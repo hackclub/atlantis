@@ -9,6 +9,8 @@ from django.shortcuts import redirect
 import os
 import requests
 
+from .models import Profile
+
 # setting up auth
 oauth = OAuth()
 
@@ -18,7 +20,7 @@ oauth.register(
     client_id = os.environ["HCA_CLIENT_ID"],
     client_secret = os.environ["HCA_CLIENT_SECRET"],
     client_kwargs = {
-        "scope": "openid profile email"
+        "scope": "openid profile email verification_status slack_id"
     }
 )
 
@@ -46,7 +48,15 @@ def auth_callback(request):
         defaults={
             "email": email,
             "first_name": userinfo.get("given_name", ""),
-            "last_name": userinfo.get("family_name", ""),
+            "last_name": userinfo.get("family_name", "")
+        },
+    )
+
+    Profile.objects.update_or_create(
+        user=user,
+        defaults={
+            "verification_status": userinfo.get("verification_status", ""),
+            "slack_id": userinfo.get("slack_id", ""),
         },
     )
 
@@ -59,4 +69,4 @@ def index(request):
 
 
 def dashboard(request):
-    return HttpResponse("Dashboard")
+    return render(request, "layered_site/dashboard.html")

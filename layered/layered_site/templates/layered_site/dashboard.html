@@ -1,0 +1,17 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Layered</title>
+    <link rel="stylesheet" href="{% static 'layered_site/style.css' %}">
+</head>
+<body>
+    <h1>waow it worked</h1>
+    <p>if u can see this it means hcauth worked yay</p>
+    <p>your email: {{ user.email }} </p>
+    <p>your name: {{ user.get_full_name }} </p>
+    <p>your verification status: {{ user.hackclub_profile.verification_status }}</p>
+    <p>your slack id: {{ user.hackclub_profile.slack_id }}</p>
+</body>
+</html>
