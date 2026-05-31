@@ -5,11 +5,14 @@ from django.contrib.auth.models import User
 from dotenv import load_dotenv
 from django.http import HttpResponse
 from django.views.decorators.http import require_POST
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+
+from .models import Profile
+from .models import Project
 
 import os
 import requests
-
-from .models import Profile
 
 FORCE_REAUTH_COOKIE = "hca_force_reauth"
 
@@ -99,3 +102,28 @@ def explore(request):
 
 def shop(request):
     return render(request, "layered_site/shop.html")
+
+@login_required
+def project_list(request):
+    projects = request.user.projects.order_by("id")
+    return render(request, "layered_site/projects.html", {"projects": projects})
+
+@login_required
+@require_POST
+def create_project(request):
+    title = request.POST.get("title", "").strip()
+    description = request.POST.get("description", "").strip()
+    printables_url = request.POST.get("printables_url", "").strip()
+
+    if not title:
+        messages.error(request, "Title is required.")
+        return redirect("projects")
+
+    project = Project.objects.create(
+        owner = request.user,
+        title = title,
+        description = description,
+        printablesUrl = printables_url
+    )
+
+    return redirect("projects")

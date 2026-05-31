@@ -25,9 +25,87 @@ body {
     padding: 24px;
 }
 
+.modal {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 20;
+}
+
+.hidden {
+    display: none;
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-panel {
+    position: relative;
+    z-index: 1;
+    width: min(92vw, 520px);
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modal-panel form {
+    display: grid;
+    gap: 16px;
+}
+
+.modal-panel label {
+    display: grid;
+    gap: 8px;
+}
+
+.modal-panel input,
+.modal-panel textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.project-list {
+    margin: 24px 0;
+}
+
+.project-list ul {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0 0;
+    display: grid;
+    gap: 12px;
+}
+
+.project-card {
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.messages {
+    margin: 16px 0;
+}
+
+.message {
+    margin: 0;
+    color: #a33;
+}
+
 #loginButton,
 #logoutButton {
     background-color: aqua;
     padding: 10px;
     border-radius: 5px;
 }
+

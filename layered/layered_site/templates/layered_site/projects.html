@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Layered</title>
-    <link rel="stylesheet" href="{% static 'layered_site/style.css' %}">
+    <link rel="stylesheet" href="{% static 'layered_site/style.css' %}?v=1">
 </head>
 <body class="page" id="projects-page">
     <nav class="sidebar">
@@ -17,8 +17,101 @@
         <h1>Projects</h1>
         <h2>This is where your projects live!</h2>
 
-        <button>create project</button>
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <p class="message">{{ message }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <section class="project-list">
+            <h3>Your Projects</h3>
+            {% if projects %}
+                <ul>
+                    {% for project in projects %}
+                        <li class="project-card">
+                            <strong>{{ project.title }}</strong>
+                            <p>{{ project.description }}</p>
+                            {% if project.printablesUrl %}
+                                <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No projects yet. Create your first one.</p>
+            {% endif %}
+        </section>
+
+        <button type="button" id="openCreateModal">Create new project</button>
     </div>
+
+    <div id="createProjectModal" class="modal hidden" aria-hidden="true" hidden>
+        <div class="modal-backdrop" id="modalBackdrop"></div>
+
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="createProjectTitle">
+            <h3 id="createProjectTitle">Create Project</h3>
+
+            <form action="{% url 'create_project' %}" method="post">
+                {% csrf_token %}
+                <label>
+                    Title
+                    <input name="title" maxlength="60" placeholder="Project title" required>
+                </label>
+
+                <label>
+                    Description
+                    <textarea name="description" placeholder="Description"></textarea>
+                </label>
+
+                <label>
+                    Printables URL
+                    <input name="printables_url" placeholder="https://printables.com/...">
+                </label>
+
+                <div class="modal-actions">
+                    <button type="button" id="cancelCreateModal">Cancel</button>
+                    <button type="submit">Create</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const modal = document.getElementById("createProjectModal");
+            const openBtn = document.getElementById("openCreateModal");
+            const cancelBtn = document.getElementById("cancelCreateModal");
+            const backdrop = document.getElementById("modalBackdrop");
+
+            function openModal() {
+                modal.classList.remove("hidden");
+                modal.hidden = false;
+                modal.setAttribute("aria-hidden", "false");
+                
+                const firstInput = modal.querySelector("input, textarea, button");
+                if (firstInput) firstInput.focus();
+            }
+
+            function closeModal() {
+                modal.classList.add("hidden");
+                modal.hidden = true;
+                modal.setAttribute("aria-hidden", "true");
+                openBtn.focus();
+            }
+
+            openBtn.addEventListener("click", openModal);
+            cancelBtn.addEventListener("click", closeModal);
+            backdrop.addEventListener("click", closeModal);
+
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+                    closeModal();
+                }
+            });
+        })();
+    </script>
 
 </body>
 </html>
