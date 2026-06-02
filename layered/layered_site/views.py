@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from dotenv import load_dotenv
 from django.http import HttpResponse
 from django.views.decorators.http import require_POST
+from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 
@@ -12,7 +13,6 @@ from .models import Profile
 from .models import Project
 
 import os
-import requests
 
 FORCE_REAUTH_COOKIE = "hca_force_reauth"
 
@@ -126,4 +126,33 @@ def create_project(request):
         printablesUrl = printables_url
     )
 
+    return redirect("projects")
+
+
+@login_required
+@require_POST
+def edit_project(request, project_id):
+    project = get_object_or_404(request.user.projects, id=project_id)
+
+    title = request.POST.get("title", "").strip()
+    description = request.POST.get("description", "").strip()
+    printables_url = request.POST.get("printables_url", "").strip()
+
+    if not title:
+        messages.error(request, "Title is required.")
+        return redirect("projects")
+
+    project.title = title
+    project.description = description
+    project.printablesUrl = printables_url
+    project.save()
+
+    return redirect("projects")
+
+
+@login_required
+@require_POST
+def delete_project(request, project_id):
+    project = get_object_or_404(request.user.projects, id=project_id)
+    project.delete()
     return redirect("projects")

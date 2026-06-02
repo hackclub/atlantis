@@ -93,6 +93,73 @@ body {
     padding: 16px;
 }
 
+.project-card {
+    position: relative;
+}
+
+.card-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+}
+
+.card-main {
+    flex: 1 1 auto;
+}
+
+.card-controls {
+    position: relative;
+}
+
+.menu-toggle {
+    background: transparent;
+    border: none;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.card-dropdown {
+    position: absolute;
+    right: 0;
+    top: 28px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 8px;
+    display: none;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    z-index: 30;
+    min-width: 120px;
+}
+
+.card-dropdown.open {
+    display: block;
+}
+
+.card-dropdown .dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 6px 8px;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+}
+
+.card-dropdown .delete-form {
+    margin: 0;
+}
+
+.card-dropdown .delete-button {
+    color: #a33;
+    background: transparent;
+    border: none;
+    padding: 6px 6px;
+    cursor: pointer;
+}
+
 .messages {
     margin: 16px 0;
 }
