@@ -156,3 +156,11 @@ def delete_project(request, project_id):
     project = get_object_or_404(request.user.projects, id=project_id)
     project.delete()
     return redirect("projects")
+
+@login_required
+def project_detail(request, project_id):
+    project = get_object_or_404(request.user.projects, id=project_id)
+
+    return render(request, "layered_site/project_detail.html", {
+        "project": project
+    })

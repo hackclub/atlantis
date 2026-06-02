@@ -13,5 +13,6 @@ urlpatterns = [
     path("projects/<int:project_id>/delete/", views.delete_project, name="delete_project"),
     path("explore/", views.explore, name="explore"),
     path("shop/", views.shop, name="shop"),
-    path("projects/create", views.create_project, name="create_project")
+    path("projects/create", views.create_project, name="create_project"),
+    path("projects/<int:project_id>/", views.project_detail, name="project_detail")
 ]

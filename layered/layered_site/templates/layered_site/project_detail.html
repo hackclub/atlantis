@@ -1,0 +1,22 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Layered</title>
+    <link rel="stylesheet" href="{% static 'layered_site/style.css' %}">
+</head>
+<body id="project_detail_page">
+    <h1>{{ project.title }}</h1>
+
+    <p>{{ project.description }}</p>
+
+    {% if project.printablesUrl %}
+        <p><a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer noopener">
+            View on Printables
+        </a></p>
+    {% endif %}
+
+    <p><a href="{% url 'projects' %}">Back to projects</a></p>
+</body>
+</html>

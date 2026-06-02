@@ -33,7 +33,7 @@
                             <li class="project-card" data-project-id="{{ project.id }}">
                                 <div class="card-row">
                                     <div class="card-main">
-                                        <strong>{{ project.title }}</strong>
+                                        <strong><a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></strong>
                                         <p>{{ project.description }}</p>
                                         {% if project.printablesUrl %}
                                             <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
