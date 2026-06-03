@@ -1,12 +1,12 @@
 from django.shortcuts import render, redirect
 from authlib.integrations.django_client import OAuth
-from django.contrib.auth import login, get_user_model, logout
+from django.contrib.auth import login, logout
 from django.contrib.auth.models import User
-from dotenv import load_dotenv
-from django.http import HttpResponse
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.contrib.admin.views.decorators import staff_member_required
+from django.core.exceptions import PermissionDenied
 from django.contrib import messages
 
 from .models import Profile
@@ -164,3 +164,43 @@ def project_detail(request, project_id):
     return render(request, "layered_site/project_detail.html", {
         "project": project
     })
+
+# admin views
+@staff_member_required
+def admin_dash(request):
+    return render(request, "root/home.html")
+
+@staff_member_required
+def shop_dash(request):
+    if not request.user.has_perm("layered_site.fulfillment"):
+        raise PermissionDenied
+    # fetch items and return later
+    return render(request, "root/shop.html")
+
+@staff_member_required
+def fulfillment_dash(request):
+    if not request.user.has_perm("layered_site.fulfillment"):
+        raise PermissionDenied
+    # fetch orders to fulfill later
+    return render(request, "root/fulfillment.html")
+
+@staff_member_required
+def review_dash(request):
+    if not request.user.has_perm("layered_site.t1_review"):
+        raise PermissionDenied
+    # fetch projects to review later
+    return render(request, "root/review.html")
+
+@staff_member_required
+def ysws_review_dash(request):
+    if not request.user.has_perm("layered_site.t2_review"):
+        raise PermissionDenied
+    # fetch projects to review later
+    return render(request, "root/ysws_review.html")
+
+@staff_member_required
+def fraud_review_dash(request):
+    if not request.user.has_perm("layered_site.t3_review"):
+        raise PermissionDenied
+    # fetch projects to review later
+    return render(request, "root/fraud_review.html")
