@@ -23,23 +23,32 @@ class Project(models.Model):
 	printablesUrl = models.CharField(max_length=150)
 	created_at = models.DateTimeField(auto_now_add=True)
 
-	class ProjectStatus(models.TextChoices):
-		WORKING_ON = "W", "Working on"
-		T1_QUEUE = "T1", "Under T1 Review"
-		PRINT_QUEUE = "PQ", "In print queue"
-		BEING_PRINTED = "BP", "Being printed"
-		T2_QUEUE = "T2", "Under T2 Review"
-		T3_QUEUE = "T3", "Under fraud review"
-		FINALIZED = "F", "Finalized"
-	
-	status = models.CharField(
-        max_length=2,
-        choices=ProjectStatus.choices,
-        default=ProjectStatus.WORKING_ON,
-    )
-
 	def __str__(self):
 		return f"{self.id}: {self.title}"
+	
+class Ship(models.Model):
+	project = models.ForeignKey(
+		Project,
+		on_delete=models.CASCADE,
+		related_name="ships"
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+	class ProjectStatus(models.TextChoices):
+			WORKING_ON = "W", "Working on"
+			T1_QUEUE = "T1", "Under T1 Review"
+			PRINT_QUEUE = "PQ", "In print queue"
+			BEING_PRINTED = "BP", "Being printed"
+			T2_QUEUE = "T2", "Under T2 Review"
+			T3_QUEUE = "T3", "Under fraud review"
+			FINALIZED = "F", "Finalized"
+			LOCKED = "L", "Locked"
+		
+	status = models.CharField(
+		max_length=2,
+		choices=ProjectStatus.choices,
+		default=ProjectStatus.WORKING_ON,
+	)
+	
 
 class Item(models.Model):
 	name = models.CharField(max_length=60)
