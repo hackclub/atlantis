@@ -67,7 +67,8 @@ class Permissions(models.Model):
 			("t2_review", "T2 Project Review"),
 			("t3_review", "T3/Fraud Project Review"),
 			("printer", "Project Printer"),
-			("fulfillment", "Fulfill shop orders")
+			("fulfillment", "Fulfill shop orders"),
+			("organizer", "Access to everything")
 		]
 	
 	def __str__(self):

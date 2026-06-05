@@ -168,39 +168,42 @@ def project_detail(request, project_id):
 # admin views
 @staff_member_required
 def admin_dash(request):
+    # extra layer of security never hurt anyone eh
+    if not request.user.has_perm("layered_site.t1_review") or not request.user.has_perm("layered_site.t2_review") or not request.user.has_perm("layered_site.t3_review") or not request.user.has_perm("layered_site.printer") or not request.user.has_perm("layered_site.fulfillment") or not request.user.has_perm("layered_site.organizer"):
+        raise PermissionDenied
     return render(request, "root/home.html")
 
 @staff_member_required
 def shop_dash(request):
-    if not request.user.has_perm("layered_site.fulfillment"):
+    if not request.user.has_perm("layered_site.fulfillment") or not request.user.has_perm("layered_site.organizer"):
         raise PermissionDenied
     # fetch items and return later
     return render(request, "root/shop.html")
 
 @staff_member_required
 def fulfillment_dash(request):
-    if not request.user.has_perm("layered_site.fulfillment"):
+    if not request.user.has_perm("layered_site.fulfillment") or not request.user.has_perm("layered_site.organizer"):
         raise PermissionDenied
     # fetch orders to fulfill later
     return render(request, "root/fulfillment.html")
 
 @staff_member_required
 def review_dash(request):
-    if not request.user.has_perm("layered_site.t1_review"):
+    if not request.user.has_perm("layered_site.t1_review") or not request.user.has_perm("layered_site.organizer") or not request.user.has_perm("layered_site.t2_review") or not request.user.has_perm("layered_site.t3_review"):
         raise PermissionDenied
     # fetch projects to review later
     return render(request, "root/review.html")
 
 @staff_member_required
 def ysws_review_dash(request):
-    if not request.user.has_perm("layered_site.t2_review"):
+    if not request.user.has_perm("layered_site.t2_review") or not request.user.has_perm("layered_site.organizer") or not request.user.has_perm("t3_review"):
         raise PermissionDenied
     # fetch projects to review later
     return render(request, "root/ysws_review.html")
 
 @staff_member_required
 def fraud_review_dash(request):
-    if not request.user.has_perm("layered_site.t3_review"):
+    if not request.user.has_perm("layered_site.t3_review") or not request.user.has_perm("layered_site.organizer"):
         raise PermissionDenied
     # fetch projects to review later
     return render(request, "root/fraud_review.html")
