@@ -9,8 +9,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
 from django.contrib import messages
 
-from .models import Profile
-from .models import Project
+from .models import Profile, Project, Item
 
 import os
 
@@ -114,6 +113,7 @@ def create_project(request):
     title = request.POST.get("title", "").strip()
     description = request.POST.get("description", "").strip()
     printables_url = request.POST.get("printables_url", "").strip()
+    locked = False
 
     if not title:
         messages.error(request, "Title is required.")
@@ -123,7 +123,8 @@ def create_project(request):
         owner = request.user,
         title = title,
         description = description,
-        printablesUrl = printables_url
+        printablesUrl = printables_url,
+        locked = locked
     )
 
     return redirect("projects")
@@ -203,7 +204,7 @@ def review_dash(request):
 
 @staff_member_required
 def ysws_review_dash(request):
-    if not request.user.has_perm("layered_site.t2_review") or not request.user.has_perm("layered_site.organizer") or not request.user.has_perm("t3_review"):
+    if not request.user.has_perm("layered_site.t2_review") or not request.user.has_perm("layered_site.organizer") or not request.user.has_perm("layered_site.t3_review"):
         raise PermissionDenied
     # fetch projects to review later
     return render(request, "root/ysws_review.html")
@@ -214,3 +215,106 @@ def fraud_review_dash(request):
         raise PermissionDenied
     # fetch projects to review later
     return render(request, "root/fraud_review.html")
+
+@staff_member_required
+@require_POST
+def create_item(request):
+    name = request.POST.get("name", "").strip()
+    description = request.POST.get("description", "").strip()
+    cost = request.POST.get("cost", "").strip()
+
+    if not name:
+        messages.error(request, "Name is required.")
+        return redirect("root/shop")
+    
+    if not description:
+        messages.error(request, "Description is required.")
+        return redirect("root/shop")
+    
+    if not cost:
+        messages.error(request, "Cost is required.")
+        return redirect("root/shop")
+
+    try:
+        cost = int(cost)
+    except ValueError:
+        messages.error(request, "Cost must be a whole number.")
+        return redirect("root/shop")
+
+    item = Item.objects.create(
+        name = name,
+        description = description,
+        cost = cost
+    )
+
+    return redirect("root/shop")
+
+@staff_member_required
+@require_POST
+def edit_item(request, item_id):
+    get_object_or_404(Item, item_id)
+
+    name = request.POST.get("title", "").strip()
+    description = request.POST.get("description", "").strip()
+    cost = request.POST.get("printables_url", "").strip()
+
+    if not name:
+        messages.error(request, "Name is required.")
+        return redirect("root/shop")
+    
+    if not description:
+        messages.error(request, "Description is required.")
+        return redirect("root/shop")
+    
+    if not cost:
+        messages.error(request, "Cost is required.")
+        return redirect("root/shop")
+
+    try:
+        cost = int(cost)
+    except ValueError:
+        messages.error(request, "Cost must be a whole number.")
+        return redirect("root/shop")
+
+    item = Item.objects.create(
+        name = name,
+        description = description,
+        cost = cost
+    )
+
+    item.name = name
+    item.description = description
+    item.cost = cost
+    item.save()
+
+    return redirect("root/shop")
+
+@staff_member_required
+@require_POST
+def delete_item(request, item_id):
+    item = get_object_or_404(Item, item_id)
+    item.delete()
+
+    return redirect("root/shop")
+
+@staff_member_required
+@require_POST
+def lock_project(request, project_id):
+    project = get_object_or_404(Project, project_id)
+    
+    project.locked = True
+    project.save()
+
+    previous_page = request.META.get("HTTP_REFERER", "root/review")
+    return redirect(previous_page)
+
+@staff_member_required
+@require_POST
+def unlock_project(request, project_id):
+    project = get_object_or_404(Project, project_id)
+    
+    project.locked = False
+    project.save()
+
+    previous_page = request.META.get("HTTP_REFERER", "root/review")
+    return redirect(previous_page)

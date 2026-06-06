@@ -22,6 +22,7 @@ class Project(models.Model):
 	description = models.CharField(max_length=1000)
 	printablesUrl = models.CharField(max_length=150)
 	created_at = models.DateTimeField(auto_now_add=True)
+	locked = models.BooleanField(default=False)
 
 	def __str__(self):
 		return f"{self.id}: {self.title}"
@@ -34,20 +35,21 @@ class Ship(models.Model):
 	)
 	created_at = models.DateTimeField(auto_now_add=True)
 	class ProjectStatus(models.TextChoices):
-			WORKING_ON = "W", "Working on"
 			T1_QUEUE = "T1", "Under T1 Review"
 			PRINT_QUEUE = "PQ", "In print queue"
 			BEING_PRINTED = "BP", "Being printed"
 			T2_QUEUE = "T2", "Under T2 Review"
 			T3_QUEUE = "T3", "Under fraud review"
 			FINALIZED = "F", "Finalized"
-			LOCKED = "L", "Locked"
 		
 	status = models.CharField(
 		max_length=2,
 		choices=ProjectStatus.choices,
-		default=ProjectStatus.WORKING_ON,
+		default=ProjectStatus.T1_QUEUE,
 	)
+
+	def __str__(self):
+		return f"Ship created at {self.created_at} with status {self.status}"
 	
 
 class Item(models.Model):
