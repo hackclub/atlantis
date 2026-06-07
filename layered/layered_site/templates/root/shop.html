@@ -26,10 +26,22 @@
                         <li class="item-card" data-item-id="{{ item.id }}">
                             <div class="card-row">
                                 <div class="card-main">
-                                    <img src="{{ item.imageUrl }}" alt="{{ item.name }}" loading="lazy">
+                                    <img src="{{ item.imageUrl }}" alt="{{ item.name }}" loading="lazy" style="max-width: 100%; max-height: 400px; height: auto;">
                                     <strong><a href="{% url 'item_detail' item.id %}">{{ item.name }}</a></strong>
                                     <p>{{ item.description }}</p>
                                     <p>{{ item.cost }} layers</p>        
+                                </div>
+
+                                <div class="card-controls">
+                                        <button type="button" class="menu-toggle" aria-haspopup="true" aria-expanded="false">⋯</button>
+                                        <div class="card-dropdown" aria-hidden="true">
+                                            <button type="button" class="dropdown-item open-edit" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}">Edit</button>
+
+                                            <form action="{% url 'delete_item' item.id %}" method="post" class="dropdown-item delete-form">
+                                                {% csrf_token %}
+                                                <button type="submit" class="delete-button">Delete</button>
+                                            </form>
+                                        </div>
                                 </div>
                             </div>
                         </li>
@@ -75,6 +87,41 @@
             </form>
         </div>
     </div>
+
+    <div id="editItemModal" class="modal hidden" aria-hidden="true" hidden>
+        <div class="modal-backdrop" id="editModalBackdrop"></div>
+
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="editItemTitle">
+            <h3 id="editItemTitle">Edit Item</h3>
+
+            <form id="editItemForm" action="" method="post">
+                {% csrf_token %}
+                <label>
+                    Name
+                    <input id="editName" name="name" maxlength="60" placeholder="Item name" required>
+                </label>
+
+                <label>
+                    Description
+                    <textarea id="editDescription" name="description" maxlength="100" placeholder="Description" required></textarea>
+                </label>
+
+                <label>
+                    Cost
+                    <input id="editCost" name="cost" placeholder="5" required>
+                </label>
+
+                <label>
+                    Image URL
+                    <input id="editImageUrl" type="url" name="imageUrl" placeholder="https://example.com" required>
+                </label>
+
+                <div class="modal-actions">
+                    <button type="button" id="cancelEditModal">Cancel</button>
+                    <button type="submit">Save</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <script>
@@ -107,6 +154,89 @@
             document.addEventListener("keydown", (e) => {
                 if (e.key === "Escape" && !modal.classList.contains("hidden")) {
                     closeModal();
+                }
+            });
+        })();
+
+        (function () {
+            function closeAllMenus() {
+                document.querySelectorAll('.card-dropdown.open').forEach((dropdown) => {
+                    dropdown.classList.remove('open');
+                    dropdown.setAttribute('aria-hidden', 'true');
+                    const toggle = dropdown.parentElement.querySelector('.menu-toggle');
+                    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+                });
+            }
+
+            document.addEventListener('click', (e) => {
+                const toggle = e.target.closest('.menu-toggle');
+                if (toggle) {
+                    const dropdown = toggle.parentElement.querySelector('.card-dropdown');
+                    const isOpen = dropdown.classList.contains('open');
+                    closeAllMenus();
+                    if (!isOpen) {
+                        dropdown.classList.add('open');
+                        dropdown.setAttribute('aria-hidden', 'false');
+                        toggle.setAttribute('aria-expanded', 'true');
+                    }
+                    return;
+                }
+
+                if (!e.target.closest('.card-dropdown') && !e.target.closest('.menu-toggle')) {
+                    closeAllMenus();
+                }
+            });
+
+            const editModal = document.getElementById('editItemModal');
+            const editBackdrop = document.getElementById('editModalBackdrop');
+            const editForm = document.getElementById('editItemForm');
+            const editName = document.getElementById('editName');
+            const editDescription = document.getElementById('editDescription');
+            const editCost = document.getElementById('editCost');
+            const editImageUrl = document.getElementById('editImageUrl');
+            const cancelEditBtn = document.getElementById('cancelEditModal');
+
+            function openEditModal() {
+                editModal.classList.remove('hidden');
+                editModal.hidden = false;
+                editModal.setAttribute('aria-hidden', 'false');
+
+                const firstInput = editModal.querySelector('input, textarea, button');
+                if (firstInput) firstInput.focus();
+            }
+
+            function closeEditModal() {
+                editModal.classList.add('hidden');
+                editModal.hidden = true;
+                editModal.setAttribute('aria-hidden', 'true');
+            }
+
+            document.addEventListener('click', (e) => {
+                const openEditBtn = e.target.closest('.open-edit');
+                if (!openEditBtn) return;
+
+                const id = openEditBtn.dataset.itemId;
+                const name = openEditBtn.dataset.name || '';
+                const description = openEditBtn.dataset.description || '';
+                const cost = openEditBtn.dataset.cost || '';
+                const imageUrl = openEditBtn.dataset.imageUrl || '';
+
+                editForm.action = '/shop/' + id + '/edit/';
+                editName.value = name;
+                editDescription.value = description;
+                editCost.value = cost;
+                editImageUrl.value = imageUrl;
+
+                openEditModal();
+                closeAllMenus();
+            });
+
+            if (cancelEditBtn) cancelEditBtn.addEventListener('click', closeEditModal);
+            if (editBackdrop) editBackdrop.addEventListener('click', closeEditModal);
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !editModal.classList.contains('hidden')) {
+                    closeEditModal();
                 }
             });
         })();

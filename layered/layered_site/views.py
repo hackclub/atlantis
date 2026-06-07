@@ -11,15 +11,20 @@ from django.contrib import messages
 
 from .models import Profile, Project, Item
 
+from urllib.parse import urlparse
+
 import os
 import re
 
 FORCE_REAUTH_COOKIE = "hca_force_reauth"
-IMAGE_URL_RE = re.compile(r"^https?://[\w.-]+(?:\.[\w.-]+)+(?:[/?#].*)?$", re.IGNORECASE)
 PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?", re.IGNORECASE)
 
-def is_valid_image_url(value):
-    return bool(IMAGE_URL_RE.match(value))
+def is_valid_image_url(url):
+    try:
+        result = urlparse(url)
+        return result.scheme in ('http', 'https') and bool(result.netloc)
+    except ValueError:
+        return False
 
 def is_valid_printables_url(value):
     return bool(PRINTABLES_URL_RE.match(value))
@@ -309,25 +314,25 @@ def edit_item(request, item_id):
 
     if not name:
         messages.error(request, "Name is required.")
-        return redirect("root/shop")
+        return redirect("shop_dash")
     
     if not description:
         messages.error(request, "Description is required.")
-        return redirect("root/shop")
+        return redirect("shop_dash")
     
     if not cost:
         messages.error(request, "Cost is required.")
-        return redirect("root/shop")
+        return redirect("shop_dash")
 
     if imageUrl and not is_valid_image_url(imageUrl):
         messages.error(request, "Image URL must be a valid http or https URL.")
-        return redirect("root/shop")
+        return redirect("shop_dash")
 
     try:
         cost = int(cost)
     except ValueError:
         messages.error(request, "Cost must be a whole number.")
-        return redirect("root/shop")
+        return redirect("shop_dash")
 
     item.name = name
     item.description = description
@@ -335,7 +340,7 @@ def edit_item(request, item_id):
     item.imageUrl = imageUrl
     item.save()
 
-    return redirect("root/shop")
+    return redirect("shop_dash")
 
 @staff_member_required
 @require_POST
@@ -345,7 +350,7 @@ def delete_item(request, item_id):
     item.deleted = True
     item.save()
 
-    return redirect("root/shop")
+    return redirect("shop_dash")
 
 @staff_member_required
 @require_POST

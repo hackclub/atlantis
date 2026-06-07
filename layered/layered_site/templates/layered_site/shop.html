@@ -21,10 +21,11 @@
                 <ul>
                     {% for item in items %}
                         {% if not item.deleted %}
-                        <li class="project-card" data-item-id="{{ item.id }}">
+                        <li class="item-card" data-item-id="{{ item.id }}">
                             <div class="card-row">
                                 <div class="card-main">
-                                    <img src="{{ item.imageUrl }}" alt="{{ item.name }}" loading="lazy">
+                                    <img src="{{ item.imageUrl }}" alt="{{ item.name }}" loading="lazy" style="max-width: 30%; max-height: 200px; height: auto;">
+                                    <br>
                                     <strong><a href="{% url 'item_detail' item.id %}">{{ item.name }}</a></strong>
                                     <p>{{ item.description }}</p>
                                     <p>{{ item.cost }} layers</p>        
