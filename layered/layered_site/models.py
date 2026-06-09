@@ -62,6 +62,23 @@ class Item(models.Model):
 
 	def __str__(self):
 		return f"{self.name} ({self.description}) for {self.cost} layers"
+	
+class Order(models.Model):
+	owner = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="orders"
+	)
+	item = models.ForeignKey(
+		Item,
+		on_delete=models.PROTECT,
+		related_name="orders"
+	)
+
+	fulfilled = models.BooleanField(default=False)
+	fulfilled_at = models.DateTimeField(null=True, blank=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+	quantity = models.PositiveIntegerField(default=1)
 
 class Permissions(models.Model):
 	class Meta:
