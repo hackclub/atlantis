@@ -37,12 +37,12 @@ class Ship(models.Model):
 	)
 	created_at = models.DateTimeField(auto_now_add=True)
 	class ShipStatus(models.TextChoices):
-			T1_QUEUE = "T1", "Under T1 Review"
-			PRINT_QUEUE = "PQ", "In print queue"
-			BEING_PRINTED = "BP", "Being printed"
-			T2_QUEUE = "T2", "Under T2 Review"
-			T3_QUEUE = "T3", "Under fraud review"
-			FINALIZED = "F", "Finalized"
+		T1_QUEUE = "T1", "Under T1 Review"
+		PRINT_QUEUE = "PQ", "In print queue"
+		BEING_PRINTED = "BP", "Being printed"
+		T2_QUEUE = "T2", "Under T2 Review"
+		T3_QUEUE = "T3", "Under fraud review"
+		FINALIZED = "F", "Finalized"
 		
 	status = models.CharField(
 		max_length=2,
@@ -76,7 +76,22 @@ class Order(models.Model):
 		related_name="orders"
 	)
 
-	fulfilled = models.BooleanField(default=False)
+	class OrderStatus(models.TextChoices):
+		PENDING = "P", "Pending"
+		FULFILLED = "F", "Fulfilled"
+		DENIED = "D", "Denied"
+		REFUNDED = "R", "Refunded"
+	
+	status = models.CharField(
+		max_length=1,
+		choices=OrderStatus.choices,
+		default=OrderStatus.PENDING,
+	)
+
+	admin_notes = models.CharField(max_length=100, blank=True)
+	user_notes = models.CharField(max_length=100, blank=True)
+
+	address_id = models.CharField(max_length=20, blank=True)
 	fulfilled_at = models.DateTimeField(null=True, blank=True)
 	created_at = models.DateTimeField(auto_now_add=True)
 	quantity = models.PositiveIntegerField(default=1)
