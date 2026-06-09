@@ -215,12 +215,14 @@ def item_detail(request, item_id):
     })
 
 @login_required
-def order_item(request, item_id):
+def order_page(request, item_id):
     # add order code later
     item = get_object_or_404(Item, id=item_id)
+    profile = request.user.hackclub_profile
 
     return render(request, "layered_site/order_item.html", {
-        "item": item
+        "item": item,
+        "profile": profile
     })
 
 # staff views
