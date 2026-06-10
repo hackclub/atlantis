@@ -9,7 +9,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.core.exceptions import PermissionDenied
 from django.contrib import messages
 
-from .models import Profile, Project, Item
+from .models import Profile, Project, Item, Order
 
 from urllib.parse import urlparse
 
@@ -216,7 +216,6 @@ def item_detail(request, item_id):
 
 @login_required
 def order_page(request, item_id):
-    # add order code later
     item = get_object_or_404(Item, id=item_id)
     profile = request.user.hackclub_profile
 
@@ -225,7 +224,38 @@ def order_page(request, item_id):
         "profile": profile
     })
 
-# staff views
+@login_required
+@require_POST
+def order_item(request, item_id):
+    item = get_object_or_404(Item, id=item_id)
+    quantity = request.POST.get("quantity", "").strip()
+    user_notes = request.POST.get("user_notes", "").strip()
+
+    if not quantity:
+        messages.error(request, "Quantity is required.")
+        return redirect("order_page", item_id=item_id)
+    
+    try:
+        quantity = int(quantity)
+        if quantity <= 0:
+            raise ValueError
+    except ValueError:
+        messages.error(request, "Quantity must be a positive number.")
+        return redirect("order_page", item_id=item_id)
+
+    order = Order.objects.create(
+        owner=request.user,
+        item=item,
+        quantity=quantity,
+        user_notes=user_notes
+    )
+
+    return redirect("shop")
+
+# staff views ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 @staff_member_required
 def admin_dash(request):
     # extra layer of security never hurt anyone eh
