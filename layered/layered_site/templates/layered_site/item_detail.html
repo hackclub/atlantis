@@ -14,6 +14,14 @@
         <a href="/shop">Shop</a>
     </nav>
     <div class="content">
+        {% if messages %}
+            <div class="messages">
+                {% for message in messages %}
+                    <p class="message">{{ message }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+
         <h1>{{ item.name }}</h1>
 
         <p>{{ item.description }}</p>
@@ -26,6 +34,21 @@
         {% endif %}
 
         <p><a href="{% url 'shop' %}">Back to shop</a></p>
+        <form action="{% url 'order_item' item.id %}" method="post">
+            {% csrf_token %}
+            <label>
+                Quantity
+                <input name="quantity" type="number" min="1" value="1" required>
+            </label>
+
+            <label>
+                Notes
+                <textarea name="user_notes" maxlength="100" placeholder="Optional order notes"></textarea>
+            </label>
+
+            <button type="submit">Order</button>
+        </form>
+
         <div class="profile">
             <p>{{ user.get_full_name }}</p>
             <p>{{ profile.layers }} layers</p>

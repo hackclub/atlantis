@@ -209,20 +209,16 @@ def project_detail(request, project_id):
 @login_required
 def item_detail(request, item_id):
     item = get_object_or_404(Item, id=item_id)
+    profile = request.user.hackclub_profile
 
     return render(request, "layered_site/item_detail.html", {
-        "item": item
+        "item": item,
+        "profile": profile,
     })
 
 @login_required
 def order_page(request, item_id):
-    item = get_object_or_404(Item, id=item_id)
-    profile = request.user.hackclub_profile
-
-    return render(request, "layered_site/order_item.html", {
-        "item": item,
-        "profile": profile
-    })
+    return redirect("item_detail", item_id=item_id)
 
 @login_required
 @require_POST
@@ -233,7 +229,7 @@ def order_item(request, item_id):
 
     if not quantity:
         messages.error(request, "Quantity is required.")
-        return redirect("order_page", item_id=item_id)
+        return redirect("item_detail", item_id=item_id)
     
     try:
         quantity = int(quantity)
@@ -241,7 +237,7 @@ def order_item(request, item_id):
             raise ValueError
     except ValueError:
         messages.error(request, "Quantity must be a positive number.")
-        return redirect("order_page", item_id=item_id)
+        return redirect("item_detail", item_id=item_id)
 
     order = Order.objects.create(
         owner=request.user,

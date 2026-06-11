@@ -30,7 +30,7 @@
 
                                     <p>{{ item.description }}</p>
                                     <p>{{ item.cost }} layers</p> 
-                                    <form action="{% url 'order_item' item.id %}">
+                                    <form action="{% url 'item_detail' item.id %}" method="get">
                                         <button type="submit">Order</button>
                                     </form>
 
