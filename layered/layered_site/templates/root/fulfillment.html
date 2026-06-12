@@ -37,10 +37,10 @@
 
         <h1>Fulfillment</h1>
         <section class="order-list">
-            <h3>Orders</h3>
-            {% if orders %}
+            <h3>Pending</h3>
+            {% if pending_orders %}
                 <ul>
-                    {% for order in orders %}
+                    {% for order in pending_orders %}
                         <li class="order-card" data-order-id="{{ order.id }}">
                             <div class="card-row">
                                 <div class="card-main">
@@ -74,7 +74,48 @@
                     {% endfor %}
                 </ul>
             {% else %}
-                <p>No orders yet! Check back later.</p>
+                <p>No pending orders yet.</p>
+            {% endif %}
+        </section>
+        <section class="order-list">
+            <h3>Other Orders</h3>
+            {% if other_orders %}
+                <ul>
+                    {% for order in other_orders %}
+                        <li class="order-card" data-order-id="{{ order.id }}">
+                            <div class="card-row">
+                                <div class="card-main">
+                                    <img src="{{ order.item.imageUrl }}" alt="{{ order.item.name }}" loading="lazy" style="max-width: 30%; max-height: 200px; height: auto;">
+                                    <br>
+                                    <strong><a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a></strong>
+
+                                    <p>{{ order.item.description }}</p>
+                                    <p>{{ order.item.cost }} layers</p>
+                                    <p><strong>Ordered by:</strong> {{ order.owner.get_full_name|default:order.owner.username }}</p>
+                                    <p><strong>Quantity:</strong> {{ order.quantity }}</p>
+                                    <p><strong>Status:</strong> {{ order.get_status_display }}</p>
+                                    <p><strong>User notes:</strong> {{ order.user_notes|default:"None" }}</p>
+                                    <p><strong>Admin notes:</strong> {{ order.admin_notes|default:"None" }}</p>
+                                    <p><strong>Created:</strong> {{ order.created_at }}</p>
+                                    {% if order.fulfilled_at %}
+                                        <p><strong>Fulfilled:</strong> {{ order.fulfilled_at }}</p>
+                                    {% endif %}
+
+                                    <form action="{% url 'update_order_status' order.id %}" method="post" class="order-actions">
+                                        {% csrf_token %}
+                                        <button type="submit" name="action" value="pending">Mark pending</button>
+                                        <button type="submit" name="action" value="fulfilled">Mark fulfilled</button>
+                                        <button type="submit" name="action" value="denied">Deny</button>
+                                        <button type="submit" name="action" value="refunded">Refund</button>
+                                    </form>
+
+                                </div>
+                            </div>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p>No other orders yet.</p>
             {% endif %}
         </section>
         <div class="profile">

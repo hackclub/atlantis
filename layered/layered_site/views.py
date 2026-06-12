@@ -291,10 +291,13 @@ def shop_dash(request):
 def fulfillment_dash(request):
     if not request.user.has_perm("layered_site.fulfillment") and not request.user.has_perm("layered_site.organizer"):
         raise PermissionDenied
-    orders = Order.objects.select_related("item", "owner").order_by("status", "-created_at")
+    orders = Order.objects.select_related("item", "owner").order_by("-created_at")
+    pending_orders = orders.filter(status=Order.OrderStatus.PENDING)
+    other_orders = orders.exclude(status=Order.OrderStatus.PENDING)
     profile = request.user.hackclub_profile
     return render(request, "root/fulfillment.html", {
-        "orders": orders,
+        "pending_orders": pending_orders,
+        "other_orders": other_orders,
         "profile": profile,
     })
 
