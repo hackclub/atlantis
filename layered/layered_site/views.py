@@ -319,9 +319,23 @@ def update_order_status(request, order_id):
         messages.error(request, "Invalid order action.")
         return redirect("fulfillment_dash")
 
+    prev_status = order.status
     order.status = status_map[action]
+
+    if prev_status == order.status:
+        order.status = prev_status
+        messages.error(request, f"Order status is already { {'P': 'pending', 'D': 'denied', 'F': 'fulfilled', 'R': 'refunded'}.get(order.status) }!")
+        return redirect("fulfillment_dash")
+
     if order.status == Order.OrderStatus.FULFILLED:
         order.fulfilled_at = timezone.now()
+    elif order.status == Order.OrderStatus.REFUNDED:
+        amount_to_refund = order.item.cost * order.quantity
+        with transaction.atomic():
+            profile = Profile.objects.select_for_update().get(user=order.owner)
+
+            profile.layers += amount_to_refund
+            profile.save()
     else:
         order.fulfilled_at = None
     order.save(update_fields=["status", "fulfilled_at"])
