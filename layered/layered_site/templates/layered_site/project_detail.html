@@ -24,6 +24,10 @@
             </a></p>
         {% endif %}
 
+        {% if project.locked %}
+        <p style="color: red; font-weight: bold;">Locked</p>
+        {% endif %}
+
         {% if project.owner == user %}
         <form action="{% url 'ship_project' project.id %}" method="post">
             {% csrf_token %}
@@ -35,7 +39,7 @@
 
         <h2>Journal Entries</h2>
 
-        <p>Note: Journal entries will be implemented once we have a HQ PoC and we can implement lapse :)</p>
+        <p>Journal entries coming soon!</p>
         <div class="profile">
             <p>{{ user.get_full_name }}</p>
             <p>{{ profile.layers }} layers</p>
