@@ -86,7 +86,7 @@ class Print(models.Model):
 
 	weight = models.IntegerField(blank=True)
 	printed = models.BooleanField(default=False)
-	image_url = models.CharField(max_length=200, blank=True)
+	image_url = models.CharField(max_length=2048, blank=True)
 	feedback = models.CharField(max_length=100, blank=True)
 	internal_notes = models.CharField(max_length=100, blank=True)
 
@@ -109,8 +109,19 @@ class T2(models.Model):
 	deductions = models.IntegerField(default=0)
 
 # class T3(models.Model):
-	
 
+class Journal(models.Model):
+	project = models.ForeignKey(
+		Project,
+		on_delete=models.CASCADE,
+		related_name="journals"
+	)
+
+	time_spent = models.IntegerField()
+	title = models.CharField(max_length=100)
+	text = models.CharField(max_length=2000)
+	image_url = models.CharField(max_length=2048)
+	model_url = models.CharField(max_length=2048)
 
 # shop models
 class Item(models.Model):
@@ -118,7 +129,7 @@ class Item(models.Model):
 	description = models.CharField(max_length=100)
 	cost = models.PositiveIntegerField()
 	deleted = models.BooleanField(default=False)
-	imageUrl = models.CharField(max_length=250, default="https://example.com")
+	imageUrl = models.CharField(max_length=2048, default="https://example.com")
 
 	def __str__(self):
 		return f"{self.name} ({self.description}) for {self.cost} layers"
