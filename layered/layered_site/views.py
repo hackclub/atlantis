@@ -298,7 +298,15 @@ def admin_dash(request):
     # extra layer of security never hurt anyone eh
     if not request.user.has_perm("layered_site.t1_review") and not request.user.has_perm("layered_site.t2_review") and not request.user.has_perm("layered_site.t3_review") and not request.user.has_perm("layered_site.printer") and not request.user.has_perm("layered_site.fulfillment") and not request.user.has_perm("layered_site.organizer"):
         raise PermissionDenied
-    return render(request, "root/home.html")
+    
+    user_count = User.objects.count()
+    project_count = Project.objects.count()
+    ship_count = Ship.objects.count()
+    return render(request, "root/home.html", {
+        "users": user_count,
+        "projects": project_count,
+        "ships": ship_count
+    })
 
 @staff_member_required
 def shop_dash(request):
