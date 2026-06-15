@@ -33,7 +33,7 @@
             <li class="project-card" data-project-id="{{ ship.project.id }}">
                 <div class="card-row">
                     <div class="card-main">
-                        <strong>{{ ship.project.title }}</strong>
+                        <strong><a href="{% url 'review_project' ship.id %}">{{ ship.project.title }}</a></strong>
                         <p>{{ ship.project.description }}</p>
                     </div>
                 </div>

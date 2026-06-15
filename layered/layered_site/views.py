@@ -393,6 +393,16 @@ def review_dash(request):
     })
 
 @staff_member_required
+def review_project(request, ship_id):
+    if not request.user.has_perm("layered_site.t1_review") and not request.user.has_perm("layered_site.organizer") and not request.user.has_perm("layered_site.t2_review") and not request.user.has_perm("layered_site.t3_review"):
+        raise PermissionDenied
+
+    ship = get_object_or_404(Ship, id=ship_id)
+    return render(request, "root/review_project.html", {
+        "ship": ship
+    })
+
+@staff_member_required
 def ysws_review_dash(request):
     if not request.user.has_perm("layered_site.t2_review") and not request.user.has_perm("layered_site.organizer") and not request.user.has_perm("layered_site.t3_review"):
         raise PermissionDenied

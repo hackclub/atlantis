@@ -1,0 +1,65 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Layered Admin</title>
+    <link rel="stylesheet" href="{% static 'layered_site/style.css' %}">
+</head>
+<body class="page" id="admin-project-review-page">
+    <nav class="sidebar">
+        <a href="/root/">home</a>
+        {% if perms.layered_site.fulfillment or perms.layered_site.organizer %}
+            <a href="/root/shop">shop management</a>
+            <a href="/root/fulfillment">fulfillment</a>
+        {% endif %}
+        {% if perms.layered_site.printer or perms.layered_site.organizer %}
+            <a href="/root/print">print</a>
+        {% endif %}
+        {% if perms.layered_site.t1_review or perms.layered_site.organizer %}
+            <a href="/root/review">review</a>
+        {% endif %}
+        {% if perms.layered_site.t2_review or perms.layered_site.organizer %}
+            <a href="/root/ysws_review">ysws review</a>
+        {% endif %}
+        {% if perms.layered_site.t3_review or perms.layered_site.organizer %}
+            <a href="/root/fraud_review">fraud review</a>
+        {% endif %}
+    </nav>
+    <div class="content">
+        <h1>Review Project {{ ship.project.title }}</h1>
+        <p>{{ ship.project.description }}</p>
+        <!--ADD JOURNALS LATER YOU FUCKER-->
+        <h2>T1 actions</h2>
+        {% for t1_review in ship.t1_reviews.all %}
+            <h4>Approved: {{ t1_review.approved }} at {{ t1_review.reviewed_at }} by {{ t1_review.reviewer }}</h4>
+            <p><strong>Feedback:</strong> {{ t1_review.feedback }}</p>
+            <p><strong>Internal:</strong> {{ t1_review.internal_notes }}</p>
+            <p><strong>Print:</strong> {{ t1_review.print }}</p>
+        {% empty %}
+            <p>No T1 reviews yet.</p>
+        {% endfor %}
+        <h2>Printer actions</h2>
+        {% for print in ship.prints.all %}
+            <h4>Decision: {{ print.get_decision_display }} at {{ print.claimed_time }} by {{ print.printer }}</h4>
+            <p><strong>Weight:</strong> {{ print.weight }}</p>
+            <p><strong>Feedback:</strong> {{ print.feedback }}</p>
+            <p><strong>Internal:</strong> {{ print.internal_notes }}</p>
+            {% if print.image_url %}
+                <p><strong>Image:</strong> <a href="{{ print.image_url }}" target="_blank" rel="noreferrer">{{ print.image_url }}</a></p>
+            {% endif %}
+        {% empty %}
+            <p>No printer actions yet.</p>
+        {% endfor %}
+        <h2>T2 actions</h2>
+        {% for t2_review in ship.t2_reviews.all %}
+            <h4>Decision: {{ t2_review.get_decision_display }} at {{ t2_review.reviewed_at }} by {{ t2_review.reviewer }}</h4>
+            <p><strong>Deductions:</strong> {{ t2_review.deductions }}</p>
+            <p><strong>Feedback:</strong> {{ t2_review.feedback }}</p>
+            <p><strong>Justification:</strong> {{ t2_review.justification }}</p>
+        {% empty %}
+            <p>No T2 reviews yet.</p>
+        {% endfor %}
+    </div>
+</body>
+</html>

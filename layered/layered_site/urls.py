@@ -28,6 +28,7 @@ urlpatterns = [
     path("root/fulfillment/<int:order_id>/status/", views.update_order_status, name="update_order_status"),
     path("root/shop/", views.shop_dash, name="shop_dash"),
     path("root/review/", views.review_dash, name="review_dash"),
+    path("root/review/<int:ship_id>", views.review_project, name="review_project"),
     path("root/ysws_review/", views.ysws_review_dash, name="ysws_review_dash"),
     path("root/fraud_review/", views.fraud_review_dash, name="fraud_review_dash"),
     path("root/print/", views.print_dash, name="print_dash")
