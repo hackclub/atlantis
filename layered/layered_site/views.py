@@ -297,7 +297,7 @@ def ship_project(request, project_id):
 def admin_dash(request):
     # extra layer of security never hurt anyone eh
     user = request.user
-    if not user.has_perm("layered_site.t1_review") and not user.has_perm("layered_site.t2_review") and not user.has_perm("layered_site.t3_review") and not user.has_perm("layered_site.printer") and not user.has_perm("layered_site.fulfillment") and not user.has_perm("layered_site.organizer"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment", "layered_site.t1_review", "layered_site.t2_review", "layered_site.t3_review", "layered_site.printer"]):
         raise PermissionDenied
     
     user_count = User.objects.count()
@@ -312,7 +312,7 @@ def admin_dash(request):
 @staff_member_required
 def shop_dash(request):
     user = request.user
-    if not user.has_perm("layered_site.fulfillment") and not user.has_perm("layered_site.organizer"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment"]):
         raise PermissionDenied
     items = Item.objects.order_by("id")
     return render(request, "root/shop.html", {"items": items})
@@ -320,7 +320,7 @@ def shop_dash(request):
 @staff_member_required
 def fulfillment_dash(request):
     user = request.user
-    if not user.has_perm("layered_site.fulfillment") and not user.has_perm("layered_site.organizer"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment"]):
         raise PermissionDenied
     orders = Order.objects.select_related("item", "owner").order_by("-created_at")
     pending_orders = orders.filter(status=Order.OrderStatus.PENDING)
@@ -337,7 +337,7 @@ def fulfillment_dash(request):
 @require_POST
 def update_order_status(request, order_id):
     user = request.user
-    if not user.has_perm("layered_site.fulfillment") and not user.has_perm("layered_site.organizer"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment"]):
         raise PermissionDenied
 
     order = get_object_or_404(Order.objects.select_related("item", "owner"), id=order_id)
@@ -381,16 +381,16 @@ def update_order_status(request, order_id):
 @staff_member_required
 def print_dash(request):
     user = request.user
-    if not user.has_perm("layered_site.printer") and not user.has_perm("layered_site.organizer"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.printer", "layered_site.organizer"]):
         raise PermissionDenied
-    
+
     ships = Ship.objects.filter(status=Ship.ShipStatus.PRINT_QUEUE)
     return render(request, "root/print.html")
 
 @staff_member_required
 def review_dash(request):
     user = request.user
-    if not user.has_perm("layered_site.t1_review") and not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.t2_review") and not user.has_perm("layered_site.t3_review"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.t1_review", "layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"]):
         raise PermissionDenied
     
     ships = Ship.objects.filter(status=Ship.ShipStatus.T1_QUEUE)
@@ -401,7 +401,7 @@ def review_dash(request):
 @staff_member_required
 def review_project(request, ship_id):
     user = request.user
-    if not user.has_perm("layered_site.t1_review") and not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.t2_review") and not user.has_perm("layered_site.t3_review"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.t1_review", "layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"]):
         raise PermissionDenied
 
     ship = get_object_or_404(Ship, id=ship_id)
@@ -413,7 +413,7 @@ def review_project(request, ship_id):
 @staff_member_required
 def t1_decision(request, ship_id):
     user = request.user
-    if not user.has_perm("layered_site.t1_review") and not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.t2_review") and not request.user.has_perm("layered_site.t3_review"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.t1_review", "layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"]):
         raise PermissionDenied
     
     reviewer = request.user
@@ -451,7 +451,7 @@ def t1_decision(request, ship_id):
 @staff_member_required
 def ysws_review_dash(request):
     user = request.user
-    if not user.has_perm("layered_site.t2_review") and not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.t3_review"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"]):
         raise PermissionDenied
     
     ships = Ship.objects.filter(status=Ship.ShipStatus.T2_QUEUE)
@@ -463,7 +463,7 @@ def ysws_review_dash(request):
 @staff_member_required
 def t2_decision(request, ship_id):
     user = request.user
-    if not user.has_perm("layered_site.t2_review") and not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.t3_review"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"]):
         raise PermissionDenied
     
     reviewer = request.user
@@ -511,7 +511,7 @@ def t2_decision(request, ship_id):
 @staff_member_required
 def fraud_review_dash(request):
     user = request.user
-    if not user.has_perm("layered_site.t3_review") and not user.has_perm("layered_site.organizer"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.t3_review"]):
         raise PermissionDenied
     
     ships = Ship.objects.filter(status=Ship.ShipStatus.T3_QUEUE)
@@ -523,7 +523,7 @@ def fraud_review_dash(request):
 @staff_member_required
 def t3_decision(request, ship_id):
     user = request.user
-    if not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.t3_review"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.t3_review"]):
         raise PermissionDenied
     
     ship = get_object_or_404(Ship, id=ship_id)
@@ -580,7 +580,7 @@ def t3_decision(request, ship_id):
 @require_POST
 def create_item(request):
     user = request.user
-    if not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.fulfillment"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment"]):
         raise PermissionDenied
     
     name = request.POST.get("name", "").strip()
@@ -627,7 +627,7 @@ def create_item(request):
 @require_POST
 def edit_item(request, item_id):
     user = request.user
-    if not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.fulfillment"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment"]):
         raise PermissionDenied
 
     item = get_object_or_404(Item, id=item_id)
@@ -671,7 +671,7 @@ def edit_item(request, item_id):
 @require_POST
 def delete_item(request, item_id):
     user = request.user()
-    if not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.fulfillment"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment"]):
         raise PermissionDenied
 
     item = get_object_or_404(Item, id=item_id)
@@ -685,7 +685,7 @@ def delete_item(request, item_id):
 @require_POST
 def lock_project(request, project_id):
     user = request.user
-    if not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.t2_review") and not user.has_perm("layered_site.t3_review"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.t2_review", "layered_site.t3_review"]):
         raise PermissionDenied
 
     project = get_object_or_404(Project, id=project_id)
@@ -700,7 +700,7 @@ def lock_project(request, project_id):
 @require_POST
 def unlock_project(request, project_id):
     user = request.user
-    if not user.has_perm("layered_site.organizer") and not user.has_perm("layered_site.t2_review") and not user.has_perm("layered_site.t3_review"):
+    if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.t2_review", "layered_site.t3_review"]):
         raise PermissionDenied
 
     project = get_object_or_404(Project, id=project_id)
