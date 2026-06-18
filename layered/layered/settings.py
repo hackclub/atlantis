@@ -112,6 +112,13 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://yfvyqtuytp2qa4rsw2cfxv7t.a.shipwrights.dev/',
+    'https://*.yfvyqtuytp2qa4rsw2cfxv7t.a.shipwrights.dev/'
+]
+
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+USE_X_FORWARDED_HOST = True
 
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
