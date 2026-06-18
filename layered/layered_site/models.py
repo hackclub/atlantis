@@ -88,7 +88,7 @@ class Print(models.Model):
 
 	class Decision(models.TextChoices):
 		RETURN_T1 = "T1", "Returned to T1 Review"
-		REJECT = "R", "Rejected"
+		UNCLAIMED = "U", "Unclaimed, back in printing queue"
 		APPROVE = "A", "Approve"
 
 	weight = models.IntegerField(null=True, blank=True)
@@ -100,6 +100,7 @@ class Print(models.Model):
 
 	claimed_time = models.DateTimeField(default=timezone.now)
 	unclaimed_time = models.DateTimeField(null=True, blank=True)
+	finished_time = models.DateTimeField(null=True, blank=True)
 
 	image_url = models.CharField(max_length=2048, blank=True)
 

@@ -276,6 +276,7 @@ def order_item(request, item_id):
 
 @login_required
 def ship_project(request, project_id):
+    # remember to check if the weight is greater than the time spent x 100
     if request.method != 'POST':
         return redirect("project_detail", project_id=project_id)
     
@@ -322,10 +323,12 @@ def fulfillment_dash(request):
     user = request.user
     if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment"]):
         raise PermissionDenied
+    
     orders = Order.objects.select_related("item", "owner").order_by("-created_at")
     pending_orders = orders.filter(status=Order.OrderStatus.PENDING)
     other_orders = orders.exclude(status=Order.OrderStatus.PENDING)
     profile = request.user.hackclub_profile
+
     return render(request, "root/fulfillment.html", {
         "pending_orders": pending_orders,
         "other_orders": other_orders,
@@ -386,6 +389,123 @@ def print_dash(request):
 
     ships = Ship.objects.filter(status=Ship.ShipStatus.PRINT_QUEUE)
     return render(request, "root/print.html")
+
+@staff_member_required
+@require_POST
+def claim_print(request, ship_id):
+    user = request.user
+
+    if not any(user.has_perm(p) for p in ["layered_site.printer", "layered_site.organizer"]):
+        raise PermissionDenied
+
+    ship = get_object_or_404(Ship, id=ship_id)
+
+    if ship.prints.filter(unclaimed_time__isnull=True, finished_time__isnull=True).exists():
+        messages.error(request, "already claimed")
+        return redirect("print_dash")
+
+    ship.status = Ship.ShipStatus.BEING_PRINTED
+    ship.save()
+
+    Print.objects.create(
+        printer=user,
+        ship=ship
+    )
+
+    # redirect to project printing page later doofus
+    messages.success(request, f"folk claimed a print {ship.project.title} in the big 26")
+    return redirect("print_dash")
+
+@staff_member_required
+@require_POST
+def unclaim_print(request, ship_id):
+    user = request.user
+
+    if not any(user.has_perm(p) for p in ["layered_site.printer", "layered_site.organizer"]):
+        raise PermissionDenied
+
+    ship = get_object_or_404(Ship, id=ship_id)
+
+    active_print = ship.prints.filter(
+        unclaimed_time__isnull=True,
+        finished_time__isnull=True
+    ).order_by("-id").first()
+
+    if not active_print:
+        messages.error(request, "no active print found")
+        return redirect("print_dash")
+
+    active_print.unclaimed_time = timezone.now()
+    active_print.decision = Print.Decision.UNCLAIMED
+    active_print.save()
+
+    ship.status = Ship.ShipStatus.PRINT_QUEUE
+    ship.save()
+
+    messages.success(request, f"you unclaimed {ship.project.title} u filthy rat")
+    return redirect("print_dash")
+
+@staff_member_required
+@require_POST
+def print_decision(request, ship_id):
+    user = request.user
+
+    if not any(user.has_perm(p) for p in ["layered_site.printer", "layered_site.organizer"]):
+        raise PermissionDenied
+
+    ship = get_object_or_404(Ship, id=ship_id)
+
+    weight_raw = request.POST.get("weight", "0").strip()
+    image_url = request.POST.get("image_url", "").strip()
+
+    if not is_valid_image_url(image_url):
+        messages.error(request, "that's not a valid image URL biggie")
+        return redirect("print_dash")
+
+    try:
+        weight = int(weight_raw)
+    except ValueError:
+        messages.error(request, f"ENTER A WHOLE NUMBER YOU FUCKER (received {weight_raw})")
+        return redirect("print_dash")
+
+    feedback = request.POST.get("feedback", "").strip()
+    internal_notes = request.POST.get("internal_notes", "").strip()
+    decision = request.POST.get("decision", "").strip()
+
+    active_print = ship.prints.filter(
+        unclaimed_time__isnull=True,
+        finished_time__isnull=True
+    ).order_by("-id").first()
+
+    if not active_print:
+        messages.error(request, "no active print found")
+        return redirect("print_dash")
+
+    active_print.finished_time = timezone.now()
+    active_print.weight = weight
+    active_print.internal_notes = internal_notes
+    active_print.feedback = feedback
+    active_print.decision = decision
+    active_print.image_url = image_url
+    active_print.save()
+
+    if decision == Print.Decision.RETURN_T1:
+        ship.status = Ship.ShipStatus.T1_QUEUE
+    elif decision == Print.Decision.APPROVE:
+        ship.status = Ship.ShipStatus.T2_QUEUE
+    else:
+        messages.error(request, f"NOT A VALID DECISION NERD (got: {decision})")
+        return redirect("print_dash")
+
+    ship.save()
+
+    messages.success(
+        request,
+        f"good job, you printed {ship.project.title} correctly and decided to {decision} it. ur still fat tho lmao"
+    )
+
+    return redirect("print_dash")
+
 
 @staff_member_required
 def review_dash(request):
