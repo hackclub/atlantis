@@ -14,6 +14,7 @@ from django.db import transaction
 from .models import Profile, Project, Item, Order, Ship, T1, T2, T3, Print
 
 from urllib.parse import urlparse
+from slack_sdk import WebClient
 
 import os
 import re
@@ -44,6 +45,9 @@ oauth.register(
     }
 )
 
+# set up le slack
+slack_client = WebClient(token=os.environ["SLACK_TOKEN"])
+
 # auth views
 @require_POST
 def login_view(request):
@@ -73,6 +77,8 @@ def auth_callback(request):
     name = userinfo.get("name", "")
     sub = userinfo.get("sub")
     clean_sub = sub.replace("!", "_")
+    slack_id = userinfo.get("slack_id", "")
+    verification_status = userinfo.get("verification_status", "")
 
     user, created = User.objects.get_or_create(
         username=clean_sub, 
@@ -83,11 +89,29 @@ def auth_callback(request):
         },
     )  
 
+    if slack_id:
+        try:
+            slack_user = slack_client.users_info(user=slack_id)["user"]
+            slack_profile = slack_user["profile"]
+
+            display_name = (
+                slack_profile.get("display_name")
+                or slack_profile.get("real_name")
+            )
+            avatar_url = slack_profile.get("image_512")
+
+        except Exception as e:
+            print("Slack profile fetch failed", e)
+            display_name = name
+            avatar_url = os.environ["DEFAULT_PFP"]
+
     Profile.objects.update_or_create(
         user=user,
         defaults={
-            "verification_status": userinfo.get("verification_status", ""),
-            "slack_id": userinfo.get("slack_id", ""),
+            "verification_status": verification_status,
+            "slack_id": slack_id,
+            "slack_username": display_name,
+            "slack_pfp_url": avatar_url
         },
     )
 
