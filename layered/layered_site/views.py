@@ -146,9 +146,9 @@ def create_project(request):
         messages.error(request, "Description is required")
         return redirect("projects")
     
-    if not is_valid_printables_url(printables_url):
-        messages.error(request, "Printables URL must be a valid https://printables.com/xyz URL.")
-        return redirect("projects")
+    # if not is_valid_printables_url(printables_url):
+    #     messages.error(request, "Printables URL must be a valid https://printables.com/xyz URL.")
+    #     return redirect("projects")
 
     project = Project.objects.create(
         owner = request.user,
@@ -178,9 +178,9 @@ def edit_project(request, project_id):
         messages.error(request, "Description is required")
         return redirect("projects")
     
-    if not is_valid_printables_url(printables_url):
-        messages.error(request, "Printables URL must be a valid https://printables.com/xyz URL.")
-        return redirect("projects")
+    # if not is_valid_printables_url(printables_url):
+    #     messages.error(request, "Printables URL must be a valid https://printables.com/xyz URL.")
+    #     return redirect("projects")
 
     project.title = title
     project.description = description
@@ -281,6 +281,10 @@ def ship_project(request, project_id):
         return redirect("project_detail", project_id=project_id)
     
     project = get_object_or_404(Project, id=project_id)
+    if not is_valid_printables_url(project.printablesUrl):
+        messages.error(request, "you need a printables URL to ship!")
+        return redirect("projects")
+
     Ship.objects.create(
         project = project,
         status = Ship.ShipStatus.T1_QUEUE

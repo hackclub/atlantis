@@ -23,7 +23,7 @@ class Project(models.Model):
 	)
 	title = models.CharField(max_length=60, default="My Project")
 	description = models.CharField(max_length=1000)
-	printablesUrl = models.CharField(max_length=150)
+	printablesUrl = models.CharField(max_length=150, blank=True)
 	created_at = models.DateTimeField(auto_now_add=True)
 	locked = models.BooleanField(default=False)
 	deleted = models.BooleanField(default=False)
