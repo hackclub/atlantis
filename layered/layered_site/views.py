@@ -22,15 +22,15 @@ import re
 FORCE_REAUTH_COOKIE = "hca_force_reauth"
 PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?", re.IGNORECASE)
 
+def is_valid_printables_url(value):
+    return bool(PRINTABLES_URL_RE.match(value))
+
 def is_valid_image_url(url):
     try:
         result = urlparse(url)
         return result.scheme in ('http', 'https') and bool(result.netloc)
     except ValueError:
         return False
-
-def is_valid_printables_url(value):
-    return bool(PRINTABLES_URL_RE.match(value))
 
 # setting up auth
 oauth = OAuth()
