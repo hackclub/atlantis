@@ -27,8 +27,9 @@
         {% endif %}
     </nav>
     <div class="content">
-        <h1>Review Project {{ ship.project.title }}</h1>
+        <h1>Review Project "{{ ship.project.title }}"</h1>
         <p>{{ ship.project.description }}</p>
+        <a href="{{ ship.project.printablesUrl }}">View on Printables</a>
         <!--ADD JOURNALS LATER YOU FUCKER-->
         <h2>T1 actions</h2>
         {% for t1_review in ship.t1_reviews.all %}
@@ -60,6 +61,43 @@
         {% empty %}
             <p>No T2 reviews yet.</p>
         {% endfor %}
+
+        <h3>Review</h3>
+        <form>
+            <input type="text" placeholder="Feedback (100 characters, public)" maxlength=100 style="width: 300px;" required>
+            <br>
+            <input type="text" placeholder="Internal Notes (100 characters, private)" maxlength=100 style="width: 300px;" required>
+            <br>
+            <br>
+            <label for="print_required">Print Required?</label>
+            <input type="checkbox" id="print_required" name="print_required" checked>
+            <br>
+            <br>
+            <label for="approved_checkbox">Approved?</label>
+            <input type="checkbox" id="approved_checkbox" name="approved_checkbox">
+            <br>
+            <br>
+            <button type="submit">Reject</button>
+        </form>
     </div>
+
+    <script>
+        const approvedCheckbox = document.getElementById('approved_checkbox');
+        const printRequiredCheckbox = document.getElementById('print_required');
+        const submitButton = document.querySelector('button[type="submit"]');
+
+        function updateButtonText() {
+            if (!approvedCheckbox.checked) {
+                submitButton.textContent = 'Reject';
+            } else if (approvedCheckbox.checked && printRequiredCheckbox.checked) {
+                submitButton.textContent = 'Approve';
+            } else if (approvedCheckbox.checked && !printRequiredCheckbox.checked) {
+                submitButton.textContent = 'Approve (no print)';
+            }
+        }
+
+        approvedCheckbox.addEventListener('change', updateButtonText);
+        printRequiredCheckbox.addEventListener('change', updateButtonText);
+    </script>
 </body>
 </html>
