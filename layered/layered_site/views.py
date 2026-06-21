@@ -486,7 +486,9 @@ def print_dash(request):
         raise PermissionDenied
 
     ships = Ship.objects.filter(status=Ship.ShipStatus.PRINT_QUEUE)
-    return render(request, "root/print.html")
+    return render(request, "root/print.html", {
+        "ships": ships
+    })
 
 @staff_member_required
 @require_POST
