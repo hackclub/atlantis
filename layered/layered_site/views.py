@@ -643,7 +643,7 @@ def t1_decision(request, ship_id):
 
     if approved_raw not in ("approved", "denied"):
         messages.error(request, f"How did we get here? (approved: {approved_raw})")
-        return redirect("review")
+        return redirect("review_dash")
 
     approved = approved_raw == "approved"
 
@@ -664,7 +664,7 @@ def t1_decision(request, ship_id):
     )
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with approved = {approved} and print = {print_requested}!')
-    return redirect("review")
+    return redirect("review_dash")
 
 @staff_member_required
 def ysws_review_dash(request):
@@ -695,7 +695,7 @@ def t2_decision(request, ship_id):
         deductions = int(deductions) if deductions else 0
     except ValueError:
         messages.error(request, f"how the fuck do you expect me to deduct a string from a number (got {deductions} expected integer)")
-        return redirect("ysws_review")
+        return redirect("ysws_review_dash")
 
     feedback = request.POST.get("feedback", "").strip()
     justification = request.POST.get("justification", "").strip()
@@ -708,7 +708,7 @@ def t2_decision(request, ship_id):
         ship.status = Ship.ShipStatus.T1_QUEUE
     else:
         messages.error(request, f"How did we get here? (decision: {decision})")
-        return redirect("ysws_review")
+        return redirect("ysws_review_dash")
     
     ship.save()
 
@@ -724,7 +724,7 @@ def t2_decision(request, ship_id):
     )
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision} and deduction of {deductions} minutes!')
-    return redirect("ysws_review")
+    return redirect("ysws_review_dash")
 
 @staff_member_required
 def fraud_review_dash(request):
@@ -757,7 +757,7 @@ def t3_decision(request, ship_id):
         ship.status = Ship.ShipStatus.T2_QUEUE
     else:
         messages.error(request, f"that shit does NOT work you fat fucking chud (received decision: {decision})")
-        return redirect("fraud_review")
+        return redirect("fraud_review_dash")
     
     ship.save()
     
@@ -768,19 +768,19 @@ def t3_decision(request, ship_id):
         payout_hours = float(payout_hours_raw)
         if '.' in payout_hours_raw and len(payout_hours_raw.split('.')[1]) > 2:
             messages.error(request, f"TWO DECIMAL PLACES MAX FATASS WHAT U NEED ALL THAT PRECISION FOR???? (input: {payout_hours_raw})")
-            return redirect("fraud_review")
+            return redirect("fraud_review_dash")
     except ValueError:
         messages.error(request, f"so you see, the payout hours is supposed to be a number. guess what ur fatass put? {payout_hours_raw}. WHAT ARE YOU DOING???")
-        return redirect("fraud_review")
+        return redirect("fraud_review_dash")
     
     try:
         airtable_hours = float(airtable_hours_raw)
         if '.' in airtable_hours_raw and len(airtable_hours_raw.split('.')[1]) > 2:
             messages.error(request, f"TWO DECIMAL PLACES MAX FATASS WHAT U NEED ALL THAT PRECISION FOR???? (input: {airtable_hours_raw})")
-            return redirect("fraud_review")
+            return redirect("fraud_review_dash")
     except ValueError:
         messages.error(request, f"so you see, the airtable hours is supposed to be a number. guess what ur fatass put? {airtable_hours_raw}. WHAT ARE YOU DOING???")
-        return redirect("fraud_review")
+        return redirect("fraud_review_dash")
 
     T3.objects.create(
         ship=ship,

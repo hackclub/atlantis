@@ -63,18 +63,20 @@
         {% endfor %}
 
         <h3>Review</h3>
-        <form>
-            <input type="text" placeholder="Feedback (100 characters, public)" maxlength=100 style="width: 300px;" required>
+        <form action="{% url 't1_decision' ship.id %}" method="POST">
+            {% csrf_token %}
+            <input type="text" name="feedback" placeholder="Feedback (100 characters, public)" maxlength=100 style="width: 300px;" required>
             <br>
-            <input type="text" placeholder="Internal Notes (100 characters, private)" maxlength=100 style="width: 300px;" required>
+            <input type="text" name="internal_notes" placeholder="Internal Notes (100 characters, private)" maxlength=100 style="width: 300px;" required>
             <br>
             <br>
             <label for="print_required">Print Required?</label>
-            <input type="checkbox" id="print_required" name="print_required" checked>
+            <input type="checkbox" id="print_required" name="print" checked>
             <br>
             <br>
             <label for="approved_checkbox">Approved?</label>
-            <input type="checkbox" id="approved_checkbox" name="approved_checkbox">
+            <input type="checkbox" id="approved_checkbox">
+            <input type="hidden" id="approved_hidden" name="approved" value="denied">
             <br>
             <br>
             <button type="submit">Reject</button>
@@ -84,14 +86,18 @@
     <script>
         const approvedCheckbox = document.getElementById('approved_checkbox');
         const printRequiredCheckbox = document.getElementById('print_required');
+        const approvedHidden = document.getElementById('approved_hidden');
         const submitButton = document.querySelector('button[type="submit"]');
 
         function updateButtonText() {
             if (!approvedCheckbox.checked) {
+                approvedHidden.value = 'denied';
                 submitButton.textContent = 'Reject';
             } else if (approvedCheckbox.checked && printRequiredCheckbox.checked) {
+                approvedHidden.value = 'approved';
                 submitButton.textContent = 'Approve';
             } else if (approvedCheckbox.checked && !printRequiredCheckbox.checked) {
+                approvedHidden.value = 'approved';
                 submitButton.textContent = 'Approve (no print)';
             }
         }
