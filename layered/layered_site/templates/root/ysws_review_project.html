@@ -27,22 +27,10 @@
         {% endif %}
     </nav>
     <div class="content">
-        <h1>Review Project "{{ ship.project.title }}" by {{ ship.project.owner.hackclub_profile.slack_username }}</h1>
+        <h1>YSWS Review Project "{{ ship.project.title }}" by {{ ship.project.owner.hackclub_profile.slack_username }}</h1>
         <p>{{ ship.project.description }}</p>
         <a href="{{ ship.project.printablesUrl }}">View on Printables</a>
-        {% for journal in journals %}
-            <div class="journal-card">
-                <h3>{{ journal.title }}</h3>
-                <p>{{ journal.time_spent }} min</p>
-                <p>{{ journal.text }}</p>
-                {% if journal.image_url %}
-                    <img src="{{ journal.image_url }}" alt="{{ journal.title }}" style="max-width: 400px;">
-                {% endif %}
-                {% if journal.model_url %}
-                    <p><a href="{{ journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
-                {% endif %}
-            </div>
-        {% endfor %}
+        <!--ADD JOURNALS LATER YOU FUCKER-->
         <h2>T1 actions</h2>
         {% for t1_review in ship.t1_reviews.all %}
             <h4>Approved: {{ t1_review.approved }} at {{ t1_review.reviewed_at }} by {{ t1_review.reviewer }}</h4>
@@ -74,7 +62,7 @@
             <p>No T2 reviews yet.</p>
         {% endfor %}
 
-        <h3>Review</h3>
+        <!-- <h3>Review</h3>
         <form action="{% url 't1_decision' ship.id %}" method="POST">
             {% csrf_token %}
             <input type="text" name="feedback" placeholder="Feedback (100 characters, public)" maxlength=100 style="width: 300px;" required>
@@ -116,6 +104,6 @@
 
         approvedCheckbox.addEventListener('change', updateButtonText);
         printRequiredCheckbox.addEventListener('change', updateButtonText);
-    </script>
+    </script> -->
 </body>
 </html>

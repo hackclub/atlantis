@@ -647,6 +647,8 @@ def review_project(request, ship_id):
         raise PermissionDenied
 
     ship = get_object_or_404(Ship, id=ship_id)
+    journals = ship.project.journals.order_by('-id')
+
     return render(request, "root/review_project.html", {
         "ship": ship
     })

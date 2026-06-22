@@ -40,6 +40,7 @@ class Ship(models.Model):
 		related_name="ships"
 	)
 	created_at = models.DateTimeField(auto_now_add=True)
+	submitted_time = models.IntegerField(default=0)
 	class ShipStatus(models.TextChoices):
 		REJECTED = "R", "Rejected"
 		T1_QUEUE = "T1", "Under T1 Review"
@@ -173,7 +174,15 @@ class Journal(models.Model):
 		related_name="journals"
 	)
 
+	ship = models.ForeignKey(
+		Ship,
+		on_delete=models.PROTECT,
+		related_name="journals",
+		null=True
+	)
+
 	time_spent = models.IntegerField()
+	created_at = models.DateTimeField(auto_now_add=True)
 	title = models.CharField(max_length=100)
 	text = models.CharField(max_length=2000)
 	image_url = models.CharField(max_length=2048)
