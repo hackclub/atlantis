@@ -10,8 +10,10 @@ from django.core.exceptions import PermissionDenied
 from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
+from django.conf import settings
+from django.core.files.storage import default_storage
 
-from .models import Profile, Project, Item, Order, Ship, T1, T2, T3, Print, Journal
+from .models import Profile, Project, Item, Order, Ship, T1, T2, T3, Print, Journal 
 
 from urllib.parse import urlparse
 from slack_sdk import WebClient
@@ -251,12 +253,14 @@ def project_detail(request, project_id):
     user = request.user
     profile = request.user.hackclub_profile
     ships = project.ships.order_by('-created_at')
+    journals = project.journals.order_by('-id')
 
     return render(request, "layered_site/project_detail.html", {
         "project": project,
         "user": user,
         "profile": profile,
-        "ships": ships
+        "ships": ships,
+        "journals": journals,
     })
 
 @login_required
@@ -324,6 +328,10 @@ def create_journal(request, project_id):
     if request.method != 'POST':
         return redirect("project_detail", project_id=project_id)
     
+    if not settings.ALLOW_JOURNALING and not request.user.has_perm("layered_site.organizer"):
+        messages.error(request, "Journaling is disallowed on this instance!")
+        return redirect("project_detail", project_id=project_id)
+
     project = get_object_or_404(Project, id=project_id, owner=request.user, deleted=False)
 
     if project.locked:
@@ -343,16 +351,30 @@ def create_journal(request, project_id):
     title = request.POST.get("title", "").strip()
     text = request.POST.get("text", "").strip()
 
-    image_url = request.POST.get("image_url", "").strip()
-    model_url = request.POST.get("model_url", "").strip()
+    image_file = request.FILES.get("image")
+    model_file = request.FILES.get("STL")
 
-    if not is_valid_image_url(image_url):
-        messages.error(request, "Invalid image URL")
+    if not image_file:
+        messages.error(request, "An image is required.")
         return redirect("project_detail", project_id=project_id)
-    if not is_valid_stl_url(model_url):
-        messages.error(request, "Invalid STL url")
+    if not model_file:
+        messages.error(request, "An STL model is required.")
         return redirect("project_detail", project_id=project_id)
-    
+
+    if not (image_file.content_type or "").startswith("image/"):
+        messages.error(request, "Uploaded image must be an image file.")
+        return redirect("project_detail", project_id=project_id)
+    if not os.path.basename(model_file.name).lower().endswith(".stl"):
+        messages.error(request, "Uploaded model must be an STL file.")
+        return redirect("project_detail", project_id=project_id)
+
+    # upload to the images/ and models/ folders in the R2 bucket
+    image_key = default_storage.save(f"images/{os.path.basename(image_file.name)}", image_file)
+    model_key = default_storage.save(f"models/{os.path.basename(model_file.name)}", model_file)
+
+    image_url = default_storage.url(image_key)
+    model_url = default_storage.url(model_key)
+
     Journal.objects.create(
         project=project,
         time_spent=time_spent,

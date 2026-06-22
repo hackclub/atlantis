@@ -49,24 +49,41 @@
 
         <div class="journal-section">
         <h2>Journal Entries</h2>
+            {% if journals %}
+                {% for journal in journals %}
+                    <div class="journal-card">
+                        <h3>{{ journal.title }}</h3>
+                        <p>{{ journal.time_spent }} min</p>
+                        <p>{{ journal.text }}</p>
+                        {% if journal.image_url %}
+                            <img src="{{ journal.image_url }}" alt="{{ journal.title }}" style="max-width: 400px;">
+                        {% endif %}
+                        {% if journal.model_url %}
+                            <p><a href="{{ journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p>No journal entries yet!</p>
+            {% endif %}
             {% if project.owner == user %}
-                <!-- <form action="{url 'create_journal' %}"> -->
-                <form>
+                <form action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
                     <input type="text" name="title" placeholder="Title">
                     <input type="text" name="time_spent" placeholder="Time Spent (minutes)">
-                    <textarea 
-                        maxlength="2000" 
-                        placeholder="What did you do?" 
+                    <textarea
+                        maxlength="2000"
+                        placeholder="What did you do?"
                         style="display:block; width: 500px; height: 500px; text-align: left; resize: none; padding: 10px; box-sizing: border-box; margin-bottom: 20px;"
                         name="text"
                         required
                     ></textarea>
                     <label for="image">Upload a photo of what you did!</label>
-                    <input type="file" name="image">
+                    <input type="file" id="image" name="image" accept="image/*" required>
                     <br>
                     <br>
                     <label for="STL">Upload an STL of your current project!</label>
-                    <input type="file" name="STL">
+                    <input type="file" id="STL" name="STL" accept=".stl" required>
                     <br>
                     <br>
                     <button type="submit">Submit entry!</button>

@@ -24,6 +24,26 @@ HCA_CLIENT_ID = os.environ.get("HCA_CLIENT_ID")
 HCA_CLIENT_SECRET = os.environ.get("HCA_CLIENT_SECRET")
 HCA_CALLBACK_URI = os.environ.get("HCA_CALLBACK_URI")
 
+# fucking cloudflare bs
+AWS_ACCESS_KEY_ID = os.environ["R2_ACCESS_KEY_ID"]
+AWS_SECRET_ACCESS_KEY = os.environ["R2_SECRET_ACCESS_KEY"]
+AWS_STORAGE_BUCKET_NAME = os.environ["R2_BUCKET_NAME"]
+AWS_S3_ENDPOINT_URL = f"https://{os.environ['CF_ACCOUNT_ID']}.r2.cloudflarestorage.com"
+AWS_S3_REGION_NAME = "auto"  
+AWS_S3_SIGNATURE_VERSION = "s3v4"
+AWS_DEFAULT_ACL = None
+AWS_S3_FILE_OVERWRITE = False
+AWS_S3_CUSTOM_DOMAIN = os.environ["R2_PUBLIC_URL"].replace("https://", "")
+
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
@@ -32,6 +52,7 @@ SECRET_KEY = os.environ["SECRET_KEY"]
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get("DEBUG", "False") == "True"
+ALLOW_JOURNALING = os.environ.get("ALLOW_JOURNALING", "False") == "True"
 
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
 
@@ -45,7 +66,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'layered_site'
+    'layered_site',
+    'storages'
 ]
 
 MIDDLEWARE = [
@@ -137,4 +159,3 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
