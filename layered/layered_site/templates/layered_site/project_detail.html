@@ -31,6 +31,10 @@
                     {% csrf_token %}
                     <button type="submit">Ship</button>
                 </form>
+                <form action="{% url 'delete_project' project.id %}" method="post">
+                    {% csrf_token %}
+                    <button type="submit" style="color: red;">Delete</button>
+                </form>
             {% endif %}
             <br>
         </div>
