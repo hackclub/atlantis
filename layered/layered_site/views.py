@@ -697,10 +697,21 @@ def ysws_review_dash(request):
     user = request.user
     if not any(user.has_perm(perm) for perm in ["layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"]):
         raise PermissionDenied
-    
+
     ships = Ship.objects.filter(status=Ship.ShipStatus.T2_QUEUE)
     return render(request, "root/ysws_review.html", {
         "ships": ships
+    })
+
+@staff_member_required
+def ysws_review_project(request, ship_id):
+    user = request.user
+    if not any(user.has_perm(perm) for perm in ["layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"]):
+        raise PermissionDenied
+
+    ship = get_object_or_404(Ship, id=ship_id)
+    return render(request, "root/ysws_review_project.html", {
+        "ship": ship
     })
 
 @require_POST

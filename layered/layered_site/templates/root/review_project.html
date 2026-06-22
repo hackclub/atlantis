@@ -45,7 +45,7 @@
         {% endfor %}
         <h2>T1 actions</h2>
         {% for t1_review in ship.t1_reviews.all %}
-            <h4>Approved: {{ t1_review.approved }} at {{ t1_review.reviewed_at }} by {{ t1_review.reviewer }}</h4>
+            <p><strong>Approved:</strong> {{ t1_review.approved }} at {{ t1_review.reviewed_at }} by {{ t1_review.reviewer.hackclub_profile.slack_username }}</p>
             <p><strong>Feedback:</strong> {{ t1_review.feedback }}</p>
             <p><strong>Internal:</strong> {{ t1_review.internal_notes }}</p>
             <p><strong>Print:</strong> {{ t1_review.print }}</p>
@@ -54,7 +54,7 @@
         {% endfor %}
         <h2>Printer actions</h2>
         {% for print in ship.prints.all %}
-            <h4>Decision: {{ print.get_decision_display }} at {{ print.claimed_time }} by {{ print.printer }}</h4>
+            <p><strong>Decision:</strong> {{ print.get_decision_display }} at {{ print.claimed_time }} by {{ print.printer.hackclub_profile.slack_username }}</p>
             <p><strong>Weight:</strong> {{ print.weight }}</p>
             <p><strong>Feedback:</strong> {{ print.feedback }}</p>
             <p><strong>Internal:</strong> {{ print.internal_notes }}</p>
@@ -66,7 +66,7 @@
         {% endfor %}
         <h2>T2 actions</h2>
         {% for t2_review in ship.t2_reviews.all %}
-            <h4>Decision: {{ t2_review.get_decision_display }} at {{ t2_review.reviewed_at }} by {{ t2_review.reviewer }}</h4>
+            <p><strong>Decision:</strong> {{ t2_review.get_decision_display }} at {{ t2_review.reviewed_at }} by {{ t2_review.reviewer.hackclub_profile.slack_username }}</p>
             <p><strong>Deductions:</strong> {{ t2_review.deductions }}</p>
             <p><strong>Feedback:</strong> {{ t2_review.feedback }}</p>
             <p><strong>Justification:</strong> {{ t2_review.justification }}</p>

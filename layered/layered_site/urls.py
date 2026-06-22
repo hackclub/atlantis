@@ -32,6 +32,8 @@ urlpatterns = [
     path("root/review/<int:ship_id>", views.review_project, name="review_project"),
     path("root/review/<int:ship_id>/decision", views.t1_decision, name="t1_decision"),
     path("root/ysws_review/", views.ysws_review_dash, name="ysws_review_dash"),
+    path("root/ysws_review/<int:ship_id>", views.ysws_review_project, name="ysws_review_project"),
+    path("root/ysws_review/<int:ship_id>/decision", views.t2_decision, name="t2_decision"),
     path("root/fraud_review/", views.fraud_review_dash, name="fraud_review_dash"),
     path("root/print/", views.print_dash, name="print_dash")
 ]  

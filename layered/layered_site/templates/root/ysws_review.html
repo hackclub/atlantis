@@ -33,11 +33,11 @@
             <li class="project-card" data-project-id="{{ ship.project.id }}">
                 <div class="card-row">
                     <div class="card-main">
-                        <strong>{{ ship.project.title }}</strong>
+                        <a href="{% url 'ysws_review_project' ship.id %}"><strong>{{ ship.project.title }}</strong></a>
                         <p>{{ ship.project.description }}</p>
                     </div>
                 </div>
-            </li>    
+            </li>
         {% endfor%}
     </div>
 </body>
