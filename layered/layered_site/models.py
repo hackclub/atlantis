@@ -40,7 +40,6 @@ class Ship(models.Model):
 		related_name="ships"
 	)
 	created_at = models.DateTimeField(auto_now_add=True)
-	submitted_time = models.IntegerField(default=0)
 	class ShipStatus(models.TextChoices):
 		REJECTED = "R", "Rejected"
 		T1_QUEUE = "T1", "Under T1 Review"
