@@ -86,7 +86,7 @@
                 {% for journal in journals %}
                     <div class="journal-card">
                         <h3>{{ journal.title }}</h3>
-                        <p>{{ journal.time_spent }} min</p>
+                        <p>{{ journal.time_spent }} minutes</p>
                         <p>{{ journal.text }}</p>
                         {% if journal.image_url %}
                             <img src="{{ journal.image_url }}" alt="{{ journal.title }}" style="max-width: 400px;">

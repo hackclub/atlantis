@@ -269,10 +269,6 @@ def edit_project(request, project_id):
     if not description:
         messages.error(request, "Description is required")
         return redirect("projects")
-    
-    # if not is_valid_printables_url(printables_url):
-    #     messages.error(request, "Printables URL must be a valid https://printables.com/xyz URL.")
-    #     return redirect("projects")
 
     project.title = title
     project.description = description
@@ -829,8 +825,10 @@ def ysws_review_project(request, ship_id):
         raise PermissionDenied
 
     ship = get_object_or_404(Ship, id=ship_id)
+    journals = ship.project.journals.order_by('-id')
     return render(request, "root/ysws_review_project.html", {
-        "ship": ship
+        "ship": ship,
+        "journals": journals,
     })
 
 @require_POST
@@ -900,8 +898,10 @@ def fraud_review_project(request, ship_id):
         raise PermissionDenied
 
     ship = get_object_or_404(Ship, id=ship_id)
+    journals = ship.project.journals.order_by('-id')
     return render(request, "root/fraud_review_project.html", {
-        "ship": ship
+        "ship": ship,
+        "journals": journals
     })
 
 @require_POST
