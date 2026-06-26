@@ -57,7 +57,11 @@
         <h2>Printer actions</h2>
         {% for print in ship.prints.all %}
             <h3>Print {{ forloop.counter }}</h3>
+            {% if print.finished_time %}
+            <p><strong>Decision:</strong> {{ print.get_decision_display }} at {{ print.finished_time }} by {{ print.printer.hackclub_profile.slack_username }}</p>
+            {% else %}
             <p><strong>Decision:</strong> {{ print.get_decision_display }} at {{ print.claimed_time }} by {{ print.printer.hackclub_profile.slack_username }}</p>
+            {% endif %}
             <p><strong>Weight:</strong> {{ print.weight }}</p>
             <p><strong>Feedback:</strong> {{ print.feedback }}</p>
             <p><strong>Internal:</strong> {{ print.internal_notes }}</p>
@@ -78,12 +82,43 @@
             <p>No T2 reviews yet.</p>
         {% endfor %}
 
-        <h3>Print</h3>
-        {% if current_print.decision == "U" or not current_print %}
-        <p>hi (print unclaimed/doesn't exist)</p>
-        {% elif current_print.decision == "A" or current_print.decision == "T1" %}
-        <p>hi (print approved/sent back to t1)</p>
-        {% endif %}
+        <h1>Printing Area</h1>
+        {% if not current_print or current_print.unclaimed_time %}
+            <form action="{% url 'claim_print' ship.id %}" method="POST">
+                {% csrf_token %}
+                <button type="submit">Claim Print</button>
+            </form>
+        {% elif current_print.finished_time %}
+            <p>This print has already been printed.</p>
+        {% elif current_print.printer == user %}
+            <form action="{% url 'print_decision' ship.id %}" method="POST">
+                {% csrf_token %}
+                <input type="text" placeholder="Weight (grams)" name="weight">
+                <br>
+                <input type="text" placeholder="Feedback (public)" name="feedback" style="width: 250px;">
+                <br>
+                <input type="text" placeholder="Notes (internal)" name="internal_notes" style="width: 250px">
+                <br>
+                <input type="text" placeholder="Image URL (from Printables)" name="image_url" style="width: 250px;">
+                <br>
+                <br>
+                <select id="decision" name="decision">
+                    <option value="A">Approve</option>
+                    <option value="T1">Return to T1</option>
+                </select>
+                <br>
+                <br>
+                <button type="submit">Submit</button>
+            </form>
+            <br>
+            <br>
+            <form action="{% url 'print_decision' ship.id %}" method="POST">
+                {% csrf_token %}
+                <button type="submit">Unclaim Print</button>
+            </form>
+        {% else %}
+            <p>This print has already been claimed by someone.</p>
+        {% endif %} 
         <form>
         </form>
     </div> 

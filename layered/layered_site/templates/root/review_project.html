@@ -78,7 +78,7 @@
             <p>No T2 reviews yet.</p>
         {% endfor %}
 
-        <h3>Review</h3>
+        <h1>Review</h1>
         <form action="{% url 't1_decision' ship.id %}" method="POST">
             {% csrf_token %}
             <input type="text" name="feedback" placeholder="Feedback (100 characters, public)" maxlength=100 style="width: 300px;" required>

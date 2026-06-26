@@ -91,13 +91,14 @@ class Print(models.Model):
 	class Decision(models.TextChoices):
 		RETURN_T1 = "T1", "Returned to T1 Review"
 		UNCLAIMED = "U", "Unclaimed, back in printing queue"
+		PRINTING = "P", "Being printed"
 		APPROVE = "A", "Approve"
 
 	weight = models.IntegerField(null=True, blank=True)
 	decision = models.CharField(
 		max_length=2,
 		choices=Decision.choices,
-		default=Decision.APPROVE
+		default=Decision.PRINTING
 	)
 
 	claimed_time = models.DateTimeField(default=timezone.now)

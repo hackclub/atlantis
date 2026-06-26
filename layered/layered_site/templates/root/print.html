@@ -29,17 +29,34 @@
     <div class="content">
         {% include "root/_messages.html" %}
         <h1>Print Dash</h1>
-        <h3>Print em projects!!</h3>
+        <h3>Claimed by you</h3>
+        {% for print in claimed_prints %}
+            <div class="project-card" data-project-id="{{ print.ship.project.id }}">
+                <div class="card-row">
+                    <div class="card-main">
+                        <strong><a href="{% url 'print_project' print.ship.id %}">{{ print.ship.project.title }}</a></strong>
+                        <p>{{ print.ship.project.description }}</p>
+                    </div>
+                </div>
+            </div>
+            <br>
+        {% empty %}
+            <p>You haven't claimed any prints.</p>
+        {% endfor %}
+        <h3>Print queue</h3>
         {% for ship in ships %}
-            <li class="project-card" data-project-id="{{ ship.project.id }}">
+            <div class="project-card" data-project-id="{{ ship.project.id }}">
                 <div class="card-row">
                     <div class="card-main">
                         <strong><a href="{% url 'print_project' ship.id %}">{{ ship.project.title }}</a></strong>
                         <p>{{ ship.project.description }}</p>
                     </div>
                 </div>
-            </li>    
-        {% endfor%}
+            </div>
+            <br>
+        {% empty %}
+            <p>The print queue is empty.</p>
+        {% endfor %}
     </div>
 </body>
 </html>

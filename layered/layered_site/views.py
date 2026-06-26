@@ -591,9 +591,20 @@ def print_dash(request):
     if not any(user.has_perm(perm) for perm in ["layered_site.printer", "layered_site.organizer"]):
         raise PermissionDenied
 
-    ships = Ship.objects.filter(status=Ship.ShipStatus.PRINT_QUEUE)
+    claimed_prints = (
+        Print.objects.filter(
+            printer=user,
+            unclaimed_time__isnull=True,
+            finished_time__isnull=True,
+        )
+        .select_related("ship", "ship__project")
+        .order_by("-claimed_time")
+    )
+    queued_ships = Ship.objects.filter(status=Ship.ShipStatus.PRINT_QUEUE).select_related("project")
     return render(request, "root/print.html", {
-        "ships": ships
+        "claimed_prints": claimed_prints,
+        "ships": queued_ships,
+        "user": user
     })
 
 @staff_member_required
@@ -618,9 +629,8 @@ def claim_print(request, ship_id):
         ship=ship
     )
 
-    # redirect to project printing page later doofus
-    messages.success(request, f"folk claimed a print {ship.project.title} in the big 26")
-    return redirect("print_dash")
+    messages.success(request, f"folk claimed the print '{ship.project.title}' in the big 26")
+    return redirect("print_project", ship_id=ship_id)
 
 @staff_member_required
 @require_POST
@@ -649,7 +659,7 @@ def unclaim_print(request, ship_id):
     ship.save()
 
     messages.success(request, f"you unclaimed {ship.project.title} u filthy rat")
-    return redirect("print_dash")
+    return redirect("print_project", ship_id=ship_id)
 
 @staff_member_required
 def print_project(request, ship_id):
@@ -683,7 +693,7 @@ def print_decision(request, ship_id):
 
     if not is_valid_image_url(image_url):
         messages.error(request, "that's not a valid image URL biggie")
-        return redirect("print_dash")
+        return redirect("print_project")
 
     try:
         weight = int(weight_raw)
