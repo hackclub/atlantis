@@ -162,8 +162,8 @@ class T3(models.Model):
 		default=Decision.APPROVE,
 	)
 
-	payout_hours = models.DecimalField(decimal_places=2, max_digits=5)
-	airtable_hours = models.DecimalField(decimal_places=2, max_digits=5)
+	payout_time = models.IntegerField()
+	airtable_time = models.IntegerField()
 
 	internal_notes = models.CharField(blank=True)
 

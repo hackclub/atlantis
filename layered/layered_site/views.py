@@ -909,40 +909,38 @@ def t3_decision(request, ship_id):
         ship.status = Ship.ShipStatus.PRINT_QUEUE
     elif decision == T3.Decision.RETURN_T2:
         ship.status = Ship.ShipStatus.T2_QUEUE
+    elif decision == T3.Decision.APPROVE:
+        ship.status = Ship.ShipStatus.FINALIZED
+
+        # remember to payout here
     else:
         messages.error(request, f"that shit does NOT work you fat fucking chud (received decision: {decision})")
         return redirect("fraud_review_dash")
     
     ship.save()
     
-    payout_hours_raw = request.POST.get("payout", "0").strip()
-    airtable_hours_raw = request.POST.get("airtable_hours", "0").strip()
+    payout_time_raw = request.POST.get("payout_time", "0").strip()
+    airtable_time_raw = request.POST.get("airtable_time", "0").strip()
 
     try:
-        payout_hours = float(payout_hours_raw)
-        if '.' in payout_hours_raw and len(payout_hours_raw.split('.')[1]) > 2:
-            messages.error(request, f"TWO DECIMAL PLACES MAX FATASS WHAT U NEED ALL THAT PRECISION FOR???? (input: {payout_hours_raw})")
-            return redirect("fraud_review_dash")
+        payout_time = int(payout_time_raw)
     except ValueError:
-        messages.error(request, f"so you see, the payout hours is supposed to be a number. guess what ur fatass put? {payout_hours_raw}. WHAT ARE YOU DOING???")
-        return redirect("fraud_review_dash")
+        messages.error(request, f"i need an integer. you gave me {payout_time_raw}. come on vro")
+        return redirect(request, "fraud_review")
     
     try:
-        airtable_hours = float(airtable_hours_raw)
-        if '.' in airtable_hours_raw and len(airtable_hours_raw.split('.')[1]) > 2:
-            messages.error(request, f"TWO DECIMAL PLACES MAX FATASS WHAT U NEED ALL THAT PRECISION FOR???? (input: {airtable_hours_raw})")
-            return redirect("fraud_review_dash")
+        airtable_time = int(airtable_time_raw)
     except ValueError:
-        messages.error(request, f"so you see, the airtable hours is supposed to be a number. guess what ur fatass put? {airtable_hours_raw}. WHAT ARE YOU DOING???")
-        return redirect("fraud_review_dash")
+        messages.error(request, f"i need an integer. you gave me {airtable_time_raw}. come on vro")
+        return redirect(request, "fraud_review")
 
     T3.objects.create(
         ship=ship,
         reviewer=reviewer,
         decision=decision,
         internal_notes=internal_notes,
-        payout_hours=payout_hours,
-        airtable_hours=airtable_hours
+        payout_time=payout_time,
+        airtable_time=airtable_time
     )
 
     messages.success(request, f"good job. you did it right. i'm not complimenting you go lose some weight fattie. (project: {ship.project.title} with decision {decision})")
