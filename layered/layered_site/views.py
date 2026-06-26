@@ -207,7 +207,9 @@ def projects(request):
 
 def explore(request):
     profile = request.user.hackclub_profile
-    return render(request, "layered_site/explore.html", {'profile': profile})
+
+    projects = Project.objects.exclude(owner=request.user)
+    return render(request, "layered_site/explore.html", {'profile': profile, 'projects': projects})
 
 def shop(request):
     profile = request.user.hackclub_profile

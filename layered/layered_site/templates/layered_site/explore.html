@@ -16,7 +16,26 @@
     <div class="content">
         {% include "root/_messages.html" %}
         <h1>Explore</h1>
-        <h2>This is where you can look at other users' projects!</h2>
+            {% if projects %}
+                    {% for project in projects %}
+                            {% if not project.deleted %}
+                            <div class="project-card" data-project-id="{{ project.id }}">
+                                <div class="card-row">
+                                    <div class="card-main">
+                                        <strong><a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></strong>
+                                        <p>{{ project.description }}</p>
+                                        {% if project.printablesUrl %}
+                                            <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+            {% else %}
+                <p>No projects not made by you yet. Tell your friends to make some!</p>
+            {% endif %}
+
         
         <div class="profile">
             <img src="{{ user.hackclub_profile.slack_pfp_url }}" id="pfp">

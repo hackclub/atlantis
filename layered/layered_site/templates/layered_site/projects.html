@@ -29,10 +29,9 @@
         <section class="project-list">
             <h3>Your Projects</h3>
             {% if projects %}
-                <ul>
                     {% for project in projects %}
                             {% if not project.deleted %}
-                            <li class="project-card" data-project-id="{{ project.id }}">
+                            <div class="project-card" data-project-id="{{ project.id }}">
                                 <div class="card-row">
                                     <div class="card-main">
                                         <strong><a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></strong>
@@ -54,10 +53,9 @@
                                         </div>
                                     </div>
                                 </div>
-                            </li>
+                            </div>
                             {% endif %}
                         {% endfor %}
-                </ul>
             {% else %}
                 <p>No projects yet. Create your first one!</p>
             {% endif %}
