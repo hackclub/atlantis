@@ -25,6 +25,9 @@
         {% if perms.layered_site.t3_review or perms.layered_site.organizer %}
             <a href="/root/fraud_review">fraud review</a>
         {% endif %}
+        {% if perms.layered_site.organizer %}
+            <a href="/root/audit_log">audit log</a>
+        {% endif %}
     </nav>
     <div class="content">
         {% include "root/_messages.html" %}
@@ -40,10 +43,10 @@
         <section class="item-list">
             <h3>Items</h3>
             {% if items %}
-                <ul>
+                <div>
                     {% for item in items %}
                         {% if not item.deleted %}
-                        <li class="item-card" data-item-id="{{ item.id }}">
+                        <div class="item-card" data-item-id="{{ item.id }}">
                             <div class="card-row">
                                 <div class="card-main">
                                     <img src="{{ item.imageUrl }}" alt="{{ item.name }}" loading="lazy" style="max-width: 100%; max-height: 400px; height: auto;">
@@ -65,10 +68,10 @@
                                         </div>
                                 </div>
                             </div>
-                        </li>
+                        </div>
                         {% endif %}
                     {% endfor %}
-            </ul>
+                    </div>
             {% else %}
                 <p>No items in the shop yet! Create one you filthy admin!!!!!</p>
             {% endif %}

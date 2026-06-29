@@ -25,6 +25,9 @@
         {% if perms.layered_site.t3_review or perms.layered_site.organizer %}
             <a href="/root/fraud_review">fraud review</a>
         {% endif %}
+        {% if perms.layered_site.organizer %}
+            <a href="/root/audit_log">audit log</a>
+        {% endif %}
     </nav>
     <div class="content">
         {% include "root/_messages.html" %}

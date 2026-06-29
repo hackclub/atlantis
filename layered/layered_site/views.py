@@ -13,8 +13,9 @@ from django.db import transaction
 from django.db.models import Sum
 from django.conf import settings
 from django.core.files.storage import default_storage
+from django.core.paginator import Paginator
 
-from .models import Profile, Project, Item, Order, Ship, T1, T2, T3, Print, Journal 
+from .models import Profile, Project, Item, Order, Ship, T1, T2, T3, Print, Journal, AuditLog
 
 from urllib.parse import urlparse
 from slack_sdk import WebClient
@@ -29,6 +30,45 @@ PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?", 
 
 def is_valid_printables_url(value):
     return bool(PRINTABLES_URL_RE.match(value))
+
+def get_client_ip(request):
+    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR", "")
+
+def record_audit(request, action, target="", metadata=None):
+    """Record an admin action in the audit log.
+
+    Captures every value submitted through the form (minus the CSRF token),
+    the names of any uploaded files, who acted, and where from. `metadata`
+    holds the resulting state/extra context for the action.
+    """
+    form_data = {
+        key: request.POST.getlist(key) if len(request.POST.getlist(key)) > 1 else value
+        for key, value in request.POST.items()
+        if key != "csrfmiddlewaretoken"
+    }
+    if request.FILES:
+        form_data["_uploaded_files"] = {
+            field: [f.name for f in request.FILES.getlist(field)]
+            for field in request.FILES
+        }
+
+    try:
+        AuditLog.objects.create(
+            actor=request.user if request.user.is_authenticated else None,
+            action=action,
+            target=str(target)[:255],
+            path=request.path,
+            method=request.method,
+            ip_address=get_client_ip(request),
+            form_data=form_data,
+            metadata=metadata or {},
+        )
+    except Exception as e:
+        # auditing must never break the underlying admin action
+        print("Failed to record audit log entry:", e)
 
 def is_valid_image_url(url):
     try:
@@ -580,6 +620,15 @@ def update_order_status(request, order_id):
         order.fulfilled_at = None
     order.save(update_fields=["status", "fulfilled_at", "fulfiller"])
 
+    record_audit(request, "update_order_status", target=f"Order #{order.id}", metadata={
+        "order_id": order.id,
+        "item": order.item.name,
+        "owner": order.owner.username,
+        "quantity": order.quantity,
+        "previous_status": prev_status,
+        "new_status": order.status,
+    })
+
     messages.success(request, f"Order #{order.id} updated to {order.get_status_display().lower()}.")
     return redirect("fulfillment_dash")
 
@@ -622,10 +671,17 @@ def claim_print(request, ship_id):
     ship.status = Ship.ShipStatus.BEING_PRINTED
     ship.save()
 
-    Print.objects.create(
+    new_print = Print.objects.create(
         printer=user,
         ship=ship
     )
+
+    record_audit(request, "claim_print", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
+        "ship_id": ship.id,
+        "print_id": new_print.id,
+        "project": ship.project.title,
+        "new_ship_status": ship.status,
+    })
 
     messages.success(request, f"folk claimed the print '{ship.project.title}' in the big 26")
     return redirect("print_project", ship_id=ship_id)
@@ -655,6 +711,13 @@ def unclaim_print(request, ship_id):
 
     ship.status = Ship.ShipStatus.PRINT_QUEUE
     ship.save()
+
+    record_audit(request, "unclaim_print", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
+        "ship_id": ship.id,
+        "print_id": active_print.id,
+        "project": ship.project.title,
+        "new_ship_status": ship.status,
+    })
 
     messages.success(request, f"you unclaimed {ship.project.title} u filthy rat")
     return redirect("print_project", ship_id=ship_id)
@@ -730,6 +793,15 @@ def print_decision(request, ship_id):
 
     ship.save()
 
+    record_audit(request, "print_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
+        "ship_id": ship.id,
+        "print_id": active_print.id,
+        "project": ship.project.title,
+        "decision": decision,
+        "weight": weight,
+        "new_ship_status": ship.status,
+    })
+
     messages.success(
         request,
         f"good job, you printed {ship.project.title} correctly and decided to {decision} it. ur still fat tho lmao"
@@ -795,7 +867,7 @@ def t1_decision(request, ship_id):
     
     ship.save()
 
-    T1.objects.create(
+    t1 = T1.objects.create(
         reviewer=reviewer,
         ship=ship,
         feedback=feedback,
@@ -803,6 +875,15 @@ def t1_decision(request, ship_id):
         print=print_requested,
         approved=approved
     )
+
+    record_audit(request, "t1_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
+        "ship_id": ship.id,
+        "t1_id": t1.id,
+        "project": ship.project.title,
+        "approved": approved,
+        "print_requested": print_requested,
+        "new_ship_status": ship.status,
+    })
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with approved = {approved} and print = {print_requested}!')
     return redirect("review_dash")
@@ -867,7 +948,7 @@ def t2_decision(request, ship_id):
     with transaction.atomic():
         ship.save()
 
-        T2.objects.create(
+        t2 = T2.objects.create(
             ship=ship,
             reviewer=reviewer,
             decision=decision,
@@ -884,6 +965,15 @@ def t2_decision(request, ship_id):
             journal.time_spent -= deduct
             journal.save(update_fields=['time_spent'])
             remaining -= deduct
+
+    record_audit(request, "t2_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
+        "ship_id": ship.id,
+        "t2_id": t2.id,
+        "project": ship.project.title,
+        "decision": decision,
+        "deductions": deductions,
+        "new_ship_status": ship.status,
+    })
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision} and deduction of {deductions} minutes!')
     return redirect("ysws_review_dash")
@@ -958,7 +1048,7 @@ def t3_decision(request, ship_id):
         messages.error(request, f"i need an integer. you gave me {airtable_time_raw}. come on vro")
         return redirect(request, "fraud_review")
 
-    T3.objects.create(
+    t3 = T3.objects.create(
         ship=ship,
         reviewer=reviewer,
         decision=decision,
@@ -966,6 +1056,16 @@ def t3_decision(request, ship_id):
         payout_time=payout_time,
         airtable_time=airtable_time
     )
+
+    record_audit(request, "t3_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
+        "ship_id": ship.id,
+        "t3_id": t3.id,
+        "project": ship.project.title,
+        "decision": decision,
+        "payout_time": payout_time,
+        "airtable_time": airtable_time,
+        "new_ship_status": ship.status,
+    })
 
     messages.success(request, f"good job. you did it right. i'm not complimenting you go lose some weight fattie. (project: {ship.project.title} with decision {decision})")
     return redirect("fraud_review_dash")
@@ -1015,6 +1115,12 @@ def create_item(request):
         imageUrl = imageUrl
     )
 
+    record_audit(request, "create_item", target=f"Item #{item.id} ({item.name})", metadata={
+        "item_id": item.id,
+        "name": item.name,
+        "cost": item.cost,
+    })
+
     return redirect("shop_dash")
 
 @staff_member_required
@@ -1053,18 +1159,31 @@ def edit_item(request, item_id):
         messages.error(request, "Cost must be a whole number.")
         return redirect("shop_dash")
 
+    previous = {
+        "name": item.name,
+        "description": item.description,
+        "cost": item.cost,
+        "imageUrl": item.imageUrl,
+    }
+
     item.name = name
     item.description = description
     item.cost = cost
     item.imageUrl = imageUrl
     item.save()
 
+    record_audit(request, "edit_item", target=f"Item #{item.id} ({item.name})", metadata={
+        "item_id": item.id,
+        "previous": previous,
+        "new": {"name": name, "description": description, "cost": cost, "imageUrl": imageUrl},
+    })
+
     return redirect("shop_dash")
 
 @staff_member_required
 @require_POST
 def delete_item(request, item_id):
-    user = request.user()
+    user = request.user
     if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment"]):
         raise PermissionDenied
 
@@ -1072,6 +1191,11 @@ def delete_item(request, item_id):
 
     item.deleted = True
     item.save()
+
+    record_audit(request, "delete_item", target=f"Item #{item.id} ({item.name})", metadata={
+        "item_id": item.id,
+        "name": item.name,
+    })
 
     return redirect("shop_dash")
 
@@ -1087,8 +1211,44 @@ def lock_project(request, project_id):
     project.locked = True
     project.save()
 
+    record_audit(request, "lock_project", target=f"Project #{project.id} ({project.title})", metadata={
+        "project_id": project.id,
+        "project": project.title,
+        "owner": project.owner.username,
+    })
+
     previous_page = request.META.get("HTTP_REFERER", "root/review")
     return redirect(previous_page)
+
+@staff_member_required
+def audit_log(request):
+    user = request.user
+    # organizers only
+    if not user.has_perm("layered_site.organizer"):
+        raise PermissionDenied
+
+    logs = AuditLog.objects.select_related("actor").all()
+
+    action_filter = request.GET.get("action", "").strip()
+    actor_filter = request.GET.get("actor", "").strip()
+
+    if action_filter:
+        logs = logs.filter(action=action_filter)
+    if actor_filter:
+        logs = logs.filter(actor__username__icontains=actor_filter)
+
+    actions = AuditLog.objects.order_by("action").values_list("action", flat=True).distinct()
+
+    paginator = Paginator(logs, 50)
+    page = paginator.get_page(request.GET.get("page"))
+
+    return render(request, "root/audit_log.html", {
+        "page": page,
+        "logs": page.object_list,
+        "actions": actions,
+        "action_filter": action_filter,
+        "actor_filter": actor_filter,
+    })
 
 @staff_member_required
 @require_POST
@@ -1101,6 +1261,12 @@ def unlock_project(request, project_id):
     
     project.locked = False
     project.save()
+
+    record_audit(request, "unlock_project", target=f"Project #{project.id} ({project.title})", metadata={
+        "project_id": project.id,
+        "project": project.title,
+        "owner": project.owner.username,
+    })
 
     previous_page = request.META.get("HTTP_REFERER", "root/review")
     return redirect(previous_page)

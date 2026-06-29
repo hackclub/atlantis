@@ -1,0 +1,125 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Layered Admin</title>
+    <link rel="stylesheet" href="{% static 'layered_site/style.css' %}">
+</head>
+<body class="page" id="admin-audit-log-page">
+    <nav class="sidebar">
+        <a href="/root/">home</a>
+        {% if perms.layered_site.fulfillment or perms.layered_site.organizer %}
+            <a href="/root/shop">shop management</a>
+            <a href="/root/fulfillment">fulfillment</a>
+        {% endif %}
+        {% if perms.layered_site.printer or perms.layered_site.organizer %}
+            <a href="/root/print">print</a>
+        {% endif %}
+        {% if perms.layered_site.t1_review or perms.layered_site.organizer or perms.layered_site.t2_review or perms.layered_site.t3_review %}
+            <a href="/root/review">review</a>
+        {% endif %}
+        {% if perms.layered_site.t2_review or perms.layered_site.organizer or perms.layered_site.t3_review %}
+            <a href="/root/ysws_review">ysws review</a>
+        {% endif %}
+        {% if perms.layered_site.t3_review or perms.layered_site.organizer %}
+            <a href="/root/fraud_review">fraud review</a>
+        {% endif %}
+        {% if perms.layered_site.organizer %}
+            <a href="/root/audit_log">audit log</a>
+        {% endif %}
+    </nav>
+    <div class="content">
+        {% include "root/_messages.html" %}
+        <h1>Audit Log</h1>
+        <p>A record of every admin action</p>
+
+        <form method="get" class="audit-filters" style="margin-bottom: 1rem;">
+            <label>
+                Action:
+                <select name="action">
+                    <option value="">All actions</option>
+                    {% for a in actions %}
+                        <option value="{{ a }}" {% if a == action_filter %}selected{% endif %}>{{ a }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Actor:
+                <input type="text" name="actor" value="{{ actor_filter }}" placeholder="username">
+            </label>
+            <button type="submit">Filter</button>
+            <a href="{% url 'audit_log' %}">Reset</a>
+        </form>
+
+        <p>{{ page.paginator.count }} total entr{{ page.paginator.count|pluralize:"y,ies" }}</p>
+
+        {% if logs %}
+            {% for log in logs %}
+                <div class="audit-entry" style="border: 1px solid #ccc; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
+                    <div class="audit-header">
+                        <strong>{{ log.action }}</strong>
+                        &mdash; {{ log.created_at }}
+                    </div>
+                    <div class="audit-meta">
+                        <p><strong>Actor:</strong>
+                            {% if log.actor %}
+                                {{ log.actor.get_full_name|default:log.actor.username }} ({{ log.actor.username }})
+                            {% else %}
+                                <em>deleted user</em>
+                            {% endif %}
+                        </p>
+                        {% if log.target %}<p><strong>Target:</strong> {{ log.target }}</p>{% endif %}
+                        <p><strong>Request:</strong> {{ log.method }} {{ log.path }}</p>
+                        {% if log.ip_address %}<p><strong>IP address:</strong> {{ log.ip_address }}</p>{% endif %}
+                    </div>
+
+                    <details>
+                        <summary>Form values submitted ({{ log.form_data|length }})</summary>
+                        {% if log.form_data %}
+                            <table class="audit-data">
+                                {% for key, value in log.form_data.items %}
+                                    <tr>
+                                        <th style="text-align: left; padding-right: 1rem; vertical-align: top;">{{ key }}</th>
+                                        <td style="white-space: pre-wrap; word-break: break-word;">{{ value }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        {% else %}
+                            <p><em>No form values submitted.</em></p>
+                        {% endif %}
+                    </details>
+
+                    {% if log.metadata %}
+                        <details>
+                            <summary>Resulting state / context</summary>
+                            <table class="audit-data">
+                                {% for key, value in log.metadata.items %}
+                                    <tr>
+                                        <th style="text-align: left; padding-right: 1rem; vertical-align: top;">{{ key }}</th>
+                                        <td style="white-space: pre-wrap; word-break: break-word;">{{ value }}</td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </details>
+                    {% endif %}
+                </div>
+            {% endfor %}
+
+            {% if page.has_other_pages %}
+                <div class="pagination" style="margin-top: 1rem;">
+                    {% if page.has_previous %}
+                        <a href="?action={{ action_filter }}&actor={{ actor_filter }}&page={{ page.previous_page_number }}">&laquo; Previous</a>
+                    {% endif %}
+                    <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+                    {% if page.has_next %}
+                        <a href="?action={{ action_filter }}&actor={{ actor_filter }}&page={{ page.next_page_number }}">Next &raquo;</a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        {% else %}
+            <p>No audit log entries{% if action_filter or actor_filter %} match your filters{% endif %}.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

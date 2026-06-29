@@ -19,10 +19,10 @@
         <section class="item-list">
             <h3>Items</h3>
             {% if items %}
-                <ul>
+                <div>
                     {% for item in items %}
                         {% if not item.deleted %}
-                        <li class="item-card" data-item-id="{{ item.id }}">
+                        <div class="item-card" data-item-id="{{ item.id }}">
                             <div class="card-row">
                                 <div class="card-main">
                                     <img src="{{ item.imageUrl }}" alt="{{ item.name }}" loading="lazy" style="max-width: 30%; max-height: 200px; height: auto;">
@@ -37,10 +37,10 @@
 
                                 </div>
                             </div>
-                        </li>
+                        </div>
                         {% endif %}
                     {% endfor %}
-            </ul>
+                    </div>
             {% else %}
                 <p>No items in the shop yet! Check back later.</p>
             {% endif %}

@@ -237,6 +237,37 @@ class Order(models.Model):
 	created_at = models.DateTimeField(auto_now_add=True)
 	quantity = models.PositiveIntegerField(default=1)
 
+# audit log model
+class AuditLog(models.Model):
+	actor = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		related_name="audit_logs",
+		null=True,
+		blank=True
+	)
+	action = models.CharField(max_length=64)
+	target = models.CharField(max_length=255, blank=True)
+	path = models.CharField(max_length=255, blank=True)
+	method = models.CharField(max_length=8, blank=True)
+	ip_address = models.CharField(max_length=64, blank=True)
+	# every value submitted through the form (csrf token stripped)
+	form_data = models.JSONField(default=dict, blank=True)
+	# resulting state / extra context about the action
+	metadata = models.JSONField(default=dict, blank=True)
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering = ["-created_at"]
+		indexes = [
+			models.Index(fields=["-created_at"]),
+			models.Index(fields=["action"]),
+		]
+
+	def __str__(self):
+		who = self.actor.username if self.actor else "deleted user"
+		return f"{self.created_at:%Y-%m-%d %H:%M} {who} {self.action}"
+
 # permissions model
 class Permissions(models.Model):
 	class Meta:
