@@ -472,6 +472,9 @@ def create_journal(request, project_id):
         if time_spent > 240:
             messages.error(request, "Time spent must not be greater than 4 hours!")
             return redirect("project_detail", project_id=project_id)
+        if time_spent < 30:
+            messages.error(request, "You must spend at least 30 minutes on your journal entry!")
+            return redirect("project_detail", project_id=project_id)
     except ValueError:
         messages.error(request, "Journal time spent must be an integer!")
         return redirect("project_detail", project_id=project_id)
