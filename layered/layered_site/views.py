@@ -351,6 +351,9 @@ def project_detail(request, project_id):
     elif ship_pending:
         can_ship = False
         ship_disabled_reason = "Your most recent ship must be finalized or rejected before you can reship."
+    elif not project.journals.exists():
+        can_ship = False
+        ship_disabled_reason = "You must have at least one journal entry before you can ship."
     else:
         can_ship = True
         ship_disabled_reason = ""
@@ -534,6 +537,8 @@ def ship_project(request, project_id):
     if not project.description:
         messages.error(request, "your project must have a description before you can ship!")
         return redirect("projects")
+    if not project.journals.exists():
+        messages.error(request, "your project must have at least one journal to be shipped")
 
     latest_ship = project.ships.order_by('-created_at').first()
     if latest_ship and latest_ship.status not in (Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED):
