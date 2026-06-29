@@ -362,12 +362,28 @@ def project_detail(request, project_id):
             printablesData = {"makesCount": 0}
     else:
         printablesData = {"makesCount": 0}
+    
+    def get_latest_feedback(ship):
+        candidates = []
+        t1 = ship.t1_reviews.order_by('-reviewed_at').first()
+        if t1 and t1.feedback:
+            candidates.append((t1.reviewed_at, t1.feedback))
+        t2 = ship.t2_reviews.order_by('-reviewed_at').first()
+        if t2 and t2.feedback:
+            candidates.append((t2.reviewed_at, t2.feedback))
+        pr = ship.prints.exclude(decision=Print.Decision.PRINTING).order_by('-finished_time').first()
+        if pr and pr.feedback and pr.finished_time:
+            candidates.append((pr.finished_time, pr.feedback))
+        return max(candidates, key=lambda x: x[0])[1] if candidates else ""
+
+    ships_with_feedback = [(ship, get_latest_feedback(ship)) for ship in ships]
 
     return render(request, "layered_site/project_detail.html", {
         "project": project,
         "user": user,
         "profile": profile,
         "ships": ships,
+        "ships_with_feedback": ships_with_feedback,
         "journals": journals,
         "time_spent": time_spent,
         "can_ship": can_ship,
