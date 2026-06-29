@@ -683,7 +683,7 @@ def claim_print(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    messages.success(request, f"folk claimed the print '{ship.project.title}' in the big 26")
+    messages.success(request, f"Claimed print '{ship.project.title}'.")
     return redirect("print_project", ship_id=ship_id)
 
 @staff_member_required
@@ -719,7 +719,7 @@ def unclaim_print(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    messages.success(request, f"you unclaimed {ship.project.title} u filthy rat")
+    messages.success(request, f"Unclaimed print '{ship.project.title}'")
     return redirect("print_dash")
 
 @staff_member_required
@@ -753,13 +753,13 @@ def print_decision(request, ship_id):
     image_url = request.POST.get("image_url", "").strip()
 
     if not is_valid_image_url(image_url):
-        messages.error(request, "that's not a valid image URL biggie")
+        messages.error(request, "Invalid image URL")
         return redirect("print_project")
 
     try:
         weight = int(weight_raw)
     except ValueError:
-        messages.error(request, f"ENTER A WHOLE NUMBER YOU FUCKER (received {weight_raw})")
+        messages.error(request, f"Weight must be a whole number, received {weight_raw})")
         return redirect("print_dash")
 
     feedback = request.POST.get("feedback", "").strip()
@@ -788,7 +788,7 @@ def print_decision(request, ship_id):
     elif decision == Print.Decision.APPROVE:
         ship.status = Ship.ShipStatus.T2_QUEUE
     else:
-        messages.error(request, f"NOT A VALID DECISION NERD (got: {decision})")
+        messages.error(request, f"Invalid decision (got: {decision})")
         return redirect("print_dash")
 
     ship.save()
@@ -804,7 +804,7 @@ def print_decision(request, ship_id):
 
     messages.success(
         request,
-        f"good job, you printed {ship.project.title} correctly and decided to {decision} it. ur still fat tho lmao"
+        f"Print {ship.project.title} with {decision}"
     )
 
     return redirect("print_dash")
@@ -929,7 +929,7 @@ def t2_decision(request, ship_id):
     try:
         deductions = int(deductions) if deductions else 0
     except ValueError:
-        messages.error(request, f"how the fuck do you expect me to deduct a string from a number (got {deductions} expected integer)")
+        messages.error(request, f"Expected integer, got {deductions}")
         return redirect("ysws_review_dash")
 
     feedback = request.POST.get("feedback", "").strip()
@@ -1028,7 +1028,7 @@ def t3_decision(request, ship_id):
 
         # remember to payout here
     else:
-        messages.error(request, f"that shit does NOT work you fat fucking chud (received decision: {decision})")
+        messages.error(request, f"Invalid decision (received decision: {decision})")
         return redirect("fraud_review_dash")
     
     ship.save()
@@ -1039,13 +1039,13 @@ def t3_decision(request, ship_id):
     try:
         payout_time = int(payout_time_raw)
     except ValueError:
-        messages.error(request, f"i need an integer. you gave me {payout_time_raw}. come on vro")
+        messages.error(request, f"Expected integer, receieved {payout_time_raw}")
         return redirect(request, "fraud_review")
     
     try:
         airtable_time = int(airtable_time_raw)
     except ValueError:
-        messages.error(request, f"i need an integer. you gave me {airtable_time_raw}. come on vro")
+        messages.error(request, f"Expected integer, receieved {airtable_time_raw}")
         return redirect(request, "fraud_review")
 
     t3 = T3.objects.create(
@@ -1067,7 +1067,7 @@ def t3_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    messages.success(request, f"good job. you did it right. i'm not complimenting you go lose some weight fattie. (project: {ship.project.title} with decision {decision})")
+    messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}")
     return redirect("fraud_review_dash")
 
 @staff_member_required
