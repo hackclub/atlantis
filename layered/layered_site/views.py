@@ -864,18 +864,26 @@ def t2_decision(request, ship_id):
         messages.error(request, f"How did we get here? (decision: {decision})")
         return redirect("ysws_review_dash")
     
-    ship.save()
+    with transaction.atomic():
+        ship.save()
 
-    # remember to deduct time from journals later
-        
-    T2.objects.create(
-        ship=ship,
-        reviewer=reviewer,
-        decision=decision,
-        deductions=deductions,
-        feedback=feedback,
-        justification=justification
-    )
+        T2.objects.create(
+            ship=ship,
+            reviewer=reviewer,
+            decision=decision,
+            deductions=deductions,
+            feedback=feedback,
+            justification=justification
+        )
+
+        remaining = deductions
+        for journal in ship.project.journals.order_by('-id'):
+            if remaining <= 0:
+                break
+            deduct = min(journal.time_spent, remaining)
+            journal.time_spent -= deduct
+            journal.save(update_fields=['time_spent'])
+            remaining -= deduct
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision} and deduction of {deductions} minutes!')
     return redirect("ysws_review_dash")
@@ -899,9 +907,12 @@ def fraud_review_project(request, ship_id):
 
     ship = get_object_or_404(Ship, id=ship_id)
     journals = ship.project.journals.order_by('-id')
+    total_time = journals.aggregate(total=Sum('time_spent'))['total'] or 0
+
     return render(request, "root/fraud_review_project.html", {
         "ship": ship,
-        "journals": journals
+        "journals": journals,
+        "total_time": total_time
     })
 
 @require_POST

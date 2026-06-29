@@ -89,8 +89,11 @@
             {% csrf_token %}
             <input type="text" name="internal_notes" placeholder="Internal Notes" style="width: 250px;" required>
             <br>
-            <input type="text" name="payout_time" placeholder="Payout Time (minutes)" required>
-            <input type="text" name="airtable_time" placeholder="Airtable Time (minutes)" required>
+            <label for="payout_time">Payout Time:</label>
+            <input type="text" name="payout_time" placeholder="Payout Time (minutes)" value="{{ total_time }}" required>
+            <br>
+            <label for="airtable_time">Airtable Time:</label>
+            <input type="text" name="airtable_time" placeholder="Airtable Time (minutes)" value="{{ total_time }}" required>
             <br>
             <br>
             <select id="decision" name="decision">
