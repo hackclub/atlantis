@@ -115,7 +115,7 @@
             </form>
             <br>
             <br>
-            <form action="{% url 'print_decision' ship.id %}" method="POST">
+            <form action="{% url 'unclaim_print' ship.id %}" method="POST">
                 {% csrf_token %}
                 <button type="submit">Unclaim Print</button>
             </form>

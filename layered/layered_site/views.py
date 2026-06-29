@@ -720,7 +720,7 @@ def unclaim_print(request, ship_id):
     })
 
     messages.success(request, f"you unclaimed {ship.project.title} u filthy rat")
-    return redirect("print_project", ship_id=ship_id)
+    return redirect("print_dash")
 
 @staff_member_required
 def print_project(request, ship_id):
