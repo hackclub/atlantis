@@ -29,6 +29,15 @@
             <a href="/root/audit_log">audit log</a>
         {% endif %}
     </nav>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="{% static 'layered_site/stl_viewer.js' %}"></script>
     <div class="content">
         {% include "root/_messages.html" %}
         <h1>YSWS Review Project "{{ ship.project.title }}" by {{ ship.project.owner.hackclub_profile.slack_username }}</h1>
@@ -36,17 +45,22 @@
         <a href="{{ ship.project.printablesUrl }}">View on Printables</a>
         <h2>Journal Entries</h2>
         {% for journal in journals %}
-        <div class="journal-card">
-            <h3>{{ journal.title }}</h3>
-            <p>{{ journal.time_spent }} minutes</p>
-            <p id="journal-content">{{ journal.text }}</p>
-            {% if journal.image_url %}
-                <img src="{{ journal.image_url }}" alt="{{ journal.title }}" style="max-width: 400px;">
-            {% endif %}
-            {% if journal.model_url %}
-                <p><a href="{{ journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
-            {% endif %}
-        </div>
+            <div class="journal-card">
+                <h3>{{ journal.title }}</h3>
+                <p>{{ journal.time_spent }} minutes</p>
+                <p id="journal-content">{{ journal.text }}</p>
+                <div class="journal-media">
+                    {% if journal.image_url %}
+                        <img src="{{ journal.image_url }}" alt="{{ journal.title }}" class="journal-image">
+                    {% endif %}
+                    {% if journal.model_url %}
+                        <div class="stl-viewer" data-stl-url="{{ journal.model_url }}"></div>
+                    {% endif %}
+                </div>
+                {% if journal.model_url %}
+                    <p><a href="{{ journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
+                {% endif %}
+            </div>
         {% empty %}
         <p>No journal entries. How did this happen?</p>
         {% endfor %}

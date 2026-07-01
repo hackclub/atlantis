@@ -13,6 +13,15 @@
         <a href="/explore">Explore</a>
         <a href="/shop">Shop</a>
     </nav>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="{% static 'layered_site/stl_viewer.js' %}"></script>
     <div class="content">
         {% include "root/_messages.html" %}
         <div class="project-info">
@@ -35,9 +44,14 @@
                         <h3>{{ journal.title }}</h3>
                         <p>{{ journal.time_spent }} minutes</p>
                         <p id="journal-content">{{ journal.text }}</p>
-                        {% if journal.image_url %}
-                            <img src="{{ journal.image_url }}" alt="{{ journal.title }}" style="max-width: 400px;">
-                        {% endif %}
+                        <div class="journal-media">
+                            {% if journal.image_url %}
+                                <img src="{{ journal.image_url }}" alt="{{ journal.title }}" class="journal-image">
+                            {% endif %}
+                            {% if journal.model_url %}
+                                <div class="stl-viewer" data-stl-url="{{ journal.model_url }}"></div>
+                            {% endif %}
+                        </div>
                         {% if journal.model_url %}
                             <p><a href="{{ journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
                         {% endif %}

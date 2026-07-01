@@ -793,6 +793,7 @@ def print_project(request, ship_id):
         raise PermissionDenied
     
     ship = get_object_or_404(Ship, id=ship_id)
+    journals = ship.project.journals.order_by('-id')
     if ship.prints.exists():
         current_print = ship.prints.all().order_by("-id").first()
     else:
@@ -800,7 +801,8 @@ def print_project(request, ship_id):
 
     return render(request, "root/print_project.html", {
         "current_print": current_print,
-        "ship": ship
+        "ship": ship,
+        "journals": journals
     })
 
 @staff_member_required
