@@ -8,10 +8,13 @@
 </head>
 <body class="page" id="shop-page">
     <nav class="sidebar">
-        <a href="/dashboard">Home</a>
-        <a href="/projects">Projects</a>
-        <a href="/explore">Explore</a>
-        <a href="/shop">Shop</a>
+        <a href="/dashboard">home</a>
+        <a href="/projects">projects</a>
+        <a href="/explore">explore</a>
+        <a href="/shop">shop</a>
+        {% if perms.layered_site.organizer or perms.layered_site.fulfillment or perms.layered_site.printer or perms.layered_site.t1_review or perms.layered_site.t2_review or perms.layered_site.t3_review %}
+            <a href="/root">admin</a>
+        {% endif %}
     </nav>
     <div class="content">
         {% include "root/_messages.html" %}
