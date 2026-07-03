@@ -73,7 +73,6 @@ def record_audit(request, action, target="", metadata=None):
             metadata=metadata or {},
         )
     except Exception as e:
-        # auditing must never break the underlying admin action
         print("Failed to record audit log entry:", e)
 
 def is_valid_image_url(url):
@@ -589,7 +588,6 @@ def create_journal(request, project_id):
         messages.error(request, "Uploaded model must be an STL file.")
         return redirect("project_detail", project_id=project_id)
 
-    # upload to the images/ and models/ folders in the R2 bucket
     image_key = default_storage.save(f"images/{os.path.basename(image_file.name)}", image_file)
     model_key = default_storage.save(f"models/{os.path.basename(model_file.name)}", model_file)
 
