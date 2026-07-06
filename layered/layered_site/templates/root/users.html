@@ -8,6 +8,21 @@
     {% include "root/_messages.html" %}
     <h1>Users</h1>
     <h3>Manage Users</h3>
+    <form method="GET" class="users-search" role="search">
+        <input
+            id="userSearchInput"
+            type="search"
+            name="q"
+            value="{{ search_query }}"
+            placeholder="Search by Slack username"
+            aria-label="Search by Slack username"
+            autocomplete="off"
+        >
+        <noscript><button type="submit">Search</button></noscript>
+        {% if search_query %}
+        <a href="{% url 'users' %}" class="link-button">Clear</a>
+        {% endif %}
+    </form>
     <table class="users-table">
         <thead>
             <tr>
@@ -22,7 +37,7 @@
         </thead>
         <tbody>
             {% for user in users %}
-            <tr data-user-id="{{ user.id }}">
+            <tr data-user-id="{{ user.id }}" data-slack-username="{{ user.hackclub_profile.slack_username|default:''|lower }}">
                 <td>
                     {% if user.hackclub_profile.slack_pfp_url %}
                     <img src="{{ user.hackclub_profile.slack_pfp_url }}" style="border-radius: 50%; width: 40px; height: 40px;">
@@ -55,6 +70,7 @@
             {% endfor %}
         </tbody>
     </table>
+    <p id="userSearchEmpty" hidden>No users match that Slack username.</p>
 
     <dialog id="editUserPopup">
         <form method="POST" id="editUserForm" action="">
@@ -155,6 +171,31 @@
         });
 
         if (cancelBtn) cancelBtn.addEventListener('click', () => dialog.close());
+    })();
+
+    (function () {
+        const input = document.getElementById('userSearchInput');
+        const empty = document.getElementById('userSearchEmpty');
+        if (!input) return;
+
+        const rows = Array.from(document.querySelectorAll('.users-table tbody tr'));
+        const searchForm = input.closest('form');
+
+        function applyFilter() {
+            const query = input.value.trim().toLowerCase();
+            let visibleCount = 0;
+            rows.forEach((row) => {
+                const username = row.dataset.slackUsername || '';
+                const match = username.includes(query);
+                row.hidden = !match;
+                if (match) visibleCount += 1;
+            });
+            if (empty) empty.hidden = visibleCount !== 0;
+        }
+
+        if (searchForm) searchForm.addEventListener('submit', (event) => event.preventDefault());
+        input.addEventListener('input', applyFilter);
+        applyFilter();
     })();
 </script>
 {% endblock %}

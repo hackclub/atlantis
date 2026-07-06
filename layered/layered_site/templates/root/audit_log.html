@@ -9,10 +9,10 @@
     <h1>Audit Log</h1>
     <p>A record of every admin action</p>
 
-    <form method="get" class="audit-filters" style="margin-bottom: 1rem;">
+    <form method="get" class="audit-filters" id="auditFilters" style="margin-bottom: 1rem;">
         <label>
             Action:
-            <select name="action">
+            <select name="action" id="auditActionFilter">
                 <option value="">All actions</option>
                 {% for a in actions %}
                     <option value="{{ a }}" {% if a == action_filter %}selected{% endif %}>{{ a }}</option>
@@ -21,10 +21,9 @@
         </label>
         <label>
             Actor:
-            <input type="text" name="actor" value="{{ actor_filter }}" placeholder="username">
+            <input type="text" name="actor" id="auditActorFilter" value="{{ actor_filter }}" placeholder="name or username" autocomplete="off">
         </label>
-        <button type="submit">Filter</button>
-        <a href="{% url 'audit_log' %}">Reset</a>
+        <noscript><button type="submit">Filter</button></noscript>
     </form>
 
     <p>{{ page.paginator.count }} total entr{{ page.paginator.count|pluralize:"y,ies" }}</p>
@@ -96,4 +95,29 @@
         <p>No audit log entries{% if action_filter or actor_filter %} match your filters{% endif %}.</p>
     {% endif %}
 </div>
+
+<script>
+    (function () {
+        const form = document.getElementById('auditFilters');
+        const action = document.getElementById('auditActionFilter');
+        const actor = document.getElementById('auditActorFilter');
+        if (!form) return;
+
+        if (action) action.addEventListener('change', () => form.submit());
+
+        if (actor) {
+            let timer;
+            actor.addEventListener('input', () => {
+                clearTimeout(timer);
+                timer = setTimeout(() => form.submit(), 300);
+            });
+
+            if (actor.value) {
+                actor.focus();
+                const end = actor.value.length;
+                actor.setSelectionRange(end, end);
+            }
+        }
+    })();
+</script>
 {% endblock %}

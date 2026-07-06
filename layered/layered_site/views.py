@@ -10,7 +10,7 @@ from django.core.exceptions import PermissionDenied
 from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Sum, Q
 from django.conf import settings
 from django.core.files.storage import default_storage
 from django.core.paginator import Paginator
@@ -1416,7 +1416,11 @@ def audit_log(request):
     if action_filter:
         logs = logs.filter(action=action_filter)
     if actor_filter:
-        logs = logs.filter(actor__username__icontains=actor_filter)
+        logs = logs.filter(
+            Q(actor__username__icontains=actor_filter)
+            | Q(actor__first_name__icontains=actor_filter)
+            | Q(actor__last_name__icontains=actor_filter)
+        )
 
     actions = AuditLog.objects.order_by("action").values_list("action", flat=True).distinct()
 
@@ -1439,13 +1443,19 @@ def users(request):
 
     user_model = get_user_model()
     users = user_model.objects.all().prefetch_related("groups").order_by("id")
+
+    search_query = request.GET.get("q", "").strip()
+    if search_query:
+        users = users.filter(hackclub_profile__slack_username__icontains=search_query)
+
     default_pfp_url = os.environ["DEFAULT_PFP"]
     all_groups = Group.objects.all()
 
     return render(request, "root/users.html", {
         "users": users,
         "default_pfp_url": default_pfp_url,
-        "all_groups": all_groups
+        "all_groups": all_groups,
+        "search_query": search_query,
     })
 
 @staff_member_required
@@ -1458,6 +1468,18 @@ def edit_user(request, user_id):
     user_model = get_user_model()
     targetUser = get_object_or_404(user_model, id=user_id)
     targetProfile = targetUser.hackclub_profile
+
+    previous = {
+        "username": targetUser.username,
+        "email": targetUser.email,
+        "first_name": targetUser.first_name,
+        "last_name": targetUser.last_name,
+        "slack_username": targetProfile.slack_username,
+        "slack_id": targetProfile.slack_id,
+        "slack_pfp_url": targetProfile.slack_pfp_url,
+        "layers": targetProfile.layers,
+        "groups": list(targetUser.groups.values_list("name", flat=True)),
+    }
 
     targetUser.username = request.POST.get("editSub")
     targetUser.email = request.POST.get("editEmail")
@@ -1481,6 +1503,22 @@ def edit_user(request, user_id):
 
     targetProfile.save()
     targetUser.save()
+
+    record_audit(request, "edit_user", target=f"User #{targetUser.id} ({targetUser.hackclub_profile.slack_username})", metadata={
+        "user_id": targetUser.id,
+        "previous": previous,
+        "new": {
+            "username": targetUser.username,
+            "email": targetUser.email,
+            "first_name": targetUser.first_name,
+            "last_name": targetUser.last_name,
+            "slack_username": targetProfile.slack_username,
+            "slack_id": targetProfile.slack_id,
+            "slack_pfp_url": targetProfile.slack_pfp_url,
+            "layers": targetProfile.layers,
+            "groups": list(targetUser.groups.values_list("name", flat=True)),
+        },
+    })
 
     return redirect("users")
 
