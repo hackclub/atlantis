@@ -60,6 +60,7 @@ ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
 # Application definition
 
 INSTALLED_APPS = [
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -136,7 +137,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 CSRF_TRUSTED_ORIGINS = [
     'https://yfvyqtuytp2qa4rsw2cfxv7t.a.shipwrights.dev/',
-    'https://*.yfvyqtuytp2qa4rsw2cfxv7t.a.shipwrights.dev/'
+    'https://*.yfvyqtuytp2qa4rsw2cfxv7t.a.shipwrights.dev/',
+    'https://layered.hacklub.com',
+    'https://*.layered.hacklub.com'
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -152,6 +155,39 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
+
+JAZZMIN_SETTINGS = {
+    "site_title": "Layered Supadmin",
+    "site_header": "Layered Supadmin",
+    "site_brand": "Layered",
+    "welcome_sign": "log in you naughty naughty",
+    "copyright": "Hack Club",
+    "search_model": "auth.User",
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "show_ui_builder": False,
+}
+
+JAZZMIN_UI_TWEAKS = {
+    "navbar_small_text": False,
+    "footer_small_text": False,
+    "body_small_text": False,
+    "brand_small_text": False,
+    "brand_colour": "navbar-teal",
+    "accent": "accent-info",
+    "navbar": "navbar-dark navbar-teal",
+    "no_customize": False,
+    "sidebar_themes": True,
+    "theme": "solar",
+    "dark_mode_theme": "solar",
+    "sidebar": "sidebar-dark-teal", 
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": True,
+    "sidebar_nav_compact_sidebar": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+}
 
 
 # Static files (CSS, JavaScript, Images)
