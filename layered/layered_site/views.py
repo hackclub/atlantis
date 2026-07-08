@@ -701,7 +701,6 @@ def update_order_status(request, order_id):
     if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.fulfillment"]):
         raise PermissionDenied
 
-    order = get_object_or_404(Order.objects.select_related("item", "owner"), id=order_id)
     action = request.POST.get("action", "").strip()
 
     status_map = {
@@ -714,27 +713,29 @@ def update_order_status(request, order_id):
     if action not in status_map:
         messages.error(request, "Invalid order action.")
         return redirect("fulfillment_dash")
+    
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(id=order_id)
+        profile = Profile.objects.select_for_update().get(user=order.owner)
 
-    prev_status = order.status
-    order.status = status_map[action]
+        prev_status = order.status
+        order.status = status_map[action]
 
-    if prev_status == order.status:
-        order.status = prev_status
-        messages.error(request, f"Order status is already { {'P': 'pending', 'D': 'denied', 'F': 'fulfilled', 'R': 'refunded'}.get(order.status) }!")
-        return redirect("fulfillment_dash")
+        if prev_status == order.status:
+            order.status = prev_status
+            messages.error(request, f"Order status is already { {'P': 'pending', 'D': 'denied', 'F': 'fulfilled', 'R': 'refunded'}.get(order.status) }!")
+            return redirect("fulfillment_dash")
 
-    order.fulfiller = request.user
-    amount_refunded = None
+        order.fulfiller = request.user
+        amount_refunded = None
 
-    if order.status == Order.OrderStatus.REFUNDED:
-        amount_refunded = order.item.cost * order.quantity
-        with transaction.atomic():
-            profile = Profile.objects.select_for_update().get(user=order.owner)
+        if order.status == Order.OrderStatus.REFUNDED:
+            amount_refunded = order.cost * order.quantity
             profile.layers += amount_refunded
             profile.save()
-    else:
-        order.fulfilled_at = timezone.now()
-    order.save(update_fields=["status", "fulfilled_at", "fulfiller"])
+        else:
+            order.fulfilled_at = timezone.now()
+        order.save(update_fields=["status", "fulfilled_at", "fulfiller"])
 
     record_audit(request, "update_order_status", target=f"Order #{order.id}", metadata={
         "order_id": order.id,

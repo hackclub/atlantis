@@ -253,7 +253,7 @@ class Item(models.Model):
 	description = models.CharField(max_length=100)
 	cost = models.PositiveIntegerField()
 	deleted = models.BooleanField(default=False)
-	imageUrl = models.CharField(max_length=2048, default="https://example.com")
+	imageUrl = models.URLField(max_length=2048, default="https://example.com")
 
 	def __str__(self):
 		return f"{self.name} ({self.description}) for {self.cost} layers"
@@ -273,7 +273,8 @@ class Order(models.Model):
 		settings.AUTH_USER_MODEL,
 		on_delete=models.PROTECT,
 		related_name="orders_fulfilled",
-		null=True
+		null=True,
+		blank=True
 	)
 
 	class OrderStatus(models.TextChoices):
@@ -295,6 +296,12 @@ class Order(models.Model):
 	fulfilled_at = models.DateTimeField(null=True, blank=True)
 	created_at = models.DateTimeField(auto_now_add=True)
 	quantity = models.PositiveIntegerField(default=1)
+	cost = models.PositiveIntegerField(blank=True)
+
+	def save(self, *args, **kwargs):
+		if not self.cost and self.item:
+			self.cost = self.item.cost
+		super().save(*args, **kwargs)
 
 # audit log model
 class AuditLog(models.Model):
