@@ -37,6 +37,13 @@ slack_client = WebClient(token=os.environ["SLACK_TOKEN"])
 def is_valid_printables_url(value):
     return bool(PRINTABLES_URL_RE.match(value))
 
+def layers_for_minutes(minutes):
+    # payout is 5 layers per hour, measured at 0.1-hour (6-minute) granularity,
+    # then rounded to a whole number of layers.
+    # e.g. 220 min -> 3.6h -> 18 layers
+    tenths_of_hour = minutes // 6
+    return round(tenths_of_hour * 0.5)
+
 def get_client_ip(request):
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if forwarded:
@@ -626,10 +633,13 @@ def ship_project(request, project_id):
     if not project.description:
         messages.error(request, "your project must have a description before you can ship!")
         return redirect("projects")
-    if not project.journals.exists():
+    # only journals not already snapshotted onto a previous ship count toward
+    # this ship, so eligibility must be measured against that same set.
+    unassigned_journals = project.journals.filter(ship__isnull=True)
+    if not unassigned_journals.exists():
         messages.error(request, "your project must have at least one journal to be shipped")
         return redirect("projects")
-    if (project.journals.aggregate(total=Sum('time_spent'))['total'] or 0) <= 180:
+    if (unassigned_journals.aggregate(total=Sum('time_spent'))['total'] or 0) <= 180:
         messages.error(request, "you must have atleast 3 hours of logged time before you can ship!")
         return redirect("projects")
 
@@ -638,11 +648,15 @@ def ship_project(request, project_id):
         messages.error(request, "You cannot reship until your most recent ship has been finalized or rejected.")
         return redirect("project_detail", project_id=project_id)
 
-    Ship.objects.create(
-        project = project,
-        status = Ship.ShipStatus.T1_QUEUE
-    )
-    
+    with transaction.atomic():
+        ship = Ship.objects.create(
+            project = project,
+            status = Ship.ShipStatus.T1_QUEUE
+        )
+        # snapshot the time onto this ship: claim every journal not already
+        # tied to a ship so later journals can't inflate this ship's payout.
+        project.journals.filter(ship__isnull=True).update(ship=ship)
+
     messages.success(request, f'Successfully shipped project "{project.title}"!')
     return redirect("projects")
 
@@ -1180,7 +1194,9 @@ def fraud_review_project(request, ship_id):
         raise PermissionDenied
 
     ship = get_object_or_404(Ship, id=ship_id)
-    journals = ship.project.journals.order_by('-id')
+    # only the journals snapshotted onto this ship count toward its payout,
+    # not whatever the project has accumulated live since it shipped.
+    journals = ship.journals.order_by('-id')
     total_time = journals.aggregate(total=Sum('time_spent'))['total'] or 0
 
     return render(request, "root/fraud_review_project.html", {
@@ -1207,13 +1223,13 @@ def t3_decision(request, ship_id):
         payout_time = int(payout_time_raw)
     except ValueError:
         messages.error(request, f"Expected integer, receieved {payout_time_raw}")
-        return redirect(request, "fraud_review")
+        return redirect("fraud_review_project", ship_id=ship_id)
 
     try:
         airtable_time = int(airtable_time_raw)
     except ValueError:
         messages.error(request, f"Expected integer, receieved {airtable_time_raw}")
-        return redirect(request, "fraud_review")
+        return redirect("fraud_review_project", ship_id=ship_id)
 
     with transaction.atomic():
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
@@ -1222,6 +1238,7 @@ def t3_decision(request, ship_id):
             messages.error(request, "ship not in T3 queue")
             return redirect("fraud_review_dash")
 
+        payout_layers = 0
         match decision:
             case T3.Decision.RETURN_T1:
                 ship.status = Ship.ShipStatus.T1_QUEUE
@@ -1234,7 +1251,10 @@ def t3_decision(request, ship_id):
                 message = "returned to printers"
             case T3.Decision.APPROVE:
                 ship.status = Ship.ShipStatus.FINALIZED
-                # remember to payout here
+                profile = Profile.objects.select_for_update().get(user=ship.project.owner)
+                payout_layers = layers_for_minutes(payout_time)
+                profile.layers += payout_layers
+                profile.save(update_fields=["layers"])
             case _:
                 messages.error(request, f"Invalid decision (received decision: {decision})")
                 return redirect("fraud_review_dash")
@@ -1260,6 +1280,7 @@ def t3_decision(request, ship_id):
         "decision": decision,
         "payout_time": payout_time,
         "airtable_time": airtable_time,
+        "payout_layers": payout_layers,
         "new_ship_status": ship.status,
     })
 
