@@ -794,19 +794,23 @@ def claim_print(request, ship_id):
     if not any(user.has_perm(p) for p in ["layered_site.printer", "layered_site.organizer"]):
         raise PermissionDenied
 
-    ship = get_object_or_404(Ship, id=ship_id)
+    with transaction.atomic():
+        ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
 
-    if ship.prints.filter(unclaimed_time__isnull=True, finished_time__isnull=True).exists():
-        messages.error(request, "already claimed")
-        return redirect("print_dash")
+        if not ship.status == Ship.ShipStatus.PRINT_QUEUE:
+            messages.error(request, "print not in print queue")
+            return redirect("print_dash")
+        if ship.prints.filter(unclaimed_time__isnull=True, finished_time__isnull=True).exists():
+            messages.error(request, "already claimed")
+            return redirect("print_dash")
 
-    ship.status = Ship.ShipStatus.BEING_PRINTED
-    ship.save()
+        ship.status = Ship.ShipStatus.BEING_PRINTED
+        ship.save()
 
-    new_print = Print.objects.create(
-        printer=user,
-        ship=ship
-    )
+        new_print = Print.objects.create(
+            printer=user,
+            ship=ship
+        )
 
     owner_slack_id = ship.project.owner.hackclub_profile.slack_id
     if owner_slack_id:
@@ -826,11 +830,13 @@ def claim_print(request, ship_id):
 @require_POST
 def unclaim_print(request, ship_id):
     user = request.user
+    ship = get_object_or_404(Ship, id=ship_id)
 
     if not any(user.has_perm(p) for p in ["layered_site.printer", "layered_site.organizer"]):
         raise PermissionDenied
-
-    ship = get_object_or_404(Ship, id=ship_id)
+    if not ship.status == Ship.ShipStatus.BEING_PRINTED:
+        messages.error(request, "print is not being printed")
+        return redirect("print_dash")
 
     active_print = ship.prints.filter(
         unclaimed_time__isnull=True,
@@ -839,6 +845,9 @@ def unclaim_print(request, ship_id):
 
     if not active_print:
         messages.error(request, "no active print found")
+        return redirect("print_dash")
+    if not active_print.printer == user:
+        messages.error(request, "this print isn't claimed by you!")
         return redirect("print_dash")
 
     active_print.unclaimed_time = timezone.now()
@@ -890,52 +899,57 @@ def print_decision(request, ship_id):
     if not any(user.has_perm(p) for p in ["layered_site.printer", "layered_site.organizer"]):
         raise PermissionDenied
 
-    ship = get_object_or_404(Ship, id=ship_id)
-
     weight_raw = request.POST.get("weight", "0").strip()
     image_url = request.POST.get("image_url", "").strip()
 
     if not is_valid_image_url(image_url):
         messages.error(request, "Invalid image URL")
-        return redirect("print_project")
+        return redirect("print_project", ship_id=ship_id)
 
     try:
         weight = int(weight_raw)
     except ValueError:
         messages.error(request, f"Weight must be a whole number, received {weight_raw})")
-        return redirect("print_dash")
+        return redirect("print_project", ship_id=ship_id)
 
     feedback = request.POST.get("feedback", "").strip()
     internal_notes = request.POST.get("internal_notes", "").strip()
     decision = request.POST.get("decision", "").strip()
 
-    active_print = ship.prints.filter(
-        unclaimed_time__isnull=True,
-        finished_time__isnull=True
-    ).order_by("-id").first()
+    with transaction.atomic():
+        ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
 
-    if not active_print:
-        messages.error(request, "no active print found")
-        return redirect("print_dash")
-
-    active_print.finished_time = timezone.now()
-    active_print.weight = weight
-    active_print.internal_notes = internal_notes
-    active_print.feedback = feedback
-    active_print.decision = decision
-    active_print.image_url = image_url
-    active_print.save()
-    
-    match decision:
-        case Print.Decision.RETURN_T1:
-            ship.status = Ship.ShipStatus.T1_QUEUE
-        case Print.Decision.APPROVE:
-            ship.status = Ship.ShipStatus.T2_QUEUE
-        case _:
-            messages.error(request, f"Invalid decision (got: {decision})")
+        if not ship.status == Ship.ShipStatus.BEING_PRINTED:
+            messages.error(request, "print not being printed")
             return redirect("print_dash")
 
-    ship.save()
+        active_print = ship.prints.filter(
+            unclaimed_time__isnull=True,
+            finished_time__isnull=True
+        ).order_by("-id").first()
+
+        if not active_print:
+            messages.error(request, "no active print found")
+            return redirect("print_project", ship_id=ship_id)
+
+        active_print.finished_time = timezone.now()
+        active_print.weight = weight
+        active_print.internal_notes = internal_notes
+        active_print.feedback = feedback
+        active_print.decision = decision
+        active_print.image_url = image_url
+        active_print.save()
+
+        match decision:
+            case Print.Decision.RETURN_T1:
+                ship.status = Ship.ShipStatus.T1_QUEUE
+            case Print.Decision.APPROVE:
+                ship.status = Ship.ShipStatus.T2_QUEUE
+            case _:
+                messages.error(request, f"Invalid decision (got: {decision})")
+                return redirect("print_dash")
+
+        ship.save()
 
     owner_slack_id = ship.project.owner.hackclub_profile.slack_id
     if owner_slack_id:
@@ -996,7 +1010,6 @@ def t1_decision(request, ship_id):
         raise PermissionDenied
     
     reviewer = request.user
-    ship = get_object_or_404(Ship, id=ship_id)
     feedback = request.POST.get("feedback", "").strip()
     internal_notes = request.POST.get("internal_notes", "").strip()
     print_requested = "print" in request.POST
@@ -1008,21 +1021,28 @@ def t1_decision(request, ship_id):
 
     approved = approved_raw == "approved"
 
-    if approved:
-        ship.status = Ship.ShipStatus.PRINT_QUEUE if print_requested else Ship.ShipStatus.T2_QUEUE
-    else:
-        ship.status = Ship.ShipStatus.REJECTED
-    
-    ship.save()
+    with transaction.atomic():
+        ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
 
-    t1 = T1.objects.create(
-        reviewer=reviewer,
-        ship=ship,
-        feedback=feedback,
-        internal_notes=internal_notes,
-        print=print_requested,
-        approved=approved
-    )
+        if not ship.status == Ship.ShipStatus.T1_QUEUE:
+            messages.error(request, "ship not in T1 queue")
+            return redirect("review_dash")
+
+        if approved:
+            ship.status = Ship.ShipStatus.PRINT_QUEUE if print_requested else Ship.ShipStatus.T2_QUEUE
+        else:
+            ship.status = Ship.ShipStatus.REJECTED
+
+        ship.save()
+
+        t1 = T1.objects.create(
+            reviewer=reviewer,
+            ship=ship,
+            feedback=feedback,
+            internal_notes=internal_notes,
+            print=print_requested,
+            approved=approved
+        )
 
     owner_slack_id = ship.project.owner.hackclub_profile.slack_id
     if owner_slack_id:
@@ -1072,7 +1092,6 @@ def t2_decision(request, ship_id):
         raise PermissionDenied
     
     reviewer = request.user
-    ship = get_object_or_404(Ship, id=ship_id)
     decision = request.POST.get("decision", "").strip()
     deductions = request.POST.get("deductions", "0").strip()
 
@@ -1086,26 +1105,28 @@ def t2_decision(request, ship_id):
 
     feedback = request.POST.get("feedback", "").strip()
     justification = request.POST.get("justification", "").strip()
-    owner_slack_id = ship.project.owner.hackclub_profile.slack_id
-    
-    match decision:
-        case T2.Decision.APPROVE:
-            ship.status = Ship.ShipStatus.T3_QUEUE
-            message = "approved"
-        case T2.Decision.RETURN_PRINT:
-            ship.status = Ship.ShipStatus.PRINT_QUEUE
-            message = "returned to the printers"
-        case T2.Decision.RETURN_T1:
-            ship.status = Ship.ShipStatus.T1_QUEUE
-            message = "returned to T1 reviewers"
-        case _:
-            messages.error(request, f"How did we get here? (decision: {decision})")
-            message = "(invalid decision, ask in <#C0AUP8VUU6T>)"
-            return redirect("ysws_review_dash")
-        
-    send_slack_dm(f"Your project <https://layered.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been T2 reviewed and {message}! Here's what they said about it: _{feedback}_", owner_slack_id)
-    
+
     with transaction.atomic():
+        ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
+
+        if not ship.status == Ship.ShipStatus.T2_QUEUE:
+            messages.error(request, "ship not in T2 queue")
+            return redirect("ysws_review_dash")
+
+        match decision:
+            case T2.Decision.APPROVE:
+                ship.status = Ship.ShipStatus.T3_QUEUE
+                message = "approved"
+            case T2.Decision.RETURN_PRINT:
+                ship.status = Ship.ShipStatus.PRINT_QUEUE
+                message = "returned to the printers"
+            case T2.Decision.RETURN_T1:
+                ship.status = Ship.ShipStatus.T1_QUEUE
+                message = "returned to T1 reviewers"
+            case _:
+                messages.error(request, f"How did we get here? (decision: {decision})")
+                return redirect("ysws_review_dash")
+
         ship.save()
 
         t2 = T2.objects.create(
@@ -1125,7 +1146,10 @@ def t2_decision(request, ship_id):
             journal.time_spent -= deduct
             journal.save(update_fields=['time_spent'])
             remaining -= deduct
-        
+
+    owner_slack_id = ship.project.owner.hackclub_profile.slack_id
+    send_slack_dm(f"Your project <https://layered.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been T2 reviewed and {message}! Here's what they said about it: _{feedback}_", owner_slack_id)
+
     record_audit(request, "t2_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
         "t2_id": t2.id,
@@ -1172,34 +1196,10 @@ def t3_decision(request, ship_id):
     if not any(user.has_perm(perm) for perm in ["layered_site.organizer", "layered_site.t3_review"]):
         raise PermissionDenied
     
-    ship = get_object_or_404(Ship, id=ship_id)
     reviewer = request.user
     decision = request.POST.get("decision", "").strip()
     internal_notes = request.POST.get("internal_notes", "").strip()
-    
-    owner_slack_id = ship.project.owner.hackclub_profile.slack_id
 
-    match decision:
-        case T3.Decision.RETURN_T1:
-            ship.status = Ship.ShipStatus.T1_QUEUE
-            message = "returned to T1 reviewers"
-        case T3.Decision.RETURN_T2:
-            ship.status = Ship.ShipStatus.T2_QUEUE
-            message = "returned to T2 reviewers"
-        case T3.Decision.RETURN_PRINT:
-            ship.status = Ship.ShipStatus.PRINT_QUEUE
-            message = "returned to printers"
-        case T3.Decision.APPROVE:
-            ship.status = Ship.ShipStatus.FINALIZED
-            # remember to payout here
-        case _:
-            messages.error(request, f"Invalid decision (received decision: {decision})")
-            return redirect("fraud_review_dash")
-    
-    ship.save()
-
-    send_slack_dm(f"Your project <https://layered.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://layered.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
-    
     payout_time_raw = request.POST.get("payout_time", "0").strip()
     airtable_time_raw = request.POST.get("airtable_time", "0").strip()
 
@@ -1208,21 +1208,50 @@ def t3_decision(request, ship_id):
     except ValueError:
         messages.error(request, f"Expected integer, receieved {payout_time_raw}")
         return redirect(request, "fraud_review")
-    
+
     try:
         airtable_time = int(airtable_time_raw)
     except ValueError:
         messages.error(request, f"Expected integer, receieved {airtable_time_raw}")
         return redirect(request, "fraud_review")
 
-    t3 = T3.objects.create(
-        ship=ship,
-        reviewer=reviewer,
-        decision=decision,
-        internal_notes=internal_notes,
-        payout_time=payout_time,
-        airtable_time=airtable_time
-    )
+    with transaction.atomic():
+        ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
+
+        if not ship.status == Ship.ShipStatus.T3_QUEUE:
+            messages.error(request, "ship not in T3 queue")
+            return redirect("fraud_review_dash")
+
+        match decision:
+            case T3.Decision.RETURN_T1:
+                ship.status = Ship.ShipStatus.T1_QUEUE
+                message = "returned to T1 reviewers"
+            case T3.Decision.RETURN_T2:
+                ship.status = Ship.ShipStatus.T2_QUEUE
+                message = "returned to T2 reviewers"
+            case T3.Decision.RETURN_PRINT:
+                ship.status = Ship.ShipStatus.PRINT_QUEUE
+                message = "returned to printers"
+            case T3.Decision.APPROVE:
+                ship.status = Ship.ShipStatus.FINALIZED
+                # remember to payout here
+            case _:
+                messages.error(request, f"Invalid decision (received decision: {decision})")
+                return redirect("fraud_review_dash")
+
+        ship.save()
+
+        t3 = T3.objects.create(
+            ship=ship,
+            reviewer=reviewer,
+            decision=decision,
+            internal_notes=internal_notes,
+            payout_time=payout_time,
+            airtable_time=airtable_time
+        )
+
+    owner_slack_id = ship.project.owner.hackclub_profile.slack_id
+    send_slack_dm(f"Your project <https://layered.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://layered.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
 
     record_audit(request, "t3_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
