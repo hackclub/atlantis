@@ -45,7 +45,7 @@ def auth_callback(request):
     if not userinfo:
         userinfo = oauth.hackclub.userinfo(token=token)
 
-    email = userinfo.get("email")
+    email = userinfo.get("email", "hackclubber@example.com")
     name = userinfo.get("name", "")
     sub = userinfo.get("sub")
     clean_sub = sub.replace("!", "_")
