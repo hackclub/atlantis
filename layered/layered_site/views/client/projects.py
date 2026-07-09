@@ -7,6 +7,7 @@ from django.db.models import Sum
 from django.core.files.storage import default_storage
 from django.db import transaction
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 from math import floor
 
 from ...models import (
@@ -196,12 +197,17 @@ def project_detail(request, project_id):
 def explore(request):
     profile = request.user.hackclub_profile
 
-    projects = Project.objects.filter(deleted=False).exclude(owner=request.user, locked=True)
+    projects_unlocked = Project.objects.filter(deleted=False).exclude(locked=True)
+    projects = projects_unlocked.exclude(owner=request.user)
+
     return render(request, "layered_site/explore.html", {'profile': profile, 'projects': projects})
 
 @login_required
 def project_detail_explore(request, project_id):
     project = get_object_or_404(Project, id=project_id, deleted=False)
+    if project.locked and not request.user.has_perm("layered_site.organizer"):
+        raise PermissionDenied
+
     user = request.user
     profile = user.hackclub_profile
     ships = project.ships.order_by("-created_at")
