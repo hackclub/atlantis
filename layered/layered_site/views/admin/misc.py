@@ -6,9 +6,10 @@ from django.shortcuts import get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Q, Sum
 from django.core.paginator import Paginator
+from django.contrib import messages
 
 from ...models import AuditLog, Project
-from ..helpers import check_perms, is_valid_image_url, record_audit
+from ..helpers import check_perms, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url
 
 import os
 
@@ -165,11 +166,34 @@ def admin_edit_project(request, project_id):
         "deleted": project.deleted,
     }
 
-    project.title = request.POST.get("editTitle", "").strip()
-    project.description = request.POST.get("editDescription", "").strip()
-    project.printablesUrl = request.POST.get("editPrintablesUrl", "").strip()
-    project.editor_model_url = request.POST.get("editEditorModelUrl", "").strip()
-    project.deleted = request.POST.get("editDeleted") == "1"
+    title = request.POST.get("editTitle", "").strip()
+    description = request.POST.get("editDescription", "").strip()
+    printablesUrl = request.POST.get("editPrintablesUrl", "").strip()
+    editor_model_url = request.POST.get("editEditorModelUrl", "").strip()
+    deleted = request.POST.get("editDeleted") == "1"
+
+    if len(title) > 60:
+        messages.error(request, "Title too long (max 60 chars)")
+        return redirect("manage_projects")
+    
+    if len(description) > 1000:
+        messages.error(request, "Description too long (max 1000 chars)")
+        return redirect("manage_projects")
+    
+    if not is_valid_printables_url(printablesUrl) and printablesUrl:
+        messages.error(request, "Invalid printables URL")
+        return redirect("manage_projects")
+    
+    if not is_valid_editor_model_url(editor_model_url) and editor_model_url:
+        messages.error(request, "Invalid editor model URL")
+        return redirect("manage_projects")
+    
+    project.title = title
+    project.description = description
+    project.printablesUrl = printablesUrl
+    project.editor_model_url = editor_model_url
+    project.deleted = deleted
+
     project.save()
 
     record_audit(request, "edit_project", target=f"Project #{project.id} ({project.title})", metadata={

@@ -11,6 +11,8 @@ import requests
 import re
 
 PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?", re.IGNORECASE)
+CLOUDFLARE_BUCKET_RE = re.compile(r"^https?:\/\/(?:[a-zA-Z0-9-]+\.)*pub-d9ac82fd80854a42ae2dde2757ff0a55\.r2\.dev(?:\/.*)?$", re.IGNORECASE)
+
 slack_client = WebClient(token=os.environ["SLACK_TOKEN"])
 
 def check_perms(perms):
@@ -143,3 +145,6 @@ def send_slack_dm(content, user):
         return True
     except SlackApiError:
         return False
+    
+def is_valid_editor_model_url(value):
+    return bool(CLOUDFLARE_BUCKET_RE.match(value))

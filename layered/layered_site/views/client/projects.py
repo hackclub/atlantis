@@ -35,8 +35,20 @@ def create_project(request):
         messages.error(request, "Title is required.")
         return redirect("projects")
     
+    if len(title) > 60:
+        messages.error(request, "Title too long (max 60 chars)")
+        return redirect("projects")
+    
     if not description:
         messages.error(request, "Description is required")
+        return redirect("projects")
+    
+    if len(description) > 1000:
+        messages.error(request, "Description too wrong (max 1000 chars)")
+        return redirect("projects")
+
+    if printables_url and not is_valid_printables_url(printables_url):
+        messages.error(request, "Printables URL must be a valid printables.com link.")
         return redirect("projects")
 
     project = Project.objects.create(
@@ -67,8 +79,20 @@ def edit_project(request, project_id):
         messages.error(request, "Title is required.")
         return redirect("projects")
     
+    if len(title) > 60:
+        messages.error(request, "Title too long (max 60 chars)")
+        return redirect("projects")
+    
     if not description:
         messages.error(request, "Description is required")
+        return redirect("projects")
+    
+    if len(description) > 1000:
+        messages.error(request, "Description too long (max 1000 chars)")
+        return redirect("projects")
+
+    if printables_url and not is_valid_printables_url(printables_url):
+        messages.error(request, "Printables URL must be a valid printables.com link.")
         return redirect("projects")
 
     project.title = title
@@ -280,10 +304,10 @@ def create_journal(request, project_id):
     title = request.POST.get("title", "").strip()
     text = request.POST.get("text", "").strip()
 
-    if len(text) <= 200:
+    if len(text) < 200:
         messages.error(request, "Journals must have at least 200 characters!")
         return redirect("project_detail", project_id=project_id)
-    elif len(text) >= 2000:
+    elif len(text) > 2000:
         messages.error(request, "Journals must not be greater than 2000 characters!")
         return redirect("project_detail", project_id=project_id)
 

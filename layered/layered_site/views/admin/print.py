@@ -135,6 +135,10 @@ def print_decision(request, ship_id):
 
     if not is_valid_image_url(image_url):
         messages.error(request, "Invalid image URL")
+        return redirect("print_project", ship_id=ship_id) 
+    
+    if len(image_url) > 2048:
+        messages.error(request, "Image URL too long (max 2048 characters).")
         return redirect("print_project", ship_id=ship_id)
 
     try:
@@ -145,6 +149,11 @@ def print_decision(request, ship_id):
 
     feedback = request.POST.get("feedback", "").strip()
     internal_notes = request.POST.get("internal_notes", "").strip()
+
+    if len(feedback) > 100 or len(internal_notes) > 100:
+        messages.error(request, "Internal notes or feedback too long (max 100 characters)")
+        return redirect("print_project", ship_id=ship_id)
+
     decision = request.POST.get("decision", "").strip()
 
     with transaction.atomic():

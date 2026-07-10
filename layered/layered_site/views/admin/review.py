@@ -36,16 +36,21 @@ def review_project(request, ship_id):
 @require_POST
 @staff_member_required
 @check_perms(["layered_site.t1_review", "layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"])
-def t1_decision(request, ship_id):
+def t1_decision(request, ship_id): 
     reviewer = request.user
     feedback = request.POST.get("feedback", "").strip()
     internal_notes = request.POST.get("internal_notes", "").strip()
+
+    if len(feedback) > 100 or len(internal_notes) > 100:
+        messages.error(request, "Feedback or internal notes too long (max 100 char)")
+        return redirect("review_project", ship_id=ship_id)
+
     print_requested = "print" in request.POST
     approved_raw = request.POST.get("approved", "").strip()
 
     if approved_raw not in ("approved", "denied"):
         messages.error(request, f"How did we get here? (approved: {approved_raw})")
-        return redirect("review_dash")
+        return redirect("review_project", ship_id=ship_id)
 
     approved = approved_raw == "approved"
 
@@ -114,8 +119,6 @@ def t2_decision(request, ship_id):
     decision = request.POST.get("decision", "").strip()
     deductions = request.POST.get("deductions", "0").strip()
 
-    # remember to verify if deductions are greater than project time spent
-
     try:
         deductions = int(deductions) if deductions else 0
     except ValueError:
@@ -125,8 +128,18 @@ def t2_decision(request, ship_id):
     feedback = request.POST.get("feedback", "").strip()
     justification = request.POST.get("justification", "").strip()
 
+    if len(feedback) > 100 or len(justification) > 400:
+        messages.error(request, "Feedback or justification length too long (feedback max 100, justification max 400)")
+        return redirect("ysws_review_dash")
+
     with transaction.atomic():
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
+        journals = ship.journals.order_by("-id")
+
+        total_time = journals.aggregate(total=Sum('time_spent'))['total'] or 0
+        if total_time <= deductions:
+            messages.error(request, f"Deduction too large. (total_time: {total_time}, deductions: {deductions})")
+            return redirect("ysws_review_dash")
 
         if not ship.status == Ship.ShipStatus.T2_QUEUE:
             messages.error(request, "ship not in T2 queue")
