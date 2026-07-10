@@ -1,4 +1,5 @@
 from django.contrib.auth.decorators import user_passes_test
+from django.conf import settings
 from ..models import AuditLog
 
 from slack_sdk.errors import SlackApiError
@@ -13,7 +14,7 @@ import re
 PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?", re.IGNORECASE)
 CLOUDFLARE_BUCKET_RE = re.compile(r"^https?:\/\/(?:[a-zA-Z0-9-]+\.)*pub-d9ac82fd80854a42ae2dde2757ff0a55\.r2\.dev(?:\/.*)?$", re.IGNORECASE)
 
-slack_client = WebClient(token=os.environ["SLACK_TOKEN"])
+slack_client = WebClient(token=settings.SLACK_TOKEN)
 
 def check_perms(perms):
     def check_perms_internal(user):

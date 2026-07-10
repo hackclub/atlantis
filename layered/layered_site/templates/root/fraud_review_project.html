@@ -16,7 +16,7 @@
 <script type="module" src="{% static 'layered_site/stl_viewer.js' %}"></script>
 <div class="content">
     {% include "root/_messages.html" %}
-    <h1>YSWS Review Project "{{ ship.project.title }}" by {{ ship.project.owner.hackclub_profile.slack_username }}</h1>
+    <h1>Fraud Review Project "{{ ship.project.title }}" by {{ ship.project.owner.hackclub_profile.slack_username }}</h1>
     <p>{{ ship.project.description }}</p>
     <a href="{{ ship.project.printablesUrl }}">View on Printables</a>
     {% if ship.project.editor_model_url %}
