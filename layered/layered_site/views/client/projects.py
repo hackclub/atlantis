@@ -13,7 +13,7 @@ from math import floor
 from ...models import (
     Project, Ship, Print, Journal, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
 )
-from ..helpers import is_valid_printables_url, get_model_info
+from ..helpers import is_valid_printables_url, get_model_info, validate_file_size
 
 import os
 
@@ -119,17 +119,25 @@ def update_editor_model(request, project_id):
         if not detect_editor_from_filename(editor_model_file.name):
             messages.error(request, f"Unsupported editor model file. Supported editors: {', '.join(ALLOWED_EDITORS)}.")
             return redirect("project_detail", project_id=project_id)
+        
+        if not validate_file_size(editor_model_file, 50):
+            messages.error(request, f"Editor model file too large. Max 50MB.")
+            return redirect("project_detail", project_id=project_id)
+        
         editor_model_key = default_storage.save(
             f"editor_models/{os.path.basename(editor_model_file.name)}", editor_model_file
         )
+
         project.editor_model_url = default_storage.url(editor_model_key)
     elif editor_model_link:
         if not editor_model_link.lower().startswith(("http://", "https://")):
             messages.error(request, "Editor model link must be a valid URL.")
             return redirect("project_detail", project_id=project_id)
+        
         if not detect_editor_from_link(editor_model_link):
             messages.error(request, f"Unsupported editor model link. Supported editors: {', '.join(ALLOWED_EDITORS)}.")
             return redirect("project_detail", project_id=project_id)
+        
         project.editor_model_url = editor_model_link
     else:
         messages.error(request, "Upload a file or provide a link for the editor model.")
@@ -294,7 +302,7 @@ def create_journal(request, project_id):
         if time_spent > 240:
             messages.error(request, "Time spent must not be greater than 4 hours!")
             return redirect("project_detail", project_id=project_id)
-        if time_spent <= 30:
+        if time_spent < 30:
             messages.error(request, "You must spend at least 30 minutes on your journal entry!")
             return redirect("project_detail", project_id=project_id)
     except ValueError:
@@ -326,6 +334,13 @@ def create_journal(request, project_id):
         return redirect("project_detail", project_id=project_id)
     if not os.path.basename(model_file.name).lower().endswith(".stl"):
         messages.error(request, "Uploaded model must be an STL file.")
+        return redirect("project_detail", project_id=project_id)
+    
+    if not validate_file_size(image_file, 5):
+        messages.error(request, "Max file size for images is 5MB.")
+        return redirect("project_detail", project_id=project_id)
+    if not validate_file_size(model_file, 50):
+        messages.error(request, "Max file size for STL files is 50MB.")
         return redirect("project_detail", project_id=project_id)
 
     image_key = default_storage.save(f"images/{os.path.basename(image_file.name)}", image_file)

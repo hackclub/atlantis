@@ -149,3 +149,9 @@ def send_slack_dm(content, user):
     
 def is_valid_editor_model_url(value):
     return bool(CLOUDFLARE_BUCKET_RE.match(value))
+
+def validate_file_size(file, max_mb):
+    max_b = max_mb * 1024 * 1024
+    if file.size > max_b:
+        return False
+    return True
