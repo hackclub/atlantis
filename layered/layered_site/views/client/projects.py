@@ -116,17 +116,21 @@ def update_editor_model(request, project_id):
     editor_model_link = request.POST.get("editor_model_link", "").strip()
 
     if editor_model_file:
-        if not detect_editor_from_filename(editor_model_file.name):
-            messages.error(request, f"Unsupported editor model file. Supported editors: {', '.join(ALLOWED_EDITORS)}.")
+        if settings.ALLOW_JOURNALING:
+            if not detect_editor_from_filename(editor_model_file.name):
+                messages.error(request, f"Unsupported editor model file. Supported editors: {', '.join(ALLOWED_EDITORS)}.")
+                return redirect("project_detail", project_id=project_id)
+            
+            if not validate_file_size(editor_model_file, 50):
+                messages.error(request, f"Editor model file too large. Max 50MB.")
+                return redirect("project_detail", project_id=project_id)
+            
+            editor_model_key = default_storage.save(
+                f"editor_models/{os.path.basename(editor_model_file.name)}", editor_model_file
+            )
+        else:
+            messages.error(request, "File uploads are currently disabled.")
             return redirect("project_detail", project_id=project_id)
-        
-        if not validate_file_size(editor_model_file, 50):
-            messages.error(request, f"Editor model file too large. Max 50MB.")
-            return redirect("project_detail", project_id=project_id)
-        
-        editor_model_key = default_storage.save(
-            f"editor_models/{os.path.basename(editor_model_file.name)}", editor_model_file
-        )
 
         project.editor_model_url = default_storage.url(editor_model_key)
     elif editor_model_link:
