@@ -1,23 +1,27 @@
 services:
   web:
     build: .
-    ports:
-      - "8000:8000"
+    restart: unless-stopped
+    expose:
+      - "8000"
     env_file:
       - .env
     depends_on:
-      - db
-    volumes:
-      - .:/app
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
-      POSTGRES_DB: django
-      POSTGRES_USER: django
-      POSTGRES_PASSWORD: django
-    ports:
-      - "5432:5432"
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     volumes:
       - pgdata:/var/lib/postgresql/data
 
