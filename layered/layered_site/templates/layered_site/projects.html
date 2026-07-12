@@ -8,10 +8,8 @@
 <div class="content">
     {% include "root/_messages.html" %}
     <h1>Projects</h1>
-    <h2>This is where your projects live!</h2>
-
     <section class="project-list">
-        <h3>Your Projects</h3>
+        <h2>Your Projects:</h2>
         {% if projects %}
                 {% for project in projects %}
                         {% if not project.deleted %}
