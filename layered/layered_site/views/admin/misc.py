@@ -83,24 +83,40 @@ def edit_user(request, user_id):
         "groups": list(targetUser.groups.values_list("name", flat=True)),
     }
 
-    targetUser.username = request.POST.get("editSub")
-    targetUser.email = request.POST.get("editEmail")
-    targetUser.first_name = request.POST.get("editFirstName")
-    targetUser.last_name = request.POST.get("editLastName")
-    targetProfile.slack_username = request.POST.get("editUsername")
-    targetProfile.slack_id = request.POST.get("editSlackId")
+    new = {
+        "username": request.POST.get("editSub"),
+        "email": request.POST.get("editEmail"),
+        "first_name": request.POST.get("editFirstName"),
+        "last_name": request.POST.get("editLastName"),
+        "slack_username": request.POST.get("editUsername"),
+        "slack_id": request.POST.get("editSlackId"),
+        "slack_pfp_url": request.POST.get("editSlackPfpUrl"),
+        "layers": request.POST.get("editLayers"),
+        "groups": request.POST.getlist("groups")
+    }
 
-    new_layers_raw = request.POST.get("editLayers")
+    for key, value in new.items():
+        if not value:
+            messages.error(request, f"{key.capitalize()} is required!")       
+
+    targetUser.username = new["username"]
+    targetUser.email = new["email"]
+    targetUser.first_name = new["first_name"]
+    targetUser.last_name = new["last_name"]
+    targetProfile.slack_username = new["slack_username"]
+    targetProfile.slack_id = new["slack_id"]
+
+    new_layers_raw = new["layers"]
     try:
         new_layers = int(new_layers_raw)
         targetProfile.layers = new_layers
     except (ValueError, TypeError):
         pass
 
-    new_pfp = request.POST.get("editSlackPfpUrl")
+    new_pfp = new["slack_pfp_url"]
     targetProfile.slack_pfp_url = new_pfp if is_valid_image_url(new_pfp) else targetUser.hackclub_profile.slack_pfp_url
 
-    new_groups = request.POST.getlist("groups")
+    new_groups = new["groups"]
     targetUser.groups.set(new_groups)
     targetUser.is_staff = targetUser.groups.exists()
 
@@ -110,17 +126,7 @@ def edit_user(request, user_id):
     record_audit(request, "edit_user", target=f"User #{targetUser.id} ({targetUser.hackclub_profile.slack_username})", metadata={
         "user_id": targetUser.id,
         "previous": previous,
-        "new": {
-            "username": targetUser.username,
-            "email": targetUser.email,
-            "first_name": targetUser.first_name,
-            "last_name": targetUser.last_name,
-            "slack_username": targetProfile.slack_username,
-            "slack_id": targetProfile.slack_id,
-            "slack_pfp_url": targetProfile.slack_pfp_url,
-            "layers": targetProfile.layers,
-            "groups": list(targetUser.groups.values_list("name", flat=True)),
-        },
+        "new": new
     })
 
     return redirect("users")
