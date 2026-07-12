@@ -32,6 +32,7 @@
                 <th>Slack ID</th>
                 <th>Layers</th>
                 <th>Groups</th>
+                <th>Staff Member</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -50,6 +51,11 @@
                 <td>{{ user.hackclub_profile.slack_id|default:"not found" }}</td>
                 <td>{{ user.hackclub_profile.layers|default:"0" }}</td>
                 <td>{{ user.groups.all|join:", "|default:"no groups found" }}</td>
+                {% if user.is_staff %}
+                <td style="color: green;">true</td>
+                {% else %}
+                <td style="color: red;">false</td>
+                {% endif %}
                 <td>
                     <button
                         type="button"
