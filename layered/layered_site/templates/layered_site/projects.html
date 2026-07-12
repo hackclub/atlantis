@@ -28,7 +28,7 @@
                                     <div class="card-controls">
                                         <button type="button" class="menu-toggle" aria-haspopup="true" aria-expanded="false">⋯</button>
                                         <div class="card-dropdown" aria-hidden="true">
-                                            <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title|escapejs }}" data-description="{{ project.description|escapejs }}" data-printables="{{ project.printablesUrl|default_if_none:""|escapejs }}">Edit</button>
+                                            <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-description="{{ project.description }}" data-printables="{{ project.printablesUrl|default_if_none:"" }}">Edit</button>
                                             <form action="{% url 'delete_project' project.id %}" method="post" class="dropdown-item delete-form">
                                                 {% csrf_token %}
                                                 <button type="submit" class="delete-button">Delete</button>
