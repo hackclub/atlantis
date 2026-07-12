@@ -310,6 +310,10 @@ def lock_project(request, project_id):
         "owner": project.owner.username,
     })
 
+    owner_slack_id = project.owner.hackclub_profile.slack_id
+    if owner_slack_id:
+        send_slack_dm(f"Your project <https://layered.hacklub.com/projects/{project_id}|{project.title}> has been locked.", owner_slack_id)
+
     return redirect(request.META.get("HTTP_REFERER", "/"))
 
 @staff_member_required
@@ -326,5 +330,9 @@ def unlock_project(request, project_id):
         "project": project.title,
         "owner": project.owner.username,
     })
+
+    owner_slack_id = project.owner.hackclub_profile.slack_id
+    if owner_slack_id:
+        send_slack_dm(f"Your project <https://layered.hacklub.com/projects/{project_id}|{project.title}> has been unlocked.", owner_slack_id)
 
     return redirect(request.META.get("HTTP_REFERER", "/"))
