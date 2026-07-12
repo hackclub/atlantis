@@ -1,5 +1,6 @@
 from django.contrib.auth.decorators import user_passes_test
 from django.conf import settings
+from django.contrib import messages
 from ..models import AuditLog
 
 from slack_sdk.errors import SlackApiError
@@ -48,12 +49,6 @@ def get_client_ip(request):
     return request.META.get("REMOTE_ADDR", "")
 
 def record_audit(request, action, target="", metadata=None):
-    """Record an admin action in the audit log.
-
-    Captures every value submitted through the form (minus the CSRF token),
-    the names of any uploaded files, who acted, and where from. `metadata`
-    holds the resulting state/extra context for the action.
-    """
     form_data = {
         key: request.POST.getlist(key) if len(request.POST.getlist(key)) > 1 else value
         for key, value in request.POST.items()
@@ -77,7 +72,7 @@ def record_audit(request, action, target="", metadata=None):
             metadata=metadata or {},
         )
     except Exception as e:
-        print("Failed to record audit log entry:", e)
+        messages.error(request, f"Failed to log audit: {e}")
 
 def is_valid_image_url(url):
     try:
