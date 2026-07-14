@@ -1,0 +1,59 @@
+.users-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 24px 0;
+}
+
+.users-table thead {
+    background-color: #f5f5f5;
+    border-bottom: 2px solid #ddd;
+}
+
+.users-table th {
+    padding: 12px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.users-table td {
+    padding: 12px;
+    font-size: 14px;
+}
+
+.users-table tbody tr {
+    border-bottom: 1px solid #eee;
+}
+
+.users-table tbody tr:hover {
+    background-color: #f9f9f9;
+}
+
+.users-table img {
+    display: block;
+}
+
+.users-table a {
+    color: #0066cc;
+    text-decoration: none;
+}
+
+.users-table a:hover {
+    text-decoration: underline;
+}
+
+.audit-data {
+    border-collapse: collapse;
+    margin: 8px 0;
+}
+
+.audit-data th {
+    text-align: left;
+    padding-right: 1rem;
+    vertical-align: top;
+}
+
+.audit-data td {
+    white-space: pre-wrap;
+    word-break: break-word;
+}

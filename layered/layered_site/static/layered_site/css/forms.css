@@ -1,0 +1,70 @@
+.order-form {
+    display: grid;
+    gap: 12px;
+    max-width: 360px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #eee;
+}
+
+.order-form label {
+    display: grid;
+    gap: 4px;
+}
+
+.order-form input,
+.order-form textarea {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.review-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+    margin-top: 12px;
+}
+
+.review-form .form-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.review-form input[type="text"],
+.review-form input[type="number"],
+.review-form select {
+    width: 320px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.project-editor-upload {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #eee;
+}
+
+.project-editor-upload label {
+    display: block;
+    margin-top: 8px;
+}
+
+.project-editor-upload input {
+    margin-top: 4px;
+}
+
+.project-editor-upload button {
+    margin-top: 12px;
+}
+
+.messages {
+    margin: 16px 0;
+}
+
+.message {
+    margin: 0;
+    color: #a33;
+}

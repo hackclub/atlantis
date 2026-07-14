@@ -1,0 +1,29 @@
+.audit-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.audit-entry {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.audit-header {
+    margin-bottom: 8px;
+}
+
+.audit-meta p {
+    margin: 4px 0;
+}
+
+.pagination {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 1rem;
+}

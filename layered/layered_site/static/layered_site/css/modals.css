@@ -1,0 +1,111 @@
+.modal {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 20;
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-panel {
+    position: relative;
+    z-index: 1;
+    width: min(92vw, 520px);
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+dialog#editUserPopup,
+dialog#editProjectPopup {
+    width: min(92vw, 520px);
+    border: none;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+dialog#editUserPopup::backdrop,
+dialog#editProjectPopup::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-panel form,
+dialog#editUserPopup form,
+dialog#editProjectPopup form {
+    display: grid;
+    gap: 16px;
+}
+
+.modal-panel label,
+dialog#editUserPopup label,
+dialog#editProjectPopup label {
+    display: grid;
+    gap: 8px;
+}
+
+.modal-panel input,
+.modal-panel textarea,
+dialog#editUserPopup input,
+dialog#editProjectPopup input {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+dialog#editProjectPopup label.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+dialog#editProjectPopup label.checkbox-label input {
+    width: auto;
+}
+
+.group-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    border: none;
+    padding: 0;
+    margin: 0;
+}
+
+.group-selector legend {
+    padding: 0;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+.group-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border: 1px solid #ddd;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 14px;
+    user-select: none;
+}
+
+.group-chip input {
+    display: none;
+}
+
+.group-chip:has(input:checked) {
+    background: #0066cc;
+    border-color: #0066cc;
+    color: #fff;
+}

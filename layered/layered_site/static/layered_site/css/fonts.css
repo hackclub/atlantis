@@ -1,0 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+.prompt-thin { font-family: "Prompt", sans-serif; font-weight: 100; font-style: normal; }
+.prompt-extralight { font-family: "Prompt", sans-serif; font-weight: 200; font-style: normal; }
+.prompt-light { font-family: "Prompt", sans-serif; font-weight: 300; font-style: normal; }
+.prompt-regular { font-family: "Prompt", sans-serif; font-weight: 400; font-style: normal; }
+.prompt-medium { font-family: "Prompt", sans-serif; font-weight: 500; font-style: normal; }
+.prompt-semibold { font-family: "Prompt", sans-serif; font-weight: 600; font-style: normal; }
+.prompt-bold { font-family: "Prompt", sans-serif; font-weight: 700; font-style: normal; }
+.prompt-extrabold { font-family: "Prompt", sans-serif; font-weight: 800; font-style: normal; }
+.prompt-black { font-family: "Prompt", sans-serif; font-weight: 900; font-style: normal; }
+
+.prompt-thin-italic { font-family: "Prompt", sans-serif; font-weight: 100; font-style: italic; }
+.prompt-extralight-italic { font-family: "Prompt", sans-serif; font-weight: 200; font-style: italic; }
+.prompt-light-italic { font-family: "Prompt", sans-serif; font-weight: 300; font-style: italic; }
+.prompt-regular-italic { font-family: "Prompt", sans-serif; font-weight: 400; font-style: italic; }
+.prompt-medium-italic { font-family: "Prompt", sans-serif; font-weight: 500; font-style: italic; }
+.prompt-semibold-italic { font-family: "Prompt", sans-serif; font-weight: 600; font-style: italic; }
+.prompt-bold-italic { font-family: "Prompt", sans-serif; font-weight: 700; font-style: italic; }
+.prompt-extrabold-italic { font-family: "Prompt", sans-serif; font-weight: 800; font-style: italic; }
+.prompt-black-italic { font-family: "Prompt", sans-serif; font-weight: 900; font-style: italic; }

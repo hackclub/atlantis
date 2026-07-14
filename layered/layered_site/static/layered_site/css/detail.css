@@ -1,0 +1,107 @@
+.item-detail {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px;
+    align-items: flex-start;
+    margin-top: 16px;
+}
+
+.item-detail-media img {
+    width: 320px;
+    max-width: 100%;
+    height: auto;
+    border-radius: 12px;
+}
+
+.item-detail-info {
+    flex: 1 1 280px;
+}
+
+.item-detail-info h1 {
+    margin-top: 0;
+}
+
+.item-detail-cost {
+    color: #666;
+    font-size: 16px;
+}
+
+#time_spent {
+    color: #666;
+    font-size: 14px;
+    margin: 4px 0 12px;
+}
+
+#journal-content {
+    max-width: 45ch;
+    overflow-wrap: break-word;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+.journal-media {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.journal-image {
+    width: 400px;
+    height: 400px;
+    object-fit: contain;
+    border-radius: 5px;
+}
+
+.stl-viewer {
+    width: 400px;
+    height: 400px;
+    border-radius: 5px;
+    background-color: #f0f0f0;
+    overflow: hidden;
+    cursor: grab;
+}
+
+.stl-viewer canvas {
+    display: block;
+}
+
+.review-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
+    align-items: start;
+}
+
+.review-main {
+    min-width: 0;
+}
+
+.review-sidebar {
+    position: sticky;
+    top: 24px;
+    align-self: start;
+    box-sizing: border-box;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 16px;
+    background: #fff;
+}
+
+.review-sidebar h2 {
+    margin-top: 0;
+}
+
+@media (max-width: 900px) {
+    .review-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .review-sidebar {
+        position: static;
+        max-height: none;
+        overflow: visible;
+    }
+}
