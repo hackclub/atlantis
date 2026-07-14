@@ -1,4 +1,3 @@
-/* list wrappers: a labelled <ul> of cards */
 .project-list,
 .item-list {
     margin: 24px 0;
@@ -31,7 +30,6 @@
     margin: 0;
 }
 
-/* grid layouts of cards */
 .item-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -57,7 +55,6 @@
     margin: 0;
 }
 
-/* shared card shell */
 .project-card,
 .item-card,
 .journal-card,
@@ -94,7 +91,6 @@
     gap: 50px;
 }
 
-/* card thumbnails and secondary text */
 .item-card-image,
 .order-card-image {
     width: 100%;
@@ -114,6 +110,27 @@
     margin: 4px 0;
 }
 
+.project-locked {
+    margin: 0;
+    color: #a33;
+}
+
+.card-detail-link {
+    display: inline-block;
+    margin-top: 12px;
+    padding: 8px 12px;
+    border: 1px solid #0066cc;
+    border-radius: 8px;
+    color: #0066cc;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.card-detail-link:hover {
+    background: #0066cc;
+    color: #fff;
+}
+
 .order-actions {
     display: flex;
     flex-wrap: wrap;
@@ -121,7 +138,6 @@
     margin-top: 12px;
 }
 
-/* generic header row + overflow menu, used across card types */
 .card-row {
     display: flex;
     justify-content: space-between;
@@ -185,12 +201,16 @@
 
 .card-dropdown .delete-form {
     margin: 0;
+    padding: 0;
 }
 
 .card-dropdown .delete-button {
+    display: block;
+    width: 100%;
+    text-align: left;
     color: #a33;
     background: transparent;
     border: none;
-    padding: 6px 6px;
+    padding: 6px 8px;
     cursor: pointer;
 }

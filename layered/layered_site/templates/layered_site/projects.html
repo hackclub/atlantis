@@ -8,48 +8,49 @@
 <div class="content">
     {% include "root/_messages.html" %}
     <h1>Projects</h1>
+    <button type="button" id="openCreateModal">Create new project</button>
     <section class="project-list">
-        <h2>Your Projects:</h2>
+        <h3>Your Projects</h3>
         {% if projects %}
+            <div class="card-grid">
                 {% for project in projects %}
-                        {% if not project.deleted %}
-                        <div class="project-card" data-project-id="{{ project.id }}">
-                            <div class="card-row">
-                                <div class="card-main">
-                                    <strong><a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></strong>
-                                    <p>{{ project.description }}</p>
-                                    {% if project.printablesUrl %}
-                                        <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
-                                    {% endif %}
-                                </div>
-                                {% if not project.locked %}
-                                    <div class="card-controls">
-                                        <button type="button" class="menu-toggle" aria-haspopup="true" aria-expanded="false">⋯</button>
-                                        <div class="card-dropdown" aria-hidden="true">
-                                            <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-description="{{ project.description }}" data-printables="{{ project.printablesUrl|default_if_none:"" }}">Edit</button>
-                                            <form action="{% url 'delete_project' project.id %}" method="post" class="dropdown-item delete-form">
-                                                {% csrf_token %}
-                                                <button type="submit" class="delete-button">Delete</button>
-                                            </form>
-                                        </div>
-                                        <p>Status: {% if project.ships.last %}{{ project.ships.last.get_status_display }}{% else %}No ships yet{% endif %}</p>
-                                    </div>
-                                {% else %}
-                                    <div class="card-controls">
-                                        <p style="color: red;"><strong>Locked</strong></p>
-                                        <p>Status: {% if project.ships.last %}{{ project.ships.last.get_status_display }}{% else %}No ships yet{% endif %}</p>
-                                    </div>
+                    {% if not project.deleted %}
+                    <div class="project-card" data-project-id="{{ project.id }}">
+                        <div class="card-row">
+                            <div class="card-main">
+                                <strong><a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></strong>
+                                <p>{{ project.description }}</p>
+                                {% if project.printablesUrl %}
+                                    <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
                                 {% endif %}
+                                <p class="project-byline">Status: {% if project.ships.last %}{{ project.ships.last.get_status_display }}{% else %}No ships yet{% endif %}</p>
                             </div>
+                            {% if not project.locked %}
+                                <div class="card-controls">
+                                    <button type="button" class="menu-toggle" aria-haspopup="true" aria-expanded="false">⋯</button>
+                                    <div class="card-dropdown" aria-hidden="true">
+                                        <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-description="{{ project.description }}" data-printables="{{ project.printablesUrl|default_if_none:"" }}">Edit</button>
+                                        <form action="{% url 'delete_project' project.id %}" method="post" class="dropdown-item delete-form">
+                                            {% csrf_token %}
+                                            <button type="submit" class="delete-button">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="card-controls">
+                                    <p class="project-locked"><strong>Locked</strong></p>
+                                </div>
+                            {% endif %}
                         </div>
-                        {% endif %}
-                    {% endfor %}
+                        <a href="{% url 'project_detail' project.id %}" class="card-detail-link">View project</a>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
         {% else %}
             <p>No projects yet. Create your first one!</p>
         {% endif %}
     </section>
-
-    <button type="button" id="openCreateModal">Create new project</button>
 </div>
 
 <div id="createProjectModal" class="modal hidden" aria-hidden="true" hidden>
