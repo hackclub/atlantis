@@ -1,34 +1,37 @@
 {% extends "layered_site/_base.html" %}
+{% load static %}
 
-{% block page_id %}explore{% endblock %}
-{% block title %}Explore{% endblock %}
+{% block page_id %}projects{% endblock %}
+{% block title %}Projects{% endblock %}
 
 {% block content %}
 <div class="content">
     {% include "root/_messages.html" %}
     <h1>Explore</h1>
+    <section class="project-list">
         {% if projects %}
+            <div class="card-grid">
                 {% for project in projects %}
-                        {% if not project.deleted %}
-                        <div class="project-card" data-project-id="{{ project.id }}">
-                            <div class="card-row">
-                                <div class="card-main">
-                                    <strong><a href="{% url 'project_detail_explore' project.id %}">{{ project.title }}</a></strong>
-                                    <p>by {{ project.owner.hackclub_profile.slack_username }}</p>
-                                    <p>{{ project.description }}</p>
-                                    {% if project.printablesUrl %}
-                                        <p><a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a></p>
-                                    {% endif %}
-                                    {% if project.editor_model_url %}
-                                        <p><a href="{{ project.editor_model_url }}" target="_blank" rel="noreferrer">Download editor model</a> ({{ project.editor_name }})</p>
-                                    {% endif %}
-                                </div>
+                    {% if not project.deleted %}
+                    <div class="project-card" data-project-id="{{ project.id }}">
+                        <div class="card-row">
+                            <div class="card-main">
+                                <strong><a href="{% url 'project_detail_explore' project.id %}">{{ project.title }}</a></strong>
+                                <p>{{ project.description }}</p>
+                                {% if project.printablesUrl %}
+                                    <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
+                                {% endif %}
+                                <p>by {{ project.owner.hackclub_profile.slack_username }}</p>
                             </div>
                         </div>
-                        {% endif %}
-                    {% endfor %}
+                        <a href="{% url 'project_detail_explore' project.id %}" class="card-detail-link">View project</a>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
         {% else %}
-            <p>No projects not made by you yet. Tell your friends to make some!</p>
+            <p>No projects yet.</p>
         {% endif %}
-</div>
+    </section>
+</div>  
 {% endblock %}

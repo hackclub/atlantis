@@ -1,8 +1,8 @@
 {% extends "layered_site/_base.html" %}
 {% load static %}
 
-{% block page_id %}project-detail-explore{% endblock %}
-{% block title %}View Project {{ project.title }}{% endblock %}
+{% block page_id %}project_detail{% endblock %}
+{% block title %}Project {{ project.title }}{% endblock %}
 
 {% block content %}
 <script type="importmap">
@@ -21,7 +21,6 @@
             <div class="card-main">
                 <h1>{{ project.title }}</h1>
                 <p id="time_spent">Time spent: {{ time_spent }}</p>
-                <p>by {{ project.owner.hackclub_profile.slack_username }}</p>
                 {% if project.locked %}
                     <p style="color: red; font-weight: bold;">Locked</p>
                 {% endif %}
@@ -29,31 +28,15 @@
                 {% if project.printablesUrl %}
                     <p>
                         <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer noopener">View on Printables</a>
-                        — {{ printablesData.makesCount }} makes on Printables
+                        - {{ printablesData.makesCount }} makes on Printables
                     </p>
                 {% endif %}
                 {% if project.editor_model_url %}
                     <p><a href="{{ project.editor_model_url }}" target="_blank" rel="noreferrer noopener">Download editor model</a> ({{ project.editor_name }})</p>
                 {% endif %}
             </div>
-            {% if perms.layered_site.t2_review or perms.layered_site.organizer or perms.layered_site.t3_review %}
-                <div class="card-controls">
-                    {% if project.locked %}
-                        <form method="post" action="{% url 'unlock_project' project.id %}">
-                            {% csrf_token %}
-                            <button type="submit" style="color: red;">Unlock</button>
-                        </form>
-                    {% else %}
-                        <form method="post" action="{% url 'lock_project' project.id %}">
-                            {% csrf_token %}
-                            <button type="submit" style="color: red;">Lock</button>
-                        </form>
-                    {% endif %}
-                </div>
-            {% endif %}
         </div>
     </div>
-
     <div class="journal-section">
     <h2>Journal Entries</h2>
         {% if journals %}
@@ -80,7 +63,24 @@
         {% else %}
             <p>No journal entries yet!</p>
         {% endif %}
-        <p><a href="{% url 'explore' %}">Back to explore</a></p>
+        <p><a href="{% url 'projects' %}">Back to projects</a></p>
     </div>
 </div>
+<script>
+    const textArea = document.getElementById("journal_content");
+    const countDisplay = document.getElementById("character_count");
+
+    countDisplay.style.color = "red"
+
+    textArea.addEventListener('input', () => {
+        const currentLength = textArea.value.length;
+        countDisplay.textContent = currentLength;
+
+        if (currentLength >= 200 && currentLength <= 2000) {
+            countDisplay.style.color = "green"
+        } else {
+            countDisplay.style.color = "red"
+        }
+    });
+</script>
 {% endblock %}
