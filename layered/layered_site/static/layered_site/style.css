@@ -513,3 +513,11 @@ dialog#editProjectPopup label.checkbox-label input {
 .users-table a:hover {
     text-decoration: underline;
 }
+
+.review-card {
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+    width: 450px
+}
