@@ -45,9 +45,9 @@
                     {% else %}
                         <button type="button" disabled title="{{ ship_disabled_reason }}">Ship</button>
                     {% endif %}
-                    <form action="{% url 'delete_project' project.id %}" method="post">
+                    <form id="deleteProjectForm" action="{% url 'delete_project' project.id %}" method="post">
                         {% csrf_token %}
-                        <button type="submit" style="color: red;">Delete</button>
+                        <button type="button" id="openDeleteModal" style="color: red;">Delete</button>
                     </form>
                 </div>
             {% endif %}
@@ -142,6 +142,56 @@
         <p><a href="{% url 'projects' %}">Back to projects</a></p>
     </div>
 </div>
+
+<div id="deleteProjectModal" class="modal hidden" aria-hidden="true" hidden>
+    <div class="modal-backdrop" id="deleteModalBackdrop"></div>
+
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="deleteProjectTitle">
+        <h3 id="deleteProjectTitle">Delete Project</h3>
+        <p>Are you sure you want to delete "{{ project.title }}"? This action cannot be undone.</p>
+
+        <div class="modal-actions">
+            <button type="button" id="cancelDeleteModal">Cancel</button>
+            <button type="button" id="confirmDeleteModal" class="delete-button">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const modal = document.getElementById('deleteProjectModal');
+        const backdrop = document.getElementById('deleteModalBackdrop');
+        const openBtn = document.getElementById('openDeleteModal');
+        const cancelBtn = document.getElementById('cancelDeleteModal');
+        const confirmBtn = document.getElementById('confirmDeleteModal');
+        const form = document.getElementById('deleteProjectForm');
+
+        function openModal() {
+            modal.classList.remove('hidden');
+            modal.hidden = false;
+            modal.setAttribute('aria-hidden', 'false');
+            cancelBtn.focus();
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            modal.hidden = true;
+            modal.setAttribute('aria-hidden', 'true');
+            openBtn.focus();
+        }
+
+        if (openBtn) openBtn.addEventListener('click', openModal);
+        cancelBtn.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', closeModal);
+        confirmBtn.addEventListener('click', () => form.submit());
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+    })();
+</script>
 <script>
     const textArea = document.getElementById("journal_content");
     const countDisplay = document.getElementById("character_count");
