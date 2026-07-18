@@ -42,7 +42,7 @@ STORAGES = {
         "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": "layered.storage.NonStrictManifestStaticFilesStorage",
     },
 }
 
@@ -147,10 +147,12 @@ CSRF_TRUSTED_ORIGINS = [
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 
-SECURE_SSL_REDIRECT = not DEBUG
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
-if not DEBUG:
+SECURE_SSL = os.environ.get("SECURE_SSL", "False" if DEBUG else "True") == "True"
+
+SECURE_SSL_REDIRECT = SECURE_SSL
+SESSION_COOKIE_SECURE = SECURE_SSL
+CSRF_COOKIE_SECURE = SECURE_SSL
+if SECURE_SSL:
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
@@ -189,7 +191,7 @@ JAZZMIN_UI_TWEAKS = {
     "no_customize": False,
     "sidebar_themes": True,
     "theme": "solar",
-    "dark_mode_theme": "solar",
+    "default_theme_mode": "auto",
     "sidebar": "sidebar-dark-teal", 
     "sidebar_nav_small_text": False,
     "sidebar_disable_expand": False,
