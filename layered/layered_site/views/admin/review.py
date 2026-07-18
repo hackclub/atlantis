@@ -11,8 +11,15 @@ from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, 
 
 @staff_member_required
 @check_perms(["layered_site.t1_review", "layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"])
-def review_dash(request):    
-    ships = Ship.objects.filter(status=Ship.ShipStatus.T1_QUEUE)
+def review_dash(request):
+    ships = (
+        Ship.objects.filter(status=Ship.ShipStatus.T1_QUEUE)
+        .select_related("project", "project__owner", "project__owner__hackclub_profile")
+        .order_by("-created_at")
+    )
+    for ship in ships:
+        total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
+        ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
     return render(request, "root/review.html", {
         "ships": ships
     })
@@ -96,7 +103,14 @@ def t1_decision(request, ship_id):
 @staff_member_required
 @check_perms(["layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"])
 def ysws_review_dash(request):
-    ships = Ship.objects.filter(status=Ship.ShipStatus.T2_QUEUE)
+    ships = (
+        Ship.objects.filter(status=Ship.ShipStatus.T2_QUEUE)
+        .select_related("project", "project__owner", "project__owner__hackclub_profile")
+        .order_by("-created_at")
+    )
+    for ship in ships:
+        total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
+        ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
     return render(request, "root/ysws_review.html", {
         "ships": ships
     })
@@ -191,8 +205,15 @@ def t2_decision(request, ship_id):
 
 @staff_member_required
 @check_perms(["layered_site.organizer", "layered_site.t3_review"])
-def fraud_review_dash(request):    
-    ships = Ship.objects.filter(status=Ship.ShipStatus.T3_QUEUE)
+def fraud_review_dash(request):
+    ships = (
+        Ship.objects.filter(status=Ship.ShipStatus.T3_QUEUE)
+        .select_related("project", "project__owner", "project__owner__hackclub_profile")
+        .order_by("-created_at")
+    )
+    for ship in ships:
+        total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
+        ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
     return render(request, "root/fraud_review.html", {
         "ships": ships
     })

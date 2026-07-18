@@ -7,22 +7,50 @@
 <div class="content">
     {% include "root/_messages.html" %}
     <h1>Review Dash</h1>
-    <h3>T1 Reviews</h3>
-    <div class="card-grid">
-        {% for ship in ships %}
-            <div class="project-card" data-project-id="{{ ship.project.id }}">
-                <div class="card-row">
-                    <div class="card-main">
-                        <strong><a href="{% url 'review_project' ship.id %}">{{ ship.project.title }}</a></strong>
-                        <p>by {{ ship.project.owner.hackclub_profile.slack_username }}</p>
-                        <p>Type: {{ ship.project.editor_name }}</p>
-                        <p>{{ ship.project.description }}</p>
-                    </div>
-                </div>
-            </div>
-        {% empty %}
-            <p>No projects awaiting T1 review.</p>
-        {% endfor %}
-    </div>
+    <section class="project-list">
+        <h2>Ships</h2>
+        {% if ships %}
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Project Title</th>
+                        <th>Owner</th>
+                        <th>Type</th>
+                        <th>Time Spent</th>
+                        <th>Shipped</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ship in ships %}
+                        {% if not ship.project.deleted %}
+                        <tr data-project-id="{{ ship.project.id }}">
+                            <td><a href="{% url 'ysws_review_project' ship.id %}">{{ ship.project.title }}</a></td>
+                            <td>@{{ ship.project.owner.hackclub_profile.slack_username }}</td>
+                            <td>
+                                {{ ship.project.editor_name }}
+                            </td>
+                            <td>{{ ship.time_spent_display }}</td>
+                            <td>{{ ship.created_at|date:"M j, Y" }}</td>
+                            <td>{{ ship.project.description|truncatechars:80 }}</td>
+                            <td>
+                                <a href="{% url 'ysws_review_project' ship.id %}">Review project</a>
+                                <br>
+                                {% if ship.project.printablesUrl %}
+                                    <a href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
+                                {% else %}
+                                    <span aria-disabled="true">No printables link</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No projects yet. Create your first one!</p>
+        {% endif %}
+    </section>
 </div>
 {% endblock %}

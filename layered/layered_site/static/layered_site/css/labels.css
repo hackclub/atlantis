@@ -1,0 +1,68 @@
+.editor-label {
+    border-width: 1.5px;
+    border-radius: 7px;
+    border-style: solid;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    padding-left: 7px;
+    padding-right: 7px;
+    font-family: "Prompt";
+    width: fit-content;
+    margin-left: 8px;
+    font-size: 16px;
+    opacity: 0.6;
+}
+
+#fusion-360-label {
+    color: #FFFFFF;
+    background-color: #FF6B01;
+    border-color: #913B00;
+}
+
+#onshape-label {
+    color: #FFFFFF;
+    background-color: #64BB58;
+    border-color: #3D7A35;
+}
+
+#shapr3d-label {
+    color: #FFFFFF;
+    background-color: #1D4EFF;
+    border-color: #0F2E99;
+}
+
+#solidworks-label {
+    color: #FFFFFF;
+    background-color: #DA291C;
+    border-color: #8C170F;
+}
+
+#freecad-label {
+    color: #FFFFFF;
+    background-color: #CB333B;
+    border-color: #7A1F24;
+}
+
+#openscad-label {
+    color: #3A3D0A;
+    background-color: #FFF662;
+    border-color: #606C38;
+}
+
+#blender-label {
+    color: #FFFFFF;
+    background-color: #E87D0D;
+    border-color: #A85206;
+}
+
+#solvespace-label {
+    color: #FFFFFF;
+    background-color: #2E86AB;
+    border-color: #1B5470;
+}
+
+#other-label {
+    color: #FFFFFF;
+    background-color: #6C757D;
+    border-color: #495057;
+}

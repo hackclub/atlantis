@@ -66,6 +66,7 @@
     border-radius: 12px;
     padding: 16px;
     position: relative;
+    color: black;
 }
 
 .journal-card { width: fit-content; }
@@ -113,6 +114,17 @@
 .project-locked {
     margin: 0;
     color: #a33;
+}
+
+.project-card a:not(.card-detail-link),
+.item-card a:not(.card-detail-link),
+.journal-card a:not(.card-detail-link),
+.review-card a:not(.card-detail-link),
+.ship-card a:not(.card-detail-link),
+.project-info a:not(.card-detail-link),
+.order-card a:not(.card-detail-link) {
+    color: inherit;
+    text-decoration: none;
 }
 
 .card-detail-link {
@@ -213,4 +225,8 @@
     border: none;
     padding: 6px 8px;
     cursor: pointer;
+}
+
+.project-card {
+    padding: 20px;
 }

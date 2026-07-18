@@ -11,33 +11,55 @@
     <section class="order-list">
         <h3>Pending</h3>
         {% if pending_orders %}
-            <div class="order-grid">
-                {% for order in pending_orders %}
-                    <div class="order-card" data-order-id="{{ order.id }}">
-                        <img src="{{ order.item.imageUrl }}" alt="{{ order.item.name }}" loading="lazy" class="order-card-image">
-                        <strong><a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a></strong>
-                        <p>{{ order.item.description }}</p>
-                        <p>{{ order.item.cost }} layers</p>
-                        <p><strong>Ordered by:</strong> {{ order.owner.get_full_name|default:order.owner.username }}</p>
-                        <p><strong>Quantity:</strong> {{ order.quantity }}</p>
-                        <p><strong>Status:</strong> {{ order.get_status_display }}</p>
-                        <p><strong>User notes:</strong> {{ order.user_notes|default:"None" }}</p>
-                        <p><strong>Fulfiller:</strong> {{ order.fulfiller }}</p>
-                        <p><strong>Admin notes:</strong> {{ order.admin_notes|default:"None" }}</p>
-                        <p><strong>Created:</strong> {{ order.created_at }}</p>
-                        {% if order.fulfilled_at %}
-                            <p><strong>Fulfilled:</strong> {{ order.fulfilled_at }}</p>
-                        {% endif %}
-                        <form action="{% url 'update_order_status' order.id %}" method="post" class="order-actions">
-                            {% csrf_token %}
-                            <button type="submit" name="action" value="pending">Mark pending</button>
-                            <button type="submit" name="action" value="fulfilled">Mark fulfilled</button>
-                            <button type="submit" name="action" value="denied">Deny</button>
-                            <button type="submit" name="action" value="refunded">Refund</button>
-                        </form>
-                    </div>
-                {% endfor %}
-            </div>
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Cost</th>
+                        <th>Ordered by</th>
+                        <th>Qty</th>
+                        <th>Status</th>
+                        <th>User notes</th>
+                        <th>Fulfiller</th>
+                        <th>Admin notes</th>
+                        <th>Created</th>
+                        <th>Fulfilled</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in pending_orders %}
+                    <tr data-order-id="{{ order.id }}">
+                        <td>
+                            {% if order.item.imageUrl %}
+                                <img src="{{ order.item.imageUrl }}" alt="{{ order.item.name }}" loading="lazy" style="width: 40px; height: 40px; object-fit: cover; display: inline-block; vertical-align: middle; margin-right: 6px;">
+                            {% endif %}
+                            <a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
+                        </td>
+                        <td>{{ order.item.cost }} layers</td>
+                        <td>{{ order.owner.get_full_name|default:order.owner.username }}</td>
+                        <td>{{ order.quantity }}</td>
+                        <td>{{ order.get_status_display }}</td>
+                        <td>{{ order.user_notes|default:"None" }}</td>
+                        <td>{{ order.fulfiller }}</td>
+                        <td>{{ order.admin_notes|default:"None" }}</td>
+                        <td>{{ order.created_at|date:"M j, Y" }}</td>
+                        <td>{% if order.fulfilled_at %}{{ order.fulfilled_at|date:"M j, Y" }}{% else %}—{% endif %}</td>
+                        <td>
+                            <form action="{% url 'update_order_status' order.id %}" method="post" class="order-actions">
+                                {% csrf_token %}
+                                <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
+                                    <button type="submit" name="action" value="pending" class="link-button">Mark pending</button>
+                                    <button type="submit" name="action" value="fulfilled" class="link-button">Mark fulfilled</button>
+                                    <button type="submit" name="action" value="denied" class="link-button">Deny</button>
+                                    <button type="submit" name="action" value="refunded" class="link-button">Refund</button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         {% else %}
             <p>No pending orders yet.</p>
         {% endif %}
@@ -45,33 +67,55 @@
     <section class="order-list">
         <h3>Other Orders</h3>
         {% if other_orders %}
-            <div class="order-grid">
-                {% for order in other_orders %}
-                    <div class="order-card" data-order-id="{{ order.id }}">
-                        <img src="{{ order.item.imageUrl }}" alt="{{ order.item.name }}" loading="lazy" class="order-card-image">
-                        <strong><a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a></strong>
-                        <p>{{ order.item.description }}</p>
-                        <p>{{ order.item.cost }} layers</p>
-                        <p><strong>Ordered by:</strong> {{ order.owner.get_full_name|default:order.owner.username }}</p>
-                        <p><strong>Quantity:</strong> {{ order.quantity }}</p>
-                        <p><strong>Status:</strong> {{ order.get_status_display }}</p>
-                        <p><strong>User notes:</strong> {{ order.user_notes|default:"None" }}</p>
-                        <p><strong>Fulfiller:</strong> {{ order.fulfiller.hackclub_profile.slack_username }}</p>
-                        <p><strong>Admin notes:</strong> {{ order.admin_notes|default:"None" }}</p>
-                        <p><strong>Created:</strong> {{ order.created_at }}</p>
-                        {% if order.fulfilled_at %}
-                            <p><strong>Fulfilled:</strong> {{ order.fulfilled_at }}</p>
-                        {% endif %}
-                        <form action="{% url 'update_order_status' order.id %}" method="post" class="order-actions">
-                            {% csrf_token %}
-                            <button type="submit" name="action" value="pending">Mark pending</button>
-                            <button type="submit" name="action" value="fulfilled">Mark fulfilled</button>
-                            <button type="submit" name="action" value="denied">Deny</button>
-                            <button type="submit" name="action" value="refunded">Refund</button>
-                        </form>
-                    </div>
-                {% endfor %}
-            </div>
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Cost</th>
+                        <th>Ordered by</th>
+                        <th>Qty</th>
+                        <th>Status</th>
+                        <th>User notes</th>
+                        <th>Fulfiller</th>
+                        <th>Admin notes</th>
+                        <th>Created</th>
+                        <th>Fulfilled</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in other_orders %}
+                    <tr data-order-id="{{ order.id }}">
+                        <td>
+                            {% if order.item.imageUrl %}
+                                <img src="{{ order.item.imageUrl }}" alt="{{ order.item.name }}" loading="lazy" style="width: 40px; height: 40px; object-fit: cover; display: inline-block; vertical-align: middle; margin-right: 6px;">
+                            {% endif %}
+                            <a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
+                        </td>
+                        <td>{{ order.item.cost }} layers</td>
+                        <td>{{ order.owner.get_full_name|default:order.owner.username }}</td>
+                        <td>{{ order.quantity }}</td>
+                        <td>{{ order.get_status_display }}</td>
+                        <td>{{ order.user_notes|default:"None" }}</td>
+                        <td>{{ order.fulfiller.hackclub_profile.slack_username }}</td>
+                        <td>{{ order.admin_notes|default:"None" }}</td>
+                        <td>{{ order.created_at|date:"M j, Y" }}</td>
+                        <td>{% if order.fulfilled_at %}{{ order.fulfilled_at|date:"M j, Y" }}{% else %}—{% endif %}</td>
+                        <td>
+                            <form action="{% url 'update_order_status' order.id %}" method="post" class="order-actions">
+                                {% csrf_token %}
+                                <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
+                                    <button type="submit" name="action" value="pending" class="link-button">Mark pending</button>
+                                    <button type="submit" name="action" value="fulfilled" class="link-button">Mark fulfilled</button>
+                                    <button type="submit" name="action" value="denied" class="link-button">Deny</button>
+                                    <button type="submit" name="action" value="refunded" class="link-button">Refund</button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         {% else %}
             <p>No other orders yet.</p>
         {% endif %}

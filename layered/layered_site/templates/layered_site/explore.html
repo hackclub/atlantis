@@ -13,19 +13,42 @@
             <div class="card-grid">
                 {% for project in projects %}
                     {% if not project.deleted %}
-                    <div class="project-card" data-project-id="{{ project.id }}">
-                        <div class="card-row">
-                            <div class="card-main">
-                                <strong><a href="{% url 'project_detail_explore' project.id %}">{{ project.title }}</a></strong>
-                                <p>{{ project.description }}</p>
-                                {% if project.printablesUrl %}
-                                    <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
-                                {% endif %}
-                                <p>by {{ project.owner.hackclub_profile.slack_username }}</p>
+                        <div class="project-card" data-project-id="{{ project.id }}">
+                            <div class="card-row">
+                                <div class="card-main">
+                                    <span style="font-size: 25px;"><strong><a href="{% url 'project_detail_explore' project.id %}">{{ project.title }}</a></strong></span>
+                                    <p>
+                                        by @{{ project.owner.hackclub_profile.slack_username }}
+                                        {% if project.editor_name == "Fusion 360" %}
+                                            <span class="editor-label" id="fusion-360-label">Fusion 360</span>
+                                        {% elif project.editor_name == "Onshape" %}
+                                            <span class="editor-label" id="onshape-label">Onshape</span>
+                                        {% elif project.editor_name == "Shapr3D" %}
+                                            <span class="editor-label" id="shapr3d-label">Sharp3D</span>
+                                        {% elif project.editor_name == "Solidworks" %}
+                                            <span class="editor-label" id="solidworks-label">Soldiworks</span>
+                                        {% elif project.editor_name == "FreeCAD" %}
+                                            <span class="editor-label" id="freecad-label">FreeCAD</span>
+                                        {% elif project.editor_name == "OpenSCAD" %}
+                                            <span class="editor-label" id="openscad-label">OpenSCAD</span>
+                                        {% elif project.editor_name == "Blender" %}
+                                            <span class="editor-label" id="blender-label">Blender</span>
+                                        {% elif project.editor_name == "Solvespace" %}
+                                            <span class="editor-label" id="solvespace-label">SolveSpace</span>
+                                        {% else %}
+                                            <span class="editor-label" id="other-label">Other</span>
+                                        {% endif %} 
+                                    </p>
+                                    <p>{{ project.description }}</p>
+                                </div>
                             </div>
+                            <a href="{% url 'project_detail_explore' project.id %}" class="card-detail-link">View project</a>
+                            {% if project.printablesUrl %}
+                                <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer" class="card-detail-link">Printables link</a>
+                            {% else %}
+                                <a class="card-detail-link" aria-disabled="true">Printables link</a>
+                            {% endif %}
                         </div>
-                        <a href="{% url 'project_detail_explore' project.id %}" class="card-detail-link">View project</a>
-                    </div>
                     {% endif %}
                 {% endfor %}
             </div>

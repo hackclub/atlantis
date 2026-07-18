@@ -4,6 +4,7 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
+from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 
 from ...models import Ship, Print
@@ -22,7 +23,17 @@ def print_dash(request):
         .select_related("ship", "ship__project")
         .order_by("-claimed_time")
     )
-    queued_ships = Ship.objects.filter(status=Ship.ShipStatus.PRINT_QUEUE).select_related("project")
+    queued_ships = (
+        Ship.objects.filter(status=Ship.ShipStatus.PRINT_QUEUE)
+        .select_related("project", "project__owner", "project__owner__hackclub_profile")
+        .order_by("-created_at")
+    )
+    for ship in queued_ships:
+        total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
+        ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
+    for print in claimed_prints:
+        total_time = print.ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
+        print.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
     return render(request, "root/print.html", {
         "claimed_prints": claimed_prints,
         "ships": queued_ships,

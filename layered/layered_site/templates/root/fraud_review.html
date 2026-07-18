@@ -8,20 +8,31 @@
     {% include "root/_messages.html" %}
     <h1>Fraud Review Dash</h1>
     <h3>T3 Reviews</h3>
-    <div class="card-grid">
-        {% for ship in ships %}
-            <div class="project-card" data-project-id="{{ ship.project.id }}">
-                <div class="card-row">
-                    <div class="card-main">
-                        <a href="{% url 'fraud_review_project' ship.id %}"><strong>{{ ship.project.title }}</strong></a>
-                        <p>Type: {{ ship.project.editor_name }}</p>
-                        <p>{{ ship.project.description }}</p>
-                    </div>
-                </div>
-            </div>
-        {% empty %}
-            <p>No projects awaiting T3 review.</p>
-        {% endfor %}
-    </div>
+    <table class="users-table">
+        <thead>
+            <tr>
+                <th>Project Title</th>
+                <th>Type</th>
+                <th>Time Spent</th>
+                <th>Shipped</th>
+                <th>Description</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ship in ships %}
+            <tr data-project-id="{{ ship.project.id }}">
+                <td><a href="{% url 'fraud_review_project' ship.id %}">{{ ship.project.title }}</a></td>
+                <td>{{ ship.project.editor_name }}</td>
+                <td>{{ ship.time_spent_display }}</td>
+                <td>{{ ship.created_at|date:"M j, Y" }}</td>
+                <td>{{ ship.project.description|truncatechars:80 }}</td>
+                <td><a href="{% url 'fraud_review_project' ship.id %}">Review project</a></td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="6">No projects awaiting T3 review.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
 </div>
 {% endblock %}

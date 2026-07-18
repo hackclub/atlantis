@@ -20,6 +20,7 @@ def audit_log(request):
 
     action_filter = request.GET.get("action", "").strip()
     actor_filter = request.GET.get("actor", "").strip()
+    target_type_filter = request.GET.get("target_type", "").strip()
 
     if action_filter:
         logs = logs.filter(action=action_filter)
@@ -29,8 +30,17 @@ def audit_log(request):
             | Q(actor__first_name__icontains=actor_filter)
             | Q(actor__last_name__icontains=actor_filter)
         )
+    if target_type_filter:
+        logs = logs.filter(target__startswith=f"{target_type_filter} #")
 
     actions = AuditLog.objects.order_by("action").values_list("action", flat=True).distinct()
+
+    # targets are stored as "<Type> #<id> ...", so the type is the leading word
+    target_types = sorted({
+        target.split(" ", 1)[0]
+        for target in AuditLog.objects.exclude(target="").values_list("target", flat=True).distinct()
+        if target
+    })
 
     paginator = Paginator(logs, 50)
     page = paginator.get_page(request.GET.get("page"))
@@ -41,6 +51,8 @@ def audit_log(request):
         "actions": actions,
         "action_filter": action_filter,
         "actor_filter": actor_filter,
+        "target_types": target_types,
+        "target_type_filter": target_type_filter,
     })
 
 @staff_member_required

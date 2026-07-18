@@ -20,6 +20,15 @@
             </select>
         </label>
         <label>
+            Target type:
+            <select name="target_type" id="auditTargetTypeFilter">
+                <option value="">All targets</option>
+                {% for t in target_types %}
+                    <option value="{{ t }}" {% if t == target_type_filter %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
             Actor:
             <input type="text" name="actor" id="auditActorFilter" value="{{ actor_filter }}" placeholder="name or username" autocomplete="off">
         </label>
@@ -29,70 +38,82 @@
     <p>{{ page.paginator.count }} total entr{{ page.paginator.count|pluralize:"y,ies" }}</p>
 
     {% if logs %}
-        {% for log in logs %}
-            <div class="audit-entry">
-                <div class="audit-header">
-                    <strong>{{ log.action }}</strong>
-                    &mdash; {{ log.created_at }}
-                </div>
-                <div class="audit-meta">
-                    <p><strong>Actor:</strong>
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Action</th>
+                    <th>Actor</th>
+                    <th>Target</th>
+                    <th>Request</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.created_at }}</td>
+                    <td><strong>{{ log.action }}</strong></td>
+                    <td>
                         {% if log.actor %}
                             {{ log.actor.get_full_name|default:log.actor.username }} ({{ log.actor.username }})
                         {% else %}
                             <em>deleted user</em>
                         {% endif %}
-                    </p>
-                    {% if log.target %}<p><strong>Target:</strong> {{ log.target }}</p>{% endif %}
-                    <p><strong>Request:</strong> {{ log.method }} {{ log.path }}</p>
-                    {% if log.ip_address %}<p><strong>IP address:</strong> {{ log.ip_address }}</p>{% endif %}
-                </div>
-
-                <details>
-                    <summary>Form values submitted ({{ log.form_data|length }})</summary>
-                    {% if log.form_data %}
-                        <table class="audit-data">
-                            {% for key, value in log.form_data.items %}
-                                <tr>
-                                    <th>{{ key }}</th>
-                                    <td>{{ value }}</td>
-                                </tr>
-                            {% endfor %}
-                        </table>
-                    {% else %}
-                        <p><em>No form values submitted.</em></p>
-                    {% endif %}
-                </details>
-
-                {% if log.metadata %}
-                    <details>
-                        <summary>Resulting state / context</summary>
-                        <table class="audit-data">
-                            {% for key, value in log.metadata.items %}
-                                <tr>
-                                    <th>{{ key }}</th>
-                                    <td>{{ value }}</td>
-                                </tr>
-                            {% endfor %}
-                        </table>
-                    </details>
-                {% endif %}
-            </div>
-        {% endfor %}
+                    </td>
+                    <td>{{ log.target|default:"—" }}</td>
+                    <td>
+                        {{ log.method }} {{ log.path }}
+                        {% if log.ip_address %}<br><small>{{ log.ip_address }}</small>{% endif %}
+                    </td>
+                    <td>
+                        <details>
+                            <summary>Form values ({{ log.form_data|length }})</summary>
+                            {% if log.form_data %}
+                                <table class="audit-data">
+                                    {% for key, value in log.form_data.items %}
+                                        <tr>
+                                            <th>{{ key }}</th>
+                                            <td>{{ value }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </table>
+                            {% else %}
+                                <p><em>No form values submitted.</em></p>
+                            {% endif %}
+                        </details>
+                        {% if log.metadata %}
+                            <details>
+                                <summary>Resulting state / context</summary>
+                                <table class="audit-data">
+                                    {% for key, value in log.metadata.items %}
+                                        <tr>
+                                            <th>{{ key }}</th>
+                                            <td>{{ value }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </table>
+                            </details>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
 
         {% if page.has_other_pages %}
             <div class="pagination">
                 {% if page.has_previous %}
-                    <a href="?action={{ action_filter }}&actor={{ actor_filter }}&page={{ page.previous_page_number }}">&laquo; Previous</a>
+                    <a href="?action={{ action_filter }}&actor={{ actor_filter }}&target_type={{ target_type_filter }}&page={{ page.previous_page_number }}">&laquo; Previous</a>
                 {% endif %}
                 <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
                 {% if page.has_next %}
-                    <a href="?action={{ action_filter }}&actor={{ actor_filter }}&page={{ page.next_page_number }}">Next &raquo;</a>
+                    <a href="?action={{ action_filter }}&actor={{ actor_filter }}&target_type={{ target_type_filter }}&page={{ page.next_page_number }}">Next &raquo;</a>
                 {% endif %}
             </div>
         {% endif %}
     {% else %}
-        <p>No audit log entries{% if action_filter or actor_filter %} match your filters{% endif %}.</p>
+        <p>No audit log entries{% if action_filter or actor_filter or target_type_filter %} match your filters{% endif %}.</p>
     {% endif %}
 </div>
 
@@ -100,10 +121,12 @@
     (function () {
         const form = document.getElementById('auditFilters');
         const action = document.getElementById('auditActionFilter');
+        const targetType = document.getElementById('auditTargetTypeFilter');
         const actor = document.getElementById('auditActorFilter');
         if (!form) return;
 
         if (action) action.addEventListener('change', () => form.submit());
+        if (targetType) targetType.addEventListener('change', () => form.submit());
 
         if (actor) {
             let timer;
