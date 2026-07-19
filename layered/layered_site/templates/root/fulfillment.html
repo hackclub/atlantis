@@ -36,7 +36,7 @@
                             {% endif %}
                             <a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
                         </td>
-                        <td>{{ order.item.cost }} layers</td>
+                        <td>{{ order.item.cost }} spool</td>
                         <td>{{ order.owner.get_full_name|default:order.owner.username }}</td>
                         <td>{{ order.quantity }}</td>
                         <td>{{ order.get_status_display }}</td>
@@ -92,7 +92,7 @@
                             {% endif %}
                             <a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
                         </td>
-                        <td>{{ order.item.cost }} layers</td>
+                        <td>{{ order.item.cost }} spools</td>
                         <td>{{ order.owner.get_full_name|default:order.owner.username }}</td>
                         <td>{{ order.quantity }}</td>
                         <td>{{ order.get_status_display }}</td>

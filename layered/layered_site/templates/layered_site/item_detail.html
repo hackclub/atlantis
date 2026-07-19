@@ -19,7 +19,7 @@
         </div>
         <div class="item-detail-info">
             <h1>{{ item.name }}</h1>
-            <p class="item-detail-cost">{{ item.cost }} layers</p>
+            <p class="item-detail-cost">{{ item.cost }} spools</p>
             <p>{{ item.description }}</p>
 
             <form action="{% url 'order_item' item.id %}" method="post" class="order-form">

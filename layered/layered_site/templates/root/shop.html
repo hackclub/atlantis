@@ -33,7 +33,7 @@
                             </td>
                             <td><a href="{% url 'item_detail' item.id %}">{{ item.name }}</a></td>
                             <td>{{ item.description|truncatechars:80 }}</td>
-                            <td>{{ item.cost }} layers</td>
+                            <td>{{ item.cost }} spools</td>
                             <td>
                                 <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}">Edit</button>
                                 <br>

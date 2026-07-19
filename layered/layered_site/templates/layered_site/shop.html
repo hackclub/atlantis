@@ -19,7 +19,7 @@
                         {% endif %}
                         <strong>{{ item.name }}</strong>
                         <p>{{ item.description }}</p>
-                        <p class="item-card-cost">{{ item.cost }} layers</p>
+                        <p class="item-card-cost">{{ item.cost }} spools</p>
                         <form action="{% url 'item_detail' item.id %}" method="get">
                             <button type="submit">Order</button>
                         </form>
