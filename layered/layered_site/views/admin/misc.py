@@ -107,8 +107,9 @@ def edit_user(request, user_id):
         "groups": request.POST.getlist("groups")
     }
 
+    unrequired_items = ["slack_pfp_url", "groups"]
     for key, value in new.items():
-        if not value:
+        if not value and key not in unrequired_items:
             messages.error(request, f"{key.capitalize()} is required!")       
 
     targetUser.username = new["username"]
