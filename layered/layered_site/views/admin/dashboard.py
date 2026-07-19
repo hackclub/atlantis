@@ -1,8 +1,6 @@
 from django.shortcuts import render
-from django.contrib.auth import get_user_model
 from django.contrib.admin.views.decorators import staff_member_required
 
-from ...models import Project, Ship
 from ..helpers import check_perms
 
 @staff_member_required
