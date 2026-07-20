@@ -18,7 +18,7 @@
                                 <div class="card-main">
                                     <span style="font-size: 25px;"><strong><a href="{% url 'project_detail_explore' project.id %}">{{ project.title }}</a></strong></span>
                                     <p>
-                                        by @{{ project.owner.hackclub_profile.slack_username }}
+                                        by <a href="{% url 'user_profile' project.owner.id %}">@{{ project.owner.hackclub_profile.slack_username }}</a>
                                         {% if project.editor_name == "Fusion 360" %}
                                             <span class="editor-label" id="fusion-360-label">Fusion 360</span>
                                         {% elif project.editor_name == "Onshape" %}

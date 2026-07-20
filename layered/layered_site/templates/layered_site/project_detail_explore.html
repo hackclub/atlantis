@@ -20,6 +20,7 @@
         <div class="card-row">
             <div class="card-main">
                 <h1>{{ project.title }}</h1>
+                <p>by <a href="{% url 'user_profile' project.owner.id %}">@{{ project.owner.hackclub_profile.slack_username }}</a></p>
                 <p id="time_spent">Time spent: {{ time_spent }}</p>
                 {% if project.locked %}
                     <p style="color: red; font-weight: bold;">Locked</p>

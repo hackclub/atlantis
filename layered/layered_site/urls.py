@@ -51,5 +51,6 @@ urlpatterns = [
     path("root/projects/", manage_projects, name="manage_projects"),
     path("root/projects/edit/<int:project_id>/", admin_edit_project, name="admin_edit_project"),
     path("root/projects/delete/<int:project_id>/", db_delete_project, name="db_delete_project"),
-    path("root/metrics", metrics, name="metrics")
+    path("root/metrics/", metrics, name="metrics"),
+    path("users/<int:user_id>/", user_profile, name="user_profile")
 ]
