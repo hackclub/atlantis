@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Sum
 
 from ...models import Profile, Project, Ship, T1, T2, T3
-from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes
+from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline
 
 @staff_member_required
 @check_perms(["layered_site.t1_review", "layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"])
@@ -29,6 +29,7 @@ def review_dash(request):
 def review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
     journals = ship.project.journals.order_by('-id')
+    timeline = build_journal_timeline(journals, ship.project.ships.all())
     try:
         hasMake = bool(get_model_info(ship.project.printablesUrl.split('/model/')[1].split('-')[0])["makesCount"])
     except:
@@ -37,6 +38,7 @@ def review_project(request, ship_id):
     return render(request, "root/review_project.html", {
         "ship": ship,
         "journals": journals,
+        "timeline": timeline,
         "hasMake": hasMake,
     })
 
@@ -120,9 +122,11 @@ def ysws_review_dash(request):
 def ysws_review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
     journals = ship.project.journals.order_by('-id')
+    timeline = build_journal_timeline(journals, ship.project.ships.all())
     return render(request, "root/ysws_review_project.html", {
         "ship": ship,
         "journals": journals,
+        "timeline": timeline,
     })
 
 @require_POST
@@ -222,8 +226,9 @@ def fraud_review_dash(request):
 @check_perms(["layered_site.organizer", "layered_site.t3_review"])
 def fraud_review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
-    journals = ship.journals.order_by('-id')
-    logged_time = journals.aggregate(total=Sum('time_spent'))['total'] or 0
+    journals = ship.project.journals.order_by('-id')
+    timeline = build_journal_timeline(journals, ship.project.ships.all())
+    logged_time = ship.journals.aggregate(total=Sum('time_spent'))['total'] or 0
 
     latest_t2 = ship.t2_reviews.order_by('-id').first()
     deductions = latest_t2.deductions if latest_t2 else 0
@@ -232,6 +237,7 @@ def fraud_review_project(request, ship_id):
     return render(request, "root/fraud_review_project.html", {
         "ship": ship,
         "journals": journals,
+        "timeline": timeline,
         "logged_time": logged_time,
         "deductions": deductions,
         "total_time": total_time

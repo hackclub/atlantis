@@ -39,26 +39,32 @@
     </div>
     <div class="journal-section">
     <h2>Journal Entries</h2>
-        {% if journals %}
-            {% for journal in journals %}
-                <div class="journal-card">
-                    <h3>{{ journal.title }}</h3>
-                    <p>{{ journal.time_spent }} minutes</p>
-                    <p id="journal-content">{{ journal.text }}</p>
-                    <div class="journal-media">
-                        {% if journal.image_url %}
-                            <img src="{{ journal.image_url }}" alt="{{ journal.title }}" class="journal-image">
-                        {% endif %}
-                        {% if journal.model_url %}
-                            <div class="stl-viewer" data-stl-url="{{ journal.model_url }}"></div>
+        {% if timeline %}
+            {% for event in timeline %}
+                {% if event.type == "ship" %}
+                    {% include "layered_site/_ship_event.html" with event=event %}
+                    <br>
+                    <br>
+                {% else %}
+                    <div class="journal-card">
+                        <h3>{{ event.journal.title }}</h3>
+                        <p>{{ event.journal.time_spent }} minutes</p>
+                        <p id="journal-content">{{ event.journal.text }}</p>
+                        <div class="journal-media">
+                            {% if event.journal.image_url %}
+                                <img src="{{ event.journal.image_url }}" alt="{{ event.journal.title }}" class="journal-image">
+                            {% endif %}
+                            {% if event.journal.model_url %}
+                                <div class="stl-viewer" data-stl-url="{{ event.journal.model_url }}"></div>
+                            {% endif %}
+                        </div>
+                        {% if event.journal.model_url %}
+                            <p><a href="{{ event.journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
                         {% endif %}
                     </div>
-                    {% if journal.model_url %}
-                        <p><a href="{{ journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
-                    {% endif %}
-                </div>
-                <br>
-                <br>
+                    <br>
+                    <br>
+                {% endif %}
             {% endfor %}
         {% else %}
             <p>No journal entries yet!</p>

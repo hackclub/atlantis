@@ -15,7 +15,7 @@ from ...models import (
 )
 from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
-    sniff_image_extension, random_storage_key,
+    sniff_image_extension, random_storage_key, build_journal_timeline,
 )
 
 import os
@@ -231,15 +231,18 @@ def project_detail(request, project_id):
             candidates.append((pr.finished_time, pr.feedback))
         return max(candidates, key=lambda x: x[0])[1] if candidates else ""
 
-    ships_with_feedback = [(ship, get_latest_feedback(ship)) for ship in ships]
+    for ship in ships:
+        ship.latest_feedback = get_latest_feedback(ship)
+
+    timeline = build_journal_timeline(journals, ships)
 
     return render(request, "layered_site/project_detail.html", {
         "project": project,
         "user": user,
         "profile": profile,
         "ships": ships,
-        "ships_with_feedback": ships_with_feedback,
         "journals": journals,
+        "timeline": timeline,
         "time_spent": time_spent,
         "can_ship": can_ship,
         "ship_disabled_reason": ship_disabled_reason,
@@ -279,12 +282,15 @@ def project_detail_explore(request, project_id):
     else:
         printablesData = {"makesCount": 0}
 
+    timeline = build_journal_timeline(journals, ships)
+
     return render(request, "layered_site/project_detail_explore.html", {
         "project": project,
         "user": user,
         "profile": profile,
         "ships": ships,
         "journals": journals,
+        "timeline": timeline,
         "time_spent": time_spent,
         "printablesData": printablesData,
     })

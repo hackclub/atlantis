@@ -1,0 +1,12 @@
+{# expects: event (a "ship" timeline entry); optional: show_ship_status (default False) #}
+<div class="ship-event">
+    <h4>Shipped</h4>
+    <p><strong>Time spent:</strong> {{ event.time_display }}</p>
+    <p><strong>Shipped on:</strong> {{ event.ship.created_at|date:"M j, Y, g:i a" }}</p>
+    {% if show_ship_status %}
+        <p><strong>Status:</strong> {{ event.ship.get_status_display }}</p>
+    {% endif %}
+    {% if event.feedback %}
+        <p><strong>Latest Feedback:</strong> {{ event.feedback }}</p>
+    {% endif %}
+</div>

@@ -65,24 +65,6 @@
             </div>
         {% endif %}
     </div>
-    {% if project.owner == user %}
-    <h2>Ships</h2>
-    <div class="ships-section">
-        {% if ships_with_feedback %}
-            {% for ship, feedback in ships_with_feedback %}
-                <div class="ship-card">
-                    <h4>Ship {{ forloop.counter }}</h4>
-                    <p><strong>Status:</strong> {{ ship.get_status_display }}</p>
-                    <p><strong>Latest Feedback:</strong> {{ feedback }}</p>
-                </div>
-                <br>
-            {% endfor %}
-        {% else %}
-            <p>No ships yet!</p>
-        {% endif %}
-    </div>
-    {% endif %}
-
     <div class="journal-section">
     <h2>Journal Entries</h2>
         {% if project.owner == user %}
@@ -115,26 +97,32 @@
             </form>
         {% endif %}
         <br>
-        {% if journals %}
-            {% for journal in journals %}
-                <div class="journal-card">
-                    <h3>{{ journal.title }}</h3>
-                    <p>{{ journal.time_spent }} minutes</p>
-                    <p id="journal-content">{{ journal.text }}</p>
-                    <div class="journal-media">
-                        {% if journal.image_url %}
-                            <img src="{{ journal.image_url }}" alt="{{ journal.title }}" class="journal-image">
-                        {% endif %}
-                        {% if journal.model_url %}
-                            <div class="stl-viewer" data-stl-url="{{ journal.model_url }}"></div>
+        {% if timeline %}
+            {% for event in timeline %}
+                {% if event.type == "ship" %}
+                    {% include "layered_site/_ship_event.html" with event=event show_ship_status=True %}
+                    <br>
+                    <br>
+                {% else %}
+                    <div class="journal-card">
+                        <h3>{{ event.journal.title }}</h3>
+                        <p>{{ event.journal.time_spent }} minutes</p>
+                        <p id="journal-content">{{ event.journal.text }}</p>
+                        <div class="journal-media">
+                            {% if event.journal.image_url %}
+                                <img src="{{ event.journal.image_url }}" alt="{{ event.journal.title }}" class="journal-image">
+                            {% endif %}
+                            {% if event.journal.model_url %}
+                                <div class="stl-viewer" data-stl-url="{{ event.journal.model_url }}"></div>
+                            {% endif %}
+                        </div>
+                        {% if event.journal.model_url %}
+                            <p><a href="{{ event.journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
                         {% endif %}
                     </div>
-                    {% if journal.model_url %}
-                        <p><a href="{{ journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
-                    {% endif %}
-                </div>
-                <br>
-                <br>
+                    <br>
+                    <br>
+                {% endif %}
             {% endfor %}
         {% else %}
             <p>No journal entries yet!</p>

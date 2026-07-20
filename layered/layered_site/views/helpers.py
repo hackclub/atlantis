@@ -44,6 +44,27 @@ def layers_for_minutes(minutes):
     tenths_of_hour = minutes // 6
     return round(tenths_of_hour * 0.5)
 
+def build_journal_timeline(journals, ships):
+    events = []
+    for journal in journals:
+        events.append({
+            "type": "journal",
+            "journal": journal,
+            "sort_key": journal.created_at,
+        })
+    for ship in ships:
+        total_time = sum(j.time_spent for j in ship.journals.all())
+        events.append({
+            "type": "ship",
+            "ship": ship,
+            "time_spent": total_time,
+            "time_display": f"{total_time // 60}h {total_time % 60}m",
+            "feedback": getattr(ship, "latest_feedback", ""),
+            "sort_key": ship.created_at,
+        })
+    events.sort(key=lambda e: e["sort_key"], reverse=True)
+    return events
+
 def get_client_ip(request):
     forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
     if forwarded:

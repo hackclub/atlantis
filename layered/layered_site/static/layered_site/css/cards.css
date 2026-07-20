@@ -60,6 +60,7 @@
 .journal-card,
 .review-card,
 .ship-card,
+.ship-event,
 .project-info,
 .order-card {
     border: 1px solid #ddd;
@@ -72,13 +73,15 @@
 .journal-card { width: fit-content; }
 .review-card { width: 450px; }
 .ship-card { width: 400px; }
+.ship-event { width: 400px; }
 .project-info { width: 750px; }
 
 .review-main .project-info {
     width: auto;
 }
 
-.review-card h4 {
+.review-card h4,
+.ship-event h4 {
     margin: 0 0 8px;
 }
 

@@ -8,7 +8,7 @@ from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 
 from ...models import Ship, Print
-from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_url
+from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_url, build_journal_timeline
 
 @staff_member_required
 @check_perms(["layered_site.printer", "layered_site.organizer"])
@@ -125,6 +125,7 @@ def unclaim_print(request, ship_id):
 def print_project(request, ship_id):    
     ship = get_object_or_404(Ship, id=ship_id)
     journals = ship.project.journals.order_by('-id')
+    timeline = build_journal_timeline(journals, ship.project.ships.all())
     if ship.prints.exists():
         current_print = ship.prints.all().order_by("-id").first()
     else:
@@ -134,6 +135,7 @@ def print_project(request, ship_id):
         "current_print": current_print,
         "ship": ship,
         "journals": journals,
+        "timeline": timeline,
         "can_claim": ship.status == Ship.ShipStatus.PRINT_QUEUE,
     })
 
