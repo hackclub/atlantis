@@ -1,6 +1,8 @@
 from django.contrib.auth.decorators import user_passes_test
 from django.conf import settings
 from django.contrib import messages
+from django.db.models import Count
+from django.contrib.auth import get_user_model
 from ..models import AuditLog
 
 from slack_sdk.errors import SlackApiError
@@ -241,3 +243,33 @@ def sniff_image_extension(file):
 
 def random_storage_key(prefix, extension):
     return f"{prefix}/{uuid.uuid4().hex}{extension}"
+
+def display_name(user):
+    if user is None:
+        return "deleted user"
+    profile = getattr(user, "hackclub_profile", None)
+    if profile and profile.slack_username:
+        return profile.slack_username
+    return user.username
+
+
+def add_bars(rows, value_key="value"):
+    top = max((r[value_key] for r in rows), default=0) or 1
+    for r in rows:
+        r["bar"] = round(r[value_key] / top * 100, 1)
+    return rows
+
+
+def reviewer_leaderboard(relation, limit=10):
+    """Rank users by how many `relation` rows they own (e.g. "t1_reviews").
+
+    Returns rows shaped for root/_metric_chart.html: {label, value, bar}.
+    """
+    User = get_user_model()
+    rows = (
+        User.objects.annotate(n=Count(relation))
+        .filter(n__gt=0)
+        .select_related("hackclub_profile")
+        .order_by("-n")[:limit]
+    )
+    return add_bars([{"label": display_name(u), "value": u.n} for u in rows])

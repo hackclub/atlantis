@@ -7,7 +7,7 @@ from django.db import transaction
 from django.db.models import Sum
 
 from ...models import Profile, Project, Ship, T1, T2, T3
-from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline
+from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard
 
 @staff_member_required
 @check_perms(["layered_site.t1_review", "layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"])
@@ -21,7 +21,8 @@ def review_dash(request):
         total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
         ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
     return render(request, "root/review.html", {
-        "ships": ships
+        "ships": ships,
+        "leaderboard": reviewer_leaderboard("t1_reviews"),
     })
 
 @staff_member_required
@@ -114,7 +115,8 @@ def ysws_review_dash(request):
         total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
         ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
     return render(request, "root/ysws_review.html", {
-        "ships": ships
+        "ships": ships,
+        "leaderboard": reviewer_leaderboard("t2_reviews"),
     })
 
 @staff_member_required
@@ -219,7 +221,8 @@ def fraud_review_dash(request):
         total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
         ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
     return render(request, "root/fraud_review.html", {
-        "ships": ships
+        "ships": ships,
+        "leaderboard": reviewer_leaderboard("t3_reviews"),
     })
 
 @staff_member_required

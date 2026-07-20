@@ -50,5 +50,13 @@
                 </tbody>
             </table>
     </section>
+    <section class="chart-grid">
+        {% include "root/_metric_chart.html" with title="Top T3 reviewers" rows=leaderboard empty="No reviews yet" %}
+    </section>
 </div>
+<script>
+    document.querySelectorAll('[data-bar]').forEach((el) => {
+        el.style.width = el.dataset.bar + '%';
+    });
+</script>
 {% endblock %}

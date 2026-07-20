@@ -8,7 +8,7 @@ from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 
 from ...models import Ship, Print
-from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_url, build_journal_timeline
+from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_url, build_journal_timeline, reviewer_leaderboard
 
 @staff_member_required
 @check_perms(["layered_site.printer", "layered_site.organizer"])
@@ -37,7 +37,8 @@ def print_dash(request):
     return render(request, "root/print.html", {
         "claimed_prints": claimed_prints,
         "ships": queued_ships,
-        "user": user
+        "user": user,
+        "leaderboard": reviewer_leaderboard("prints"),
     })
 
 @staff_member_required

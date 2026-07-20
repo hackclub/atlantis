@@ -21,7 +21,13 @@ from ...models import (
 )
 
 from ...models import detect_editor
-from ..helpers import check_perms, layers_for_minutes
+from ..helpers import (
+    check_perms,
+    layers_for_minutes,
+    add_bars as _add_bars,
+    display_name as _display_name,
+    reviewer_leaderboard as _reviewer_leaderboard,
+)
 
 def _fmt_minutes(minutes):
     minutes = int(minutes or 0)
@@ -30,33 +36,6 @@ def _fmt_minutes(minutes):
 
 def _pct(part, whole):
     return round(part / whole * 100, 1) if whole else 0.0
-
-
-def _add_bars(rows, value_key="value"):
-    top = max((r[value_key] for r in rows), default=0) or 1
-    for r in rows:
-        r["bar"] = round(r[value_key] / top * 100, 1)
-    return rows
-
-
-def _display_name(user):
-    if user is None:
-        return "deleted user"
-    profile = getattr(user, "hackclub_profile", None)
-    if profile and profile.slack_username:
-        return profile.slack_username
-    return user.username
-
-
-def _reviewer_leaderboard(relation, limit=10):
-    User = get_user_model()
-    rows = (
-        User.objects.annotate(n=Count(relation))
-        .filter(n__gt=0)
-        .select_related("hackclub_profile")
-        .order_by("-n")[:limit]
-    )
-    return _add_bars([{"label": _display_name(u), "value": u.n} for u in rows])
 
 
 @staff_member_required
