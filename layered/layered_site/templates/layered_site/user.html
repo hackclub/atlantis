@@ -13,6 +13,7 @@
         <div class="profile-header-main">
             <h1>@{{ viewed_profile.slack_username }}</h1>
             <p>{{ viewed_profile.layers }} spools</p>
+            <p>Joined {{ user_viewed.date_joined|date:"F j, Y" }}</p>
         </div>
     </div>
 
