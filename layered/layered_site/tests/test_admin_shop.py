@@ -205,6 +205,17 @@ class UpdateOrderStatusTests(BaseTestCase):
 		self.assertEqual(self.order.status, Order.OrderStatus.DENIED)
 		self.assertEqual(self._buyer_layers(), 0)
 
+	def test_only_fulfillment_stamps_fulfilled_at(self):
+		# Denying (or reverting to pending) must not set a bogus fulfilled_at.
+		self._update("denied")
+		self.order.refresh_from_db()
+		self.assertIsNone(self.order.fulfilled_at)
+
+		fulfilled = Order.objects.create(owner=self.buyer, item=self.item)
+		self._update("fulfilled", order=fulfilled)
+		fulfilled.refresh_from_db()
+		self.assertIsNotNone(fulfilled.fulfilled_at)
+
 	def test_refund_restores_layers(self):
 		self._update("refunded")
 		self.order.refresh_from_db()

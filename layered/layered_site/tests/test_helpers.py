@@ -87,6 +87,11 @@ class UrlValidatorTests(TestCase):
 		self.assertFalse(is_valid_printables_url("https://evil.com/https://printables.com"))
 		self.assertFalse(is_valid_printables_url(""))
 
+	def test_printables_regex_is_anchored_at_end(self):
+		# A lookalike host that merely starts with printables.com must not pass.
+		self.assertFalse(is_valid_printables_url("https://printables.com.evil.com/model/1"))
+		self.assertFalse(is_valid_printables_url("https://printables.computer/model/1"))
+
 	def test_valid_editor_model_urls(self):
 		self.assertTrue(is_valid_editor_model_url(
 			"https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/editor_models/a.f3d"

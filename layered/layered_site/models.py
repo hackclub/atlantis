@@ -301,7 +301,7 @@ class Order(models.Model):
 	refunded = models.BooleanField(blank=True, null=True)
 
 	def save(self, *args, **kwargs):
-		if not self.cost and self.item:
+		if self.cost is None and self.item:
 			self.cost = self.item.cost
 		super().save(*args, **kwargs)
 

@@ -26,7 +26,7 @@ ALLOWED_IMAGE_FORMATS = {
     "WEBP": ".webp",
 }
 
-PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?", re.IGNORECASE)
+PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?$", re.IGNORECASE)
 CLOUDFLARE_BUCKET_RE = re.compile(r"^https?:\/\/(?:[a-zA-Z0-9-]+\.)*pub-d9ac82fd80854a42ae2dde2757ff0a55\.r2\.dev(?:\/.*)?$", re.IGNORECASE)
 
 slack_client = WebClient(token=settings.SLACK_TOKEN, timeout=5)

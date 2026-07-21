@@ -76,7 +76,7 @@ def update_order_status(request, order_id):
             profile.layers += amount_refunded
             profile.save()
             order.refunded = True
-        else:
+        elif order.status == Order.OrderStatus.FULFILLED:
             order.fulfilled_at = timezone.now()
         order.save(update_fields=["status", "fulfilled_at", "fulfiller", "refunded"])
 

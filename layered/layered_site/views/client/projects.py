@@ -47,7 +47,7 @@ def create_project(request):
         return redirect("projects")
     
     if len(description) > 1000:
-        messages.error(request, "Description too wrong (max 1000 chars)")
+        messages.error(request, "Description too long (max 1000 chars)")
         return redirect("projects")
 
     if printables_url and not is_valid_printables_url(printables_url):

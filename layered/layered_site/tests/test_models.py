@@ -73,6 +73,11 @@ class OrderModelTests(TestCase):
 		order = Order.objects.create(owner=self.user, item=self.item, cost=10)
 		self.assertEqual(order.cost, 10)
 
+	def test_save_keeps_explicit_zero_cost(self):
+		# A free order must not silently re-inherit the item's price.
+		order = Order.objects.create(owner=self.user, item=self.item, cost=0)
+		self.assertEqual(order.cost, 0)
+
 	def test_cost_snapshot_survives_item_price_change(self):
 		order = Order.objects.create(owner=self.user, item=self.item)
 		self.item.cost = 99
