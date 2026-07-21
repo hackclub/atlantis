@@ -100,6 +100,9 @@ def t1_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
+    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + 1
+    reviewer.hackclub_profile.save()
+
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with approved = {approved} and print = {print_requested}!')
     return redirect("review_dash")
 
@@ -205,6 +208,9 @@ def t2_decision(request, ship_id):
         "deductions": deductions,
         "new_ship_status": ship.status,
     })
+
+    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + 2
+    reviewer.hackclub_profile.save()
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision} and deduction of {deductions} minutes!')
     return redirect("ysws_review_dash")
@@ -338,6 +344,9 @@ def t3_decision(request, ship_id):
                     )
         if reward_missing_item:
             messages.warning(request, "A printer earned a reward but no reward item is set. Designate one in shop management, then grant it from print rewards.")
+            
+    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + 2
+    reviewer.hackclub_profile.save()
 
     messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}")
     return redirect("fraud_review_dash")
