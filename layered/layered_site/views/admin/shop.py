@@ -106,7 +106,7 @@ def update_order_status(request, order_id):
         dm_messages = {
             Order.OrderStatus.FULFILLED: f"Your order for {order.quantity}x {order.item.name} has been fulfilled!",
             Order.OrderStatus.DENIED: f"Your order for {order.quantity}x {order.item.name} was denied. Ask in #layered-help for more details.",
-            Order.OrderStatus.REFUNDED: f"Your order for {order.quantity}x {order.item.name} was refunded and {amount_refunded} layers have been added back to your balance.",
+            Order.OrderStatus.REFUNDED: f"Your order for {order.quantity}x {order.item.name} was refunded and {amount_refunded} spools have been added back to your balance.",
             Order.OrderStatus.PENDING: f"Your order for {order.quantity}x {order.item.name} has been marked as pending again.",
         }
         send_slack_dm(dm_messages[order.status], owner_slack_id)
