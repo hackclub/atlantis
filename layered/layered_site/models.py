@@ -84,6 +84,11 @@ class Project(models.Model):
 	created_at = models.DateTimeField(auto_now_add=True)
 	locked = models.BooleanField(default=False)
 	deleted = models.BooleanField(default=False)
+	followers = models.ManyToManyField(
+		settings.AUTH_USER_MODEL,
+		related_name="followed_projects",
+		blank=True,
+	)
 
 	def __str__(self):
 		return f"{self.id}: {self.title}"

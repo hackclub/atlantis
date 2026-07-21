@@ -22,6 +22,7 @@
                 <h1>{{ project.title }}</h1>
                 <p>by <a href="{% url 'user_profile' project.owner.id %}">@{{ project.owner.hackclub_profile.slack_username }}</a></p>
                 <p id="time_spent">Time spent: {{ time_spent }}</p>
+                <p id="follower_count">{{ follower_count }} follower{{ follower_count|pluralize }}</p>
                 {% if project.locked %}
                     <p style="color: red; font-weight: bold;">Locked</p>
                 {% endif %}
@@ -36,7 +37,25 @@
                     <p><a href="{{ project.editor_model_url }}" target="_blank" rel="noreferrer noopener">Download editor model</a> ({{ project.editor_name }})</p>
                 {% endif %}
             </div>
+            {% if project.owner != user %}
+                <div class="card-controls">
+                    {% if is_following %}
+                        <form action="{% url 'unfollow_project' project.id %}" method="post">
+                            {% csrf_token %}
+                            <button type="submit">Unfollow</button>
+                        </form>
+                    {% else %}
+                        <form action="{% url 'follow_project' project.id %}" method="post">
+                            {% csrf_token %}
+                            <button type="submit">Follow</button>
+                        </form>
+                    {% endif %}
+                </div>
+            {% endif %}
         </div>
+        {% if project.owner != user %}
+            <p class="follow-hint">Follow this project to get a Slack DM for every new journal entry and ship.</p>
+        {% endif %}
     </div>
     <div class="journal-section">
     <h2>Journal Entries</h2>

@@ -3,6 +3,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.db.models import Count
 from django.contrib.auth import get_user_model
+from django.urls import reverse
 from ..models import AuditLog
 
 from slack_sdk.errors import SlackApiError
@@ -219,6 +220,16 @@ def send_slack_dm(content, user):
         return True
     except SlackApiError:
         return False
+
+def notify_followers(request, project, message):
+    url = request.build_absolute_uri(reverse("project_detail_explore", args=[project.id]))
+    content = f"{message} {url}"
+    for follower in project.followers.all():
+        if follower == project.owner:
+            continue
+        profile = getattr(follower, "hackclub_profile", None)
+        if profile and profile.slack_id:
+            send_slack_dm(content, profile.slack_id)
     
 def is_valid_editor_model_url(value):
     return bool(CLOUDFLARE_BUCKET_RE.match(value))

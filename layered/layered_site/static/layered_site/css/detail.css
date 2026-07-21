@@ -32,6 +32,12 @@
     margin: 4px 0 12px;
 }
 
+.follow-hint {
+    color: #666;
+    font-size: 14px;
+    margin-top: 12px;
+}
+
 #journal-content {
     max-width: 45ch;
     overflow-wrap: break-word;

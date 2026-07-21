@@ -16,6 +16,7 @@ from ...models import (
 from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
     sniff_image_extension, random_storage_key, build_journal_timeline,
+    notify_followers,
 )
 
 import os
@@ -284,6 +285,9 @@ def project_detail_explore(request, project_id):
 
     timeline = build_journal_timeline(journals, ships)
 
+    is_following = project.followers.filter(pk=user.pk).exists()
+    follower_count = project.followers.count()
+
     return render(request, "layered_site/project_detail_explore.html", {
         "project": project,
         "user": user,
@@ -293,7 +297,33 @@ def project_detail_explore(request, project_id):
         "timeline": timeline,
         "time_spent": time_spent,
         "printablesData": printablesData,
+        "is_following": is_following,
+        "follower_count": follower_count,
     })
+
+
+@login_required
+@require_POST
+def follow_project(request, project_id):
+    project = get_object_or_404(Project, id=project_id, deleted=False)
+    if project.locked and not request.user.has_perm("layered_site.organizer"):
+        raise PermissionDenied
+    if project.owner == request.user:
+        messages.error(request, "You can't follow your own project.")
+        return redirect("project_detail_explore", project_id=project_id)
+
+    project.followers.add(request.user)
+    messages.success(request, f'You are now following "{project.title}". You\'ll be notified of new journal entries and ships.')
+    return redirect("project_detail_explore", project_id=project_id)
+
+
+@login_required
+@require_POST
+def unfollow_project(request, project_id):
+    project = get_object_or_404(Project, id=project_id, deleted=False)
+    project.followers.remove(request.user)
+    messages.success(request, f'You have unfollowed "{project.title}".')
+    return redirect("project_detail_explore", project_id=project_id)
 
 @login_required
 def create_journal(request, project_id):
@@ -374,6 +404,12 @@ def create_journal(request, project_id):
         model_url=model_url
     )
 
+    notify_followers(
+        request,
+        project,
+        f'A project you follow, "{project.title}", has had a new journal entry! Check it out!'
+    )
+
     messages.success(request, "Journal entry created successfully")
     return redirect("project_detail", project_id=project_id)
     
@@ -422,6 +458,12 @@ def ship_project(request, project_id):
             status = Ship.ShipStatus.T1_QUEUE
         )
         project.journals.filter(ship__isnull=True).update(ship=ship)
+
+    notify_followers(
+        request,
+        project,
+        f'A project you follow, "{project.title}", has just shipped a new update! Check it out!'
+    )
 
     messages.success(request, f'Successfully shipped project "{project.title}"!')
     return redirect("projects")

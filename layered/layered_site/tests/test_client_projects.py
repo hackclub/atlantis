@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.test import override_settings
 from django.urls import reverse
 
@@ -626,3 +628,111 @@ class UpdateEditorModelTests(BaseTestCase):
 		big = SimpleUploadedFile("part.f3d", b"\0" * (50 * 1024 * 1024 + 1))
 		response = self._update(editor_model_file=big)
 		self.assertIn("Editor model file too large. Max 50MB.", message_texts(response))
+
+
+class FollowProjectTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("follower")
+		self.owner = make_user("owner")
+		self.project = make_project(self.owner)
+		self.client.force_login(self.user)
+
+	def _follow(self, project=None):
+		project = project or self.project
+		return self.client.post(reverse("follow_project", args=[project.id]))
+
+	def _unfollow(self, project=None):
+		project = project or self.project
+		return self.client.post(reverse("unfollow_project", args=[project.id]))
+
+	def test_follow_adds_user(self):
+		response = self._follow()
+		self.assertTrue(self.project.followers.filter(pk=self.user.pk).exists())
+		self.assertTrue(any("now following" in m for m in message_texts(response)))
+
+	def test_unfollow_removes_user(self):
+		self.project.followers.add(self.user)
+		response = self._unfollow()
+		self.assertFalse(self.project.followers.filter(pk=self.user.pk).exists())
+		self.assertTrue(any("unfollowed" in m for m in message_texts(response)))
+
+	def test_cannot_follow_own_project(self):
+		self.client.force_login(self.owner)
+		self._follow()
+		self.assertFalse(self.project.followers.filter(pk=self.owner.pk).exists())
+
+	def test_cannot_follow_locked_project(self):
+		locked = make_project(self.owner, locked=True)
+		self.assertEqual(self._follow(locked).status_code, 403)
+
+	def test_get_request_not_allowed(self):
+		self.assertEqual(self.client.get(reverse("follow_project", args=[self.project.id])).status_code, 405)
+
+	def test_detail_reports_follow_state(self):
+		response = self.client.get(reverse("project_detail_explore", args=[self.project.id]))
+		self.assertFalse(response.context["is_following"])
+		self.project.followers.add(self.user)
+		response = self.client.get(reverse("project_detail_explore", args=[self.project.id]))
+		self.assertTrue(response.context["is_following"])
+
+	def test_detail_reports_follower_count(self):
+		response = self.client.get(reverse("project_detail_explore", args=[self.project.id]))
+		self.assertEqual(response.context["follower_count"], 0)
+		self.project.followers.add(self.user, make_user("other_follower"))
+		response = self.client.get(reverse("project_detail_explore", args=[self.project.id]))
+		self.assertEqual(response.context["follower_count"], 2)
+
+
+@override_settings(ALLOW_JOURNALING=True)
+class FollowerNotificationTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.owner = make_user("owner")
+		self.follower = make_user("follower")
+		self.project = make_project(self.owner, shippable=True)
+		self.project.followers.add(self.follower)
+		self.client.force_login(self.owner)
+
+	@patch("layered_site.views.client.projects.notify_followers")
+	def test_journal_creation_notifies_followers(self, mock_notify):
+		self.client.post(
+			reverse("create_journal", args=[self.project.id]),
+			{
+				"time_spent": "60",
+				"title": "Update",
+				"text": "x" * 300,
+				"image": image_upload(),
+				"STL": stl_upload(),
+			},
+		)
+		self.assertEqual(Journal.objects.count(), 1)
+		mock_notify.assert_called_once()
+		args = mock_notify.call_args.args
+		self.assertEqual(args[1], self.project)
+		self.assertIn("new journal entry", args[2])
+
+	@patch("layered_site.views.client.projects.notify_followers")
+	def test_ship_notifies_followers(self, mock_notify):
+		make_journal(self.project, time_spent=200)
+		self.client.post(reverse("ship_project", args=[self.project.id]))
+		self.assertEqual(Ship.objects.count(), 1)
+		mock_notify.assert_called_once()
+		args = mock_notify.call_args.args
+		self.assertEqual(args[1], self.project)
+		self.assertIn("shipped", args[2])
+
+	@patch("layered_site.views.helpers.send_slack_dm")
+	def test_notify_followers_dms_followers_with_project_link(self, mock_dm):
+		from django.test import RequestFactory
+
+		from layered_site.views.helpers import notify_followers
+
+		self.project.followers.add(self.owner)
+		request = RequestFactory().get("/")
+		notify_followers(request, self.project, "hello")
+
+		expected_url = request.build_absolute_uri(
+			reverse("project_detail_explore", args=[self.project.id])
+		)
+		mock_dm.assert_called_once_with(f"hello {expected_url}", self.follower.hackclub_profile.slack_id)
