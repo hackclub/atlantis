@@ -9,6 +9,10 @@ from django.db.models import Sum
 from ...models import Profile, Project, Ship, T1, T2, T3
 from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, grant_print_rewards
 
+T1_PAY = 1
+T2_PAY = 2
+T3_PAY = 1
+
 @staff_member_required
 @check_perms(["layered_site.t1_review", "layered_site.t2_review", "layered_site.organizer", "layered_site.t3_review"])
 def review_dash(request):
@@ -100,7 +104,7 @@ def t1_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + 1
+    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + T1_PAY
     reviewer.hackclub_profile.save()
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with approved = {approved} and print = {print_requested}!')
@@ -209,7 +213,7 @@ def t2_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + 2
+    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + T2_PAY
     reviewer.hackclub_profile.save()
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision} and deduction of {deductions} minutes!')
@@ -344,8 +348,8 @@ def t3_decision(request, ship_id):
                     )
         if reward_missing_item:
             messages.warning(request, "A printer earned a reward but no reward item is set. Designate one in shop management, then grant it from print rewards.")
-            
-    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + 2
+
+    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + T3_PAY
     reviewer.hackclub_profile.save()
 
     messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}")
