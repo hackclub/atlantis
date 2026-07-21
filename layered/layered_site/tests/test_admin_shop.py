@@ -89,6 +89,20 @@ class CreateItemTests(BaseTestCase):
 		self._create()
 		self.assertEqual(Item.objects.count(), 0)
 
+	def test_stock_defaults_to_unlimited(self):
+		self._create()
+		self.assertEqual(Item.objects.get().stock, -1)
+
+	def test_stock_value_respected(self):
+		self._create(stock="5")
+		self.assertEqual(Item.objects.get().stock, 5)
+
+	def test_invalid_stock_rejected(self):
+		for value in ("abc", "-2", "1.5"):
+			with self.subTest(value=value):
+				self._create(stock=value)
+				self.assertEqual(Item.objects.count(), 0)
+
 
 class EditItemTests(BaseTestCase):
 	def setUp(self):
@@ -127,6 +141,25 @@ class EditItemTests(BaseTestCase):
 				self._edit(**overrides)
 				self.item.refresh_from_db()
 				self.assertEqual(self.item.name, "Old")
+
+	def test_edit_updates_stock(self):
+		self._edit(stock="7")
+		self.item.refresh_from_db()
+		self.assertEqual(self.item.stock, 7)
+
+	def test_edit_blank_stock_defaults_to_unlimited(self):
+		self.item.stock = 4
+		self.item.save(update_fields=["stock"])
+		self._edit(stock="")
+		self.item.refresh_from_db()
+		self.assertEqual(self.item.stock, -1)
+
+	def test_edit_invalid_stock_leaves_item_unchanged(self):
+		self.item.stock = 4
+		self.item.save(update_fields=["stock"])
+		self._edit(stock="-2")
+		self.item.refresh_from_db()
+		self.assertEqual(self.item.stock, 4)
 
 	def test_unknown_item_404(self):
 		response = self.client.post(reverse("edit_item", args=[9999]), {})

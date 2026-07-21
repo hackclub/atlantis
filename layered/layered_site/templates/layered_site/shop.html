@@ -23,8 +23,17 @@
                             <strong>{{ item.name }}</strong>
                             <p>{{ item.description }}</p>
                             <p class="item-card-cost">{{ item.cost }} spools</p>
+                            {% if not item.unlimited_stock %}
+                                {% if item.in_stock %}
+                                    <p class="item-card-stock">{{ item.stock }} left</p>
+                                {% else %}
+                                    <p class="item-card-stock out-of-stock">Out of stock</p>
+                                {% endif %}
+                            {% endif %}
                             <form action="{% url 'item_detail' item.id %}" method="get">
-                                <button type="submit">Order</button>
+                                <button type="submit"{% if not item.in_stock %} disabled{% endif %}>
+                                    {% if item.in_stock %}Order{% else %}Out of stock{% endif %}
+                                </button>
                             </form>
                         </div>
                         {% endif %}

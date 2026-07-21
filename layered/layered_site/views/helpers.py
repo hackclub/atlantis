@@ -327,6 +327,9 @@ def grant_print_rewards(printer, request=None):
             status=Order.OrderStatus.PENDING,
             admin_notes=f"Auto print reward: {milestone}kg printed"[:100],
         )
+        if not reward_item.unlimited_stock:
+            reward_item.stock = max(0, reward_item.stock - owed)
+            reward_item.save(update_fields=["stock"])
         profile.print_reward_kg = milestone
         profile.save(update_fields=["print_reward_kg"])
 

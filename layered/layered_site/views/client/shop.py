@@ -51,7 +51,19 @@ def order_item(request, item_id):
     total_cost = item.cost * quantity
 
     with transaction.atomic():
+        item = Item.objects.select_for_update().get(id=item.id)
         profile = Profile.objects.select_for_update().get(user=request.user)
+
+        if not item.unlimited_stock and item.stock <= 0:
+            messages.error(request, "This item is out of stock.")
+            return redirect("item_detail", item_id=item_id)
+
+        if not item.unlimited_stock and quantity > item.stock:
+            messages.error(
+                request,
+                f"Only {item.stock} of this item {'is' if item.stock == 1 else 'are'} left in stock."
+            )
+            return redirect("item_detail", item_id=item_id)
 
         if profile.layers < total_cost:
             messages.error(
@@ -59,9 +71,13 @@ def order_item(request, item_id):
                 "You do not have enough layers to purchase this item."
             )
             return redirect("item_detail", item_id=item_id)
-        
+
         profile.layers -= total_cost
         profile.save()
+
+        if not item.unlimited_stock:
+            item.stock -= quantity
+            item.save(update_fields=["stock"])
 
         Order.objects.create(
             owner=request.user,

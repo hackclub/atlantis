@@ -23,11 +23,20 @@
             <p class="item-detail-cost">{{ item.cost }} spools</p>
             <p>{{ item.description }}</p>
 
+            {% if not item.unlimited_stock %}
+                {% if item.in_stock %}
+                    <p class="item-detail-stock">{{ item.stock }} left in stock</p>
+                {% else %}
+                    <p class="item-detail-stock out-of-stock">Out of stock</p>
+                {% endif %}
+            {% endif %}
+
+            {% if item.in_stock %}
             <form action="{% url 'order_item' item.id %}" method="post" class="order-form">
                 {% csrf_token %}
                 <label>
                     Quantity
-                    <input name="quantity" type="number" min="1" value="1" required>
+                    <input name="quantity" type="number" min="1" value="1"{% if not item.unlimited_stock %} max="{{ item.stock }}"{% endif %} required>
                 </label>
 
                 <label>
@@ -37,6 +46,9 @@
 
                 <button type="submit">Order</button>
             </form>
+            {% else %}
+                <p>This item is currently out of stock. Check back later!</p>
+            {% endif %}
         </div>
     </div>
 </div>

@@ -262,6 +262,18 @@ class Item(models.Model):
 	imageUrl = models.URLField(max_length=2048, default="https://example.com")
 	category = models.CharField(max_length=40, default="Other")
 	is_print_reward = models.BooleanField(default=False)
+	stock = models.IntegerField(
+		default=-1,
+		help_text="Units available to order. -1 means unlimited stock.",
+	)
+
+	@property
+	def unlimited_stock(self):
+		return self.stock < 0
+
+	@property
+	def in_stock(self):
+		return self.unlimited_stock or self.stock > 0
 
 	def __str__(self):
 		return f"{self.name} ({self.description}) for {self.cost} layers"

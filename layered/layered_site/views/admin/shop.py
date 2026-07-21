@@ -138,6 +138,16 @@ def create_item(request):
         messages.error(request, "Cost must be a whole number.")
         return redirect("shop_dash")
 
+    stock = request.POST.get("stock", "").strip() or "-1"
+    try:
+        stock = int(stock)
+    except ValueError:
+        messages.error(request, "Stock must be a whole number (-1 for unlimited).")
+        return redirect("shop_dash")
+    if stock < -1:
+        messages.error(request, "Stock must be -1 (unlimited) or a non-negative number.")
+        return redirect("shop_dash")
+
     is_print_reward = request.POST.get("is_print_reward") == "on"
 
     item = Item.objects.create(
@@ -147,6 +157,7 @@ def create_item(request):
         imageUrl = imageUrl,
         category = category,
         is_print_reward = is_print_reward,
+        stock = stock,
     )
 
     if is_print_reward:
@@ -158,6 +169,7 @@ def create_item(request):
         "cost": item.cost,
         "category": item.category,
         "is_print_reward": is_print_reward,
+        "stock": item.stock,
     })
 
     return redirect("shop_dash")
@@ -196,6 +208,16 @@ def edit_item(request, item_id):
         messages.error(request, "Cost must be a whole number.")
         return redirect("shop_dash")
 
+    stock = request.POST.get("stock", "").strip() or "-1"
+    try:
+        stock = int(stock)
+    except ValueError:
+        messages.error(request, "Stock must be a whole number (-1 for unlimited).")
+        return redirect("shop_dash")
+    if stock < -1:
+        messages.error(request, "Stock must be -1 (unlimited) or a non-negative number.")
+        return redirect("shop_dash")
+
     is_print_reward = request.POST.get("is_print_reward") == "on"
 
     previous = {
@@ -205,6 +227,7 @@ def edit_item(request, item_id):
         "imageUrl": item.imageUrl,
         "category": item.category,
         "is_print_reward": item.is_print_reward,
+        "stock": item.stock,
     }
 
     item.name = name
@@ -213,6 +236,7 @@ def edit_item(request, item_id):
     item.imageUrl = imageUrl
     item.category = category
     item.is_print_reward = is_print_reward
+    item.stock = stock
     item.save()
 
     if is_print_reward:
@@ -221,7 +245,7 @@ def edit_item(request, item_id):
     record_audit(request, "edit_item", target=f"Item #{item.id} ({item.name})", metadata={
         "item_id": item.id,
         "previous": previous,
-        "new": {"name": name, "description": description, "cost": cost, "imageUrl": imageUrl, "category": category, "is_print_reward": is_print_reward},
+        "new": {"name": name, "description": description, "cost": cost, "imageUrl": imageUrl, "category": category, "is_print_reward": is_print_reward, "stock": stock},
     })
 
     return redirect("shop_dash")

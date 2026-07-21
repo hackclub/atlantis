@@ -20,6 +20,7 @@
                         <th>Description</th>
                         <th>Category</th>
                         <th>Cost</th>
+                        <th>Stock</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -36,8 +37,9 @@
                             <td>{{ item.description|truncatechars:80 }}</td>
                             <td>{{ item.category }}</td>
                             <td>{{ item.cost }} spools</td>
+                            <td>{% if item.unlimited_stock %}Unlimited{% else %}{{ item.stock }}{% endif %}</td>
                             <td>
-                                <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}" data-category="{{ item.category }}" data-is-print-reward="{{ item.is_print_reward|yesno:'1,' }}">Edit</button>
+                                <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}" data-category="{{ item.category }}" data-is-print-reward="{{ item.is_print_reward|yesno:'1,' }}" data-stock="{{ item.stock }}">Edit</button>
                                 <br>
                                 <form action="{% url 'delete_item' item.id %}" method="post" class="delete-form" style="display: inline;">
                                     {% csrf_token %}
@@ -86,6 +88,12 @@
                 <input name="category" maxlength="40" placeholder="Other" list="categoryOptions">
             </label>
 
+            <label>
+                Stock
+                <input name="stock" type="number" min="-1" value="-1" placeholder="-1">
+                <small>-1 means unlimited</small>
+            </label>
+
             <label class="checkbox-label">
                 <input type="checkbox" name="is_print_reward">
                 Use as the 1kg print reward (replaces any current reward item)
@@ -130,6 +138,12 @@
             <label>
                 Category
                 <input id="editCategory" name="category" maxlength="40" placeholder="Other" list="categoryOptions">
+            </label>
+
+            <label>
+                Stock
+                <input id="editStock" name="stock" type="number" min="-1" placeholder="-1">
+                <small>-1 means unlimited</small>
             </label>
 
             <label class="checkbox-label">
@@ -222,6 +236,7 @@
         const editCost = document.getElementById('editCost');
         const editImageUrl = document.getElementById('editImageUrl');
         const editCategory = document.getElementById('editCategory');
+        const editStock = document.getElementById('editStock');
         const editIsPrintReward = document.getElementById('editIsPrintReward');
         const cancelEditBtn = document.getElementById('cancelEditModal');
 
@@ -250,6 +265,7 @@
             const cost = openEditBtn.dataset.cost || '';
             const imageUrl = openEditBtn.dataset.imageUrl || '';
             const category = openEditBtn.dataset.category || '';
+            const stock = openEditBtn.dataset.stock || '-1';
             const isPrintReward = openEditBtn.dataset.isPrintReward === '1';
 
             editForm.action = '/shop/' + id + '/edit/';
@@ -258,6 +274,7 @@
             editCost.value = cost;
             editImageUrl.value = imageUrl;
             editCategory.value = category;
+            editStock.value = stock;
             editIsPrintReward.checked = isPrintReward;
 
             openEditModal();

@@ -104,3 +104,35 @@ class OrderItemTests(BaseTestCase):
 	def test_unknown_item_404(self):
 		response = self.client.post(reverse("order_item", args=[9999]), {"quantity": "1"})
 		self.assertEqual(response.status_code, 404)
+
+	def test_unlimited_stock_not_decremented(self):
+		# Default stock of -1 means unlimited; ordering must not touch it.
+		self._order(quantity="2")
+		self.item.refresh_from_db()
+		self.assertEqual(self.item.stock, -1)
+
+	def test_limited_stock_decremented_on_order(self):
+		self.item.stock = 3
+		self.item.save(update_fields=["stock"])
+		self._order(quantity="2")
+		self.item.refresh_from_db()
+		self.assertEqual(self.item.stock, 1)
+		self.assertEqual(Order.objects.count(), 1)
+
+	def test_order_exceeding_stock_rejected(self):
+		self.item.stock = 1
+		self.item.save(update_fields=["stock"])
+		response = self._order(quantity="2")
+		self.item.refresh_from_db()
+		self.assertEqual(self.item.stock, 1)
+		self.assertEqual(Order.objects.count(), 0)
+		self.assertEqual(self._layers(), 100)
+		self.assertIn("Only 1 of this item is left in stock.", message_texts(response))
+
+	def test_out_of_stock_rejected(self):
+		self.item.stock = 0
+		self.item.save(update_fields=["stock"])
+		response = self._order(quantity="1")
+		self.assertEqual(Order.objects.count(), 0)
+		self.assertEqual(self._layers(), 100)
+		self.assertIn("This item is out of stock.", message_texts(response))

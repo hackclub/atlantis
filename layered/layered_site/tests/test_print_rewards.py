@@ -109,6 +109,23 @@ class GrantPrintRewardsHelperTests(BaseTestCase):
 		self.assertEqual(Order.objects.count(), 2)
 		self.assertEqual(self._reward_kg(), 2)
 
+	def test_limited_stock_reward_item_decremented(self):
+		self.item.stock = 5
+		self.item.save(update_fields=["stock"])
+		self._finalized_print(2500)
+		grant_print_rewards(self.printer)
+		self.item.refresh_from_db()
+		self.assertEqual(self.item.stock, 3)
+
+	def test_reward_stock_never_goes_negative(self):
+		self.item.stock = 1
+		self.item.save(update_fields=["stock"])
+		self._finalized_print(2500)  # owes 2, only 1 in stock
+		result = grant_print_rewards(self.printer)
+		self.assertEqual(result["created"], 2)
+		self.item.refresh_from_db()
+		self.assertEqual(self.item.stock, 0)
+
 	def test_no_reward_item_leaves_counter_untouched(self):
 		self.item.delete()
 		self._finalized_print(1500)
