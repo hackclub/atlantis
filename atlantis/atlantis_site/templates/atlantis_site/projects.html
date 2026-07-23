@@ -1,0 +1,266 @@
+{% extends "atlantis_site/_base.html" %}
+{% load static %}
+
+{% block page_id %}projects{% endblock %}
+{% block title %}Projects{% endblock %}
+
+{% block content %}
+<div class="content">
+    {% include "root/_messages.html" %}
+    <h1>Projects</h1>
+    <button type="button" id="openCreateModal">Create new project</button>
+    <section class="project-list">
+        <h3>Your Projects</h3>
+        {% if projects %}
+            <div class="card-grid">
+                {% for project in projects %}
+                    {% if not project.deleted %}
+                    <div class="project-card" data-project-id="{{ project.id }}">
+                        <div class="card-row">
+                            <div class="card-main">
+                                <strong><a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></strong>
+                                <p>{{ project.description }}</p>
+                                {% if project.printablesUrl %}
+                                    <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
+                                {% endif %}
+                                <p class="project-byline">Status: {% if project.ships.last %}{{ project.ships.last.get_status_display }}{% else %}No ships yet{% endif %}</p>
+                            </div>
+                            {% if not project.locked %}
+                                <div class="card-controls">
+                                    <button type="button" class="menu-toggle" aria-haspopup="true" aria-expanded="false">⋯</button>
+                                    <div class="card-dropdown" aria-hidden="true">
+                                        <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-description="{{ project.description }}" data-printables="{{ project.printablesUrl|default_if_none:"" }}">Edit</button>
+                                        <button type="button" class="dropdown-item open-delete delete-button" data-project-id="{{ project.id }}" data-title="{{ project.title }}">Delete</button>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="card-controls">
+                                    <p class="project-locked"><strong>Locked</strong></p>
+                                </div>
+                            {% endif %}
+                        </div>
+                        <a href="{% url 'project_detail' project.id %}" class="card-detail-link">View project</a>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <p>No projects yet. Create your first one!</p>
+        {% endif %}
+    </section>
+</div>
+
+<div id="createProjectModal" class="modal hidden" aria-hidden="true" hidden>
+    <div class="modal-backdrop" id="modalBackdrop"></div>
+
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="createProjectTitle">
+        <h3 id="createProjectTitle">Create Project</h3>
+
+        <form action="{% url 'create_project' %}" method="post">
+            {% csrf_token %}
+            <label>
+                Title
+                <input name="title" maxlength="60" placeholder="Project title" required>
+            </label>
+
+            <label>
+                Description
+                <textarea name="description" placeholder="Description" required></textarea>
+            </label>
+
+            <label>
+                Printables URL
+                <input name="printables_url" placeholder="https://printables.com/..." type="url">
+            </label>
+
+            <div class="modal-actions">
+                <button type="button" id="cancelCreateModal">Cancel</button>
+                <button type="submit">Create</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="editProjectModal" class="modal hidden" aria-hidden="true" hidden>
+    <div class="modal-backdrop" id="editModalBackdrop"></div>
+
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="editProjectTitle">
+        <h3 id="editProjectTitle">Edit Project</h3>
+
+        <form id="editProjectForm" action="" method="post">
+            {% csrf_token %}
+            <label>
+                Title
+                <input id="editTitle" name="title" maxlength="60" placeholder="Project title" required>
+            </label>
+
+            <label>
+                Description
+                <textarea id="editDescription" name="description" placeholder="Description" required></textarea>
+            </label>
+
+            <label>
+                Printables URL
+                <input id="editPrintables" name="printables_url" placeholder="https://printables.com/..." type="url" pattern="https:\/\/(?:www\.)?printables\.com(?:\/.*)?" title="Please enter a valid Printables URL starting with https://" required>
+            </label>
+
+            <div class="modal-actions">
+                <button type="button" id="cancelEditModal">Cancel</button>
+                <button type="submit">Save</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="deleteProjectModal" class="modal hidden" aria-hidden="true" hidden>
+    <div class="modal-backdrop" id="deleteModalBackdrop"></div>
+
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="deleteProjectTitle">
+        <h3 id="deleteProjectTitle">Delete Project</h3>
+        <p>Are you sure you want to delete "<span id="deleteProjectName"></span>"? This action cannot be undone.</p>
+
+        <form id="deleteProjectForm" action="" method="post">
+            {% csrf_token %}
+            <div class="modal-actions">
+                <button type="button" id="cancelDeleteModal">Cancel</button>
+                <button type="submit" class="delete-button">Delete</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const modal = document.getElementById("createProjectModal");
+        const openBtn = document.getElementById("openCreateModal");
+        const cancelBtn = document.getElementById("cancelCreateModal");
+        const backdrop = document.getElementById("modalBackdrop");
+
+        function openModal() {
+            modal.classList.remove("hidden");
+            modal.hidden = false;
+            modal.setAttribute("aria-hidden", "false");
+            
+            const firstInput = modal.querySelector("input, textarea, button");
+            if (firstInput) firstInput.focus();
+        }
+
+        function closeModal() {
+            modal.classList.add("hidden");
+            modal.hidden = true;
+            modal.setAttribute("aria-hidden", "true");
+            openBtn.focus();
+        }
+
+        openBtn.addEventListener("click", openModal);
+        cancelBtn.addEventListener("click", closeModal);
+        backdrop.addEventListener("click", closeModal);
+
+        document.addEventListener("keydown", (e) => {
+            if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+                closeModal();
+            }
+        });
+    })();
+
+    (function () {
+        function closeAllMenus() {
+            document.querySelectorAll('.card-dropdown.open').forEach(d => {
+                d.classList.remove('open');
+                d.setAttribute('aria-hidden', 'true');
+                const toggle = d.parentElement.querySelector('.menu-toggle');
+                if (toggle) toggle.setAttribute('aria-expanded', 'false');
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            const toggle = e.target.closest('.menu-toggle');
+            if (toggle) {
+                const dropdown = toggle.parentElement.querySelector('.card-dropdown');
+                const isOpen = dropdown.classList.contains('open');
+                closeAllMenus();
+                if (!isOpen) {
+                    dropdown.classList.add('open');
+                    dropdown.setAttribute('aria-hidden', 'false');
+                    toggle.setAttribute('aria-expanded', 'true');
+                }
+                return;
+            }
+
+            if (!e.target.closest('.card-dropdown') && !e.target.closest('.menu-toggle')) {
+                closeAllMenus();
+            }
+        });
+
+        const editModal = document.getElementById('editProjectModal');
+        const editBackdrop = document.getElementById('editModalBackdrop');
+        const editForm = document.getElementById('editProjectForm');
+        const editTitle = document.getElementById('editTitle');
+        const editDescription = document.getElementById('editDescription');
+        const editPrintables = document.getElementById('editPrintables');
+        const cancelEditBtn = document.getElementById('cancelEditModal');
+
+        document.addEventListener('click', (e) => {
+            const openEditBtn = e.target.closest('.open-edit');
+            if (openEditBtn) {
+                const id = openEditBtn.dataset.projectId;
+                const title = openEditBtn.dataset.title || '';
+                const description = openEditBtn.dataset.description || '';
+                const printables = openEditBtn.dataset.printables || '';
+                editForm.action = `/projects/${id}/edit/`;
+                editTitle.value = title;
+                editDescription.value = description;
+                editPrintables.value = printables;
+                editModal.classList.remove('hidden');
+                editModal.hidden = false;
+                editModal.setAttribute('aria-hidden', 'false');
+                const first = editModal.querySelector('input, textarea, button');
+                if (first) first.focus();
+                closeAllMenus();
+            }
+        });
+
+        function closeEditModal() {
+            editModal.classList.add('hidden');
+            editModal.hidden = true;
+            editModal.setAttribute('aria-hidden', 'true');
+        }
+
+        if (cancelEditBtn) cancelEditBtn.addEventListener('click', closeEditModal);
+        if (editBackdrop) editBackdrop.addEventListener('click', closeEditModal);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !editModal.classList.contains('hidden')) closeEditModal(); });
+
+        const deleteModal = document.getElementById('deleteProjectModal');
+        const deleteBackdrop = document.getElementById('deleteModalBackdrop');
+        const deleteForm = document.getElementById('deleteProjectForm');
+        const deleteProjectName = document.getElementById('deleteProjectName');
+        const cancelDeleteBtn = document.getElementById('cancelDeleteModal');
+
+        document.addEventListener('click', (e) => {
+            const openDeleteBtn = e.target.closest('.open-delete');
+            if (openDeleteBtn) {
+                const id = openDeleteBtn.dataset.projectId;
+                const title = openDeleteBtn.dataset.title || 'this project';
+                deleteForm.action = `/projects/${id}/delete/`;
+                deleteProjectName.textContent = title;
+                deleteModal.classList.remove('hidden');
+                deleteModal.hidden = false;
+                deleteModal.setAttribute('aria-hidden', 'false');
+                const first = deleteModal.querySelector('button');
+                if (first) first.focus();
+                closeAllMenus();
+            }
+        });
+
+        function closeDeleteModal() {
+            deleteModal.classList.add('hidden');
+            deleteModal.hidden = true;
+            deleteModal.setAttribute('aria-hidden', 'true');
+        }
+
+        if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+        if (deleteBackdrop) deleteBackdrop.addEventListener('click', closeDeleteModal);
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !deleteModal.classList.contains('hidden')) closeDeleteModal(); });
+    })();
+</script>
+{% endblock %}

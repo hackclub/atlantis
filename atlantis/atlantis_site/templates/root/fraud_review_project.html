@@ -1,0 +1,60 @@
+{% extends 'root/_base_root.html' %}
+{% load static %}
+
+{% block page_id %}admin-fraud-project-review-page{% endblock %}
+{% block title %}Fraud Review Project{% endblock %}
+
+{% block content %}
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+        }
+    }
+</script>
+<script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
+<div class="content">
+    {% include "root/_messages.html" %}
+    <div class="review-layout">
+        <div class="review-main">
+            {% include "root/_review_project_header.html" with heading="Fraud Review Project" show_lock=True %}
+            {% include "root/_review_journals.html" with journal_empty="No journal entries. Go punish the people that reviewed this before u gng" %}
+            {% include "root/_review_history.html" %}
+        </div>
+        <aside class="review-sidebar">
+            <h2>Review</h2>
+            <p><strong>Logged time:</strong> {{ logged_time }} minutes</p>
+            <p><strong>T2 deductions:</strong> {{ deductions }} minutes</p>
+            <p><strong>Net time (payout default):</strong> {{ total_time }} minutes</p>
+            <form action="{% url 't3_decision' ship.id %}" method="POST" class="review-form">
+                {% csrf_token %}
+                <div class="form-row">
+                    <input type="text" name="internal_notes" placeholder="Internal Notes" required>
+                </div>
+                <div class="form-row">
+                    <label for="payout_time">Payout Time:</label>
+                    <input type="text" id="payout_time" name="payout_time" placeholder="Payout Time (minutes)" value="{{ total_time }}" style="width: 50px;" required>
+                </div>
+                <div class="form-row">
+                    <label for="airtable_time">Airtable Time:</label>
+                    <input type="text" id="airtable_time" name="airtable_time" placeholder="Airtable Time (minutes)" value="{{ total_time }}" style="width: 50px;" required>
+                </div>
+                <div class="form-row">
+                    <select id="decision" name="decision">
+                        <option value="T1">Return to T1</option>
+                        <option value="P">Return to Printers</option>
+                        <option value="T2">Return to T2</option>
+                        <option value="A">Approve</option>
+                    </select>
+                </div>
+                {% if ship.project.locked %}
+                    <button type="submit" disabled title="Can't review a locked project" id="submit_btn">Submit</button>
+                {% else %}
+                    <button type="submit" id="submit_btn">Submit</button>
+                {% endif %}
+            </form>
+        </aside>
+    </div>
+</div>
+{% endblock %}

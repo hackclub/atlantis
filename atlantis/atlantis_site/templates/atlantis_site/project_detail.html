@@ -1,0 +1,200 @@
+{% extends "atlantis_site/_base.html" %}
+{% load static %}
+
+{% block page_id %}project_detail{% endblock %}
+{% block title %}Project {{ project.title }}{% endblock %}
+
+{% block content %}
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+        }
+    }
+</script>
+<script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
+<div class="content">
+    {% include "root/_messages.html" %}
+    <div class="project-info">
+        <div class="card-row">
+            <div class="card-main">
+                <h1>{{ project.title }}</h1>
+                <p id="time_spent">Time spent: {{ time_spent }}</p>
+                {% if project.locked %}
+                    <p style="color: red; font-weight: bold;">Locked</p>
+                {% endif %}
+                <p>{{ project.description }}</p>
+                {% if project.printablesUrl %}
+                    <p>
+                        <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer noopener">View on Printables</a>
+                        - {{ printablesData.makesCount }} makes on Printables
+                    </p>
+                {% endif %}
+                {% if project.editor_model_url %}
+                    <p><a href="{{ project.editor_model_url }}" target="_blank" rel="noreferrer noopener">Download editor model</a> ({{ project.editor_name }})</p>
+                {% endif %}
+            </div>
+            {% if project.owner == user %}
+                <div class="card-controls">
+                    {% if can_ship %}
+                        <form action="{% url 'ship_project' project.id %}" method="post">
+                            {% csrf_token %}
+                            <button type="submit">Ship</button>
+                        </form>
+                    {% else %}
+                        <button type="button" disabled title="{{ ship_disabled_reason }}">Ship</button>
+                    {% endif %}
+                    <form id="deleteProjectForm" action="{% url 'delete_project' project.id %}" method="post">
+                        {% csrf_token %}
+                        <button type="button" id="openDeleteModal" style="color: red;">Delete</button>
+                    </form>
+                </div>
+            {% endif %}
+        </div>
+        {% if project.owner == user and not project.locked %}
+            <div class="project-editor-upload">
+                <form action="{% url 'update_editor_model' project.id %}" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <label for="editor_model_file">Upload your editor model file</label>
+                    <input type="file" id="editor_model_file" name="editor_model_file" accept="{{ allowed_editor_extensions }}">
+                    <label for="editor_model_link">Or paste a link to it</label>
+                    <input type="url" id="editor_model_link" name="editor_model_link" placeholder="https://...">
+                    <button type="submit">Save editor model</button>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+    <div class="journal-section">
+    <h2>Journal Entries</h2>
+        {% if project.owner == user %}
+            <form action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="text" name="title" placeholder="Title" required>
+                <input type="text" name="time_spent" placeholder="Time Spent (minutes)" requried>
+                <p>Characters: <span id="character_count">0</span> (min 200, max 2000)</p>
+                <textarea
+                    maxlength="2000"
+                    placeholder="What did you do?"
+                    style="display:block; width: 500px; height: 500px; text-align: left; resize: none; padding: 10px; box-sizing: border-box; margin-bottom: 20px;"
+                    name="text"
+                    id="journal_content"
+                    required
+                ></textarea>
+                <label for="image">Upload a photo of what you did!</label>
+                <input type="file" id="image" name="image" accept="image/*" required>
+                <br>
+                <br>
+                <label for="STL">Upload an STL of your current project!</label>
+                <input type="file" id="STL" name="STL" accept=".stl" required>
+                <br>
+                <br>
+                {% if project.locked %}
+                    <button type="button" disabled title="You can't make journals on a locked project.">Submit entry!</button>
+                {% else %}
+                    <button type="submit">Submit entry!</button>
+                {% endif %}
+            </form>
+        {% endif %}
+        <br>
+        {% if timeline %}
+            {% for event in timeline %}
+                {% if event.type == "ship" %}
+                    {% include "atlantis_site/_ship_event.html" with event=event show_ship_status=True %}
+                    <br>
+                    <br>
+                {% else %}
+                    <div class="journal-card">
+                        <h3>{{ event.journal.title }}</h3>
+                        <p>{{ event.journal.time_spent }} minutes</p>
+                        <p id="journal-content">{{ event.journal.text }}</p>
+                        <div class="journal-media">
+                            {% if event.journal.image_url %}
+                                <img src="{{ event.journal.image_url }}" alt="{{ event.journal.title }}" class="journal-image">
+                            {% endif %}
+                            {% if event.journal.model_url %}
+                                <div class="stl-viewer" data-stl-url="{{ event.journal.model_url }}"></div>
+                            {% endif %}
+                        </div>
+                        {% if event.journal.model_url %}
+                            <p><a href="{{ event.journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
+                        {% endif %}
+                    </div>
+                    <br>
+                    <br>
+                {% endif %}
+            {% endfor %}
+        {% else %}
+            <p>No journal entries yet!</p>
+        {% endif %}
+        <p><a href="{% url 'projects' %}">Back to projects</a></p>
+    </div>
+</div>
+
+<div id="deleteProjectModal" class="modal hidden" aria-hidden="true" hidden>
+    <div class="modal-backdrop" id="deleteModalBackdrop"></div>
+
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="deleteProjectTitle">
+        <h3 id="deleteProjectTitle">Delete Project</h3>
+        <p>Are you sure you want to delete "{{ project.title }}"? This action cannot be undone.</p>
+
+        <div class="modal-actions">
+            <button type="button" id="cancelDeleteModal">Cancel</button>
+            <button type="button" id="confirmDeleteModal" class="delete-button">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const modal = document.getElementById('deleteProjectModal');
+        const backdrop = document.getElementById('deleteModalBackdrop');
+        const openBtn = document.getElementById('openDeleteModal');
+        const cancelBtn = document.getElementById('cancelDeleteModal');
+        const confirmBtn = document.getElementById('confirmDeleteModal');
+        const form = document.getElementById('deleteProjectForm');
+
+        function openModal() {
+            modal.classList.remove('hidden');
+            modal.hidden = false;
+            modal.setAttribute('aria-hidden', 'false');
+            cancelBtn.focus();
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            modal.hidden = true;
+            modal.setAttribute('aria-hidden', 'true');
+            openBtn.focus();
+        }
+
+        if (openBtn) openBtn.addEventListener('click', openModal);
+        cancelBtn.addEventListener('click', closeModal);
+        backdrop.addEventListener('click', closeModal);
+        confirmBtn.addEventListener('click', () => form.submit());
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+    })();
+</script>
+<script>
+    const textArea = document.getElementById("journal_content");
+    const countDisplay = document.getElementById("character_count");
+
+    countDisplay.style.color = "red"
+
+    textArea.addEventListener('input', () => {
+        const currentLength = textArea.value.length;
+        countDisplay.textContent = currentLength;
+
+        if (currentLength >= 200 && currentLength <= 2000) {
+            countDisplay.style.color = "green"
+        } else {
+            countDisplay.style.color = "red"
+        }
+    });
+</script>
+{% endblock %}

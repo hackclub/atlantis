@@ -1,0 +1,21 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Atlantis{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
+</head>
+<body class="page" id="{% block page_id %}base-page{% endblock %}">
+    {% include 'atlantis_site/_navbar.html' %}
+
+    {% block content %}
+    {% endblock %}
+
+    <a class="profile" href="{% url 'user_profile' user.id %}">
+        <img src="{{ user.hackclub_profile.slack_pfp_url }}" id="pfp">
+        <p>{{ user.hackclub_profile.slack_username }}</p>
+        <p>{{ user.hackclub_profile.layers }} spools</p>
+    </a>
+</body>
+</html>

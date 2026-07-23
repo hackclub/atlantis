@@ -1,0 +1,29 @@
+<nav class="sidebar">
+    <a href="/root/">home</a>
+    {% if perms.atlantis_site.fulfillment or perms.atlantis_site.organizer %}
+        <a href="/root/shop">shop management</a>
+        <a href="/root/fulfillment">fulfillment</a>
+    {% endif %}
+    {% if perms.atlantis_site.printer or perms.atlantis_site.organizer %}
+        <a href="/root/print">print</a>
+    {% endif %}
+    {% if perms.atlantis_site.organizer %}
+        <a href="/root/print/rewards">print rewards</a>
+    {% endif %}
+    {% if perms.atlantis_site.t1_review or perms.atlantis_site.organizer or perms.atlantis_site.t2_review or perms.atlantis_site.t3_review %}
+        <a href="/root/review">review</a>
+    {% endif %}
+    {% if perms.atlantis_site.t2_review or perms.atlantis_site.organizer or perms.atlantis_site.t3_review %}
+        <a href="/root/ysws_review">ysws review</a>
+    {% endif %}
+    {% if perms.atlantis_site.t3_review or perms.atlantis_site.organizer %}
+        <a href="/root/fraud_review">fraud review</a>
+    {% endif %}
+    {% if perms.atlantis_site.organizer %}
+        <a href="/root/audit_log">audit log</a>
+        <a href="/root/users">users</a>
+        <a href="/root/projects">projects</a>
+        <a href="/root/metrics">metrics</a>
+    {% endif %}
+    <a href="/dashboard">back home</a>
+</nav>

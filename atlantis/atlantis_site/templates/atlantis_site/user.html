@@ -1,0 +1,52 @@
+{% extends "atlantis_site/_base.html" %}
+
+{% block page_id %}user{% endblock %}
+{% block title %}@{{ user_viewed.hackclub_profile.slack_username }}{% endblock %}
+
+{% block content %}
+<div class="content">
+    {% include "root/_messages.html" %}
+    <div class="profile-header">
+        {% if viewed_profile.slack_pfp_url %}
+            <img src="{{ viewed_profile.slack_pfp_url }}" alt="@{{ viewed_profile.slack_username }}" class="profile-header-pfp">
+        {% endif %}
+        <div class="profile-header-main">
+            <h1>@{{ viewed_profile.slack_username }}</h1>
+            <p>{{ viewed_profile.layers }} spools</p>
+            <p>Joined {{ user_viewed.date_joined|date:"F j, Y" }}</p>
+        </div>
+    </div>
+
+    <section class="project-list">
+        <h2>{% if is_self %}Your projects{% else %}Projects{% endif %}</h2>
+        {% if projects %}
+            <div class="card-grid">
+                {% for project in projects %}
+                    <div class="project-card" data-project-id="{{ project.id }}">
+                        <div class="card-row">
+                            <div class="card-main">
+                                {% if is_self %}
+                                    <strong><a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></strong>
+                                {% else %}
+                                    <strong><a href="{% url 'project_detail_explore' project.id %}">{{ project.title }}</a></strong>
+                                {% endif %}
+                                <p>{{ project.description }}</p>
+                                {% if project.locked %}
+                                    <p class="project-locked"><strong>Locked</strong></p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if is_self %}
+                            <a href="{% url 'project_detail' project.id %}" class="card-detail-link">View project</a>
+                        {% else %}
+                            <a href="{% url 'project_detail_explore' project.id %}" class="card-detail-link">View project</a>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p>No projects yet.</p>
+        {% endif %}
+    </section>
+</div>
+{% endblock %}

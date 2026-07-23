@@ -1,0 +1,19 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Atlantis</title>
+    <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
+</head>
+<body>
+    <div class="content">
+        <h1>Atlantis</h1>
+        <p>Atlantis is a Hack Club YSWS where you ship CAD, and we ship you a 3D printer!</p>
+        <form action="{% url 'login' %}" method="post">
+            {%csrf_token%}
+            <button id="loginButton" type="submit">login</button>
+        </form>
+    </div>
+</body>
+</html>

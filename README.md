@@ -1,10 +1,10 @@
 # what is this
-this is the website for the hack club [layered](https://layered.hacklub.com) YSWS! 
+this is the website for the hack club [atlantis](https://atlantis.hacklub.com) YSWS! 
 
 ## dev
 so... you want to help develop the website? here's some detailed setup instructions
 
-- run `git clone https://github.com/hellonearth311/layered.git`
+- run `git clone https://github.com/hellonearth311/atlantis.git`
 - create a .env file with this template
 ```
 HCA_CLIENT_ID = CLIENT_ID_GOES_HERE
@@ -78,7 +78,7 @@ while the R2 bucket that's used for object storage is free, to obtain one you **
 - run `python -m venv .venv`
 - wait for vscode to detect the venv and activate it
 - run `pip install -r requirements.txt`
-- run `cd layered`
+- run `cd atlantis`
 - run `python manage.py migrate`
 - run `docker compose up db`
 - open a new terminal tab and run `python manage.py runserver`

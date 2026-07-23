@@ -1,0 +1,13 @@
+<nav class="sidebar">
+    <a href="/dashboard">home</a>
+    <a href="/projects">projects</a>
+    <a href="/explore">explore</a>
+    <a href="/shop">shop</a>
+    {% if perms.atlantis_site.organizer or perms.atlantis_site.fulfillment or perms.atlantis_site.printer or perms.atlantis_site.t1_review or perms.atlantis_site.t2_review or perms.atlantis_site.t3_review %}
+        <a href="/root">admin</a>
+    {% endif %}
+    <form action="{% url 'logout' %}" method="post" id="logoutForm">
+        {% csrf_token %}    
+        <a href="javascript:void(0)" onclick="document.getElementById('logoutForm').submit();">log out</a>
+    </form>
+</nav>
