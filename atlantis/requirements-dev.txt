@@ -1,0 +1,17 @@
+# Local development only — NOT installed in production.
+# Enables `manage.py runserver_plus` to serve HTTPS on localhost, which is
+# required for the Lookout recorder (getDisplayMedia needs a secure context).
+#
+# Setup (once):
+#   pip install -r requirements-dev.txt
+#   mkcert -install            # trusts the local CA (prompts for your password)
+#   cd atlantis && mkcert localhost 127.0.0.1 ::1 -cert-file certs/localhost+2.pem -key-file certs/localhost+2-key.pem
+#
+# Run:
+#   python manage.py runserver_plus --cert-file certs/localhost+2.pem --key-file certs/localhost+2-key.pem
+#
+# Note: pyOpenSSL pulls a newer cryptography than the pinned production version;
+# keep these deps in this dev-only file so production stays on its pinned set.
+django-extensions>=4.1
+Werkzeug>=3.1
+pyOpenSSL>=26.0

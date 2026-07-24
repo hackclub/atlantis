@@ -65,6 +65,34 @@
             </div>
         {% endif %}
     </div>
+    {% if project.owner == user %}
+    <div class="timelapse-section">
+        <h2>Timelapses</h2>
+        {% if not project.locked %}
+            <form action="{% url 'start_timelapse' project.id %}" method="post">
+                {% csrf_token %}
+                <button type="submit">Record a timelapse</button>
+            </form>
+        {% endif %}
+        {% if timelapses %}
+            {% for timelapse in timelapses %}
+                <div class="timelapse-card">
+                    <p>Status: {{ timelapse.get_status_display }} &middot; Tracked: {{ timelapse.tracked_display }}</p>
+                    {% if timelapse.is_complete %}
+                        <video controls poster="{{ timelapse.thumbnail_url }}" src="{{ timelapse.video_url }}" style="max-width:100%;"></video>
+                    {% elif timelapse.is_recordable %}
+                        <p><a href="{% url 'record_timelapse' timelapse.pk %}">Continue recording &rarr;</a></p>
+                    {% elif timelapse.status == "compiling" or timelapse.status == "stopped" %}
+                        <p><a href="{% url 'record_timelapse' timelapse.pk %}">View compilation progress &rarr;</a></p>
+                    {% endif %}
+                </div>
+                <br>
+            {% endfor %}
+        {% else %}
+            <p>No timelapses yet!</p>
+        {% endif %}
+    </div>
+    {% endif %}
     <div class="journal-section">
     <h2>Journal Entries</h2>
         {% if project.owner == user %}

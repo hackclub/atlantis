@@ -37,6 +37,13 @@ AWS_S3_CUSTOM_DOMAIN = os.environ["R2_PUBLIC_URL"].replace("https://", "")
 
 SLACK_TOKEN = os.environ["SLACK_TOKEN"]
 
+# Lookout — screen-recording timelapse service. LOOKOUT_TOKEN is the internal
+# API key used for server-to-server session management (never exposed to the browser).
+LOOKOUT_TOKEN = os.environ["LOOKOUT_TOKEN"]
+LOOKOUT_BASE_URL = os.environ.get("LOOKOUT_BASE_URL", "https://lookout.hackclub.com")
+# Reported as clientInfo telemetry on every upload-url request (see guide).
+LOOKOUT_APP_NAME = os.environ.get("LOOKOUT_APP_NAME", "Atlantis")
+
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
@@ -72,6 +79,15 @@ INSTALLED_APPS = [
     'atlantis_site',
     'storages'
 ]
+
+# django-extensions is a dev-only tool (used for `runserver_plus` to serve
+# HTTPS on localhost). Only enable it when it's actually installed so that
+# production images without it aren't broken.
+try:
+    import django_extensions  # noqa: F401
+    INSTALLED_APPS.append('django_extensions')
+except ImportError:
+    pass
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -138,10 +154,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://yfvyqtuytp2qa4rsw2cfxv7t.a.shipwrights.dev/',
-    'https://*.yfvyqtuytp2qa4rsw2cfxv7t.a.shipwrights.dev/',
-    'https://atlantis.hacklub.com',
-    'https://*.atlantis.hacklub.com'
+    'https://atlantis.hackclub.com',
+    'https://*.atlantis.hackclub.com',
+    'https://localhost:8000'
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

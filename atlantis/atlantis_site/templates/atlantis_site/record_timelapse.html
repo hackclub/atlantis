@@ -1,0 +1,50 @@
+{% extends "atlantis_site/_base.html" %}
+{% load static %}
+
+{% block page_id %}record_timelapse{% endblock %}
+{% block title %}Record Timelapse — {{ project.title }}{% endblock %}
+
+{% block content %}
+<div class="content">
+    {% include "root/_messages.html" %}
+
+    <div class="project-info">
+        <div class="card-row">
+            <div class="card-main">
+                <h1>Record a timelapse</h1>
+                <p>Project: <a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></p>
+                <p id="lookout-status">Status: loading…</p>
+                <p>Tracked time: <span id="lookout-timer">00:00:00</span> <span id="lookout-mode" style="opacity:0.6;"></span></p>
+            </div>
+        </div>
+
+        <div class="card-controls" style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button type="button" id="lookout-start">Start recording</button>
+            <button type="button" id="lookout-reshare" style="display:none;">Re-share screen</button>
+            <button type="button" id="lookout-pause" style="display:none;">Pause</button>
+            <button type="button" id="lookout-resume" style="display:none;">Resume</button>
+            <button type="button" id="lookout-stop" style="display:none; color:red;">Stop &amp; compile</button>
+        </div>
+
+        <div id="lookout-video" style="margin-top:16px;"></div>
+
+        <h3 style="margin-top:16px;">Activity log</h3>
+        <div id="lookout-log" style="max-height:220px; overflow-y:auto; font-family:monospace; font-size:12px; border:1px solid #ccc; padding:8px; border-radius:6px; background:rgba(0,0,0,0.03);"></div>
+
+        <p style="margin-top:16px;"><a href="{% url 'project_detail' project.id %}">Back to project</a></p>
+    </div>
+</div>
+
+{{ session.token|json_script:"lookout-token" }}
+<script>
+    window.LOOKOUT_CONFIG = {
+        baseUrl: "{{ lookout_base_url|escapejs }}",
+        token: JSON.parse(document.getElementById("lookout-token").textContent),
+        sessionId: "{{ session.session_id|escapejs }}",
+        appName: "{{ lookout_app_name|escapejs }}",
+        syncUrl: "{% url 'sync_timelapse' session.pk %}",
+        csrfToken: "{{ csrf_token }}",
+    };
+</script>
+<script src="{% static 'atlantis_site/lookout_recorder.js' %}"></script>
+{% endblock %}

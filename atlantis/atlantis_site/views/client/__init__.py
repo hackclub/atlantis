@@ -3,11 +3,13 @@ from ...views.client.auth import login_view, auth_callback, logout_view
 from ...views.client.projects import projects, create_project, edit_project, update_editor_model, delete_project, project_detail, project_detail_explore, create_journal, ship_project, explore, follow_project, unfollow_project
 from ...views.client.shop import shop, item_detail, order_page, order_item
 from ...views.client.misc import user_profile
+from ...views.client.timelapse import start_timelapse, record_timelapse, sync_timelapse
 
 __all__ = [
     "index", "dashboard",
     "login_view", "auth_callback", "logout_view",
     "projects", "create_project", "edit_project", "update_editor_model", "delete_project", "project_detail", "project_detail_explore", "create_journal", "ship_project", "explore", "follow_project", "unfollow_project",
     "shop", "item_detail", "order_page", "order_item",
-    "user_profile"
+    "user_profile",
+    "start_timelapse", "record_timelapse", "sync_timelapse"
 ]

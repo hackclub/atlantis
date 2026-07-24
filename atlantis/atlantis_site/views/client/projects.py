@@ -237,6 +237,8 @@ def project_detail(request, project_id):
 
     timeline = build_journal_timeline(journals, ships)
 
+    timelapses = project.timelapses.filter(owner=request.user)
+
     return render(request, "atlantis_site/project_detail.html", {
         "project": project,
         "user": user,
@@ -250,6 +252,7 @@ def project_detail(request, project_id):
         "printablesData": printablesData,
         "allowed_editors": ALLOWED_EDITORS,
         "allowed_editor_extensions": ",".join(EDITOR_FILE_EXTENSIONS.keys()),
+        "timelapses": timelapses,
     })
 
 @login_required

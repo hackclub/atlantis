@@ -253,6 +253,88 @@ class Journal(models.Model):
 	image_url = models.CharField(max_length=2048)
 	model_url = models.CharField(max_length=2048)
 
+# lookout timelapse recording sessions
+class LookoutSession(models.Model):
+	# Mirrors Lookout's server-side session lifecycle. See the Lookout guide.
+	class Status(models.TextChoices):
+		PENDING = "pending", "Pending"
+		ACTIVE = "active", "Active"
+		PAUSED = "paused", "Paused"
+		STOPPED = "stopped", "Stopped"
+		COMPILING = "compiling", "Compiling"
+		COMPLETE = "complete", "Complete"
+		FAILED = "failed", "Failed"
+
+	project = models.ForeignKey(
+		Project,
+		on_delete=models.CASCADE,
+		related_name="timelapses"
+	)
+	owner = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="timelapses"
+	)
+
+	# Lookout identifiers. `token` is a secret credential granting full control
+	# of the session — never render it anywhere except the recorder page JS for
+	# its own session, and never log it in full.
+	session_id = models.CharField(max_length=64, unique=True)
+	token = models.CharField(max_length=128, unique=True)
+
+	status = models.CharField(
+		max_length=16,
+		choices=Status.choices,
+		default=Status.PENDING,
+	)
+
+	# Cached server-authoritative values, refreshed via the internal API.
+	tracked_seconds = models.IntegerField(default=0)
+	total_active_seconds = models.IntegerField(default=0)
+	screenshot_count = models.IntegerField(default=0)
+
+	# Whether Hackatime heartbeats have already been forwarded for this session,
+	# so we never double-count a completed timelapse.
+	heartbeats_forwarded = models.BooleanField(default=False)
+
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ["-created_at"]
+
+	def __str__(self):
+		return f"Timelapse {self.session_id} ({self.status}) for project {self.project_id}"
+
+	@property
+	def is_recordable(self):
+		return self.status in (
+			self.Status.PENDING,
+			self.Status.ACTIVE,
+			self.Status.PAUSED,
+		)
+
+	@property
+	def is_complete(self):
+		return self.status == self.Status.COMPLETE
+
+	@property
+	def tracked_display(self):
+		total = self.tracked_seconds or 0
+		return f"{total // 3600}h {(total % 3600) // 60}m"
+
+	@property
+	def video_url(self):
+		# Permanent media redirect — safe to embed, unlike expiring presigned URLs.
+		base = settings.LOOKOUT_BASE_URL.rstrip("/")
+		return f"{base}/api/media/{self.session_id}/video.mp4"
+
+	@property
+	def thumbnail_url(self):
+		base = settings.LOOKOUT_BASE_URL.rstrip("/")
+		return f"{base}/api/media/{self.session_id}/thumbnail.jpg"
+
+
 # shop models
 class Item(models.Model):
 	name = models.CharField(max_length=60)
