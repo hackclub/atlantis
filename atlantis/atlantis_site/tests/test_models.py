@@ -1,7 +1,23 @@
 from django.test import TestCase
 
-from ..models import AuditLog, Item, Order, Ship
+from ..models import AuditLog, Item, Order, Ship, media_url
 from .base import VALID_EDITOR_LINK, make_project, make_user
+
+
+class MediaUrlTests(TestCase):
+	def test_blank_returns_empty(self):
+		self.assertEqual(media_url(""), "")
+
+	def test_external_link_passes_through(self):
+		link = "https://cad.onshape.com/documents/abc123"
+		self.assertEqual(media_url(link), link)
+
+	def test_object_key_resolves_to_proxy_url(self):
+		self.assertEqual(media_url("images/abc.png"), "/media/images/abc.png")
+
+	def test_project_and_journal_display_properties(self):
+		project = make_project(make_user(), editor_model_url="editor_models/x.f3d")
+		self.assertEqual(project.editor_model_display_url, "/media/editor_models/x.f3d")
 
 
 class ProfileModelTests(TestCase):

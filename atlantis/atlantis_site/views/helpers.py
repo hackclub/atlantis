@@ -5,7 +5,7 @@ from django.db import transaction
 from django.db.models import Count, Sum
 from django.contrib.auth import get_user_model
 from django.urls import reverse
-from ..models import AuditLog, Print, Ship, Item, Order, Profile
+from ..models import AuditLog, Print, Ship, Item, Order, Profile, detect_editor
 
 from slack_sdk.errors import SlackApiError
 from slack_sdk import WebClient
@@ -29,7 +29,6 @@ ALLOWED_IMAGE_FORMATS = {
 }
 
 PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?$", re.IGNORECASE)
-CLOUDFLARE_BUCKET_RE = re.compile(r"^https?:\/\/(?:[a-zA-Z0-9-]+\.)*pub-d9ac82fd80854a42ae2dde2757ff0a55\.r2\.dev(?:\/.*)?$", re.IGNORECASE)
 
 slack_client = WebClient(token=settings.SLACK_TOKEN, timeout=5)
 
@@ -233,7 +232,7 @@ def notify_followers(request, project, message):
             send_slack_dm(content, profile.slack_id)
     
 def is_valid_editor_model_url(value):
-    return bool(CLOUDFLARE_BUCKET_RE.match(value))
+    return detect_editor(value) is not None
 
 def validate_file_size(file, max_mb):
     max_b = max_mb * 1024 * 1024

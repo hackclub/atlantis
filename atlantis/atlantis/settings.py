@@ -26,22 +26,18 @@ HCA_CALLBACK_URI = os.environ.get("HCA_CALLBACK_URI")
 
 # fucking cloudflare bs
 AWS_ACCESS_KEY_ID = os.environ["R2_ACCESS_KEY_ID"]
-AWS_SECRET_ACCESS_KEY = os.environ["R2_SECRET_ACCESS_KEY"]
+AWS_SECRET_ACCESS_KEY = os.environ["R2_ACCESS_KEY"]
 AWS_STORAGE_BUCKET_NAME = os.environ["R2_BUCKET_NAME"]
-AWS_S3_ENDPOINT_URL = f"https://{os.environ['CF_ACCOUNT_ID']}.r2.cloudflarestorage.com"
-AWS_S3_REGION_NAME = "auto"  
+AWS_S3_ENDPOINT_URL = os.environ["R2_ENDPOINT"]
+AWS_S3_REGION_NAME = "auto"
 AWS_S3_SIGNATURE_VERSION = "s3v4"
 AWS_DEFAULT_ACL = None
-AWS_S3_FILE_OVERWRITE = False
-AWS_S3_CUSTOM_DOMAIN = os.environ["R2_PUBLIC_URL"].replace("https://", "")
+AWS_S3_FILE_OVERWRITE = True
 
 SLACK_TOKEN = os.environ["SLACK_TOKEN"]
 
-# Lookout — screen-recording timelapse service. LOOKOUT_TOKEN is the internal
-# API key used for server-to-server session management (never exposed to the browser).
 LOOKOUT_TOKEN = os.environ["LOOKOUT_TOKEN"]
 LOOKOUT_BASE_URL = os.environ.get("LOOKOUT_BASE_URL", "https://lookout.hackclub.com")
-# Reported as clientInfo telemetry on every upload-url request (see guide).
 LOOKOUT_APP_NAME = os.environ.get("LOOKOUT_APP_NAME", "Atlantis")
 
 STORAGES = {
@@ -80,9 +76,6 @@ INSTALLED_APPS = [
     'storages'
 ]
 
-# django-extensions is a dev-only tool (used for `runserver_plus` to serve
-# HTTPS on localhost). Only enable it when it's actually installed so that
-# production images without it aren't broken.
 try:
     import django_extensions  # noqa: F401
     INSTALLED_APPS.append('django_extensions')

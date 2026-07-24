@@ -34,7 +34,7 @@
                     </p>
                 {% endif %}
                 {% if project.editor_model_url %}
-                    <p><a href="{{ project.editor_model_url }}" target="_blank" rel="noreferrer noopener">Download editor model</a> ({{ project.editor_name }})</p>
+                    <p><a href="{{ project.editor_model_display_url }}" target="_blank" rel="noreferrer noopener">Download editor model</a> ({{ project.editor_name }})</p>
                 {% endif %}
             </div>
             {% if project.owner != user %}
@@ -72,14 +72,14 @@
                         <p id="journal-content">{{ event.journal.text }}</p>
                         <div class="journal-media">
                             {% if event.journal.image_url %}
-                                <img src="{{ event.journal.image_url }}" alt="{{ event.journal.title }}" class="journal-image">
+                                <img src="{{ event.journal.image_display_url }}" alt="{{ event.journal.title }}" class="journal-image">
                             {% endif %}
                             {% if event.journal.model_url %}
-                                <div class="stl-viewer" data-stl-url="{{ event.journal.model_url }}"></div>
+                                <div class="stl-viewer" data-stl-url="{{ event.journal.model_display_url }}"></div>
                             {% endif %}
                         </div>
                         {% if event.journal.model_url %}
-                            <p><a href="{{ event.journal.model_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
+                            <p><a href="{{ event.journal.model_display_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
                         {% endif %}
                     </div>
                     <br>

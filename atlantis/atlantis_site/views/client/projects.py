@@ -8,7 +8,12 @@ from django.core.files.storage import default_storage
 from django.db import transaction
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
+from django.http import FileResponse, Http404
 from math import floor
+
+from botocore.exceptions import ClientError
+
+import mimetypes
 
 from ...models import (
     Project, Ship, Print, Journal, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
@@ -137,7 +142,9 @@ def update_editor_model(request, project_id):
             messages.error(request, "File uploads are currently disabled.")
             return redirect("project_detail", project_id=project_id)
 
-        project.editor_model_url = default_storage.url(editor_model_key)
+        # Store the object key (not a URL) — the bucket is private and served
+        # through serve_media. External links are kept verbatim below.
+        project.editor_model_url = editor_model_key
     elif editor_model_link:
         if not editor_model_link.lower().startswith(("http://", "https://")):
             messages.error(request, "Editor model link must be a valid URL.")
@@ -395,16 +402,15 @@ def create_journal(request, project_id):
     image_key = default_storage.save(random_storage_key("images", image_ext), image_file)
     model_key = default_storage.save(random_storage_key("models", ".stl"), model_file)
 
-    image_url = default_storage.url(image_key)
-    model_url = default_storage.url(model_key)
-
+    # Store the object keys (not URLs) — the bucket is private and served
+    # through serve_media.
     Journal.objects.create(
         project=project,
         time_spent=time_spent,
         title=title,
         text=text,
-        image_url=image_url,
-        model_url=model_url
+        image_url=image_key,
+        model_url=model_key
     )
 
     notify_followers(
@@ -470,3 +476,34 @@ def ship_project(request, project_id):
 
     messages.success(request, f'Successfully shipped project "{project.title}"!')
     return redirect("projects")
+
+
+# Object-key prefixes we upload to (see random_storage_key). serve_media only
+# streams keys under these, so the view can never be used to read arbitrary
+# objects out of the bucket.
+ALLOWED_MEDIA_PREFIXES = ("images/", "models/", "editor_models/")
+
+
+@login_required
+def serve_media(request, key):
+    """Stream a private-bucket object back to the browser.
+
+    The R2 bucket has no public URL, so uploaded files (stored as object keys)
+    are proxied through here: we open the object with the server's S3
+    credentials and stream it to the (authenticated) requester.
+    """
+    if ".." in key or not key.startswith(ALLOWED_MEDIA_PREFIXES):
+        raise Http404
+
+    try:
+        file = default_storage.open(key)
+        # S3 opens lazily, so force the object to be fetched now: a missing or
+        # inaccessible key then surfaces here as a 404 instead of a 500 raised
+        # mid-stream, outside this view.
+        file.read(1)
+        file.seek(0)
+    except (FileNotFoundError, OSError, ClientError):
+        raise Http404
+
+    content_type, _ = mimetypes.guess_type(key)
+    return FileResponse(file, content_type=content_type or "application/octet-stream")

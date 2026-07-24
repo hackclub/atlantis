@@ -25,12 +25,11 @@ POSTGRES_PORT = 5432
 SLACK_TOKEN = SLACK_TOKEN_GOES_HERE
 DEFAULT_PFP = https://cdn.hackclub.com/019ee160-b8f6-7920-aca0-6e35fffc2b6a/slack_hash_256.png
 
-CF_ACCOUNT_ID = CLOUDFLARE_ACCOUNT_ID_GOES_HERE
 CLOUDFLARE_TOKEN = CLOUDFLARE_TOKEN_GOES_HERE
 R2_ACCESS_KEY_ID = R2_ACCESS_KEY_ID_GOES_HERE
-R2_SECRET_ACCESS_KEY = R2_SECRET_ACCESS_KEY_GOES_HERE
+R2_ACCESS_KEY = R2_ACCESS_KEY_GOES_HERE
+R2_ENDPOINT = https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
 R2_BUCKET_NAME = R2_BUCKET_NAME_GOES_HERE
-R2_PUBLIC_URL = R2_PUBLIC_URL_GOES_HERE
 
 PRINTABLES_GRAPHQL_URL = https://api.printables.com/graphql/                     
 ```
@@ -64,15 +63,13 @@ leave `DEFAULT_PFP` the same. to get your `SLACK_TOKEN`:
 ### cloudflare stuff
 while the R2 bucket that's used for object storage is free, to obtain one you **need** to provide them with a valid credit/debit card!
 - get a cloudflare R2 bucket (i'm not explaining how to do this, google it! it's not too difficult but you **will** need a payment method.)
-- head to your R2 dash and copy your user id
+- head to your R2 dash
 - click on "API tokens"
 - create an account api token with access to your bucket
-- get your token, access key id, and access key
+- get your token (`CLOUDFLARE_TOKEN`), access key id, access key, and the S3 endpoint url (`R2_ENDPOINT`)
 - also get your bucket name and paste that in
-- go inside your bucket
-- head to settings
-- enable public development URL
-- grab the public developer URL and paste it in!
+
+the bucket stays **private** — you do **not** need to enable a public development URL. uploaded files are served back to the browser through the app's `serve_media` proxy view, which streams them from R2 using your S3 credentials.
 
 ### launching server/docker
 - run `python -m venv .venv`

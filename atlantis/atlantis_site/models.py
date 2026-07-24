@@ -4,7 +4,16 @@ from urllib.parse import urlparse
 from django.db import models
 from django.contrib.auth.models import User
 from django.conf import settings
+from django.urls import reverse
 from django.utils import timezone
+
+
+def media_url(value):
+	if not value:
+		return ""
+	if value.startswith(("http://", "https://")):
+		return value
+	return reverse("serve_media", args=[value])
 
 ALLOWED_EDITORS = [
 	"Fusion 360",
@@ -97,6 +106,10 @@ class Project(models.Model):
 	@property
 	def editor_name(self):
 		return detect_editor(self.editor_model_url)
+
+	@property
+	def editor_model_display_url(self):
+		return media_url(self.editor_model_url)
 	
 class Ship(models.Model):
 	project = models.ForeignKey(
@@ -253,9 +266,16 @@ class Journal(models.Model):
 	image_url = models.CharField(max_length=2048)
 	model_url = models.CharField(max_length=2048)
 
+	@property
+	def image_display_url(self):
+		return media_url(self.image_url)
+
+	@property
+	def model_display_url(self):
+		return media_url(self.model_url)
+
 # lookout timelapse recording sessions
 class LookoutSession(models.Model):
-	# Mirrors Lookout's server-side session lifecycle. See the Lookout guide.
 	class Status(models.TextChoices):
 		PENDING = "pending", "Pending"
 		ACTIVE = "active", "Active"
@@ -276,9 +296,6 @@ class LookoutSession(models.Model):
 		related_name="timelapses"
 	)
 
-	# Lookout identifiers. `token` is a secret credential granting full control
-	# of the session — never render it anywhere except the recorder page JS for
-	# its own session, and never log it in full.
 	session_id = models.CharField(max_length=64, unique=True)
 	token = models.CharField(max_length=128, unique=True)
 
@@ -288,13 +305,10 @@ class LookoutSession(models.Model):
 		default=Status.PENDING,
 	)
 
-	# Cached server-authoritative values, refreshed via the internal API.
 	tracked_seconds = models.IntegerField(default=0)
 	total_active_seconds = models.IntegerField(default=0)
 	screenshot_count = models.IntegerField(default=0)
 
-	# Whether Hackatime heartbeats have already been forwarded for this session,
-	# so we never double-count a completed timelapse.
 	heartbeats_forwarded = models.BooleanField(default=False)
 
 	created_at = models.DateTimeField(auto_now_add=True)
@@ -325,7 +339,6 @@ class LookoutSession(models.Model):
 
 	@property
 	def video_url(self):
-		# Permanent media redirect — safe to embed, unlike expiring presigned URLs.
 		base = settings.LOOKOUT_BASE_URL.rstrip("/")
 		return f"{base}/api/media/{self.session_id}/video.mp4"
 

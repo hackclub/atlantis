@@ -21,6 +21,7 @@ urlpatterns = [
     path("projects/<int:project_id>/timelapse/start/", start_timelapse, name="start_timelapse"),
     path("timelapse/<int:session_pk>/record/", record_timelapse, name="record_timelapse"),
     path("timelapse/<int:session_pk>/sync/", sync_timelapse, name="sync_timelapse"),
+    path("media/<path:key>", serve_media, name="serve_media"),
     path("explore/", explore, name="explore"),
     path("explore/<int:project_id>/", project_detail_explore, name="project_detail_explore"),
     path("explore/<int:project_id>/follow/", follow_project, name="follow_project"),

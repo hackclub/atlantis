@@ -93,18 +93,17 @@ class UrlValidatorTests(TestCase):
 		self.assertFalse(is_valid_printables_url("https://printables.computer/model/1"))
 
 	def test_valid_editor_model_urls(self):
-		self.assertTrue(is_valid_editor_model_url(
-			"https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/editor_models/a.f3d"
-		))
-		self.assertTrue(is_valid_editor_model_url(
-			"https://cdn.pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/x"
-		))
+		# An uploaded file, stored as a private-bucket object key with a known
+		# CAD extension.
+		self.assertTrue(is_valid_editor_model_url("editor_models/abc123.f3d"))
+		# A link to a supported editor.
+		self.assertTrue(is_valid_editor_model_url("https://cad.onshape.com/documents/abc123"))
 
 	def test_invalid_editor_model_urls(self):
-		self.assertFalse(is_valid_editor_model_url("https://evil.r2.dev/x"))
-		self.assertFalse(is_valid_editor_model_url(
-			"https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev.evil.com/x"
-		))
+		# Unknown host and no CAD extension.
+		self.assertFalse(is_valid_editor_model_url("https://evil.example.com/model"))
+		# A key without a recognised editor extension.
+		self.assertFalse(is_valid_editor_model_url("editor_models/notes.txt"))
 		self.assertFalse(is_valid_editor_model_url(""))
 
 

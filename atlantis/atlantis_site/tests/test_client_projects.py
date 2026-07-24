@@ -356,8 +356,9 @@ class CreateJournalTests(BaseTestCase):
 		self.assertEqual(journal.time_spent, 60)
 		self.assertEqual(journal.title, "Progress update")
 		self.assertIsNone(journal.ship)
-		self.assertIn("/images/", journal.image_url)
-		self.assertIn("/models/", journal.model_url)
+		# Stored as private-bucket object keys, not public URLs.
+		self.assertTrue(journal.image_url.startswith("images/"))
+		self.assertTrue(journal.model_url.startswith("models/"))
 		self.assertTrue(journal.model_url.endswith(".stl"))
 
 	@override_settings(ALLOW_JOURNALING=False)
@@ -611,7 +612,8 @@ class UpdateEditorModelTests(BaseTestCase):
 		response = self._update(editor_model_file=SimpleUploadedFile("part.f3d", b"fusion data"))
 		self.assertIn("Editor model updated successfully.", message_texts(response))
 		self.project.refresh_from_db()
-		self.assertIn("/editor_models/", self.project.editor_model_url)
+		# Stored as a private-bucket object key, not a public URL.
+		self.assertTrue(self.project.editor_model_url.startswith("editor_models/"))
 		self.assertTrue(self.project.editor_model_url.endswith(".f3d"))
 
 	@override_settings(ALLOW_JOURNALING=True)
@@ -736,3 +738,40 @@ class FollowerNotificationTests(BaseTestCase):
 			reverse("project_detail_explore", args=[self.project.id])
 		)
 		mock_dm.assert_called_once_with(f"hello {expected_url}", self.follower.hackclub_profile.slack_id)
+
+
+class ServeMediaTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("viewer")
+		self.client.force_login(self.user)
+
+	def _store(self, key, content=b"filedata"):
+		from django.core.files.base import ContentFile
+		from django.core.files.storage import default_storage
+		return default_storage.save(key, ContentFile(content))
+
+	def test_streams_stored_object(self):
+		key = self._store("images/abc.png", b"pngbytes")
+		response = self.client.get(reverse("serve_media", args=[key]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(b"".join(response.streaming_content), b"pngbytes")
+		self.assertEqual(response["Content-Type"], "image/png")
+
+	def test_requires_login(self):
+		self.client.logout()
+		response = self.client.get(reverse("serve_media", args=["images/abc.png"]))
+		self.assertEqual(response.status_code, 302)
+
+	def test_missing_key_returns_404(self):
+		response = self.client.get(reverse("serve_media", args=["images/nope.png"]))
+		self.assertEqual(response.status_code, 404)
+
+	def test_rejects_disallowed_prefix(self):
+		self._store("secrets/private.txt", b"secret")
+		response = self.client.get(reverse("serve_media", args=["secrets/private.txt"]))
+		self.assertEqual(response.status_code, 404)
+
+	def test_rejects_path_traversal(self):
+		response = self.client.get("/media/images/../secrets/x")
+		self.assertEqual(response.status_code, 404)

@@ -14,7 +14,7 @@
                 <p><a href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer noopener">View on Printables</a></p>
             {% endif %}
             {% if ship.project.editor_model_url %}
-                <p><a href="{{ ship.project.editor_model_url }}" target="_blank" rel="noreferrer noopener">Download editor model</a> ({{ ship.project.editor_name }})</p>
+                <p><a href="{{ ship.project.editor_model_display_url }}" target="_blank" rel="noreferrer noopener">Download editor model</a> ({{ ship.project.editor_name }})</p>
             {% endif %}
         </div>
         {% if show_lock %}
