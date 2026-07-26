@@ -302,39 +302,74 @@ def _response(status=200, headers=None, redirect=False):
 	return response
 
 
-@patch("atlantis_site.views.helpers._host_resolves_to_public", return_value=True)
+@patch("atlantis_site.views.helpers._validated_public_ip", return_value="93.184.216.34")
 class SafeHeadTests(TestCase):
-	def test_rejects_non_http_schemes(self, _dns):
+	def test_rejects_non_http_schemes(self, _ip):
 		self.assertIsNone(helpers._safe_head("ftp://example.com/file"))
 		self.assertIsNone(helpers._safe_head("file:///etc/passwd"))
 		self.assertIsNone(helpers._safe_head("not a url"))
 
-	@patch("atlantis_site.views.helpers.requests.head")
-	def test_returns_response_for_plain_url(self, mock_head, _dns):
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_returns_response_for_plain_url(self, mock_head, _ip):
 		mock_head.return_value = _response(headers={"Content-Type": "image/png"})
 		response = helpers._safe_head("https://example.com/a.png")
 		self.assertIsNotNone(response)
 
-	@patch("atlantis_site.views.helpers.requests.head")
-	def test_follows_redirects_manually(self, mock_head, _dns):
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_follows_redirects_manually(self, mock_head, _ip):
 		final = _response(headers={"Content-Type": "image/png"})
 		hop = _response(headers={"Location": "https://example.com/real.png"}, redirect=True)
 		mock_head.side_effect = [hop, final]
 		self.assertIs(helpers._safe_head("https://example.com/a"), final)
 		self.assertEqual(mock_head.call_count, 2)
 
-	@patch("atlantis_site.views.helpers.requests.head")
-	def test_gives_up_after_max_redirects(self, mock_head, _dns):
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_gives_up_after_max_redirects(self, mock_head, _ip):
 		hop = _response(headers={"Location": "https://example.com/loop"}, redirect=True)
 		mock_head.return_value = hop
 		self.assertIsNone(helpers._safe_head("https://example.com/a", max_redirects=3))
 
-	@patch("atlantis_site.views.helpers.requests.head")
-	def test_redirect_to_private_host_blocked(self, mock_head, _dns):
-		_dns.side_effect = [True, False]
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_redirect_to_private_host_blocked(self, mock_head, _ip):
+		_ip.side_effect = ["93.184.216.34", None]
 		hop = _response(headers={"Location": "http://169.254.169.254/meta"}, redirect=True)
 		mock_head.return_value = hop
 		self.assertIsNone(helpers._safe_head("https://example.com/a"))
+
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_head_is_pinned_to_validated_ip(self, mock_head, _ip):
+		# DNS-rebinding guard: the HEAD must target the IP we validated, never
+		# re-resolve the hostname.
+		mock_head.return_value = _response(headers={"Content-Type": "image/png"})
+		helpers._safe_head("https://example.com/a.png")
+		url_arg, ip_arg = mock_head.call_args.args[:2]
+		self.assertEqual(url_arg, "https://example.com/a.png")
+		self.assertEqual(ip_arg, "93.184.216.34")
+
+
+class PinnedIPAdapterTests(TestCase):
+	"""The adapter must connect to the vetted IP while keeping TLS identity."""
+
+	@patch("atlantis_site.views.helpers.HTTPAdapter.send")
+	def test_https_pins_ip_and_preserves_sni(self, mock_super_send):
+		import requests as _requests
+		adapter = helpers._PinnedIPAdapter("93.184.216.34")
+		request = _requests.Request("HEAD", "https://example.com/a.png").prepare()
+		adapter.send(request)
+		sent = mock_super_send.call_args.args[0]
+		self.assertEqual(sent.url, "https://93.184.216.34/a.png")
+		self.assertEqual(sent.headers["Host"], "example.com")
+		self.assertEqual(adapter.poolmanager.connection_pool_kw["server_hostname"], "example.com")
+		self.assertEqual(adapter.poolmanager.connection_pool_kw["assert_hostname"], "example.com")
+
+	@patch("atlantis_site.views.helpers.HTTPAdapter.send")
+	def test_ipv6_target_is_bracketed(self, mock_super_send):
+		import requests as _requests
+		adapter = helpers._PinnedIPAdapter("2606:2800:220:1:248:1893:25c8:1946")
+		request = _requests.Request("HEAD", "https://example.com/a.png").prepare()
+		adapter.send(request)
+		sent = mock_super_send.call_args.args[0]
+		self.assertEqual(sent.url, "https://[2606:2800:220:1:248:1893:25c8:1946]/a.png")
 
 
 class ContentTypeValidatorTests(TestCase):

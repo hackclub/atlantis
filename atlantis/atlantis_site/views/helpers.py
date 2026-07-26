@@ -10,7 +10,9 @@ from ..models import AuditLog, Print, Ship, Item, Order, Profile, detect_editor
 from slack_sdk.errors import SlackApiError
 from slack_sdk import WebClient
 
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, urlunparse
+
+from requests.adapters import HTTPAdapter
 
 from PIL import Image
 
@@ -110,32 +112,82 @@ def _is_public_ip(ip):
         or ip.is_unspecified
     )
 
-def _host_resolves_to_public(hostname):
+def _validated_public_ip(hostname):
+    """Resolve *hostname* and return one address to connect to, but only if
+    EVERY resolved address is public; otherwise return None.
+
+    Returning the concrete IP (instead of a bool) lets the caller pin the
+    outbound request to that exact address. That closes the DNS-rebinding
+    window: without pinning, an attacker's DNS can answer with a public IP for
+    this validation lookup and a private one (127.0.0.1, 169.254.169.254, ...)
+    for the request that requests/urllib3 would otherwise resolve separately.
+    """
     if not hostname:
-        return False
+        return None
     try:
         addr_info = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
-        return False
+        return None
+    chosen = None
     for *_, sockaddr in addr_info:
         try:
             ip = ipaddress.ip_address(sockaddr[0])
         except ValueError:
-            return False
+            return None
         if getattr(ip, "ipv4_mapped", None):
             ip = ip.ipv4_mapped
         if not _is_public_ip(ip):
-            return False
-    return True
+            return None
+        if chosen is None:
+            chosen = str(ip)
+    return chosen
+
+def _host_resolves_to_public(hostname):
+    return _validated_public_ip(hostname) is not None
+
+def _authority(host, port):
+    bracketed = f"[{host}]" if ":" in host else host
+    return f"{bracketed}:{port}" if port else bracketed
+
+class _PinnedIPAdapter(HTTPAdapter):
+    def __init__(self, dest_ip, **kwargs):
+        self._dest_ip = dest_ip
+        super().__init__(**kwargs)
+
+    def send(self, request, **kwargs):
+        parsed = urlparse(request.url)
+        hostname = parsed.hostname
+        request.headers["Host"] = _authority(hostname, parsed.port)
+        request.url = urlunparse(
+            parsed._replace(netloc=_authority(self._dest_ip, parsed.port))
+        )
+        pool_kw = self.poolmanager.connection_pool_kw
+        if parsed.scheme == "https":
+            pool_kw["server_hostname"] = hostname
+            pool_kw["assert_hostname"] = hostname
+        else:
+            pool_kw.pop("server_hostname", None)
+            pool_kw.pop("assert_hostname", None)
+        return super().send(request, **kwargs)
+
+def _pinned_head(url, dest_ip, timeout=5):
+    parsed = urlparse(url)
+    session = requests.Session()
+    session.mount(f"{parsed.scheme}://{parsed.netloc}", _PinnedIPAdapter(dest_ip))
+    try:
+        return session.head(url, allow_redirects=False, timeout=timeout)
+    finally:
+        session.close()
 
 def _safe_head(url, max_redirects=5):
     for _ in range(max_redirects + 1):
         result = urlparse(url)
         if result.scheme not in ('http', 'https') or not result.netloc:
             return None
-        if not _host_resolves_to_public(result.hostname):
+        dest_ip = _validated_public_ip(result.hostname)
+        if dest_ip is None:
             return None
-        response = requests.head(url, allow_redirects=False, timeout=5)
+        response = _pinned_head(url, dest_ip)
         if response.is_redirect or response.is_permanent_redirect:
             location = response.headers.get('Location')
             if not location:
