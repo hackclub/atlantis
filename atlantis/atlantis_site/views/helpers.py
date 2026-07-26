@@ -113,15 +113,6 @@ def _is_public_ip(ip):
     )
 
 def _validated_public_ip(hostname):
-    """Resolve *hostname* and return one address to connect to, but only if
-    EVERY resolved address is public; otherwise return None.
-
-    Returning the concrete IP (instead of a bool) lets the caller pin the
-    outbound request to that exact address. That closes the DNS-rebinding
-    window: without pinning, an attacker's DNS can answer with a public IP for
-    this validation lookup and a private one (127.0.0.1, 169.254.169.254, ...)
-    for the request that requests/urllib3 would otherwise resolve separately.
-    """
     if not hostname:
         return None
     try:
@@ -324,10 +315,6 @@ def add_bars(rows, value_key="value"):
 
 
 def reviewer_leaderboard(relation, limit=10):
-    """Rank users by how many `relation` rows they own (e.g. "t1_reviews").
-
-    Returns rows shaped for root/_metric_chart.html: {label, value, bar}.
-    """
     User = get_user_model()
     rows = (
         User.objects.annotate(n=Count(relation))
