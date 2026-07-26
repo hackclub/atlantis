@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.db import transaction
 
 from ...models import Profile, Item, Order
+from ..helpers import rate_limit
 
 @login_required
 def shop(request):
@@ -28,6 +29,7 @@ def order_page(request, item_id):
     return redirect("item_detail", item_id=item_id)
 
 @login_required
+@rate_limit("order_item", 2)
 def order_item(request, item_id):
     if request.method != "POST":
         return redirect("item_detail", item_id=item_id)

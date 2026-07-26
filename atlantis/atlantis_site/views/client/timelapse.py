@@ -7,10 +7,12 @@ from django.http import JsonResponse
 
 from ...models import Project, LookoutSession
 from ... import lookout
+from ..helpers import rate_limit
 
 
 @login_required
 @require_POST
+@rate_limit("start_timelapse", 3)
 def start_timelapse(request, project_id):
 	"""Create a Lookout session (server-to-server) and hand the user its recorder.
 
@@ -90,6 +92,7 @@ def _apply_session_payload(session, session_obj, tracked_seconds, screenshot_cou
 
 @login_required
 @require_POST
+@rate_limit("sync_timelapse", 2, json=True)
 def sync_timelapse(request, session_pk):
 	"""Refresh our cached copy of a session from Lookout's authoritative state.
 

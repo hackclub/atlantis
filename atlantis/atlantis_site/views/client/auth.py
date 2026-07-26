@@ -4,7 +4,7 @@ from django.contrib.auth import login, logout, get_user_model
 from django.views.decorators.http import require_POST
 
 from ...models import Profile
-from ..helpers import slack_client
+from ..helpers import slack_client, rate_limit
 
 import os
 
@@ -23,6 +23,7 @@ oauth.register(
 )
 
 @require_POST
+@rate_limit("login", 2)
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("dashboard")

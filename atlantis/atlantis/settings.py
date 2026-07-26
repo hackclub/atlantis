@@ -128,6 +128,25 @@ DATABASES = {
 }
 
 
+# Cache
+# https://docs.djangoproject.com/en/6.0/topics/cache/
+#
+# Backed by a Postgres table (created by migration 0041) so cache state — most
+# importantly the rate-limit windows in views.helpers.rate_limit — is shared
+# across all gunicorn workers rather than living per-process. A high MAX_ENTRIES
+# keeps active rate-limit windows from being culled early under load.
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "atlantis_cache",
+        "OPTIONS": {
+            "MAX_ENTRIES": 10000,
+        },
+    }
+}
+
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 

@@ -1,11 +1,17 @@
 from django.contrib.auth.decorators import user_passes_test
 from django.conf import settings
 from django.contrib import messages
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Sum
 from django.contrib.auth import get_user_model
+from django.http import JsonResponse
+from django.shortcuts import redirect
 from django.urls import reverse
+from django.utils.http import url_has_allowed_host_and_scheme
 from ..models import AuditLog, Print, Ship, Item, Order, Profile, detect_editor
+
+from functools import wraps
 
 from slack_sdk.errors import SlackApiError
 from slack_sdk import WebClient
@@ -75,6 +81,47 @@ def get_client_ip(request):
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.META.get("REMOTE_ADDR", "")
+
+RATE_LIMIT_MESSAGE = "You're doing that too fast. Please wait a moment and try again."
+
+
+def _rate_limit_key(request, scope):
+    if request.user.is_authenticated:
+        actor = f"user:{request.user.id}"
+    else:
+        actor = f"ip:{get_client_ip(request)}"
+    return f"ratelimit:{scope}:{actor}"
+
+
+def _safe_redirect_back(request):
+    referer = request.META.get("HTTP_REFERER", "")
+    if referer and url_has_allowed_host_and_scheme(
+        referer,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(referer)
+    return redirect("/")
+
+
+def rate_limit(scope, seconds, methods=("POST",), json=False):
+    def decorator(view):
+        @wraps(view)
+        def wrapped(request, *args, **kwargs):
+            if request.method in methods:
+                key = _rate_limit_key(request, scope)
+
+                if not cache.add(key, 1, timeout=seconds):
+                    if json:
+                        return JsonResponse(
+                            {"ok": False, "error": "rate_limited"}, status=429
+                        )
+                    messages.error(request, RATE_LIMIT_MESSAGE)
+                    return _safe_redirect_back(request)
+            return view(request, *args, **kwargs)
+        return wrapped
+    return decorator
+
 
 def record_audit(request, action, target="", metadata=None):
     form_data = {
@@ -325,7 +372,6 @@ def reviewer_leaderboard(relation, limit=10):
     return add_bars([{"label": display_name(u), "value": u.n} for u in rows])
 
 PRINT_REWARD_GRAMS = 1000
-
 
 def finalized_print_grams(printer):
     return (

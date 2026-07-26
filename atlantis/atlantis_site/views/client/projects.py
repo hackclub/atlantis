@@ -21,7 +21,7 @@ from ...models import (
 from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
     sniff_image_extension, random_storage_key, build_journal_timeline,
-    notify_followers,
+    notify_followers, rate_limit,
 )
 
 import os
@@ -34,6 +34,7 @@ def projects(request):
 
 @login_required
 @require_POST
+@rate_limit("create_project", 2)
 def create_project(request):
     title = request.POST.get("title", "").strip()
     description = request.POST.get("description", "").strip()
@@ -73,6 +74,7 @@ def create_project(request):
 
 @login_required
 @require_POST
+@rate_limit("edit_project", 2)
 def edit_project(request, project_id):
     project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
 
@@ -114,6 +116,7 @@ def edit_project(request, project_id):
 
 @login_required
 @require_POST
+@rate_limit("update_editor_model", 3)
 def update_editor_model(request, project_id):
     project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
 
@@ -166,6 +169,7 @@ def update_editor_model(request, project_id):
 
 @login_required
 @require_POST
+@rate_limit("delete_project", 2)
 def delete_project(request, project_id):
     project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
 
@@ -314,6 +318,7 @@ def project_detail_explore(request, project_id):
 
 @login_required
 @require_POST
+@rate_limit("follow_project", 1)
 def follow_project(request, project_id):
     project = get_object_or_404(Project, id=project_id, deleted=False)
     if project.locked and not request.user.has_perm("atlantis_site.organizer"):
@@ -329,6 +334,7 @@ def follow_project(request, project_id):
 
 @login_required
 @require_POST
+@rate_limit("unfollow_project", 1)
 def unfollow_project(request, project_id):
     project = get_object_or_404(Project, id=project_id, deleted=False)
     project.followers.remove(request.user)
@@ -336,6 +342,7 @@ def unfollow_project(request, project_id):
     return redirect("project_detail_explore", project_id=project_id)
 
 @login_required
+@rate_limit("create_journal", 3)
 def create_journal(request, project_id):
     if request.method != 'POST':
         return redirect("project_detail", project_id=project_id)
@@ -423,6 +430,7 @@ def create_journal(request, project_id):
     return redirect("project_detail", project_id=project_id)
     
 @login_required
+@rate_limit("ship_project", 3)
 def ship_project(request, project_id):
     # remember to check if the weight is greater than the time spent x 100
     if request.method != 'POST':
