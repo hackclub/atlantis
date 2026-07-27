@@ -76,9 +76,36 @@ class Profile(models.Model):
 	slack_pfp_url = models.CharField(max_length=200, blank=True, default="")
 	layers = models.IntegerField(default=0)
 	print_reward_kg = models.IntegerField(default=0)
+	# Encrypted (Fernet) JSON blob of the user's HCA addresses. Never store or
+	# expose plaintext addresses; decrypt only on an explicit "View Address".
+	encrypted_address = models.TextField(blank=True, default="")
 
 	def __str__(self):
 		return self.user.username
+
+	def get_addresses(self):
+		from .crypto import decrypt_addresses
+		return decrypt_addresses(self.encrypted_address)
+
+	def get_address(self, address_id=None):
+		"""Return the address matching address_id, else the primary, else the
+		first available address (or None)."""
+		addresses = self.get_addresses()
+		if not addresses:
+			return None
+		if address_id:
+			for address in addresses:
+				if address.get("id") == address_id:
+					return address
+		for address in addresses:
+			if address.get("primary"):
+				return address
+		return addresses[0]
+
+	@property
+	def primary_address_id(self):
+		address = self.get_address()
+		return address.get("id", "") if address else ""
 
 # project/ship models
 class Project(models.Model):

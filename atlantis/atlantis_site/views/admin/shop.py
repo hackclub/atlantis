@@ -4,9 +4,11 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 
 from ...models import Profile, Item, Order
+from ...crypto import format_address
 from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_url
 
 @staff_member_required
@@ -113,6 +115,30 @@ def update_order_status(request, order_id):
 
     messages.success(request, f"Order #{order.id} updated to {order.get_status_display().lower()}.")
     return redirect("fulfillment_dash")
+
+@staff_member_required
+@require_POST
+@check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])
+def view_order_address(request, order_id):
+    """Decrypt and return the shipping address for an order during fulfillment.
+
+    Access to a customer's plaintext address is audit-logged since it is PII.
+    """
+    order = get_object_or_404(Order.objects.select_related("owner"), id=order_id)
+    profile = getattr(order.owner, "hackclub_profile", None)
+    address = format_address(profile.get_address(order.address_id)) if profile else None
+
+    if address is None:
+        return JsonResponse({"ok": False, "error": "no_address"}, status=404)
+
+    record_audit(request, "view_order_address", target=f"Order #{order.id}", metadata={
+        "order_id": order.id,
+        "owner": order.owner.username,
+        "address_id": address.get("id", ""),
+    })
+
+    return JsonResponse({"ok": True, "address": address})
+
 
 @staff_member_required
 @require_POST

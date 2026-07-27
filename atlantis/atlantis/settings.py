@@ -24,6 +24,10 @@ HCA_CLIENT_ID = os.environ.get("HCA_CLIENT_ID")
 HCA_CLIENT_SECRET = os.environ.get("HCA_CLIENT_SECRET")
 HCA_CALLBACK_URI = os.environ.get("HCA_CALLBACK_URI")
 
+# Fernet key (url-safe base64-encoded 32 bytes) used to encrypt shipping
+# addresses at rest. Generate with: Fernet.generate_key().decode()
+ADDRESS_ENCRYPTION_KEY = os.environ.get("ADDRESS_ENCRYPTION_KEY")
+
 # fucking cloudflare bs
 AWS_ACCESS_KEY_ID = os.environ["R2_ACCESS_KEY_ID"]
 AWS_SECRET_ACCESS_KEY = os.environ["R2_ACCESS_KEY"]

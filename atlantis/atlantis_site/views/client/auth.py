@@ -4,6 +4,7 @@ from django.contrib.auth import login, logout, get_user_model
 from django.views.decorators.http import require_POST
 
 from ...models import Profile
+from ...crypto import encrypt_addresses
 from ..helpers import slack_client, rate_limit
 
 import os
@@ -12,13 +13,34 @@ FORCE_REAUTH_COOKIE = "hca_force_reauth"
 
 oauth = OAuth()
 
+
+def _extract_addresses(data):
+    if not isinstance(data, dict):
+        return []
+
+    identity = data.get("identity")
+    source = identity if isinstance(identity, dict) else data
+
+    raw = source.get("addresses")
+    if isinstance(raw, dict):
+        raw = [raw]
+    if not raw:
+        single = source.get("address")
+        raw = [single] if isinstance(single, dict) and single else []
+
+    return [
+        {k: v for k, v in address.items() if k != "phone_number"}
+        for address in raw
+        if isinstance(address, dict)
+    ]
+
 oauth.register(
     name="hackclub",
     server_metadata_url="https://auth.hackclub.com/.well-known/openid-configuration",
     client_id = os.environ["HCA_CLIENT_ID"],
     client_secret = os.environ["HCA_CLIENT_SECRET"],
     client_kwargs = {
-        "scope": "openid profile email verification_status slack_id"
+        "scope": "openid email name profile verification_status slack_id address"
     }
 )
 
@@ -53,6 +75,14 @@ def auth_callback(request):
     slack_id = userinfo.get("slack_id", "")
     verification_status = userinfo.get("verification_status", "")
 
+    addresses = _extract_addresses(userinfo)
+    if not addresses:
+        try:
+            full_userinfo = oauth.hackclub.userinfo(token=token)
+            addresses = _extract_addresses(full_userinfo)
+        except Exception as e:
+            print("Address fetch failed", e)
+
     user_model = get_user_model()
     user, created = user_model.objects.get_or_create(
         username=clean_sub, 
@@ -79,14 +109,19 @@ def auth_callback(request):
             display_name = name
             avatar_url = os.environ["DEFAULT_PFP"]
 
+    defaults = {
+        "verification_status": verification_status,
+        "slack_id": slack_id,
+        "slack_username": display_name,
+        "slack_pfp_url": avatar_url,
+    }
+
+    if addresses:
+        defaults["encrypted_address"] = encrypt_addresses(addresses)
+
     Profile.objects.update_or_create(
         user=user,
-        defaults={
-            "verification_status": verification_status,
-            "slack_id": slack_id,
-            "slack_username": display_name,
-            "slack_pfp_url": avatar_url
-        },
+        defaults=defaults,
     )
 
     login(request, user)

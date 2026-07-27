@@ -3,8 +3,11 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 
 from ...models import Profile, Item, Order
+from ...crypto import format_address
 from ..helpers import rate_limit
 
 @login_required
@@ -85,8 +88,24 @@ def order_item(request, item_id):
             owner=request.user,
             item=item,
             quantity=quantity,
-            user_notes=user_notes
+            user_notes=user_notes,
+            address_id=profile.primary_address_id,
         )
 
     messages.success(request, f"Successfully ordered {quantity}x {item.name}!")
     return redirect("shop")
+
+
+@login_required
+@require_POST
+@rate_limit("view_own_address", 2, json=True)
+def view_own_address(request):
+    profile = request.user.hackclub_profile
+    address = format_address(profile.get_address())
+
+    if address is None:
+        return JsonResponse(
+            {"ok": False, "error": "no_address"}, status=404
+        )
+
+    return JsonResponse({"ok": True, "address": address})
