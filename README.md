@@ -1,5 +1,5 @@
 # what is this
-this is the website for the hack club [atlantis](https://atlantis.hacklub.com) YSWS! 
+this is the website for the hack club [atlantis](https://atlantis.hackclub.com) YSWS! 
 
 ## dev
 
