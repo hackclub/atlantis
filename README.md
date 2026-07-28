@@ -2,6 +2,8 @@
 this is the website for the hack club [atlantis](https://atlantis.hacklub.com) YSWS! 
 
 ## dev
+
+### this is hella outdated, i'll get around to updating it eventually
 so... you want to help develop the website? here's some detailed setup instructions
 
 - run `git clone https://github.com/hellonearth311/atlantis.git`
