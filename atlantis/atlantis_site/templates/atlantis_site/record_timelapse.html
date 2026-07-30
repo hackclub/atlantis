@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block page_id %}record_timelapse{% endblock %}
-{% block title %}Record Timelapse — {{ project.title }}{% endblock %}
+{% block title %}Record Timelapse - {{ project.title }}{% endblock %}
 
 {% block content %}
 <div class="content">
@@ -13,9 +13,12 @@
     <div class="recorder">
         <div class="recorder-head">
             <h1>Record a timelapse</h1>
-            <span class="tl-pill" id="lookout-pill">Loading&hellip;</span>
+            <span class="tl-pill" id="lookout-pill">Not started</span>
         </div>
-        <p class="recorder-hint" id="lookout-hint">Checking where this session left off&hellip;</p>
+        <p class="recorder-hint" id="lookout-hint">
+            When you hit start, your browser asks which screen or window to share &mdash;
+            pick the one you'll be modelling in. Nothing is captured until you do.
+        </p>
 
         <div class="recorder-alert" id="lookout-alert" hidden>
             <span id="lookout-alert-text"></span>
@@ -49,7 +52,7 @@
         </div>
 
         <div class="recorder-actions">
-            <button type="button" class="tl-btn tl-btn--primary" id="lookout-start" hidden>Share screen &amp; start</button>
+            <button type="button" class="tl-btn tl-btn--primary" id="lookout-start">Share screen &amp; start</button>
             <button type="button" class="tl-btn tl-btn--primary" id="lookout-reshare" hidden>Re-share my screen</button>
             <button type="button" class="tl-btn" id="lookout-pause" hidden>Pause</button>
             <button type="button" class="tl-btn tl-btn--primary" id="lookout-resume" hidden>Resume</button>

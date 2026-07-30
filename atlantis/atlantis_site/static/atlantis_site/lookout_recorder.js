@@ -32,6 +32,7 @@
 	const BACKOFF_MS = [2000, 4000, 8000];
 	const MAX_JPEG_BYTES = 2 * 1024 * 1024;
 	const CLOCK_SKEW_WARN_MS = 4 * 60 * 1000; // warn before the server's ±5min hard reject
+	const RECOVERY_TIMEOUT_MS = 10000; // cap on the initial session-status lookup
 
 	// --- DOM ----------------------------------------------------------------
 	const el = (id) => document.getElementById(id);
@@ -586,8 +587,12 @@
 	}
 
 	async function recoverFromServer() {
+		// Bounded, so a hanging request can't strand the page on "Loading…" —
+		// aborting rejects the fetch and drops us into the catch below.
+		const abort = new AbortController();
+		const timeout = setTimeout(() => abort.abort(), RECOVERY_TIMEOUT_MS);
 		try {
-			const res = await fetch(`${BASE}/api/sessions/${TOKEN}`);
+			const res = await fetch(`${BASE}/api/sessions/${TOKEN}`, { signal: abort.signal });
 			if (!res.ok) {
 				warn(`session recovery returned ${res.status}`);
 				// Don't strand the user on a button-less page — starting a share
@@ -600,7 +605,11 @@
 			applyStatus(data.status, data.trackedSeconds, data.totalActiveSeconds);
 		} catch (e) {
 			setState("idle");
-			error(`Could not load session status: ${e.message}`);
+			error(e.name === "AbortError"
+				? "Couldn't reach Lookout to check this session — you can still try starting a recording."
+				: `Could not load session status: ${e.message}`);
+		} finally {
+			clearTimeout(timeout);
 		}
 	}
 

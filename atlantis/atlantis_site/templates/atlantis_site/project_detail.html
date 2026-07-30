@@ -78,7 +78,7 @@
         </div>
         <p class="section-hint">
             A timelapse screenshots your screen about once a minute while you work. It's the only
-            way time gets logged &mdash; the hours land on whichever journal entry you attach it to.
+            way time gets logged. The hours land on whichever journal entry you attach it to.
         </p>
         {% if timelapses %}
             <div class="timelapse-grid">
@@ -114,7 +114,7 @@
                             {% if timelapse.journal %}
                                 <p class="timelapse-meta">Attached to &ldquo;{{ timelapse.journal.title }}&rdquo;</p>
                             {% elif timelapse.is_complete %}
-                                <p class="timelapse-meta">Not attached yet &mdash; this time isn't counted until it is.</p>
+                                <p class="timelapse-meta">Not attached yet; this time isn't counted until it is.</p>
                                 <a href="#new-journal" class="card-detail-link">Attach to an entry &rarr;</a>
                             {% elif timelapse.is_recordable %}
                                 <a href="{% url 'record_timelapse' timelapse.pk %}" class="card-detail-link">Continue recording &rarr;</a>
@@ -142,7 +142,7 @@
                     <legend>Attach your timelapses</legend>
                     {% if attachable_timelapses %}
                         <p class="picker-hint">
-                            Pick at least one &mdash; the entry logs the total of whatever you attach here,
+                            Pick at least one. The entry logs the total of whatever you attach here,
                             and each timelapse can only be used once.
                         </p>
                         <div class="picker-grid">
@@ -167,12 +167,12 @@
                         </div>
                         <p class="picker-total"><span id="attach_summary">Nothing attached yet.</span></p>
                         <p class="picker-error" id="attach_error" hidden>
-                            Attach at least one timelapse before submitting &mdash; an entry with no tracked time can't be saved.
+                            Attach at least one timelapse before submitting. An entry with no tracked time can't be saved.
                         </p>
                     {% else %}
                         <p class="picker-hint">
-                            You have no finished timelapses to attach. <a href="#timelapses">Record one first</a> &mdash;
-                            time can only come from a timelapse, so an entry can't be submitted without one.
+                            You have no finished timelapses to attach. <a href="#timelapses">Record one first</a>.
+                            Time can only come from a timelapse, so an entry can't be submitted without one.
                         </p>
                     {% endif %}
                 </fieldset>
@@ -197,7 +197,7 @@
                 {% if project.locked %}
                     <button type="button" class="tl-btn" disabled title="You can't make journals on a locked project.">Submit entry!</button>
                 {% elif not attachable_timelapses %}
-                    <button type="button" class="tl-btn" disabled title="Finish a timelapse first — it's where the entry's time comes from.">Submit entry!</button>
+                    <button type="button" class="tl-btn" disabled title="Finish a timelapse first. It's where the entry's time comes from.">Submit entry!</button>
                 {% else %}
                     <button type="submit" class="tl-btn tl-btn--primary">Submit entry!</button>
                 {% endif %}
@@ -320,9 +320,6 @@
     });
 </script>
 <script>
-    // Timelapse picker: keep a running total of the time being attached, and stop
-    // the form from being submitted with none selected — the server rejects that,
-    // and the round trip would throw away the text and files already filled in.
     (function () {
         const picker = document.getElementById('timelapse_picker');
         const form = document.getElementById('new-journal');
@@ -354,7 +351,7 @@
                 picker.classList.remove('is-invalid');
                 errorMessage.hidden = true;
             } else {
-                summary.textContent = 'Nothing attached yet — this entry would log no time.';
+                summary.textContent = 'Nothing attached yet. This entry would log no time.';
             }
         }
 
@@ -371,7 +368,6 @@
     })();
 </script>
 <script>
-    // Preview a timelapse in a popup rather than inlining a player into the form.
     (function () {
         const modal = document.getElementById('timelapsePreviewModal');
         const triggers = document.querySelectorAll('.picker-preview');
