@@ -9,7 +9,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
-from ..models import AuditLog, Print, Ship, Item, Order, Profile, detect_editor
+from ..models import AuditLog, LookoutSession, Print, Ship, Item, Order, Profile, detect_editor
 
 from functools import wraps
 
@@ -55,6 +55,19 @@ def layers_for_minutes(minutes):
     tenths_of_hour = minutes // 6
     return round(tenths_of_hour * 0.5)
 
+# All reported time comes from Lookout timelapses linked to journal entries.
+# Nothing is self-reported, so these are the only ways to total time up.
+def tracked_seconds_for_journals(journals):
+    return LookoutSession.objects.filter(journal__in=journals).aggregate(
+        total=Sum("tracked_seconds")
+    )["total"] or 0
+
+def tracked_minutes_for_journals(journals):
+    return tracked_seconds_for_journals(journals) // 60
+
+def format_minutes(minutes):
+    return f"{minutes // 60}h {minutes % 60}m"
+
 def build_journal_timeline(journals, ships):
     events = []
     for journal in journals:
@@ -64,12 +77,12 @@ def build_journal_timeline(journals, ships):
             "sort_key": journal.created_at,
         })
     for ship in ships:
-        total_time = sum(j.time_spent for j in ship.journals.all())
+        total_time = tracked_minutes_for_journals(ship.journals.all())
         events.append({
             "type": "ship",
             "ship": ship,
             "time_spent": total_time,
-            "time_display": f"{total_time // 60}h {total_time % 60}m",
+            "time_display": format_minutes(total_time),
             "feedback": getattr(ship, "latest_feedback", ""),
             "sort_key": ship.created_at,
         })

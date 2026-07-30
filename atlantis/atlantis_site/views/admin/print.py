@@ -4,7 +4,6 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Sum
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 
@@ -19,6 +18,8 @@ from ..helpers import (
     grant_print_rewards,
     finalized_print_grams,
     get_print_reward_item,
+    tracked_minutes_for_journals,
+    format_minutes,
     PRINT_REWARD_GRAMS,
 )
 
@@ -41,11 +42,13 @@ def print_dash(request):
         .order_by("-created_at")
     )
     for ship in queued_ships:
-        total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
-        ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
+        ship.time_spent_display = format_minutes(
+            tracked_minutes_for_journals(ship.project.journals.all())
+        )
     for print in claimed_prints:
-        total_time = print.ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
-        print.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
+        print.time_spent_display = format_minutes(
+            tracked_minutes_for_journals(print.ship.project.journals.all())
+        )
     return render(request, "root/print.html", {
         "claimed_prints": claimed_prints,
         "ships": queued_ships,

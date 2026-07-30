@@ -4,14 +4,14 @@ from django.contrib.auth import get_user_model
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db.models import Q, Sum
+from django.db.models import Q
 from django.db import transaction
 from django.contrib import messages
 
 import os
 
 from ...models import Project
-from ..helpers import check_perms, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url
+from ..helpers import check_perms, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, tracked_minutes_for_journals, format_minutes
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer"])
@@ -115,8 +115,9 @@ def manage_projects(request):
         )
 
     for project in projects:
-        total_time = project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
-        project.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
+        project.time_spent_display = format_minutes(
+            tracked_minutes_for_journals(project.journals.all())
+        )
         project.journal_count = project.journals.count()
         latest_ship = project.ships.order_by("-created_at").first()
         project.status_display = latest_ship.get_status_display() if latest_ship else "No ships yet"

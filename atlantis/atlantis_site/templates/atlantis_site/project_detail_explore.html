@@ -68,7 +68,7 @@
                 {% else %}
                     <div class="journal-card">
                         <h3>{{ event.journal.title }}</h3>
-                        <p>{{ event.journal.time_spent }} minutes</p>
+                        <p>{{ event.journal.tracked_display }} tracked</p>
                         <p id="journal-content">{{ event.journal.text }}</p>
                         <div class="journal-media">
                             {% if event.journal.image_url %}

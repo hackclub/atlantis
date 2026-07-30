@@ -99,7 +99,20 @@
             <form action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data">
                 {% csrf_token %}
                 <input type="text" name="title" placeholder="Title" required>
-                <input type="text" name="time_spent" placeholder="Time Spent (minutes)" requried>
+                <fieldset class="timelapse-picker">
+                    <legend>Attach your timelapses (this is where your time comes from)</legend>
+                    {% if attachable_timelapses %}
+                        {% for timelapse in attachable_timelapses %}
+                            <label>
+                                <input type="checkbox" name="timelapses" value="{{ timelapse.pk }}">
+                                {{ timelapse.tracked_display }} &middot; recorded {{ timelapse.created_at }}
+                            </label>
+                            <br>
+                        {% endfor %}
+                    {% else %}
+                        <p>No finished timelapses available. Record one above &mdash; time can only come from a timelapse.</p>
+                    {% endif %}
+                </fieldset>
                 <p>Characters: <span id="character_count">0</span> (min 200, max 2000)</p>
                 <textarea
                     maxlength="2000"
@@ -134,7 +147,7 @@
                 {% else %}
                     <div class="journal-card">
                         <h3>{{ event.journal.title }}</h3>
-                        <p>{{ event.journal.time_spent }} minutes</p>
+                        <p>{{ event.journal.tracked_display }} tracked</p>
                         <p id="journal-content">{{ event.journal.text }}</p>
                         <div class="journal-media">
                             {% if event.journal.image_url %}

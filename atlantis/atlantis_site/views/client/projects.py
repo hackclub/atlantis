@@ -3,28 +3,38 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Sum
 from django.core.files.storage import default_storage
 from django.db import transaction
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404
-from math import floor
 
 from botocore.exceptions import ClientError
 
 import mimetypes
 
 from ...models import (
-    Project, Ship, Print, Journal, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
+    Project, Ship, Print, Journal, LookoutSession, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
 )
 from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
     sniff_image_extension, random_storage_key, build_journal_timeline,
-    notify_followers, rate_limit,
+    notify_followers, rate_limit, tracked_minutes_for_journals, format_minutes,
 )
 
 import os
+
+def _attachable_timelapses(project, user, ids=None):
+    """Finished timelapses the user can still attach to a new journal entry."""
+    qs = LookoutSession.objects.filter(
+        project=project,
+        owner=user,
+        status=LookoutSession.Status.COMPLETE,
+        journal__isnull=True,
+    )
+    if ids is not None:
+        qs = qs.filter(id__in=ids)
+    return qs
 
 @login_required
 def projects(request):
@@ -197,8 +207,7 @@ def project_detail(request, project_id):
     ships = project.ships.order_by('-created_at')
     journals = project.journals.order_by('-id')
 
-    total_time = journals.aggregate(total=Sum('time_spent'))['total'] or 0
-    time_spent = f"{floor(total_time / 60)}h {total_time % 60}m"
+    time_spent = format_minutes(tracked_minutes_for_journals(journals))
 
     latest_ship = ships.first()
     ship_pending = latest_ship is not None and latest_ship.status not in (Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED)
@@ -249,6 +258,7 @@ def project_detail(request, project_id):
     timeline = build_journal_timeline(journals, ships)
 
     timelapses = project.timelapses.filter(owner=request.user)
+    attachable_timelapses = _attachable_timelapses(project, request.user)
 
     return render(request, "atlantis_site/project_detail.html", {
         "project": project,
@@ -264,6 +274,7 @@ def project_detail(request, project_id):
         "allowed_editors": ALLOWED_EDITORS,
         "allowed_editor_extensions": ",".join(EDITOR_FILE_EXTENSIONS.keys()),
         "timelapses": timelapses,
+        "attachable_timelapses": attachable_timelapses,
     })
 
 @login_required
@@ -286,8 +297,7 @@ def project_detail_explore(request, project_id):
     ships = project.ships.order_by("-created_at")
     journals = project.journals.order_by("-id")
 
-    total_time = journals.aggregate(total=Sum('time_spent'))['total'] or 0
-    time_spent = f"{floor(total_time / 60)}h {total_time % 60}m"
+    time_spent = format_minutes(tracked_minutes_for_journals(journals))
 
     if project.printablesUrl:
         try:
@@ -356,20 +366,23 @@ def create_journal(request, project_id):
     if project.locked:
         messages.error(request, "You cannot create a journal on a locked project.")
         return redirect("projects")
-    time_spent_raw = request.POST.get("time_spent", "0").strip()
-    try:
-        time_spent = int(time_spent_raw)
 
-        if time_spent > 240:
-            messages.error(request, "Time spent must not be greater than 4 hours!")
-            return redirect("project_detail", project_id=project_id)
-        if time_spent < 30:
-            messages.error(request, "You must spend at least 30 minutes on your journal entry!")
-            return redirect("project_detail", project_id=project_id)
+    # Time is never self-reported — an entry's time is the sum of the Lookout
+    # timelapses attached to it, so at least one is required.
+    try:
+        timelapse_ids = {int(raw) for raw in request.POST.getlist("timelapses")}
     except ValueError:
-        messages.error(request, "Journal time spent must be an integer!")
+        messages.error(request, "Invalid timelapse selection.")
         return redirect("project_detail", project_id=project_id)
-    
+
+    if not timelapse_ids:
+        messages.error(request, "You must attach at least one finished timelapse to your journal entry!")
+        return redirect("project_detail", project_id=project_id)
+
+    if _attachable_timelapses(project, request.user, timelapse_ids).count() != len(timelapse_ids):
+        messages.error(request, "One or more of those timelapses can't be attached. Refresh and try again.")
+        return redirect("project_detail", project_id=project_id)
+
     title = request.POST.get("title", "").strip()
     text = request.POST.get("text", "").strip()
 
@@ -411,14 +424,22 @@ def create_journal(request, project_id):
 
     # Store the object keys (not URLs) — the bucket is private and served
     # through serve_media.
-    Journal.objects.create(
-        project=project,
-        time_spent=time_spent,
-        title=title,
-        text=text,
-        image_url=image_key,
-        model_url=model_key
-    )
+    with transaction.atomic():
+        available = _attachable_timelapses(
+            project, request.user, timelapse_ids
+        ).select_for_update()
+        if available.count() != len(timelapse_ids):
+            messages.error(request, "One or more of those timelapses can't be attached. Refresh and try again.")
+            return redirect("project_detail", project_id=project_id)
+
+        journal = Journal.objects.create(
+            project=project,
+            title=title,
+            text=text,
+            image_url=image_key,
+            model_url=model_key
+        )
+        available.update(journal=journal)
 
     notify_followers(
         request,
@@ -459,7 +480,7 @@ def ship_project(request, project_id):
         messages.error(request, "You cannot reship until your most recent ship has been finalized or rejected.")
         return redirect("project_detail", project_id=project_id)
 
-    unassigned_time = unassigned_journals.aggregate(total=Sum('time_spent'))['total'] or 0
+    unassigned_time = tracked_minutes_for_journals(unassigned_journals)
     if latest_ship:
         if unassigned_time <= 120:
             messages.error(request, "Can't ship again without at least 2 hours of work!")

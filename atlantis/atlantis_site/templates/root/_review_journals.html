@@ -7,7 +7,17 @@
         {% else %}
             <div class="journal-card">
                 <h3>{{ event.journal.title }}</h3>
-                <p>{{ event.journal.time_spent }} minutes</p>
+                <p>{{ event.journal.tracked_display }} tracked</p>
+                <ul class="journal-timelapses">
+                    {% for timelapse in event.journal.timelapses.all %}
+                        <li>
+                            {{ timelapse.tracked_display }} &middot;
+                            <a href="{{ timelapse.video_url }}" target="_blank" rel="noreferrer noopener">timelapse</a>
+                        </li>
+                    {% empty %}
+                        <li>No timelapse attached &mdash; no verifiable time.</li>
+                    {% endfor %}
+                </ul>
                 <p id="journal-content">{{ event.journal.text }}</p>
                 <div class="journal-media">
                     {% if event.journal.image_url %}

@@ -286,7 +286,6 @@ class Journal(models.Model):
 		null=True
 	)
 
-	time_spent = models.IntegerField()
 	created_at = models.DateTimeField(auto_now_add=True)
 	title = models.CharField(max_length=100)
 	text = models.CharField(max_length=2000)
@@ -300,6 +299,19 @@ class Journal(models.Model):
 	@property
 	def model_display_url(self):
 		return media_url(self.model_url)
+
+	@property
+	def tracked_seconds(self):
+		return self.timelapses.aggregate(total=models.Sum("tracked_seconds"))["total"] or 0
+
+	@property
+	def tracked_minutes(self):
+		return self.tracked_seconds // 60
+
+	@property
+	def tracked_display(self):
+		minutes = self.tracked_minutes
+		return f"{minutes // 60}h {minutes % 60}m"
 
 # lookout timelapse recording sessions
 class LookoutSession(models.Model):
@@ -321,6 +333,13 @@ class LookoutSession(models.Model):
 		settings.AUTH_USER_MODEL,
 		on_delete=models.CASCADE,
 		related_name="timelapses"
+	)
+	journal = models.ForeignKey(
+		Journal,
+		on_delete=models.SET_NULL,
+		related_name="timelapses",
+		null=True,
+		blank=True
 	)
 
 	session_id = models.CharField(max_length=64, unique=True)
@@ -358,6 +377,10 @@ class LookoutSession(models.Model):
 	@property
 	def is_complete(self):
 		return self.status == self.Status.COMPLETE
+
+	@property
+	def is_attachable(self):
+		return self.is_complete and self.journal_id is None
 
 	@property
 	def tracked_display(self):

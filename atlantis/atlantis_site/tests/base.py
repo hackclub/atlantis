@@ -1,4 +1,5 @@
 import io
+import itertools
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -9,7 +10,7 @@ from django.test import TestCase, override_settings
 
 from PIL import Image
 
-from ..models import Journal, Profile, Project, Ship
+from ..models import Journal, LookoutSession, Profile, Project, Ship
 
 User = get_user_model()
 
@@ -60,7 +61,33 @@ def make_project(owner, shippable=False, **kwargs):
 	return Project.objects.create(owner=owner, **defaults)
 
 
+_timelapse_seq = itertools.count(1)
+
+
+def make_timelapse(project, journal=None, minutes=60, owner=None, **kwargs):
+	"""Create a finished Lookout session — the only source of tracked time."""
+	n = next(_timelapse_seq)
+	defaults = {
+		"session_id": f"session-{n}",
+		"token": f"token-{n}",
+		"status": LookoutSession.Status.COMPLETE,
+		"tracked_seconds": minutes * 60,
+	}
+	defaults.update(kwargs)
+	return LookoutSession.objects.create(
+		project=project,
+		owner=owner if owner is not None else project.owner,
+		journal=journal,
+		**defaults,
+	)
+
+
 def make_journal(project, ship=None, time_spent=60, **kwargs):
+	"""Create a journal entry whose time comes from an attached timelapse.
+
+	`time_spent` is in minutes and is realised as a Lookout session, since
+	journals have no self-reported time of their own.
+	"""
 	defaults = {
 		"title": "Journal entry",
 		"text": "x" * 200,
@@ -68,7 +95,10 @@ def make_journal(project, ship=None, time_spent=60, **kwargs):
 		"model_url": "https://example.com/model.stl",
 	}
 	defaults.update(kwargs)
-	return Journal.objects.create(project=project, ship=ship, time_spent=time_spent, **defaults)
+	journal = Journal.objects.create(project=project, ship=ship, **defaults)
+	if time_spent:
+		make_timelapse(project, journal=journal, minutes=time_spent)
+	return journal
 
 
 def make_ship(project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(120, 120)):

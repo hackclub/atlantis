@@ -1,9 +1,10 @@
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 
-from ..models import Journal, Project, Ship
+from ..models import Journal, LookoutSession, Project, Ship
 from .base import (
 	VALID_EDITOR_LINK,
 	VALID_PRINTABLES_URL,
@@ -13,6 +14,7 @@ from .base import (
 	make_journal,
 	make_project,
 	make_ship,
+	make_timelapse,
 	make_user,
 	message_texts,
 	stl_upload,
@@ -329,9 +331,12 @@ class CreateJournalTests(BaseTestCase):
 		self.project = make_project(self.user)
 		self.client.force_login(self.user)
 
-	def _create(self, project=None, **overrides):
+	def _create(self, project=None, timelapses=None, **overrides):
+		project = project or self.project
+		if timelapses is None:
+			timelapses = [str(make_timelapse(project, minutes=60).pk)]
 		data = {
-			"time_spent": "60",
+			"timelapses": timelapses,
 			"title": "Progress update",
 			"text": "x" * 300,
 			"image": image_upload(),
@@ -339,7 +344,6 @@ class CreateJournalTests(BaseTestCase):
 		}
 		data.update(overrides)
 		data = {k: v for k, v in data.items() if v is not None}
-		project = project or self.project
 		return self.client.post(reverse("create_journal", args=[project.id]), data)
 
 	def test_get_redirects_without_creating(self):
@@ -353,7 +357,7 @@ class CreateJournalTests(BaseTestCase):
 
 		journal = Journal.objects.get()
 		self.assertEqual(journal.project, self.project)
-		self.assertEqual(journal.time_spent, 60)
+		self.assertEqual(journal.tracked_minutes, 60)
 		self.assertEqual(journal.title, "Progress update")
 		self.assertIsNone(journal.ship)
 		# Stored as private-bucket object keys, not public URLs.
@@ -385,13 +389,60 @@ class CreateJournalTests(BaseTestCase):
 		self._create()
 		self.assertEqual(Journal.objects.count(), 0)
 
-	def test_time_spent_boundaries(self):
-		cases = {"29": 0, "30": 1, "240": 1, "241": 0, "abc": 0, "": 0}
-		for raw, created in cases.items():
-			with self.subTest(time_spent=raw):
-				Journal.objects.all().delete()
-				self._create(time_spent=raw)
-				self.assertEqual(Journal.objects.count(), created)
+	def test_requires_at_least_one_timelapse(self):
+		response = self._create(timelapses=[])
+		self.assertEqual(Journal.objects.count(), 0)
+		self.assertIn(
+			"You must attach at least one finished timelapse to your journal entry!",
+			message_texts(response),
+		)
+
+	def test_rejects_non_integer_timelapse_ids(self):
+		response = self._create(timelapses=["abc"])
+		self.assertEqual(Journal.objects.count(), 0)
+		self.assertIn("Invalid timelapse selection.", message_texts(response))
+
+	def test_time_is_the_sum_of_attached_timelapses(self):
+		ids = [
+			str(make_timelapse(self.project, minutes=90).pk),
+			str(make_timelapse(self.project, minutes=45).pk),
+		]
+		self._create(timelapses=ids)
+		self.assertEqual(Journal.objects.get().tracked_minutes, 135)
+
+	def test_rejects_unfinished_timelapse(self):
+		timelapse = make_timelapse(
+			self.project, minutes=60, status=LookoutSession.Status.ACTIVE
+		)
+		self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 0)
+
+	def test_rejects_timelapse_from_another_project(self):
+		other = make_project(self.user, title="Other")
+		timelapse = make_timelapse(other, minutes=60)
+		self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 0)
+
+	def test_rejects_another_users_timelapse(self):
+		timelapse = make_timelapse(
+			self.project, minutes=60, owner=make_user("stranger")
+		)
+		self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 0)
+
+	def test_cannot_reuse_an_already_attached_timelapse(self):
+		timelapse = make_timelapse(self.project, minutes=60)
+		self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 1)
+
+		# Clear the create_journal rate limit so the reuse guard is what's tested.
+		cache.clear()
+		response = self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 1)
+		self.assertIn(
+			"One or more of those timelapses can't be attached. Refresh and try again.",
+			message_texts(response),
+		)
 
 	def test_text_length_boundaries(self):
 		cases = {199: 0, 200: 1, 2000: 1, 2001: 0}
@@ -701,7 +752,7 @@ class FollowerNotificationTests(BaseTestCase):
 		self.client.post(
 			reverse("create_journal", args=[self.project.id]),
 			{
-				"time_spent": "60",
+				"timelapses": [str(make_timelapse(self.project, minutes=60).pk)],
 				"title": "Update",
 				"text": "x" * 300,
 				"image": image_upload(),
