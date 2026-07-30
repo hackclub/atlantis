@@ -66,55 +66,119 @@
         {% endif %}
     </div>
     {% if project.owner == user %}
-    <div class="timelapse-section">
-        <h2>Timelapses</h2>
-        {% if not project.locked %}
-            <form action="{% url 'start_timelapse' project.id %}" method="post">
-                {% csrf_token %}
-                <button type="submit">Record a timelapse</button>
-            </form>
-        {% endif %}
+    <div class="timelapse-section" id="timelapses">
+        <div class="section-head">
+            <h2>Timelapses</h2>
+            {% if not project.locked %}
+                <form action="{% url 'start_timelapse' project.id %}" method="post">
+                    {% csrf_token %}
+                    <button type="submit" class="tl-btn tl-btn--primary">Record a timelapse</button>
+                </form>
+            {% endif %}
+        </div>
+        <p class="section-hint">
+            A timelapse screenshots your screen about once a minute while you work. It's the only
+            way time gets logged &mdash; the hours land on whichever journal entry you attach it to.
+        </p>
         {% if timelapses %}
-            {% for timelapse in timelapses %}
-                <div class="timelapse-card">
-                    <p>Status: {{ timelapse.get_status_display }} &middot; Tracked: {{ timelapse.tracked_display }}</p>
-                    {% if timelapse.is_complete %}
-                        <video controls poster="{{ timelapse.thumbnail_url }}" src="{{ timelapse.video_url }}" style="max-width:100%;"></video>
-                    {% elif timelapse.is_recordable %}
-                        <p><a href="{% url 'record_timelapse' timelapse.pk %}">Continue recording &rarr;</a></p>
-                    {% elif timelapse.status == "compiling" or timelapse.status == "stopped" %}
-                        <p><a href="{% url 'record_timelapse' timelapse.pk %}">View compilation progress &rarr;</a></p>
-                    {% endif %}
-                </div>
-                <br>
-            {% endfor %}
+            <div class="timelapse-grid">
+                {% for timelapse in timelapses %}
+                    <div class="timelapse-card">
+                        <div class="timelapse-thumb">
+                            {% if timelapse.is_complete %}
+                                <video controls preload="none" poster="{{ timelapse.thumbnail_url }}" src="{{ timelapse.video_url }}"></video>
+                            {% elif timelapse.status == "failed" %}
+                                <span>This one couldn't be turned into a video</span>
+                            {% elif timelapse.is_processing %}
+                                <span>Building your video&hellip;</span>
+                            {% else %}
+                                <span>No video until you finish recording</span>
+                            {% endif %}
+                        </div>
+                        <div class="timelapse-body">
+                            {% if timelapse.is_complete %}
+                                <span class="tl-pill tl-pill--done">Ready</span>
+                            {% elif timelapse.status == "failed" %}
+                                <span class="tl-pill tl-pill--error">Failed</span>
+                            {% elif timelapse.status == "active" %}
+                                <span class="tl-pill tl-pill--live"><span class="tl-dot"></span>Recording</span>
+                            {% elif timelapse.status == "paused" %}
+                                <span class="tl-pill tl-pill--paused">Paused</span>
+                            {% elif timelapse.is_processing %}
+                                <span class="tl-pill tl-pill--processing">Building video</span>
+                            {% else %}
+                                <span class="tl-pill">Not started</span>
+                            {% endif %}
+                            <div class="timelapse-time">{{ timelapse.tracked_display }}</div>
+                            <p class="timelapse-meta" title="{{ timelapse.created_at }}">Started {{ timelapse.created_at|timesince }} ago</p>
+                            {% if timelapse.journal %}
+                                <p class="timelapse-meta">Attached to &ldquo;{{ timelapse.journal.title }}&rdquo;</p>
+                            {% elif timelapse.is_complete %}
+                                <p class="timelapse-meta">Not attached yet &mdash; this time isn't counted until it is.</p>
+                                <a href="#new-journal" class="card-detail-link">Attach to an entry &rarr;</a>
+                            {% elif timelapse.is_recordable %}
+                                <a href="{% url 'record_timelapse' timelapse.pk %}" class="card-detail-link">Continue recording &rarr;</a>
+                            {% elif timelapse.is_processing %}
+                                <a href="{% url 'record_timelapse' timelapse.pk %}" class="card-detail-link">View progress &rarr;</a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
         {% else %}
-            <p>No timelapses yet!</p>
+            <div class="tl-empty">
+                <p>No timelapses yet. Record one while you work, then attach it to a journal entry to log the time.</p>
+            </div>
         {% endif %}
     </div>
     {% endif %}
     <div class="journal-section">
     <h2>Journal Entries</h2>
         {% if project.owner == user %}
-            <form action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data">
+            <form action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data" id="new-journal">
                 {% csrf_token %}
                 <input type="text" name="title" placeholder="Title" required>
-                <fieldset class="timelapse-picker">
-                    <legend>Attach your timelapses (this is where your time comes from)</legend>
+                <fieldset class="timelapse-picker" id="timelapse_picker">
+                    <legend>Attach your timelapses</legend>
                     {% if attachable_timelapses %}
-                        {% for timelapse in attachable_timelapses %}
-                            <label>
-                                <input type="checkbox" name="timelapses" value="{{ timelapse.pk }}">
-                                {{ timelapse.tracked_display }} &middot; recorded {{ timelapse.created_at }}
-                            </label>
-                            <br>
-                        {% endfor %}
+                        <p class="picker-hint">
+                            Pick at least one &mdash; the entry logs the total of whatever you attach here,
+                            and each timelapse can only be used once.
+                        </p>
+                        <div class="picker-grid">
+                            {% for timelapse in attachable_timelapses %}
+                                <div class="picker-option">
+                                    <label class="picker-choice">
+                                        <input type="checkbox" name="timelapses" value="{{ timelapse.pk }}" data-seconds="{{ timelapse.tracked_seconds }}">
+                                        <span class="picker-text">
+                                            <strong>{{ timelapse.tracked_display }}</strong>
+                                            <span title="{{ timelapse.created_at }}">recorded {{ timelapse.created_at|timesince }} ago</span>
+                                        </span>
+                                    </label>
+                                    <button
+                                        type="button"
+                                        class="tl-btn picker-preview"
+                                        data-video="{{ timelapse.video_url }}"
+                                        data-poster="{{ timelapse.thumbnail_url }}"
+                                        data-label="{{ timelapse.tracked_display }} &middot; recorded {{ timelapse.created_at|timesince }} ago"
+                                    >Preview</button>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <p class="picker-total"><span id="attach_summary">Nothing attached yet.</span></p>
+                        <p class="picker-error" id="attach_error" hidden>
+                            Attach at least one timelapse before submitting &mdash; an entry with no tracked time can't be saved.
+                        </p>
                     {% else %}
-                        <p>No finished timelapses available. Record one above &mdash; time can only come from a timelapse.</p>
+                        <p class="picker-hint">
+                            You have no finished timelapses to attach. <a href="#timelapses">Record one first</a> &mdash;
+                            time can only come from a timelapse, so an entry can't be submitted without one.
+                        </p>
                     {% endif %}
                 </fieldset>
                 <p>Characters: <span id="character_count">0</span> (min 200, max 2000)</p>
                 <textarea
+                    minlength="200"
                     maxlength="2000"
                     placeholder="What did you do?"
                     style="display:block; width: 500px; height: 500px; text-align: left; resize: none; padding: 10px; box-sizing: border-box; margin-bottom: 20px;"
@@ -131,9 +195,11 @@
                 <br>
                 <br>
                 {% if project.locked %}
-                    <button type="button" disabled title="You can't make journals on a locked project.">Submit entry!</button>
+                    <button type="button" class="tl-btn" disabled title="You can't make journals on a locked project.">Submit entry!</button>
+                {% elif not attachable_timelapses %}
+                    <button type="button" class="tl-btn" disabled title="Finish a timelapse first — it's where the entry's time comes from.">Submit entry!</button>
                 {% else %}
-                    <button type="submit">Submit entry!</button>
+                    <button type="submit" class="tl-btn tl-btn--primary">Submit entry!</button>
                 {% endif %}
             </form>
         {% endif %}
@@ -182,6 +248,21 @@
         <div class="modal-actions">
             <button type="button" id="cancelDeleteModal">Cancel</button>
             <button type="button" id="confirmDeleteModal" class="delete-button">Delete</button>
+        </div>
+    </div>
+</div>
+
+<div id="timelapsePreviewModal" class="modal hidden" aria-hidden="true" hidden>
+    <div class="modal-backdrop" id="timelapsePreviewBackdrop"></div>
+
+    <div class="modal-panel modal-panel--wide" role="dialog" aria-modal="true" aria-labelledby="timelapsePreviewTitle">
+        <h3 id="timelapsePreviewTitle">Timelapse preview</h3>
+        <div class="preview-stage">
+            <video id="timelapsePreviewVideo" controls preload="none"></video>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="tl-btn" id="closeTimelapsePreview">Close</button>
         </div>
     </div>
 </div>
@@ -237,5 +318,104 @@
             countDisplay.style.color = "red"
         }
     });
+</script>
+<script>
+    // Timelapse picker: keep a running total of the time being attached, and stop
+    // the form from being submitted with none selected — the server rejects that,
+    // and the round trip would throw away the text and files already filled in.
+    (function () {
+        const picker = document.getElementById('timelapse_picker');
+        const form = document.getElementById('new-journal');
+        if (!picker || !form) return;
+
+        const boxes = Array.from(picker.querySelectorAll('input[name="timelapses"]'));
+        if (!boxes.length) return;
+
+        const summary = document.getElementById('attach_summary');
+        const errorMessage = document.getElementById('attach_error');
+
+        function update() {
+            let seconds = 0;
+            let count = 0;
+            boxes.forEach((box) => {
+                box.closest('.picker-option').classList.toggle('is-checked', box.checked);
+                if (box.checked) {
+                    seconds += parseInt(box.dataset.seconds || '0', 10);
+                    count += 1;
+                }
+            });
+
+            if (count) {
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                summary.innerHTML = 'Attaching <span class="picker-total-value">'
+                    + hours + 'h ' + minutes + 'm</span> from ' + count
+                    + (count === 1 ? ' timelapse.' : ' timelapses.');
+                picker.classList.remove('is-invalid');
+                errorMessage.hidden = true;
+            } else {
+                summary.textContent = 'Nothing attached yet — this entry would log no time.';
+            }
+        }
+
+        boxes.forEach((box) => box.addEventListener('change', update));
+        update();
+
+        form.addEventListener('submit', (event) => {
+            if (boxes.some((box) => box.checked)) return;
+            event.preventDefault();
+            picker.classList.add('is-invalid');
+            errorMessage.hidden = false;
+            picker.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        });
+    })();
+</script>
+<script>
+    // Preview a timelapse in a popup rather than inlining a player into the form.
+    (function () {
+        const modal = document.getElementById('timelapsePreviewModal');
+        const triggers = document.querySelectorAll('.picker-preview');
+        if (!modal || !triggers.length) return;
+
+        const video = document.getElementById('timelapsePreviewVideo');
+        const title = document.getElementById('timelapsePreviewTitle');
+        const backdrop = document.getElementById('timelapsePreviewBackdrop');
+        const closeBtn = document.getElementById('closeTimelapsePreview');
+        let lastTrigger = null;
+
+        function openPreview(trigger) {
+            lastTrigger = trigger;
+            title.textContent = trigger.dataset.label || 'Timelapse preview';
+            video.poster = trigger.dataset.poster || '';
+            video.src = trigger.dataset.video || '';
+            modal.classList.remove('hidden');
+            modal.hidden = false;
+            modal.setAttribute('aria-hidden', 'false');
+            closeBtn.focus();
+        }
+
+        function closePreview() {
+            // Drop the source so a closed popup isn't still streaming.
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+            modal.classList.add('hidden');
+            modal.hidden = true;
+            modal.setAttribute('aria-hidden', 'true');
+            if (lastTrigger) lastTrigger.focus();
+        }
+
+        triggers.forEach((trigger) => {
+            trigger.addEventListener('click', () => openPreview(trigger));
+        });
+        closeBtn.addEventListener('click', closePreview);
+        backdrop.addEventListener('click', closePreview);
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+                closePreview();
+            }
+        });
+    })();
 </script>
 {% endblock %}

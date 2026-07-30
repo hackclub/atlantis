@@ -8,30 +8,74 @@
 <div class="content">
     {% include "root/_messages.html" %}
 
-    <div class="project-info">
-        <div class="card-row">
-            <div class="card-main">
-                <h1>Record a timelapse</h1>
-                <p>Project: <a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></p>
-                <p id="lookout-status">Status: loading…</p>
-                <p>Tracked time: <span id="lookout-timer">00:00:00</span> <span id="lookout-mode" style="opacity:0.6;"></span></p>
+    <p class="tl-breadcrumb"><a href="{% url 'project_detail' project.id %}">&larr; Back to {{ project.title }}</a></p>
+
+    <div class="recorder">
+        <div class="recorder-head">
+            <h1>Record a timelapse</h1>
+            <span class="tl-pill" id="lookout-pill">Loading&hellip;</span>
+        </div>
+        <p class="recorder-hint" id="lookout-hint">Checking where this session left off&hellip;</p>
+
+        <div class="recorder-alert" id="lookout-alert" hidden>
+            <span id="lookout-alert-text"></span>
+            <button type="button" class="tl-btn tl-btn--ghost" id="lookout-alert-dismiss">Dismiss</button>
+        </div>
+
+        <div class="recorder-body">
+            <div class="recorder-stage">
+                <p class="stage-empty" id="lookout-stage-empty">
+                    A preview of whatever you share shows up here, so you can check you picked the
+                    right window before you start working.
+                </p>
+                <video id="lookout-preview" muted playsinline hidden></video>
+                <div class="stage-badge" id="lookout-badge" hidden><span class="tl-dot"></span> Recording</div>
+                <div class="stage-flash" id="lookout-flash"></div>
+            </div>
+
+            <div class="recorder-side">
+                <div class="tl-stat">
+                    <div class="tl-stat-value" id="lookout-timer">00:00:00</div>
+                    <div class="tl-stat-label">Tracked time</div>
+                    <div class="tl-stat-sub">This is the time your journal entry will log.</div>
+                    <div class="tl-stat-sub" id="lookout-mode" hidden></div>
+                </div>
+                <div class="tl-stat">
+                    <div class="tl-stat-value" id="lookout-shots">0</div>
+                    <div class="tl-stat-label">Screenshots captured</div>
+                    <div class="tl-stat-sub" id="lookout-next">Next one: &mdash;</div>
+                </div>
             </div>
         </div>
 
-        <div class="card-controls" style="display:flex; gap:8px; flex-wrap:wrap;">
-            <button type="button" id="lookout-start">Start recording</button>
-            <button type="button" id="lookout-reshare" style="display:none;">Re-share screen</button>
-            <button type="button" id="lookout-pause" style="display:none;">Pause</button>
-            <button type="button" id="lookout-resume" style="display:none;">Resume</button>
-            <button type="button" id="lookout-stop" style="display:none; color:red;">Stop &amp; compile</button>
+        <div class="recorder-actions">
+            <button type="button" class="tl-btn tl-btn--primary" id="lookout-start" hidden>Share screen &amp; start</button>
+            <button type="button" class="tl-btn tl-btn--primary" id="lookout-reshare" hidden>Re-share my screen</button>
+            <button type="button" class="tl-btn" id="lookout-pause" hidden>Pause</button>
+            <button type="button" class="tl-btn tl-btn--primary" id="lookout-resume" hidden>Resume</button>
+            <button type="button" class="tl-btn tl-btn--danger" id="lookout-stop" hidden>Finish &amp; build video</button>
         </div>
 
-        <div id="lookout-video" style="margin-top:16px;"></div>
+        <div class="recorder-result" id="lookout-result" hidden>
+            <h2>Your timelapse is ready</h2>
+            <div id="lookout-video"></div>
+            <p class="recorder-next">
+                It won't count towards your project until you attach it to a journal entry.
+                <a href="{% url 'project_detail' project.id %}#new-journal">Attach it now &rarr;</a>
+            </p>
+        </div>
 
-        <h3 style="margin-top:16px;">Activity log</h3>
-        <div id="lookout-log" style="max-height:220px; overflow-y:auto; font-family:monospace; font-size:12px; border:1px solid #ccc; padding:8px; border-radius:6px; background:rgba(0,0,0,0.03);"></div>
+        <ul class="recorder-facts">
+            <li>One screenshot of the screen you share is taken roughly every minute, then stitched into a video.</li>
+            <li>Time is credited by Lookout from those screenshots &mdash; it's the only way time gets logged, so it can't be typed in by hand.</li>
+            <li>Keep this tab open while you work. You can switch to another window; just don't close this one.</li>
+            <li>Pause any time. Resuming asks you to share your screen again &mdash; browsers drop the share when you leave.</li>
+        </ul>
 
-        <p style="margin-top:16px;"><a href="{% url 'project_detail' project.id %}">Back to project</a></p>
+        <details class="recorder-log">
+            <summary>Technical details</summary>
+            <div id="lookout-log"></div>
+        </details>
     </div>
 </div>
 

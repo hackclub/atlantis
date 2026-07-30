@@ -36,17 +36,29 @@
 	// --- DOM ----------------------------------------------------------------
 	const el = (id) => document.getElementById(id);
 	const ui = {
-		status: el("lookout-status"),
+		pill: el("lookout-pill"),
+		hint: el("lookout-hint"),
 		timer: el("lookout-timer"),
+		shots: el("lookout-shots"),
+		next: el("lookout-next"),
 		mode: el("lookout-mode"),
 		log: el("lookout-log"),
 		start: el("lookout-start"),
 		pause: el("lookout-pause"),
 		resume: el("lookout-resume"),
 		stop: el("lookout-stop"),
-		video: el("lookout-video"),
 		reshare: el("lookout-reshare"),
+		preview: el("lookout-preview"),
+		stageEmpty: el("lookout-stage-empty"),
+		badge: el("lookout-badge"),
+		flash: el("lookout-flash"),
+		result: el("lookout-result"),
+		video: el("lookout-video"),
+		alert: el("lookout-alert"),
+		alertText: el("lookout-alert-text"),
+		alertDismiss: el("lookout-alert-dismiss"),
 	};
+	const PAGE_TITLE = document.title;
 
 	// --- logging (visible + console; NEVER the token) -----------------------
 	function logLine(level, msg) {
@@ -62,7 +74,22 @@
 	}
 	function info(msg) { logLine("info", msg); console.info("[lookout]", msg); }
 	function warn(msg) { logLine("warn", msg); console.warn("[lookout]", msg); }
-	function error(msg) { logLine("error", msg); console.error("[lookout]", msg); }
+	function error(msg) {
+		logLine("error", msg);
+		console.error("[lookout]", msg);
+		// Failures cost the user tracked time — say so where they'll actually see it.
+		showAlert(msg);
+	}
+
+	// --- prominent, dismissible error banner ---------------------------------
+	function showAlert(msg) {
+		if (!ui.alert || !ui.alertText) return;
+		ui.alertText.textContent = msg;
+		ui.alert.hidden = false;
+	}
+	function hideAlert() {
+		if (ui.alert) ui.alert.hidden = true;
+	}
 
 	// --- small helpers ------------------------------------------------------
 	const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -102,6 +129,8 @@
 	let baseSeconds = 0;
 	let lastSyncMs = nowMs();
 	let tickId = null;
+	let shotCount = 0;
+	let nextCaptureAtMs = 0;
 
 	function formatTime(total) {
 		total = Math.max(0, Math.floor(total));
@@ -124,13 +153,44 @@
 	function renderTimer() {
 		if (ui.timer) ui.timer.textContent = formatTime(getDisplaySeconds());
 	}
+	function renderCountdown() {
+		if (!ui.next) return;
+		if (!recording || !nextCaptureAtMs) {
+			ui.next.textContent = "Next one: —";
+			return;
+		}
+		const left = Math.max(0, Math.round((nextCaptureAtMs - nowMs()) / 1000));
+		ui.next.textContent = left > 0 ? `Next one in ${left}s` : "Taking one now…";
+	}
+	function renderTick() {
+		renderTimer();
+		renderCountdown();
+	}
 	function startTicking() {
 		if (tickId) return;
-		tickId = setInterval(renderTimer, 1000);
+		tickId = setInterval(renderTick, 1000);
 	}
 	function stopTicking(snapToBase) {
 		if (tickId) { clearInterval(tickId); tickId = null; }
 		if (snapToBase && ui.timer) ui.timer.textContent = formatTime(baseSeconds);
+		nextCaptureAtMs = 0;
+		renderCountdown();
+	}
+
+	// --- screenshot counter (ratcheted like the timer) ----------------------
+	function setShotCount(n) {
+		if (typeof n !== "number" || n < shotCount) return;
+		shotCount = n;
+		if (ui.shots) ui.shots.textContent = String(shotCount);
+	}
+	function bumpShotCount() {
+		setShotCount(shotCount + 1);
+	}
+	function flashStage() {
+		if (!ui.flash) return;
+		ui.flash.classList.remove("is-flashing");
+		void ui.flash.offsetWidth; // restart the animation
+		ui.flash.classList.add("is-flashing");
 	}
 
 	// --- clock skew ---------------------------------------------------------
@@ -192,6 +252,13 @@
 	}
 
 	// --- screen capture -----------------------------------------------------
+	// The capture source doubles as the on-page preview, so the user can see
+	// exactly what's being recorded and catch a wrong window immediately.
+	function showPreview(on) {
+		if (ui.preview) ui.preview.hidden = !on;
+		if (ui.stageEmpty) ui.stageEmpty.hidden = on;
+	}
+
 	async function startShare() {
 		stream = await navigator.mediaDevices.getDisplayMedia({
 			video: { width: { max: 1920 }, height: { max: 1080 }, frameRate: { ideal: 1 } },
@@ -199,10 +266,12 @@
 		});
 		stream.getVideoTracks()[0].addEventListener("ended", onShareStopped);
 
-		video = document.createElement("video");
+		video = ui.preview || document.createElement("video");
 		video.srcObject = stream;
 		video.muted = true;
+		video.playsInline = true;
 		await video.play();
+		showPreview(true);
 	}
 
 	function stopShare() {
@@ -210,6 +279,8 @@
 			stream.getTracks().forEach((t) => t.stop());
 			stream = null;
 		}
+		if (ui.preview) ui.preview.srcObject = null;
+		showPreview(false);
 		video = null;
 	}
 
@@ -252,7 +323,10 @@
 		const { uploadUrl, screenshotId, nextExpectedAt, trackingMode, serverTime } =
 			await uploadUrlRes.json();
 		checkClockSkew(serverTime);
-		if (trackingMode && ui.mode) ui.mode.textContent = `tracking: ${trackingMode}`;
+		if (trackingMode && ui.mode) {
+			ui.mode.textContent = `Tracking mode: ${trackingMode}`;
+			ui.mode.hidden = false;
+		}
 
 		// 2. PUT the blob to the presigned R2 URL
 		await requestWithRetry("r2-put", () => fetch(uploadUrl, {
@@ -271,6 +345,13 @@
 		const confirm = await confirmRes.json();
 		checkClockSkew(confirm.serverTime);
 		onServerTrackedSeconds(confirm.trackedSeconds);
+		if (typeof confirm.screenshotCount === "number") {
+			setShotCount(confirm.screenshotCount);
+		} else {
+			bumpShotCount();
+		}
+		flashStage();
+		hideAlert();
 
 		return confirm.nextExpectedAt;
 	}
@@ -298,6 +379,8 @@
 			const parsed = Date.parse(nextExpectedAt);
 			if (!isNaN(parsed)) delay = Math.max(0, parsed - nowMs());
 		}
+		nextCaptureAtMs = nowMs() + delay;
+		renderCountdown();
 		loopTimer = setTimeout(loop, delay);
 	}
 
@@ -309,6 +392,8 @@
 	function stopLoop() {
 		recording = false;
 		if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
+		nextCaptureAtMs = 0;
+		renderCountdown();
 	}
 
 	// --- backend sync -------------------------------------------------------
@@ -334,16 +419,97 @@
 	}
 
 	// --- UI state application -----------------------------------------------
-	function setButtons({ start, pause, resume, stop }) {
-		const set = (btn, on) => { if (btn) btn.style.display = on ? "" : "none"; };
-		set(ui.start, start);
-		set(ui.pause, pause);
-		set(ui.resume, resume);
-		set(ui.stop, stop);
+	// One place that says, for each state: what it's called, what the user
+	// should do next, and which buttons that leaves them.
+	const STATES = {
+		loading: {
+			label: "Loading…", tone: "",
+			hint: "Checking where this session left off…",
+			buttons: {},
+		},
+		idle: {
+			label: "Not started", tone: "",
+			hint: "When you hit start, your browser asks which screen or window to share — "
+				+ "pick the one you'll be modelling in. Nothing is captured until you do.",
+			buttons: { start: true },
+		},
+		live: {
+			label: "Recording", tone: "live", dot: true,
+			hint: "You're being recorded. Go work — just leave this tab open, and don't close "
+				+ "the sharing bar your browser put up.",
+			buttons: { pause: true, stop: true },
+		},
+		paused: {
+			label: "Paused", tone: "paused",
+			hint: "Paused — no time is being tracked right now. Resume when you're back; "
+				+ "you'll be asked to share your screen again.",
+			buttons: { resume: true, stop: true },
+			stage: "Sharing is off while you're paused. Resume to see your screen here again.",
+		},
+		reshare: {
+			label: "Screen sharing stopped", tone: "warn",
+			hint: "This session is still open, but your browser is no longer sharing a screen, "
+				+ "so nothing is being captured. Re-share to pick the clock back up.",
+			buttons: { reshare: true, stop: true },
+			stage: "Nothing is being captured — re-share your screen to start it back up.",
+		},
+		processing: {
+			label: "Building your video", tone: "processing",
+			hint: "Your screenshots are being stitched into a timelapse. This usually takes a "
+				+ "minute or two — you can leave this page, it'll finish without you.",
+			buttons: {},
+			stage: "Recording finished. Stitching your screenshots together…",
+		},
+		done: {
+			label: "Ready", tone: "done",
+			hint: "All done. Your tracked time only counts once you attach this timelapse to a "
+				+ "journal entry.",
+			buttons: {},
+			stage: "This recording is finished — the video is below.",
+		},
+		failed: {
+			label: "Failed", tone: "error",
+			hint: "This session couldn't be turned into a video. Ask an organizer — they can "
+				+ "retry the compile without you losing the recording.",
+			buttons: {},
+			stage: "This recording couldn't be turned into a video.",
+		},
+	};
+
+	const DEFAULT_STAGE_TEXT = ui.stageEmpty ? ui.stageEmpty.textContent : "";
+
+	function setButtons(buttons) {
+		const set = (btn, on) => { if (btn) btn.hidden = !on; };
+		set(ui.start, buttons.start);
+		set(ui.pause, buttons.pause);
+		set(ui.resume, buttons.resume);
+		set(ui.stop, buttons.stop);
+		set(ui.reshare, buttons.reshare);
 	}
-	function setStatus(text) { if (ui.status) ui.status.textContent = text; }
+
+	function setState(name) {
+		const state = STATES[name] || STATES.idle;
+		if (ui.pill) {
+			ui.pill.className = "tl-pill" + (state.tone ? ` tl-pill--${state.tone}` : "");
+			ui.pill.textContent = "";
+			if (state.dot) {
+				const dot = document.createElement("span");
+				dot.className = "tl-dot";
+				ui.pill.appendChild(dot);
+			}
+			ui.pill.appendChild(document.createTextNode(state.label));
+		}
+		if (ui.hint) ui.hint.textContent = state.hint;
+		if (ui.stageEmpty) ui.stageEmpty.textContent = state.stage || DEFAULT_STAGE_TEXT;
+		setButtons(state.buttons);
+		if (ui.badge) ui.badge.hidden = name !== "live";
+		// Make the recording state visible from the tab strip, since the whole
+		// point is that the user is off working in another window.
+		document.title = name === "live" ? `● Recording — ${PAGE_TITLE}` : PAGE_TITLE;
+	}
 
 	function showVideo() {
+		if (ui.result) ui.result.hidden = false;
 		if (!ui.video) return;
 		// Permanent media redirect — safe to embed (presigned URLs expire).
 		ui.video.innerHTML = "";
@@ -351,7 +517,6 @@
 		v.controls = true;
 		v.src = `${BASE}/api/media/${SESSION_ID}/video.mp4`;
 		v.poster = `${BASE}/api/media/${SESSION_ID}/thumbnail.jpg`;
-		v.style.maxWidth = "100%";
 		ui.video.appendChild(v);
 	}
 
@@ -364,18 +529,20 @@
 			if (res.ok) {
 				const data = await res.json();
 				const st = data.status;
-				setStatus(`Status: ${st}`);
 				if (st === "complete") {
 					await syncBackend();
-					setStatus("Timelapse ready!");
+					setState("done");
+					stopTicking(true);
 					showVideo();
 					return;
 				}
 				if (st === "failed") {
+					setState("failed");
 					error("Compilation failed. An organizer can trigger a recompile.");
 					await syncBackend();
 					return;
 				}
+				setState("processing");
 			} else {
 				warn(`status poll returned ${res.status}`);
 			}
@@ -388,49 +555,51 @@
 	// Apply a status string to the whole UI (used on load + after transitions).
 	function applyStatus(status, tracked, totalActive) {
 		if (typeof tracked === "number") { baseSeconds = tracked; lastSyncMs = nowMs(); renderTimer(); }
-		setStatus(`Status: ${status}`);
 		switch (status) {
 			case "pending":
-				setButtons({ start: true, pause: false, resume: false, stop: false });
+				setState("idle");
 				break;
 			case "active":
-				setButtons({ start: false, pause: true, resume: false, stop: true });
 				// The screen-share MediaStream doesn't survive a refresh — prompt to re-share.
-				if (!stream) {
-					setButtons({ start: false, pause: true, resume: false, stop: true });
-					if (ui.reshare) ui.reshare.style.display = "";
-					setStatus("Recording is active — re-share your screen to continue.");
-				}
+				setState(stream ? "live" : "reshare");
 				break;
 			case "paused":
-				setButtons({ start: false, pause: false, resume: true, stop: true });
+				setState("paused");
 				break;
 			case "stopped":
 			case "compiling":
-				setButtons({ start: false, pause: false, resume: false, stop: false });
+				setState("processing");
 				pollCompilation();
 				break;
 			case "complete":
-				setButtons({ start: false, pause: false, resume: false, stop: false });
+				setState("done");
 				stopTicking(true);
 				showVideo();
 				break;
 			case "failed":
-				setButtons({ start: false, pause: false, resume: false, stop: false });
+				setState("failed");
 				error("This session failed to compile.");
 				break;
 			default:
-				setButtons({ start: true, pause: false, resume: false, stop: false });
+				setState("idle");
 		}
 	}
 
 	async function recoverFromServer() {
 		try {
 			const res = await fetch(`${BASE}/api/sessions/${TOKEN}`);
-			if (!res.ok) { warn(`session recovery returned ${res.status}`); return; }
+			if (!res.ok) {
+				warn(`session recovery returned ${res.status}`);
+				// Don't strand the user on a button-less page — starting a share
+				// works for a pending or an already-active session either way.
+				setState("idle");
+				return;
+			}
 			const data = await res.json();
+			setShotCount(data.screenshotCount);
 			applyStatus(data.status, data.trackedSeconds, data.totalActiveSeconds);
 		} catch (e) {
+			setState("idle");
 			error(`Could not load session status: ${e.message}`);
 		}
 	}
@@ -438,12 +607,11 @@
 	// --- event handlers -----------------------------------------------------
 	function onShareStopped() {
 		if (!recording) return;
-		warn("Screen sharing stopped. Pausing capture — resume and re-share to continue.");
 		stopLoop();
 		stopShare();
-		if (ui.reshare) ui.reshare.style.display = "";
-		setButtons({ start: false, pause: false, resume: true, stop: true });
 		stopTicking(false);
+		setState("reshare");
+		warn("Screen sharing stopped — capture is on hold until you re-share.");
 	}
 
 	async function onStart() {
@@ -453,10 +621,9 @@
 			error(`Screen share was not granted: ${e.message}`);
 			return;
 		}
+		hideAlert();
 		info("Screen shared. Recording started.");
-		if (ui.reshare) ui.reshare.style.display = "none";
-		setButtons({ start: false, pause: true, resume: false, stop: true });
-		setStatus("Status: recording");
+		setState("live");
 		startLoop();
 	}
 
@@ -467,9 +634,9 @@
 			error(`Screen share was not granted: ${e.message}`);
 			return;
 		}
+		hideAlert();
 		info("Screen re-shared. Resuming capture.");
-		if (ui.reshare) ui.reshare.style.display = "none";
-		setButtons({ start: false, pause: true, resume: false, stop: true });
+		setState("live");
 		try { await postControl("resume"); } catch (e) { warn(`resume failed: ${e.message}`); }
 		startLoop();
 	}
@@ -484,9 +651,7 @@
 			error(`Pause failed: ${e.message}`);
 		}
 		stopShare();
-		if (ui.reshare) ui.reshare.style.display = "none";
-		setButtons({ start: false, pause: false, resume: true, stop: true });
-		setStatus("Status: paused");
+		setState("paused");
 		await syncBackend();
 	}
 
@@ -500,12 +665,15 @@
 			error(`Resume failed: ${e.message}`);
 			return;
 		}
-		setButtons({ start: false, pause: true, resume: false, stop: true });
-		setStatus("Status: recording");
+		setState("live");
 		startLoop();
 	}
 
 	async function onStop() {
+		if (!window.confirm(
+			"Finish this timelapse? You can't add more time to it afterwards — "
+			+ "record a new one for your next session."
+		)) return;
 		stopLoop();
 		try {
 			const res = await postControl("stop");
@@ -521,9 +689,7 @@
 		}
 		stopShare();
 		stopTicking(true);
-		if (ui.reshare) ui.reshare.style.display = "none";
-		setButtons({ start: false, pause: false, resume: false, stop: false });
-		setStatus("Status: compiling");
+		setState("processing");
 		await syncBackend();
 		pollCompilation();
 	}
@@ -539,6 +705,16 @@
 		if (ui.resume) ui.resume.addEventListener("click", onResume);
 		if (ui.stop) ui.stop.addEventListener("click", onStop);
 		if (ui.reshare) ui.reshare.addEventListener("click", onReshare);
+		if (ui.alertDismiss) ui.alertDismiss.addEventListener("click", hideAlert);
+
+		// Closing the tab mid-recording silently stops the clock — warn first.
+		window.addEventListener("beforeunload", (e) => {
+			if (!recording) return;
+			e.preventDefault();
+			e.returnValue = "";
+		});
+
+		setState("loading");
 		info(`Client: ${CLIENT_INFO}`);
 		// Recover current session state (handles page refresh).
 		recoverFromServer();

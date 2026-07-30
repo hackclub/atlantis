@@ -7,6 +7,12 @@ body {
     display: none;
 }
 
+/* Without this, any rule that sets `display` beats the UA stylesheet and the
+   hidden attribute silently stops working. */
+[hidden] {
+    display: none !important;
+}
+
 .link-button {
     background: none;
     border: none;

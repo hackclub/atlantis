@@ -379,6 +379,11 @@ class LookoutSession(models.Model):
 		return self.status == self.Status.COMPLETE
 
 	@property
+	def is_processing(self):
+		"""Recording is over but Lookout hasn't produced the video yet."""
+		return self.status in (self.Status.STOPPED, self.Status.COMPILING)
+
+	@property
 	def is_attachable(self):
 		return self.is_complete and self.journal_id is None
 

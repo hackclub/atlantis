@@ -257,7 +257,7 @@ def project_detail(request, project_id):
 
     timeline = build_journal_timeline(journals, ships)
 
-    timelapses = project.timelapses.filter(owner=request.user)
+    timelapses = project.timelapses.filter(owner=request.user).select_related("journal")
     attachable_timelapses = _attachable_timelapses(project, request.user)
 
     return render(request, "atlantis_site/project_detail.html", {
