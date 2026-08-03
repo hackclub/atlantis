@@ -76,16 +76,34 @@ class Profile(models.Model):
 	slack_pfp_url = models.CharField(max_length=200, blank=True, default="")
 	layers = models.IntegerField(default=0)
 	print_reward_kg = models.IntegerField(default=0)
-	# Encrypted (Fernet) JSON blob of the user's HCA addresses. Never store or
-	# expose plaintext addresses; decrypt only on an explicit "View Address".
-	encrypted_address = models.TextField(blank=True, default="")
+	# Encrypted (Fernet) JSON blob of the user's HCA OAuth token. Addresses are
+	# never stored: this token is what buys us one from HCA on demand, on an
+	# explicit "View Address".
+	encrypted_hca_token = models.TextField(blank=True, default="")
 
 	def __str__(self):
 		return self.user.username
 
+	def get_hca_token(self):
+		from .crypto import decrypt_token
+		return decrypt_token(self.encrypted_hca_token)
+
+	def save_hca_token(self, token):
+		"""Persist a token response, keeping the write to this column alone so
+		a refresh mid-request cannot clobber unrelated in-memory changes."""
+		from .crypto import encrypt_token
+		from .hca import storable_token
+		self.encrypted_hca_token = encrypt_token(storable_token(token))
+		if self.pk:
+			Profile.objects.filter(pk=self.pk).update(
+				encrypted_hca_token=self.encrypted_hca_token
+			)
+
 	def get_addresses(self):
-		from .crypto import decrypt_addresses
-		return decrypt_addresses(self.encrypted_address)
+		"""Fetch the user's addresses from HCA. Raises AddressUnavailable if
+		their token is missing or HCA cannot be reached."""
+		from .hca import fetch_addresses
+		return fetch_addresses(self)
 
 	def get_address(self, address_id=None):
 		"""Return the address matching address_id, else the primary, else the

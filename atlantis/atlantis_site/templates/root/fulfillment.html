@@ -163,6 +163,9 @@
                 } else if (data.error === "no_address") {
                     box.textContent = "No address on file for this order.";
                     box.hidden = false;
+                } else if (data.error === "address_unavailable") {
+                    box.textContent = "Couldn't fetch this address from Hack Club identity — the buyer may need to log in again.";
+                    box.hidden = false;
                 } else {
                     box.textContent = "Could not load address. Please try again.";
                     box.hidden = false;

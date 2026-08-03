@@ -8,6 +8,7 @@ from django.views.decorators.http import require_POST
 
 from ...models import Profile, Item, Order
 from ...crypto import format_address
+from ...hca import AddressUnavailable
 from ..helpers import rate_limit
 
 @login_required
@@ -55,6 +56,14 @@ def order_item(request, item_id):
     
     total_cost = item.cost * quantity
 
+    # Resolved before the transaction: this calls out to HCA, which has no
+    # business happening while row locks are held. An order still goes through
+    # if the lookup fails — fulfillment resolves the primary address anyway.
+    try:
+        address_id = request.user.hackclub_profile.primary_address_id
+    except AddressUnavailable:
+        address_id = ""
+
     with transaction.atomic():
         item = Item.objects.select_for_update().get(id=item.id)
         profile = Profile.objects.select_for_update().get(user=request.user)
@@ -89,7 +98,7 @@ def order_item(request, item_id):
             item=item,
             quantity=quantity,
             user_notes=user_notes,
-            address_id=profile.primary_address_id,
+            address_id=address_id,
         )
 
     messages.success(request, f"Successfully ordered {quantity}x {item.name}!")
@@ -101,7 +110,13 @@ def order_item(request, item_id):
 @rate_limit("view_own_address", 2, json=True)
 def view_own_address(request):
     profile = request.user.hackclub_profile
-    address = format_address(profile.get_address())
+
+    try:
+        address = format_address(profile.get_address())
+    except AddressUnavailable:
+        return JsonResponse(
+            {"ok": False, "error": "address_unavailable"}, status=503
+        )
 
     if address is None:
         return JsonResponse(

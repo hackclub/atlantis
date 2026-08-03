@@ -24,8 +24,9 @@ HCA_CLIENT_ID = os.environ.get("HCA_CLIENT_ID")
 HCA_CLIENT_SECRET = os.environ.get("HCA_CLIENT_SECRET")
 HCA_CALLBACK_URI = os.environ.get("HCA_CALLBACK_URI")
 
-# Fernet key (url-safe base64-encoded 32 bytes) used to encrypt shipping
-# addresses at rest. Generate with: Fernet.generate_key().decode()
+# Fernet key (url-safe base64-encoded 32 bytes) used to encrypt the HCA OAuth
+# tokens that shipping addresses are fetched with at rest. Addresses themselves
+# are never stored. Generate with: Fernet.generate_key().decode()
 ADDRESS_ENCRYPTION_KEY = os.environ.get("ADDRESS_ENCRYPTION_KEY")
 
 # fucking cloudflare bs

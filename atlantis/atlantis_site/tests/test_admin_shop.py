@@ -1,7 +1,23 @@
+from unittest.mock import patch
+
 from django.urls import reverse
 
+from .. import hca
+from ..hca import AddressUnavailable
 from ..models import AuditLog, Item, Order
 from .base import BaseTestCase, grant_perms, make_user, message_texts
+
+ADDRESS = {
+	"id": "adr_1",
+	"first_name": "Test",
+	"last_name": "Person",
+	"line_1": "15 Falls Rd",
+	"city": "Shelburne",
+	"state": "VT",
+	"postal_code": "05482",
+	"country": "US",
+	"primary": True,
+}
 
 
 class ShopAdminAccessTests(BaseTestCase):
@@ -319,3 +335,65 @@ class UpdateOrderStatusTests(BaseTestCase):
 		self._update("denied")
 		self.item.refresh_from_db()
 		self.assertEqual(self.item.stock, -1)
+
+
+class ViewOrderAddressTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.admin = grant_perms(make_user("fulfiller"), "fulfillment")
+		self.client.force_login(self.admin)
+		self.buyer = make_user("buyer", slack_id="U0BUYER")
+		self.item = Item.objects.create(name="Thing", description="x", cost=25)
+		self.order = Order.objects.create(
+			owner=self.buyer, item=self.item, quantity=1, address_id="adr_1"
+		)
+
+	def _view(self, order=None):
+		return self.client.post(
+			reverse("view_order_address", args=[(order or self.order).id])
+		)
+
+	def test_fulfillment_perm_required(self):
+		self.client.force_login(make_user("pleb"))
+		self.assertEqual(self._view().status_code, 302)
+
+	def test_get_not_allowed(self):
+		self.assertEqual(
+			self.client.get(reverse("view_order_address", args=[self.order.id])).status_code, 405
+		)
+
+	@patch.object(hca, "fetch_addresses", return_value=[ADDRESS])
+	def test_returns_buyers_address_fetched_on_demand(self, mock_fetch):
+		response = self._view()
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()["address"]["lines"], [
+			"Test Person", "15 Falls Rd", "Shelburne, VT 05482", "US",
+		])
+		# Fetched with the buyer's credentials, not the fulfiller's.
+		self.assertEqual(mock_fetch.call_args.args[0].user, self.buyer)
+
+	@patch.object(hca, "fetch_addresses", return_value=[ADDRESS])
+	def test_viewing_an_address_is_audit_logged(self, mock_fetch):
+		self._view()
+		log = AuditLog.objects.get(action="view_order_address")
+		self.assertEqual(log.actor, self.admin)
+		self.assertEqual(log.metadata["order_id"], self.order.id)
+		self.assertEqual(log.metadata["address_id"], "adr_1")
+
+	@patch.object(hca, "fetch_addresses", return_value=[])
+	def test_buyer_without_an_address(self, mock_fetch):
+		response = self._view()
+		self.assertEqual(response.status_code, 404)
+		self.assertEqual(response.json()["error"], "no_address")
+
+	@patch.object(hca, "fetch_addresses", side_effect=AddressUnavailable("token expired"))
+	def test_unavailable_identity_is_not_audit_logged(self, mock_fetch):
+		response = self._view()
+		self.assertEqual(response.status_code, 503)
+		self.assertEqual(response.json()["error"], "address_unavailable")
+		self.assertFalse(AuditLog.objects.filter(action="view_order_address").exists())
+
+	def test_unknown_order_404(self):
+		self.assertEqual(
+			self.client.post(reverse("view_order_address", args=[9999])).status_code, 404
+		)

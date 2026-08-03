@@ -97,6 +97,9 @@
             } else if (data.error === "no_address") {
                 box.textContent = "No address on file. Complete address verification in your Hack Club identity.";
                 box.hidden = false;
+            } else if (data.error === "address_unavailable") {
+                box.textContent = "Couldn't reach your Hack Club identity. Log out and back in, then try again.";
+                box.hidden = false;
             } else {
                 box.textContent = "Could not load address. Please try again.";
                 box.hidden = false;

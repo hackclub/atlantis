@@ -9,6 +9,7 @@ from django.shortcuts import get_object_or_404
 
 from ...models import Profile, Item, Order
 from ...crypto import format_address
+from ...hca import AddressUnavailable
 from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_url
 
 @staff_member_required
@@ -120,13 +121,18 @@ def update_order_status(request, order_id):
 @require_POST
 @check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])
 def view_order_address(request, order_id):
-    """Decrypt and return the shipping address for an order during fulfillment.
+    """Fetch and return the shipping address for an order during fulfillment.
 
-    Access to a customer's plaintext address is audit-logged since it is PII.
+    The address is pulled live from HCA with the buyer's stored token; access to
+    a customer's plaintext address is audit-logged since it is PII.
     """
     order = get_object_or_404(Order.objects.select_related("owner"), id=order_id)
     profile = getattr(order.owner, "hackclub_profile", None)
-    address = format_address(profile.get_address(order.address_id)) if profile else None
+
+    try:
+        address = format_address(profile.get_address(order.address_id)) if profile else None
+    except AddressUnavailable:
+        return JsonResponse({"ok": False, "error": "address_unavailable"}, status=503)
 
     if address is None:
         return JsonResponse({"ok": False, "error": "no_address"}, status=404)

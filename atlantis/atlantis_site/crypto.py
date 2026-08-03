@@ -11,20 +11,20 @@ def _get_fernet():
     return Fernet(key)
 
 
-def encrypt_addresses(addresses):
-    if not addresses:
+def encrypt_token(token):
+    if not token:
         return ""
-    payload = json.dumps(addresses, separators=(",", ":")).encode("utf-8")
+    payload = json.dumps(token, separators=(",", ":")).encode("utf-8")
     return _get_fernet().encrypt(payload).decode("utf-8")
 
 
-def decrypt_addresses(token):
-    if not token:
-        return []
+def decrypt_token(ciphertext):
+    if not ciphertext:
+        return {}
     try:
-        payload = _get_fernet().decrypt(token.encode("utf-8"))
+        payload = _get_fernet().decrypt(ciphertext.encode("utf-8"))
     except InvalidToken:
-        return []
+        return {}
     return json.loads(payload.decode("utf-8"))
 
 

@@ -8,6 +8,7 @@ from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 
+from cryptography.fernet import Fernet
 from PIL import Image
 
 from ..models import Journal, LookoutSession, Profile, Project, Ship
@@ -19,6 +20,8 @@ TEST_STORAGES = {
 	"staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 
+TEST_ENCRYPTION_KEY = Fernet.generate_key().decode()
+
 VALID_PRINTABLES_URL = "https://www.printables.com/model/12345-cool-thing"
 VALID_EDITOR_LINK = "https://cad.onshape.com/documents/abc123"
 VALID_R2_URL = "https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/models/thing.f3d"
@@ -26,16 +29,22 @@ VALID_R2_URL = "https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/models/thing
 ALL_SITE_PERMS = ["t1_review", "t2_review", "t3_review", "printer", "fulfillment", "organizer"]
 
 
-def make_user(username="user", layers=0, slack_id="U0TEST", slack_username=None, **user_kwargs):
-	"""Create a user with an attached hackclub Profile (as auth_callback would)."""
+def make_user(username="user", layers=0, slack_id="U0TEST", slack_username=None, hca_token=None, **user_kwargs):
+	"""Create a user with an attached hackclub Profile (as auth_callback would).
+
+	Pass hca_token to give the profile stored HCA credentials — needed by
+	anything that fetches the user's address.
+	"""
 	user = User.objects.create_user(username=username, password="pw", **user_kwargs)
-	Profile.objects.create(
+	profile = Profile.objects.create(
 		user=user,
 		slack_id=slack_id,
 		slack_username=slack_username if slack_username is not None else username,
 		slack_pfp_url="https://example.com/pfp.png",
 		layers=layers,
 	)
+	if hca_token:
+		profile.save_hca_token(hca_token)
 	return user
 
 
@@ -123,7 +132,11 @@ def message_texts(response):
 	return [str(m) for m in get_messages(response.wsgi_request)]
 
 
-@override_settings(STORAGES=TEST_STORAGES, MEDIA_URL="/media/")
+@override_settings(
+	STORAGES=TEST_STORAGES,
+	MEDIA_URL="/media/",
+	ADDRESS_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY,
+)
 class BaseTestCase(TestCase):
 	SLACK_DM_TARGETS = [
 		"atlantis_site.views.admin.review.send_slack_dm",
