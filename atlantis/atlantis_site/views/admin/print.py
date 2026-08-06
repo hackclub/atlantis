@@ -20,6 +20,7 @@ from ..helpers import (
     get_print_reward_item,
     tracked_minutes_for_journals,
     format_minutes,
+    build_review_history,
     PRINT_REWARD_GRAMS,
 )
 
@@ -152,6 +153,7 @@ def print_project(request, ship_id):
         "ship": ship,
         "journals": journals,
         "timeline": timeline,
+        "review_history": build_review_history(ship),
         "can_claim": ship.status == Ship.ShipStatus.PRINT_QUEUE,
     })
 

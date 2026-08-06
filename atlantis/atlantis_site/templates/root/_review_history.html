@@ -1,55 +1,47 @@
-{# expects: ship #}
+{# expects: ship, review_history #}
 <h2>Review History</h2>
+<form action="{% url 'add_internal_comment' ship.id %}" method="POST" class="internal-comment-form">
+    {% csrf_token %}
+    <textarea name="text" rows="2" maxlength="1000" placeholder="Leave an internal comment (reviewers only, no review action taken)" required></textarea>
+    <button type="submit">Add internal comment</button>
+</form>
 <div class="review-history">
-    <section class="review-history-group">
-        <h3>T1 actions</h3>
-        {% for t1_review in ship.t1_reviews.all %}
-            <div class="review-card">
-                <h4>Review {{ forloop.counter }}</h4>
-                <p><strong>Approved:</strong> {{ t1_review.approved }} at {{ t1_review.reviewed_at }} by {{ t1_review.reviewer.hackclub_profile.slack_username }}</p>
-                <p><strong>Feedback:</strong> {{ t1_review.feedback }}</p>
-                <p><strong>Internal:</strong> {{ t1_review.internal_notes }}</p>
-                <p><strong>Print:</strong> {{ t1_review.print }}</p>
+    {% for event in review_history %}
+        {% if event.type == "comment" %}
+            <div class="internal-comment">
+                <h4>{{ event.label }}</h4>
+                <p class="review-event-byline">
+                    {{ event.actor }} &middot; {{ event.at|date:"M j, Y, g:i a" }}
+                    {% if event.other_ship %}&middot; left on ship #{{ event.comment.ship_id }}{% endif %}
+                </p>
+                <p>{{ event.comment.text|linebreaksbr }}</p>
             </div>
-        {% empty %}
-            <p>No T1 reviews yet.</p>
-        {% endfor %}
-    </section>
-
-    <section class="review-history-group">
-        <h3>Printer actions</h3>
-        {% for print in ship.prints.all %}
+        {% else %}
             <div class="review-card">
-                <h4>Print {{ forloop.counter }}</h4>
-                {% if print.finished_time %}
-                    <p><strong>Action:</strong> {{ print.get_decision_display }} at {{ print.finished_time }} by {{ print.printer.hackclub_profile.slack_username }}</p>
-                {% else %}
-                    <p><strong>Action:</strong> {{ print.get_decision_display }} at {{ print.claimed_time }} by {{ print.printer.hackclub_profile.slack_username }}</p>
+                <h4>{{ event.label }}</h4>
+                <p class="review-event-byline">{{ event.actor }} &middot; {{ event.at|date:"M j, Y, g:i a" }}</p>
+                {% if event.type == "t1" %}
+                    <p><strong>Approved:</strong> {{ event.review.approved }}</p>
+                    <p><strong>Print:</strong> {{ event.review.print }}</p>
+                    <p><strong>Feedback:</strong> {{ event.review.feedback }}</p>
+                    <p><strong>Internal:</strong> {{ event.review.internal_notes }}</p>
+                {% elif event.type == "print" %}
+                    <p><strong>Action:</strong> {{ event.print.get_decision_display }}</p>
+                    <p><strong>Weight:</strong> {{ event.print.weight }}</p>
+                    <p><strong>Feedback:</strong> {{ event.print.feedback }}</p>
+                    <p><strong>Internal:</strong> {{ event.print.internal_notes }}</p>
+                    {% if event.print.image_url %}
+                        <p><strong>Image:</strong> <a href="{{ event.print.image_url }}" target="_blank" rel="noreferrer">{{ event.print.image_url }}</a></p>
+                    {% endif %}
+                {% elif event.type == "t2" %}
+                    <p><strong>Decision:</strong> {{ event.review.get_decision_display }}</p>
+                    <p><strong>Deductions:</strong> {{ event.review.deductions }}</p>
+                    <p><strong>Feedback:</strong> {{ event.review.feedback }}</p>
+                    <p><strong>Justification:</strong> {{ event.review.justification }}</p>
                 {% endif %}
-                <p><strong>Weight:</strong> {{ print.weight }}</p>
-                <p><strong>Feedback:</strong> {{ print.feedback }}</p>
-                <p><strong>Internal:</strong> {{ print.internal_notes }}</p>
-                {% if print.image_url %}
-                    <p><strong>Image:</strong> <a href="{{ print.image_url }}" target="_blank" rel="noreferrer">{{ print.image_url }}</a></p>
-                {% endif %}
             </div>
-        {% empty %}
-            <p>No printer actions yet.</p>
-        {% endfor %}
-    </section>
-
-    <section class="review-history-group">
-        <h3>T2 actions</h3>
-        {% for t2_review in ship.t2_reviews.all %}
-            <div class="review-card">
-                <h4>Review {{ forloop.counter }}</h4>
-                <p><strong>Decision:</strong> {{ t2_review.get_decision_display }} at {{ t2_review.reviewed_at }} by {{ t2_review.reviewer.hackclub_profile.slack_username }}</p>
-                <p><strong>Deductions:</strong> {{ t2_review.deductions }}</p>
-                <p><strong>Feedback:</strong> {{ t2_review.feedback }}</p>
-                <p><strong>Justification:</strong> {{ t2_review.justification }}</p>
-            </div>
-        {% empty %}
-            <p>No T2 reviews yet.</p>
-        {% endfor %}
-    </section>
+        {% endif %}
+    {% empty %}
+        <p>Nothing here yet.</p>
+    {% endfor %}
 </div>

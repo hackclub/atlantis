@@ -20,6 +20,7 @@ from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
     sniff_image_extension, random_storage_key, build_journal_timeline,
     notify_followers, rate_limit, tracked_minutes_for_journals, format_minutes,
+    can_bypass_ship_requirements,
 )
 
 import os
@@ -224,7 +225,7 @@ def project_detail(request, project_id):
     elif ship_pending:
         can_ship = False
         ship_disabled_reason = "Your most recent ship must be finalized or rejected before you can reship."
-    elif not project.journals.exists():
+    elif not project.journals.exists() and not can_bypass_ship_requirements(request.user):
         can_ship = False
         ship_disabled_reason = "You must have at least one journal entry before you can ship."
     else:
@@ -470,8 +471,12 @@ def ship_project(request, project_id):
     if not project.description:
         messages.error(request, "Your project must have a description before you can ship!")
         return redirect("projects")
+    # DEBUG-only, organizer-only: skip the journal and tracked-time gates so the
+    # rest of the pipeline can be exercised without hours of real recording.
+    bypass_requirements = can_bypass_ship_requirements(request.user)
+
     unassigned_journals = project.journals.filter(ship__isnull=True)
-    if not unassigned_journals.exists():
+    if not bypass_requirements and not unassigned_journals.exists():
         messages.error(request, "Your project must have at least one journal to be shipped")
         return redirect("projects")
 
@@ -480,15 +485,16 @@ def ship_project(request, project_id):
         messages.error(request, "You cannot reship until your most recent ship has been finalized or rejected.")
         return redirect("project_detail", project_id=project_id)
 
-    unassigned_time = tracked_minutes_for_journals(unassigned_journals)
-    if latest_ship:
-        if unassigned_time <= 120:
-            messages.error(request, "Can't ship again without at least 2 hours of work!")
-            return redirect("projects")
-    else:
-        if unassigned_time <= 180:
-            messages.error(request, "You must have atleast 3 hours of logged time before you can ship!")
-            return redirect("projects")
+    if not bypass_requirements:
+        unassigned_time = tracked_minutes_for_journals(unassigned_journals)
+        if latest_ship:
+            if unassigned_time <= 120:
+                messages.error(request, "Can't ship again without at least 2 hours of work!")
+                return redirect("projects")
+        else:
+            if unassigned_time <= 180:
+                messages.error(request, "You must have atleast 3 hours of logged time before you can ship!")
+                return redirect("projects")
 
     with transaction.atomic():
         ship = Ship.objects.create(

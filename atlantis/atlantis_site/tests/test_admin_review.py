@@ -1,6 +1,7 @@
+from django.core.cache import cache
 from django.urls import reverse
 
-from ..models import AuditLog, Ship, T1, T2, T3
+from ..models import AuditLog, InternalComment, Ship, T1, T2, T3
 from .base import (
 	BaseTestCase,
 	grant_perms,
@@ -390,6 +391,155 @@ class FraudReviewProjectTests(BaseTestCase):
 		)
 		response = self.client.get(reverse("fraud_review_project", args=[ship.id]))
 		self.assertEqual(response.context["total_time"], 0)
+
+
+class InternalCommentTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.reviewer = grant_perms(make_user("t1rev", slack_username="T1 Rev"), "t1_review")
+		self.client.force_login(self.reviewer)
+		self.author = make_user("author")
+		self.project = make_project(self.author, shippable=True)
+		self.ship = make_ship(self.project)
+
+	def _comment(self, ship=None, **overrides):
+		data = {"text": "printables listing looks like a remix"}
+		data.update(overrides)
+		ship = ship or self.ship
+		return self.client.post(
+			reverse("add_internal_comment", args=[ship.id]),
+			data,
+			HTTP_REFERER=reverse("review_project", args=[ship.id]),
+		)
+
+	def test_get_not_allowed(self):
+		self.assertEqual(
+			self.client.get(reverse("add_internal_comment", args=[self.ship.id])).status_code, 405
+		)
+
+	def test_comment_recorded_without_a_review_action(self):
+		response = self._comment()
+
+		comment = InternalComment.objects.get()
+		self.assertEqual(comment.ship, self.ship)
+		self.assertEqual(comment.author, self.reviewer)
+		self.assertEqual(comment.text, "printables listing looks like a remix")
+		self.assertEqual(response.url, reverse("review_project", args=[self.ship.id]))
+
+		# No decision was taken: the ship stays put and nothing was paid out.
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.T1_QUEUE)
+		self.assertEqual(T1.objects.count(), 0)
+		self.assertEqual(self.reviewer.hackclub_profile.layers, 0)
+
+	def test_text_is_stripped(self):
+		self._comment(text="   spaced out   ")
+		self.assertEqual(InternalComment.objects.get().text, "spaced out")
+
+	def test_empty_text_rejected(self):
+		response = self._comment(text="   ")
+		self.assertEqual(InternalComment.objects.count(), 0)
+		self.assertIn("An internal comment can't be empty.", message_texts(response))
+
+	def test_too_long_text_rejected(self):
+		response = self._comment(text="x" * 1001)
+		self.assertEqual(InternalComment.objects.count(), 0)
+		self.assertIn(
+			"Internal comment too long (max 1000 characters).", message_texts(response)
+		)
+
+		cache.clear()
+		self._comment(text="x" * 1000)
+		self.assertEqual(InternalComment.objects.count(), 1)
+
+	def test_falls_back_to_root_without_a_referer(self):
+		response = self.client.post(
+			reverse("add_internal_comment", args=[self.ship.id]), {"text": "no referer"}
+		)
+		self.assertEqual(response.url, "/")
+
+	def test_audit_log_recorded(self):
+		self._comment()
+		log = AuditLog.objects.get(action="internal_comment")
+		self.assertEqual(log.actor, self.reviewer)
+		self.assertEqual(log.metadata["ship_id"], self.ship.id)
+		self.assertEqual(log.metadata["comment_id"], InternalComment.objects.get().id)
+
+	def test_unknown_ship_404(self):
+		response = self.client.post(reverse("add_internal_comment", args=[99999]), {"text": "hi"})
+		self.assertEqual(response.status_code, 404)
+
+	def test_shown_in_the_review_history_of_every_review_page(self):
+		self._comment()
+		organizer = grant_perms(make_user("organizer"), "organizer")
+		self.client.force_login(organizer)
+
+		for name in ("review_project", "ysws_review_project", "fraud_review_project", "print_project"):
+			with self.subTest(page=name):
+				response = self.client.get(reverse(name, args=[self.ship.id]))
+				self.assertContains(response, "printables listing looks like a remix")
+				self.assertContains(response, "T1 Rev")
+				self.assertEqual(
+					[e["type"] for e in response.context["review_history"]], ["comment"]
+				)
+
+	def test_interleaved_with_review_actions_oldest_first(self):
+		self.client.post(
+			reverse("t1_decision", args=[self.ship.id]),
+			{"feedback": "nice", "internal_notes": "ok", "approved": "approved"},
+		)
+		self._comment()
+
+		response = self.client.get(reverse("review_project", args=[self.ship.id]))
+		self.assertEqual(
+			[e["type"] for e in response.context["review_history"]], ["t1", "comment"]
+		)
+
+	def test_shown_while_reviewing_a_later_ship_of_the_project(self):
+		self._comment()
+		self.ship.status = Ship.ShipStatus.REJECTED
+		self.ship.save()
+		reship = make_ship(self.project)
+
+		response = self.client.get(reverse("review_project", args=[reship.id]))
+		self.assertContains(response, "printables listing looks like a remix")
+		self.assertContains(response, f"left on ship #{self.ship.id}")
+
+	def test_hidden_from_the_project_owner_and_explorers(self):
+		self._comment()
+
+		self.client.force_login(self.author)
+		owner_view = self.client.get(reverse("project_detail", args=[self.project.id]))
+		self.assertNotContains(owner_view, "printables listing looks like a remix")
+
+		self.client.force_login(make_user("explorer"))
+		explore_view = self.client.get(
+			reverse("project_detail_explore", args=[self.project.id])
+		)
+		self.assertNotContains(explore_view, "printables listing looks like a remix")
+
+	def test_printer_can_comment(self):
+		self.client.force_login(grant_perms(make_user("printerguy"), "printer"))
+		self._comment()
+		self.assertEqual(InternalComment.objects.count(), 1)
+
+	def test_staff_without_perms_cannot_comment(self):
+		staff = make_user("staffonly")
+		staff.is_staff = True
+		staff.save()
+		self.client.force_login(staff)
+		self.assertEqual(self._comment().status_code, 302)
+		self.assertEqual(InternalComment.objects.count(), 0)
+
+	def test_regular_user_cannot_comment(self):
+		self.client.force_login(make_user("pleb"))
+		self._comment()
+		self.assertEqual(InternalComment.objects.count(), 0)
+
+	def test_anonymous_cannot_comment(self):
+		self.client.logout()
+		self._comment()
+		self.assertEqual(InternalComment.objects.count(), 0)
 
 
 class LockUnlockProjectTests(BaseTestCase):

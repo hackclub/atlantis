@@ -601,6 +601,97 @@ class ShipProjectTests(BaseTestCase):
 		self.assertEqual(old_journal.ship, old_ship)
 
 
+class DebugOrganizerShipBypassTests(BaseTestCase):
+	"""Organizers running with DEBUG on may ship with no journals and no time.
+
+	Both halves are required — the bypass must stay shut for organizers in
+	production and for ordinary users in development.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.organizer = grant_perms(make_user("org"), "organizer")
+		self.project = make_project(self.organizer, shippable=True)
+		self.client.force_login(self.organizer)
+
+	def _ship(self, project=None):
+		project = project or self.project
+		return self.client.post(reverse("ship_project", args=[project.id]))
+
+	@override_settings(DEBUG=True)
+	def test_organizer_ships_with_no_journals_or_time(self):
+		response = self._ship()
+		self.assertIn(
+			f'Successfully shipped project "{self.project.title}"!', message_texts(response)
+		)
+		ship = Ship.objects.get()
+		self.assertEqual(ship.status, Ship.ShipStatus.T1_QUEUE)
+		self.assertEqual(ship.journals.count(), 0)
+
+	@override_settings(DEBUG=True)
+	def test_organizer_reships_without_new_time(self):
+		make_ship(self.project, status=Ship.ShipStatus.FINALIZED)
+		self._ship()
+		self.assertEqual(Ship.objects.count(), 2)
+
+	@override_settings(DEBUG=True)
+	def test_bypass_does_not_skip_printables_requirement(self):
+		self.project.printablesUrl = ""
+		self.project.save()
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 0)
+		self.assertIn("You need a printables URL to ship!", message_texts(response))
+
+	@override_settings(DEBUG=True)
+	def test_bypass_does_not_skip_locked_project(self):
+		self.project.locked = True
+		self.project.save()
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 0)
+		self.assertIn(
+			"This project is locked. You cannot ship a locked project.", message_texts(response)
+		)
+
+	@override_settings(DEBUG=True)
+	def test_bypass_does_not_skip_in_flight_ship_check(self):
+		make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE)
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 1)
+		self.assertIn(
+			"You cannot reship until your most recent ship has been finalized or rejected.",
+			message_texts(response),
+		)
+
+	@override_settings(DEBUG=False)
+	def test_organizer_still_gated_without_debug(self):
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 0)
+		self.assertIn(
+			"Your project must have at least one journal to be shipped", message_texts(response)
+		)
+
+	@override_settings(DEBUG=True)
+	def test_non_organizer_still_gated_with_debug(self):
+		user = make_user("plain", slack_id="U0PLAIN")
+		project = make_project(user, shippable=True)
+		self.client.force_login(user)
+		response = self._ship(project)
+		self.assertEqual(Ship.objects.count(), 0)
+		self.assertIn(
+			"Your project must have at least one journal to be shipped", message_texts(response)
+		)
+
+	@override_settings(DEBUG=True)
+	def test_ship_button_enabled_for_organizer(self):
+		response = self.client.get(reverse("project_detail", args=[self.project.id]))
+		self.assertTrue(response.context["can_ship"])
+
+	@override_settings(DEBUG=False)
+	def test_ship_button_disabled_without_debug(self):
+		response = self.client.get(reverse("project_detail", args=[self.project.id]))
+		self.assertFalse(response.context["can_ship"])
+
+
 class UpdateEditorModelTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()

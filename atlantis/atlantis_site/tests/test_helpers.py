@@ -4,11 +4,16 @@ from unittest.mock import MagicMock, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
+from django.utils import timezone
 
 from slack_sdk.errors import SlackApiError
 
 from ..models import (
 	AuditLog,
+	InternalComment,
+	Print,
+	T1,
+	T2,
 	detect_editor,
 	detect_editor_from_filename,
 	detect_editor_from_link,
@@ -17,8 +22,10 @@ from ..views import helpers
 from ..views.helpers import (
 	add_bars,
 	build_journal_timeline,
+	build_review_history,
 	display_name,
 	get_client_ip,
+	internal_comments_for_project,
 	is_valid_editor_model_url,
 	is_valid_image_url,
 	is_valid_printables_url,
@@ -155,8 +162,81 @@ class BuildJournalTimelineTests(TestCase):
 		events = build_journal_timeline([], [ship])
 		self.assertEqual(events[0]["feedback"], "")
 
+	def test_internal_comments_never_reach_the_journal_timeline(self):
+		ship = make_ship(self.project, journal_minutes=())
+		InternalComment.objects.create(ship=ship, author=self.user, text="sus")
+
+		events = build_journal_timeline([], [ship])
+
+		self.assertEqual([e["type"] for e in events], ["ship"])
+
 	def test_empty_inputs(self):
 		self.assertEqual(build_journal_timeline([], []), [])
+
+
+class InternalCommentsForProjectTests(TestCase):
+	def test_covers_every_ship_of_the_project_only(self):
+		user = make_user("commenter")
+		project = make_project(user)
+		other_project = make_project(user)
+		first = make_ship(project, journal_minutes=())
+		second = make_ship(project, journal_minutes=())
+		elsewhere = make_ship(other_project, journal_minutes=())
+
+		older = InternalComment.objects.create(ship=first, author=user, text="first ship")
+		newer = InternalComment.objects.create(ship=second, author=user, text="second ship")
+		InternalComment.objects.create(ship=elsewhere, author=user, text="other project")
+
+		self.assertEqual(list(internal_comments_for_project(project)), [newer, older])
+
+
+class BuildReviewHistoryTests(TestCase):
+	def setUp(self):
+		self.user = make_user("historian", slack_username="Historian")
+		self.project = make_project(self.user)
+		self.ship = make_ship(self.project, journal_minutes=())
+
+	def test_actions_and_comments_interleave_oldest_first(self):
+		t1 = T1.objects.create(
+			ship=self.ship, reviewer=self.user, feedback="ok", internal_notes="hmm", approved=True
+		)
+		comment = InternalComment.objects.create(
+			ship=self.ship, author=self.user, text="checking the remix claim"
+		)
+		printed = Print.objects.create(
+			ship=self.ship, printer=self.user, finished_time=timezone.now()
+		)
+		t2 = T2.objects.create(
+			ship=self.ship, reviewer=self.user, feedback="good", justification="solid"
+		)
+
+		events = build_review_history(self.ship)
+
+		self.assertEqual([e["type"] for e in events], ["t1", "comment", "print", "t2"])
+		self.assertEqual([e["label"] for e in events],
+						 ["T1 Review", "Internal comment", "Print", "T2 Review"])
+		self.assertEqual([e["at"] for e in events],
+						 [t1.reviewed_at, comment.created_at, printed.finished_time, t2.reviewed_at])
+		self.assertEqual({e["actor"] for e in events}, {"Historian"})
+
+	def test_unfinished_print_sorts_by_claim_time(self):
+		claimed = Print.objects.create(ship=self.ship, printer=self.user)
+		events = build_review_history(self.ship)
+		self.assertEqual(events[0]["at"], claimed.claimed_time)
+
+	def test_comments_from_other_ships_of_the_project_are_flagged(self):
+		earlier_ship = make_ship(self.project, journal_minutes=())
+		InternalComment.objects.create(ship=earlier_ship, author=self.user, text="from the last ship")
+		InternalComment.objects.create(ship=self.ship, author=self.user, text="on this ship")
+
+		events = build_review_history(self.ship)
+
+		self.assertEqual([e["other_ship"] for e in events], [True, False])
+
+	def test_other_projects_are_untouched(self):
+		other_ship = make_ship(make_project(self.user), journal_minutes=())
+		InternalComment.objects.create(ship=other_ship, author=self.user, text="elsewhere")
+		self.assertEqual(build_review_history(self.ship), [])
 
 
 class GetClientIpTests(TestCase):

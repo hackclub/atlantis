@@ -9,7 +9,7 @@ from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
-from ..models import AuditLog, LookoutSession, Print, Ship, Item, Order, Profile, detect_editor
+from ..models import AuditLog, InternalComment, LookoutSession, Print, Ship, Item, Order, Profile, detect_editor
 
 from functools import wraps
 
@@ -68,6 +68,64 @@ def tracked_minutes_for_journals(journals):
 def format_minutes(minutes):
     return f"{minutes // 60}h {minutes % 60}m"
 
+# Local-development escape hatch. Recording real Lookout footage to clear the
+# 3h/2h ship gates makes the ship -> review -> print -> payout chain untestable
+# by hand, so organizers running with DEBUG on may ship with no journals and no
+# tracked time. BOTH conditions are required: with DEBUG off this is dead code
+# no matter who is signed in, so an organizer in production gains nothing.
+def can_bypass_ship_requirements(user):
+    return bool(settings.DEBUG and user.has_perm("atlantis_site.organizer"))
+
+def internal_comments_for_project(project):
+    """Reviewer-only comments on every ship of a project, newest first."""
+    return (
+        InternalComment.objects.filter(ship__project=project)
+        .select_related("author", "author__hackclub_profile")
+    )
+
+def build_review_history(ship):
+    """Everything reviewers did to a ship — decisions, prints, and internal
+    comments — as one oldest-first list. /root pages only: it carries internal
+    notes the project owner must never see."""
+    events = []
+    for t1 in ship.t1_reviews.all():
+        events.append({
+            "type": "t1",
+            "label": "T1 Review",
+            "review": t1,
+            "actor": display_name(t1.reviewer),
+            "at": t1.reviewed_at,
+        })
+    for print_action in ship.prints.all():
+        events.append({
+            "type": "print",
+            "label": "Print",
+            "print": print_action,
+            "actor": display_name(print_action.printer),
+            "at": print_action.finished_time or print_action.claimed_time,
+        })
+    for t2 in ship.t2_reviews.all():
+        events.append({
+            "type": "t2",
+            "label": "T2 Review",
+            "review": t2,
+            "actor": display_name(t2.reviewer),
+            "at": t2.reviewed_at,
+        })
+    # Comments span the whole project: a note left on an earlier ship is still
+    # what a reviewer needs to see on a reship, so it's flagged, not hidden.
+    for comment in internal_comments_for_project(ship.project):
+        events.append({
+            "type": "comment",
+            "label": "Internal comment",
+            "comment": comment,
+            "actor": display_name(comment.author),
+            "other_ship": comment.ship_id != ship.id,
+            "at": comment.created_at,
+        })
+    events.sort(key=lambda e: e["at"])
+    return events
+
 def build_journal_timeline(journals, ships):
     events = []
     for journal in journals:
@@ -106,7 +164,7 @@ def _rate_limit_key(request, scope):
     return f"ratelimit:{scope}:{actor}"
 
 
-def _safe_redirect_back(request):
+def safe_redirect_back(request):
     referer = request.META.get("HTTP_REFERER", "")
     if referer and url_has_allowed_host_and_scheme(
         referer,
@@ -130,7 +188,7 @@ def rate_limit(scope, seconds, methods=("POST",), json=False):
                             {"ok": False, "error": "rate_limited"}, status=429
                         )
                     messages.error(request, RATE_LIMIT_MESSAGE)
-                    return _safe_redirect_back(request)
+                    return safe_redirect_back(request)
             return view(request, *args, **kwargs)
         return wrapped
     return decorator

@@ -290,6 +290,27 @@ class T3(models.Model):
 
 	internal_notes = models.CharField(blank=True)
 
+class InternalComment(models.Model):
+	ship = models.ForeignKey(
+		Ship,
+		on_delete=models.CASCADE,
+		related_name="internal_comments"
+	)
+	author = models.ForeignKey(
+		User,
+		on_delete=models.PROTECT,
+		related_name="internal_comments"
+	)
+
+	created_at = models.DateTimeField(auto_now_add=True)
+	text = models.CharField(max_length=1000)
+
+	class Meta:
+		ordering = ["-created_at"]
+
+	def __str__(self):
+		return f"Internal comment on ship {self.ship_id} by {self.author_id}"
+
 class Journal(models.Model):
 	project = models.ForeignKey(
 		Project,
