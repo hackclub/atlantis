@@ -5,15 +5,206 @@
     <meta charset="UTF-8">
     <title>Atlantis</title>
     <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
+    <style>
+        @font-face {
+            font-family: "Waterlily";
+            src: url("{% static 'atlantis_site/assets/fonts/waterlily.ttf' %}") format("truetype");
+        }
+
+        @font-face {
+            font-family: "Patrick Hand";
+            src: url("{% static 'atlantis_site/assets/fonts/patrickhand.ttf' %}") format("truetype");
+        }
+
+        body {
+            position: relative;
+        }
+
+        #parallax {
+            position: fixed;
+            inset: 0;
+            overflow: hidden;
+            z-index: -1;
+            background-color: #1b7fc4;
+        }
+
+        .parallax-layer {
+            position: absolute;
+            inset: 0;
+            background-repeat: no-repeat;
+            background-size: cover;
+            background-position: center bottom;
+            transform: scale(calc(-1 * var(--scale)), var(--scale));
+            will-change: transform;
+        }
+
+        #layer-background {
+            --scale: 1.06;
+            background-image: url("{% static 'atlantis_site/assets/img/background.png' %}");
+        }
+
+        #layer-middleground {
+            --scale: 1.10;
+            background-image: url("{% static 'atlantis_site/assets/img/middleground.png' %}");
+        }
+
+        #layer-foreground {
+            --scale: 1.20;
+            background-image: url("{% static 'atlantis_site/assets/img/foreground.png' %}");
+        }
+
+        #landing-title {
+            font-family: "Waterlily";
+            font-size: 175px !important;
+            font-weight: 300;
+            color: #E5F2FC;
+            margin: 0;
+        }
+
+        #landing-text {
+            font-family: "Patrick Hand";
+            color: #E5F2FC;
+            font-size: 45px;
+            margin: 0;
+            margin-bottom: 30px;
+        }
+
+        #rsvp-button {
+            --border-thin: 5px;
+            --border-thick: 14px;
+
+            display: inline-block;
+            box-sizing: border-box;
+            font-family: "Patrick Hand";
+            font-size: 50px;
+            color: #00528c;
+            text-decoration: none;
+
+            padding: 10px 60px;
+            border-radius: 50px;
+            background-color: #E5F2FC;
+
+            border: var(--border-thin) solid #00528c;
+            border-bottom-width: var(--border-thick);
+            transition: border-bottom-width 0.03s ease-out, transform 0.03s ease-out;
+        }
+
+        #rsvp-button:active {
+            border-bottom-width: var(--border-thin);
+            transform: translateY(calc(var(--border-thick) - var(--border-thin)));
+        }
+
+        .landing {
+            text-align: left;
+            padding-top: 135px;
+            padding-left: 160px;        
+        }
+    </style>
 </head>
 <body>
-    <div class="content">
-        <h1>Atlantis</h1>
-        <p>Atlantis is a Hack Club YSWS where you ship CAD, and we ship you a 3D printer!</p>
-        <form action="{% url 'login' %}" method="post">
-            {%csrf_token%}
-            <button id="loginButton" type="submit">login</button>
-        </form>
+    <div id="parallax" aria-hidden="true">
+        <div class="parallax-layer" id="layer-background" data-depth="7"></div>
+        <div class="parallax-layer" id="layer-middleground" data-depth="18"></div>
+        <div class="parallax-layer" id="layer-foreground" data-depth="66"></div>
     </div>
+
+    <div class="content">
+        <div class="landing">
+            <p id="landing-title">Atlantis</p>
+            <p id="landing-text">ship 5 hours of CAD a week, <br> get a free 3D printer!</p>
+            <a href="https://example.com" id="rsvp-button">RSVP</a>
+        </div>
+
+    </div>
+
+    <script>
+        (function () {
+            const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+            const layers = Array.from(document.querySelectorAll(".parallax-layer")).map((el) => ({
+                el: el,
+                depth: parseFloat(el.dataset.depth),
+                scale: parseFloat(getComputedStyle(el).getPropertyValue("--scale")),
+                travelX: 0,
+                travelY: 0,
+            }));
+
+            function measure() {
+                for (const layer of layers) {
+                    const bleedX = ((layer.scale - 1) / 2) * window.innerWidth;
+                    const bleedY = ((layer.scale - 1) / 2) * window.innerHeight;
+                    layer.travelX = Math.min(layer.depth, bleedX);
+                    layer.travelY = Math.min(layer.depth * 0.5, bleedY);
+                }
+            }
+
+            let targetX = 0, targetY = 0, currentX = 0, currentY = 0, frame = null;
+
+            function render() {
+                currentX += (targetX - currentX) * 0.075;
+                currentY += (targetY - currentY) * 0.075;
+
+                for (const layer of layers) {
+                    const x = (-currentX * layer.travelX).toFixed(2);
+                    const y = (-currentY * layer.travelY).toFixed(2);
+                    layer.el.style.transform =
+                        "translate3d(" + x + "px, " + y + "px, 0) " +
+                        "scale(" + -layer.scale + ", " + layer.scale + ")";
+                }
+
+                if (Math.abs(targetX - currentX) < 0.0005 && Math.abs(targetY - currentY) < 0.0005) {
+                    currentX = targetX;
+                    currentY = targetY;
+                    frame = null;
+                    return;
+                }
+                frame = requestAnimationFrame(render);
+            }
+
+            function wake() {
+                if (frame === null) frame = requestAnimationFrame(render);
+            }
+
+            function onPointerMove(event) {
+                targetX = (event.clientX / window.innerWidth) * 2 - 1;
+                targetY = (event.clientY / window.innerHeight) * 2 - 1;
+                wake();
+            }
+
+            function enable() {
+                measure();
+                window.addEventListener("pointermove", onPointerMove, { passive: true });
+                window.addEventListener("pointerleave", recentre, { passive: true });
+                wake();
+            }
+
+            function recentre() {
+                targetX = 0;
+                targetY = 0;
+                wake();
+            }
+
+            function disable() {
+                window.removeEventListener("pointermove", onPointerMove);
+                window.removeEventListener("pointerleave", recentre);
+                if (frame !== null) {
+                    cancelAnimationFrame(frame);
+                    frame = null;
+                }
+                targetX = targetY = currentX = currentY = 0;
+                for (const layer of layers) layer.el.style.transform = "";
+            }
+
+            window.addEventListener("resize", function () {
+                measure();
+                wake();
+            }, { passive: true });
+
+            if (!reduceMotion.matches) enable();
+            reduceMotion.addEventListener("change", function (event) {
+                if (event.matches) disable();
+                else enable();
+            });
+        })();
+    </script>
 </body>
 </html>
