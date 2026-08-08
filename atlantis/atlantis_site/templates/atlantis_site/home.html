@@ -3,6 +3,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Atlantis</title>
     <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
     <style>
@@ -55,33 +56,35 @@
 
         #landing-title {
             font-family: "Waterlily";
-            font-size: 175px !important;
+            font-size: clamp(52px, min(12.2vw, 19.5vh), 175px) !important;
             font-weight: 300;
             color: #E5F2FC;
             margin: 0;
+            line-height: 1.1;
         }
 
         #landing-text {
             font-family: "Patrick Hand";
             color: #E5F2FC;
-            font-size: 45px;
+            font-size: clamp(19px, min(3.15vw, 5vh), 45px);
+            line-height: 1.25;
             margin: 0;
-            margin-bottom: 30px;
+            margin-bottom: clamp(14px, 3.3vh, 30px);
         }
 
         #rsvp-button {
-            --border-thin: 5px;
-            --border-thick: 14px;
+            --border-thin: 0.1em;
+            --border-thick: 0.28em;
 
             display: inline-block;
             box-sizing: border-box;
             font-family: "Patrick Hand";
-            font-size: 50px;
+            font-size: clamp(23px, min(3.5vw, 5.6vh), 50px);
             color: #00528c;
             text-decoration: none;
 
-            padding: 10px 60px;
-            border-radius: 50px;
+            padding: 0.2em 1.2em;
+            border-radius: 1em;
             background-color: #E5F2FC;
 
             border: var(--border-thin) solid #00528c;
@@ -94,10 +97,16 @@
             transform: translateY(calc(var(--border-thick) - var(--border-thin)));
         }
 
+        .content {
+            padding: 0;
+        }
+
         .landing {
             text-align: left;
-            padding-top: 135px;
-            padding-left: 160px;        
+            padding-top: clamp(32px, 15vh, 135px);
+            padding-left: clamp(22px, 11.1vw, 160px);
+            padding-right: clamp(22px, 6vw, 80px);
+            padding-bottom: clamp(24px, 6vh, 60px);
         }
     </style>
 </head>
@@ -128,12 +137,16 @@
                 travelY: 0,
             }));
 
+            const REFERENCE_WIDTH = 1440;
+
             function measure() {
+                const k = Math.min(1.6, Math.max(0.55, window.innerWidth / REFERENCE_WIDTH));
                 for (const layer of layers) {
+                    const depth = layer.depth * k;
                     const bleedX = ((layer.scale - 1) / 2) * window.innerWidth;
                     const bleedY = ((layer.scale - 1) / 2) * window.innerHeight;
-                    layer.travelX = Math.min(layer.depth, bleedX);
-                    layer.travelY = Math.min(layer.depth * 0.5, bleedY);
+                    layer.travelX = Math.min(depth, bleedX);
+                    layer.travelY = Math.min(depth * 0.5, bleedY);
                 }
             }
 
