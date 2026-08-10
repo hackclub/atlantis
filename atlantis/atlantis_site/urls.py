@@ -5,6 +5,7 @@ from .views.client import *
 
 urlpatterns = [
     path("", index, name="index"),
+    path("login-test/", login_test, name="login_test"),
     path("auth/login/", login_view, name="login"),
     path("auth/logout/", logout_view, name="logout"),
     path("oauth/callback/", auth_callback, name="auth_callback"),

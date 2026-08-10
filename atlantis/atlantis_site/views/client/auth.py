@@ -1,4 +1,4 @@
-from django.shortcuts import redirect
+from django.shortcuts import redirect, render
 from django.contrib.auth import login, logout, get_user_model
 from django.views.decorators.http import require_POST
 
@@ -10,6 +10,15 @@ from ..helpers import slack_client, rate_limit
 import os
 
 FORCE_REAUTH_COOKIE = "hca_force_reauth"
+
+# The landing page is a public teaser with no login button on it, but beta
+# testers still need a way in. This is that way in: unlisted, unlinked, and
+# noindexed, so it stays reachable only for people who were handed the URL.
+def login_test(request):
+    if request.user.is_authenticated:
+        return redirect("dashboard")
+
+    return render(request, "atlantis_site/login_test.html")
 
 @require_POST
 @rate_limit("login", 2)

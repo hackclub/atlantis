@@ -1,0 +1,21 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Atlantis</title>
+    <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
+    <link rel="icon" type="image/png" href="{% static 'atlantis_site/assets/img/favicon.png?v=2' %}">
+    <link rel="apple-touch-icon" href="{% static 'atlantis_site/assets/img/favicon.png?v=2' %}">
+</head>
+<body>
+    <div class="content">
+        <h1>Atlantis</h1>
+        <form action="{% url 'login' %}" method="post">
+            {% csrf_token %}
+            <button id="loginButton" type="submit">login</button>
+        </form>
+    </div>
+</body>
+</html>

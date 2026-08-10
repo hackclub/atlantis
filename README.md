@@ -1,6 +1,8 @@
 # what is this
 this is the website for the hack club [atlantis](https://atlantis.hackclub.com) YSWS! 
 
+note to reviewers: head to ```/login-test/``` on the site to test it out, as ```/``` is now the landing page! (this will be changed upon launch)
+
 ## dev
 
 ### this is hella outdated, i'll get around to updating it eventually
