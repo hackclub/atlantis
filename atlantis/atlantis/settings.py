@@ -204,7 +204,7 @@ JAZZMIN_SETTINGS = {
     "site_title": "Atlantis Supadmin",
     "site_header": "Atlantis Supadmin",
     "site_brand": "Atlantis",
-    "site_icon": "atlantis_site/assets/img/favicon.png",
+    "site_icon": "atlantis_site/assets/img/favicon.png?v=2",
     "welcome_sign": "log in you naughty naughty",
     "copyright": "Hack Club",
     "search_model": "auth.User",
