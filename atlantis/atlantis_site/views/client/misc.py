@@ -4,6 +4,18 @@ from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
 
 @login_required
+def guides(request):
+    return render(request, "atlantis_site/guides.html", {
+        "profile": request.user.hackclub_profile,
+    })
+
+@login_required
+def printer_select(request):
+    return render(request, "atlantis_site/printer_select.html", {
+        "profile": request.user.hackclub_profile,
+    })
+
+@login_required
 def user_profile(request, user_id):
     profile = request.user.hackclub_profile
     user_viewed = get_object_or_404(get_user_model(), id=user_id)

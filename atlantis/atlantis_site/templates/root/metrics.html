@@ -99,7 +99,7 @@
             </div>
             <div class="stat-card good">
                 <div class="stat-value">{{ reviews.total_layers_paid }}</div>
-                <div class="stat-label">Spools paid out</div>
+                <div class="stat-label">Pearls paid out</div>
                 <div class="stat-sub">for {{ reviews.t3_payout_display }} approved</div>
             </div>
             <div class="stat-card">
@@ -155,11 +155,11 @@
             <div class="stat-card warn">
                 <div class="stat-value">{{ shop.pending_orders }}</div>
                 <div class="stat-label">Pending orders</div>
-                <div class="stat-sub">{{ shop.pending_value }} spools owed</div>
+                <div class="stat-sub">{{ shop.pending_value }} pearls owed</div>
             </div>
             <div class="stat-card good">
                 <div class="stat-value">{{ shop.layers_spent }}</div>
-                <div class="stat-label">Spools spent (fulfilled)</div>
+                <div class="stat-label">Pearls spent (fulfilled)</div>
                 <div class="stat-sub">{{ shop.refunded_layers }} refunded</div>
             </div>
         </div>
@@ -189,13 +189,13 @@
             </div>
             <div class="stat-card good">
                 <div class="stat-value">{{ users.layers_in_circulation }}</div>
-                <div class="stat-label">Spools in circulation</div>
+                <div class="stat-label">Pearls in circulation</div>
                 <div class="stat-sub">avg {{ users.avg_layers }} / user</div>
             </div>
         </div>
 
         <div class="chart-grid">
-            {% include "root/_metric_chart.html" with title="Top spool holders" rows=users.top_holders empty="No users yet" %}
+            {% include "root/_metric_chart.html" with title="Top pearl holders" rows=users.top_holders empty="No users yet" %}
         </div>
     </section>
 

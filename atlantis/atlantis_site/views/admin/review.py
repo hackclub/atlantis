@@ -336,7 +336,7 @@ def t3_decision(request, ship_id):
         )
 
     owner_slack_id = ship.project.owner.hackclub_profile.slack_id
-    send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized and you've received {payout_layers} spools for it!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
+    send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized and you've received {payout_layers} pearls for it!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
 
     record_audit(request, "t3_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,

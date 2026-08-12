@@ -2,7 +2,7 @@ from ...views.client.dashboard import index, dashboard
 from ...views.client.auth import login_test, login_view, auth_callback, logout_view
 from ...views.client.projects import projects, create_project, edit_project, update_editor_model, delete_project, project_detail, project_detail_explore, create_journal, ship_project, explore, follow_project, unfollow_project, serve_media
 from ...views.client.shop import shop, item_detail, order_page, order_item, view_own_address
-from ...views.client.misc import user_profile
+from ...views.client.misc import user_profile, guides, printer_select
 from ...views.client.timelapse import start_timelapse, record_timelapse, sync_timelapse
 
 __all__ = [
@@ -10,7 +10,7 @@ __all__ = [
     "login_test", "login_view", "auth_callback", "logout_view",
     "projects", "create_project", "edit_project", "update_editor_model", "delete_project", "project_detail", "project_detail_explore", "create_journal", "ship_project", "explore", "follow_project", "unfollow_project",
     "shop", "item_detail", "order_page", "order_item", "view_own_address",
-    "user_profile",
+    "user_profile", "guides", "printer_select",
     "start_timelapse", "record_timelapse", "sync_timelapse",
     "serve_media",
 ]
