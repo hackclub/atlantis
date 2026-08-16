@@ -24,9 +24,20 @@
         <a href="{% url 'manage_projects' %}" class="link-button">Clear</a>
         {% endif %}
     </form>
+    <form method="POST" action="{% url 'db_delete_projects' %}" id="bulkDeleteForm" class="bulk-actions">
+        {% csrf_token %}
+        <label class="checkbox-label">
+            <input type="checkbox" id="selectAllProjects">
+            Select all shown
+        </label>
+        <span id="bulkSelectedCount">0 selected</span>
+        <button type="submit" id="bulkDeleteButton" style="color: red;" disabled>db delete selected</button>
+    </form>
+
     <table class="users-table">
         <thead>
             <tr>
+                <th></th>
                 <th>Project ID</th>
                 <th>Owner</th>
                 <th>Project Title</th>
@@ -41,6 +52,15 @@
         <tbody>
             {% for project in projects %}
             <tr data-project-id="{{ project.id }}" data-title="{{ project.title|default:''|lower }}" data-owner="{{ project.owner.hackclub_profile.slack_username|default:''|lower }}">
+                <td>
+                    <input
+                        type="checkbox"
+                        class="select-project"
+                        value="{{ project.id }}"
+                        data-title="{{ project.title|default:'' }}"
+                        aria-label="Select project {{ project.id }}"
+                    >
+                </td>
                 <td>{{ project.id }}</td>
                 <td>{{ project.owner.hackclub_profile.slack_username }}</td>
                 <td>{{ project.title }}</td>
@@ -151,6 +171,74 @@
     })();
 
     (function () {
+        const bulkForm = document.getElementById('bulkDeleteForm');
+        const selectAll = document.getElementById('selectAllProjects');
+        const count = document.getElementById('bulkSelectedCount');
+        const submitBtn = document.getElementById('bulkDeleteButton');
+        if (!bulkForm) return;
+
+        const boxes = Array.from(document.querySelectorAll('.select-project'));
+
+        function visibleBoxes() {
+            return boxes.filter((box) => !box.closest('tr').hidden);
+        }
+
+        function checkedBoxes() {
+            return visibleBoxes().filter((box) => box.checked);
+        }
+
+        function sync() {
+            const shown = visibleBoxes();
+            const selected = checkedBoxes();
+            count.textContent = selected.length + ' selected';
+            submitBtn.disabled = selected.length === 0;
+            selectAll.checked = shown.length > 0 && selected.length === shown.length;
+            selectAll.indeterminate = selected.length > 0 && selected.length < shown.length;
+        }
+
+        selectAll.addEventListener('change', () => {
+            visibleBoxes().forEach((box) => { box.checked = selectAll.checked; });
+            sync();
+        });
+
+        boxes.forEach((box) => box.addEventListener('change', sync));
+
+        // Rows hidden by the search filter drop out of the selection so an admin
+        // can never delete a project they can't see.
+        document.addEventListener('projects:filtered', () => {
+            boxes.forEach((box) => {
+                if (box.closest('tr').hidden) box.checked = false;
+            });
+            sync();
+        });
+
+        bulkForm.addEventListener('submit', (event) => {
+            const selected = checkedBoxes();
+            if (!selected.length) {
+                event.preventDefault();
+                return;
+            }
+
+            const titles = selected.map((box) => box.dataset.title || ('#' + box.value));
+            if (!confirm('Permanently delete ' + selected.length + ' project(s) from the database?\n\n' + titles.join('\n') + '\n\nThis cannot be undone.')) {
+                event.preventDefault();
+                return;
+            }
+
+            bulkForm.querySelectorAll('input[name="project_ids"]').forEach((input) => input.remove());
+            selected.forEach((box) => {
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = 'project_ids';
+                hidden.value = box.value;
+                bulkForm.appendChild(hidden);
+            });
+        });
+
+        sync();
+    })();
+
+    (function () {
         const input = document.getElementById('projectSearchInput');
         const empty = document.getElementById('projectSearchEmpty');
         if (!input) return;
@@ -169,6 +257,7 @@
                 if (match) visibleCount += 1;
             });
             if (empty) empty.hidden = visibleCount !== 0;
+            document.dispatchEvent(new CustomEvent('projects:filtered'));
         }
 
         if (searchForm) searchForm.addEventListener('submit', (event) => event.preventDefault());

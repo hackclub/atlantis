@@ -1,16 +1,24 @@
 from django.contrib.auth.decorators import user_passes_test
 from django.conf import settings
 from django.contrib import messages
+from django.core.cache import cache
 from django.db import transaction
 from django.db.models import Count, Sum
 from django.contrib.auth import get_user_model
+from django.http import JsonResponse
+from django.shortcuts import redirect
 from django.urls import reverse
-from ..models import AuditLog, Print, Ship, Item, Order, Profile
+from django.utils.http import url_has_allowed_host_and_scheme
+from ..models import AuditLog, InternalComment, LookoutSession, Print, Ship, Item, Order, Profile, detect_editor
+
+from functools import wraps
 
 from slack_sdk.errors import SlackApiError
 from slack_sdk import WebClient
 
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, urlunparse
+
+from requests.adapters import HTTPAdapter
 
 from PIL import Image
 
@@ -29,7 +37,6 @@ ALLOWED_IMAGE_FORMATS = {
 }
 
 PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?$", re.IGNORECASE)
-CLOUDFLARE_BUCKET_RE = re.compile(r"^https?:\/\/(?:[a-zA-Z0-9-]+\.)*pub-d9ac82fd80854a42ae2dde2757ff0a55\.r2\.dev(?:\/.*)?$", re.IGNORECASE)
 
 slack_client = WebClient(token=settings.SLACK_TOKEN, timeout=5)
 
@@ -48,6 +55,77 @@ def layers_for_minutes(minutes):
     tenths_of_hour = minutes // 6
     return round(tenths_of_hour * 0.5)
 
+# All reported time comes from Lookout timelapses linked to journal entries.
+# Nothing is self-reported, so these are the only ways to total time up.
+def tracked_seconds_for_journals(journals):
+    return LookoutSession.objects.filter(journal__in=journals).aggregate(
+        total=Sum("tracked_seconds")
+    )["total"] or 0
+
+def tracked_minutes_for_journals(journals):
+    return tracked_seconds_for_journals(journals) // 60
+
+def format_minutes(minutes):
+    return f"{minutes // 60}h {minutes % 60}m"
+
+# Local-development escape hatch. Recording real Lookout footage to clear the
+# 3h/2h ship gates makes the ship -> review -> print -> payout chain untestable
+# by hand, so organizers running with DEBUG on may ship with no journals and no
+# tracked time. BOTH conditions are required: with DEBUG off this is dead code
+# no matter who is signed in, so an organizer in production gains nothing.
+def can_bypass_ship_requirements(user):
+    return bool(settings.DEBUG and user.has_perm("atlantis_site.organizer"))
+
+def internal_comments_for_project(project):
+    """Reviewer-only comments on every ship of a project, newest first."""
+    return (
+        InternalComment.objects.filter(ship__project=project)
+        .select_related("author", "author__hackclub_profile")
+    )
+
+def build_review_history(ship):
+    """Everything reviewers did to a ship — decisions, prints, and internal
+    comments — as one oldest-first list. /root pages only: it carries internal
+    notes the project owner must never see."""
+    events = []
+    for t1 in ship.t1_reviews.all():
+        events.append({
+            "type": "t1",
+            "label": "T1 Review",
+            "review": t1,
+            "actor": display_name(t1.reviewer),
+            "at": t1.reviewed_at,
+        })
+    for print_action in ship.prints.all():
+        events.append({
+            "type": "print",
+            "label": "Print",
+            "print": print_action,
+            "actor": display_name(print_action.printer),
+            "at": print_action.finished_time or print_action.claimed_time,
+        })
+    for t2 in ship.t2_reviews.all():
+        events.append({
+            "type": "t2",
+            "label": "T2 Review",
+            "review": t2,
+            "actor": display_name(t2.reviewer),
+            "at": t2.reviewed_at,
+        })
+    # Comments span the whole project: a note left on an earlier ship is still
+    # what a reviewer needs to see on a reship, so it's flagged, not hidden.
+    for comment in internal_comments_for_project(ship.project):
+        events.append({
+            "type": "comment",
+            "label": "Internal comment",
+            "comment": comment,
+            "actor": display_name(comment.author),
+            "other_ship": comment.ship_id != ship.id,
+            "at": comment.created_at,
+        })
+    events.sort(key=lambda e: e["at"])
+    return events
+
 def build_journal_timeline(journals, ships):
     events = []
     for journal in journals:
@@ -57,12 +135,12 @@ def build_journal_timeline(journals, ships):
             "sort_key": journal.created_at,
         })
     for ship in ships:
-        total_time = sum(j.time_spent for j in ship.journals.all())
+        total_time = tracked_minutes_for_journals(ship.journals.all())
         events.append({
             "type": "ship",
             "ship": ship,
             "time_spent": total_time,
-            "time_display": f"{total_time // 60}h {total_time % 60}m",
+            "time_display": format_minutes(total_time),
             "feedback": getattr(ship, "latest_feedback", ""),
             "sort_key": ship.created_at,
         })
@@ -74,6 +152,47 @@ def get_client_ip(request):
     if forwarded:
         return forwarded.split(",")[0].strip()
     return request.META.get("REMOTE_ADDR", "")
+
+RATE_LIMIT_MESSAGE = "You're doing that too fast. Please wait a moment and try again."
+
+
+def _rate_limit_key(request, scope):
+    if request.user.is_authenticated:
+        actor = f"user:{request.user.id}"
+    else:
+        actor = f"ip:{get_client_ip(request)}"
+    return f"ratelimit:{scope}:{actor}"
+
+
+def safe_redirect_back(request):
+    referer = request.META.get("HTTP_REFERER", "")
+    if referer and url_has_allowed_host_and_scheme(
+        referer,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return redirect(referer)
+    return redirect("/")
+
+
+def rate_limit(scope, seconds, methods=("POST",), json=False):
+    def decorator(view):
+        @wraps(view)
+        def wrapped(request, *args, **kwargs):
+            if request.method in methods:
+                key = _rate_limit_key(request, scope)
+
+                if not cache.add(key, 1, timeout=seconds):
+                    if json:
+                        return JsonResponse(
+                            {"ok": False, "error": "rate_limited"}, status=429
+                        )
+                    messages.error(request, RATE_LIMIT_MESSAGE)
+                    return safe_redirect_back(request)
+            return view(request, *args, **kwargs)
+        return wrapped
+    return decorator
+
 
 def record_audit(request, action, target="", metadata=None):
     form_data = {
@@ -111,32 +230,73 @@ def _is_public_ip(ip):
         or ip.is_unspecified
     )
 
-def _host_resolves_to_public(hostname):
+def _validated_public_ip(hostname):
     if not hostname:
-        return False
+        return None
     try:
         addr_info = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
-        return False
+        return None
+    chosen = None
     for *_, sockaddr in addr_info:
         try:
             ip = ipaddress.ip_address(sockaddr[0])
         except ValueError:
-            return False
+            return None
         if getattr(ip, "ipv4_mapped", None):
             ip = ip.ipv4_mapped
         if not _is_public_ip(ip):
-            return False
-    return True
+            return None
+        if chosen is None:
+            chosen = str(ip)
+    return chosen
+
+def _host_resolves_to_public(hostname):
+    return _validated_public_ip(hostname) is not None
+
+def _authority(host, port):
+    bracketed = f"[{host}]" if ":" in host else host
+    return f"{bracketed}:{port}" if port else bracketed
+
+class _PinnedIPAdapter(HTTPAdapter):
+    def __init__(self, dest_ip, **kwargs):
+        self._dest_ip = dest_ip
+        super().__init__(**kwargs)
+
+    def send(self, request, **kwargs):
+        parsed = urlparse(request.url)
+        hostname = parsed.hostname
+        request.headers["Host"] = _authority(hostname, parsed.port)
+        request.url = urlunparse(
+            parsed._replace(netloc=_authority(self._dest_ip, parsed.port))
+        )
+        pool_kw = self.poolmanager.connection_pool_kw
+        if parsed.scheme == "https":
+            pool_kw["server_hostname"] = hostname
+            pool_kw["assert_hostname"] = hostname
+        else:
+            pool_kw.pop("server_hostname", None)
+            pool_kw.pop("assert_hostname", None)
+        return super().send(request, **kwargs)
+
+def _pinned_head(url, dest_ip, timeout=5):
+    parsed = urlparse(url)
+    session = requests.Session()
+    session.mount(f"{parsed.scheme}://{parsed.netloc}", _PinnedIPAdapter(dest_ip))
+    try:
+        return session.head(url, allow_redirects=False, timeout=timeout)
+    finally:
+        session.close()
 
 def _safe_head(url, max_redirects=5):
     for _ in range(max_redirects + 1):
         result = urlparse(url)
         if result.scheme not in ('http', 'https') or not result.netloc:
             return None
-        if not _host_resolves_to_public(result.hostname):
+        dest_ip = _validated_public_ip(result.hostname)
+        if dest_ip is None:
             return None
-        response = requests.head(url, allow_redirects=False, timeout=5)
+        response = _pinned_head(url, dest_ip)
         if response.is_redirect or response.is_permanent_redirect:
             location = response.headers.get('Location')
             if not location:
@@ -233,7 +393,7 @@ def notify_followers(request, project, message):
             send_slack_dm(content, profile.slack_id)
     
 def is_valid_editor_model_url(value):
-    return bool(CLOUDFLARE_BUCKET_RE.match(value))
+    return detect_editor(value) is not None
 
 def validate_file_size(file, max_mb):
     max_b = max_mb * 1024 * 1024
@@ -273,10 +433,6 @@ def add_bars(rows, value_key="value"):
 
 
 def reviewer_leaderboard(relation, limit=10):
-    """Rank users by how many `relation` rows they own (e.g. "t1_reviews").
-
-    Returns rows shaped for root/_metric_chart.html: {label, value, bar}.
-    """
     User = get_user_model()
     rows = (
         User.objects.annotate(n=Count(relation))
@@ -287,7 +443,6 @@ def reviewer_leaderboard(relation, limit=10):
     return add_bars([{"label": display_name(u), "value": u.n} for u in rows])
 
 PRINT_REWARD_GRAMS = 1000
-
 
 def finalized_print_grams(printer):
     return (

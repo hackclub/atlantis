@@ -1,0 +1,97 @@
+{% extends "atlantis_site/_base.html" %}
+{% load static %}
+
+{% block page_id %}record_timelapse{% endblock %}
+{% block title %}Record Timelapse - {{ project.title }}{% endblock %}
+
+{% block content %}
+<div class="content">
+    {% include "root/_messages.html" %}
+
+    <p class="tl-breadcrumb"><a href="{% url 'project_detail' project.id %}">&larr; Back to {{ project.title }}</a></p>
+
+    <div class="recorder">
+        <div class="recorder-head">
+            <h1>Record a timelapse</h1>
+            <span class="tl-pill" id="lookout-pill">Not started</span>
+        </div>
+        <p class="recorder-hint" id="lookout-hint">
+            When you hit start, your browser asks which screen or window to share &mdash;
+            pick the one you'll be modelling in. Nothing is captured until you do.
+        </p>
+
+        <div class="recorder-alert" id="lookout-alert" hidden>
+            <span id="lookout-alert-text"></span>
+            <button type="button" class="tl-btn tl-btn--ghost" id="lookout-alert-dismiss">Dismiss</button>
+        </div>
+
+        <div class="recorder-body">
+            <div class="recorder-stage">
+                <p class="stage-empty" id="lookout-stage-empty">
+                    A preview of whatever you share shows up here, so you can check you picked the
+                    right window before you start working.
+                </p>
+                <video id="lookout-preview" muted playsinline hidden></video>
+                <div class="stage-badge" id="lookout-badge" hidden><span class="tl-dot"></span> Recording</div>
+                <div class="stage-flash" id="lookout-flash"></div>
+            </div>
+
+            <div class="recorder-side">
+                <div class="tl-stat">
+                    <div class="tl-stat-value" id="lookout-timer">00:00:00</div>
+                    <div class="tl-stat-label">Tracked time</div>
+                    <div class="tl-stat-sub">This is the time your journal entry will log.</div>
+                    <div class="tl-stat-sub" id="lookout-mode" hidden></div>
+                </div>
+                <div class="tl-stat">
+                    <div class="tl-stat-value" id="lookout-shots">0</div>
+                    <div class="tl-stat-label">Screenshots captured</div>
+                    <div class="tl-stat-sub" id="lookout-next">Next one: &mdash;</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="recorder-actions">
+            <button type="button" class="tl-btn tl-btn--primary" id="lookout-start">Share screen &amp; start</button>
+            <button type="button" class="tl-btn tl-btn--primary" id="lookout-reshare" hidden>Re-share my screen</button>
+            <button type="button" class="tl-btn" id="lookout-pause" hidden>Pause</button>
+            <button type="button" class="tl-btn tl-btn--primary" id="lookout-resume" hidden>Resume</button>
+            <button type="button" class="tl-btn tl-btn--danger" id="lookout-stop" hidden>Finish &amp; build video</button>
+        </div>
+
+        <div class="recorder-result" id="lookout-result" hidden>
+            <h2>Your timelapse is ready</h2>
+            <div id="lookout-video"></div>
+            <p class="recorder-next">
+                It won't count towards your project until you attach it to a journal entry.
+                <a href="{% url 'project_detail' project.id %}#new-journal">Attach it now &rarr;</a>
+            </p>
+        </div>
+
+        <ul class="recorder-facts">
+            <li>One screenshot of the screen you share is taken roughly every minute, then stitched into a video.</li>
+            <li>Time is credited by Lookout from those screenshots &mdash; it's the only way time gets logged, so it can't be typed in by hand.</li>
+            <li>Keep this tab open while you work. You can switch to another window; just don't close this one.</li>
+            <li>Pause any time. Resuming asks you to share your screen again &mdash; browsers drop the share when you leave.</li>
+        </ul>
+
+        <details class="recorder-log">
+            <summary>Technical details</summary>
+            <div id="lookout-log"></div>
+        </details>
+    </div>
+</div>
+
+{{ session.token|json_script:"lookout-token" }}
+<script>
+    window.LOOKOUT_CONFIG = {
+        baseUrl: "{{ lookout_base_url|escapejs }}",
+        token: JSON.parse(document.getElementById("lookout-token").textContent),
+        sessionId: "{{ session.session_id|escapejs }}",
+        appName: "{{ lookout_app_name|escapejs }}",
+        syncUrl: "{% url 'sync_timelapse' session.pk %}",
+        csrfToken: "{{ csrf_token }}",
+    };
+</script>
+<script src="{% static 'atlantis_site/lookout_recorder.js' %}"></script>
+{% endblock %}

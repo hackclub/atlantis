@@ -41,6 +41,20 @@
     box-sizing: border-box;
 }
 
+.internal-comment-form {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 12px 0 24px;
+}
+
+.internal-comment-form textarea {
+    width: 450px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
 .project-editor-upload {
     margin-top: 16px;
     padding-top: 16px;

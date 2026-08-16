@@ -24,6 +24,7 @@ from ...models import detect_editor
 from ..helpers import (
     check_perms,
     layers_for_minutes,
+    tracked_minutes_for_journals,
     add_bars as _add_bars,
     display_name as _display_name,
     reviewer_leaderboard as _reviewer_leaderboard,
@@ -70,8 +71,8 @@ def metrics(request):
     ])
 
     total_journals = Journal.objects.count()
-    total_time_minutes = Journal.objects.aggregate(t=Sum("time_spent"))["t"] or 0
-    avg_journal_minutes = Journal.objects.aggregate(a=Avg("time_spent"))["a"] or 0
+    total_time_minutes = tracked_minutes_for_journals(Journal.objects.all())
+    avg_journal_minutes = (total_time_minutes / total_journals) if total_journals else 0
     avg_project_minutes = (total_time_minutes / active_projects) if active_projects else 0
 
     projects_stats = {

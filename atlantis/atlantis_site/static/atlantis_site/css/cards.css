@@ -19,14 +19,15 @@
     margin-bottom: 24px;
 }
 
-.review-history-group {
+.review-history {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 16px;
     margin-bottom: 24px;
 }
 
-.review-history-group .review-card {
+.review-history .review-card,
+.review-history .internal-comment {
     margin: 0;
 }
 
@@ -61,6 +62,7 @@
 .review-card,
 .ship-card,
 .ship-event,
+.internal-comment,
 .project-info,
 .order-card {
     border: 1px solid #ddd;
@@ -76,12 +78,27 @@
 .ship-event { width: 400px; }
 .project-info { width: 750px; }
 
+/* Tinted so a reviewer can't mistake an internal note for something the
+   project owner can see. */
+.internal-comment {
+    width: 450px;
+    background: #fffbea;
+    border-color: #e6d8a8;
+}
+
+.review-event-byline {
+    margin: 0 0 8px;
+    color: #666;
+    font-size: 14px;
+}
+
 .review-main .project-info {
     width: auto;
 }
 
 .review-card h4,
-.ship-event h4 {
+.ship-event h4,
+.internal-comment h4 {
     margin: 0 0 8px;
 }
 

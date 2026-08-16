@@ -1,28 +1,27 @@
-from django.shortcuts import redirect
-from authlib.integrations.django_client import OAuth
+from django.shortcuts import redirect, render
 from django.contrib.auth import login, logout, get_user_model
 from django.views.decorators.http import require_POST
 
 from ...models import Profile
-from ..helpers import slack_client
+from ...crypto import encrypt_token
+from ...hca import oauth, storable_token
+from ..helpers import slack_client, rate_limit
 
 import os
 
 FORCE_REAUTH_COOKIE = "hca_force_reauth"
 
-oauth = OAuth()
+# The landing page is a public teaser with no login button on it, but beta
+# testers still need a way in. This is that way in: unlisted, unlinked, and
+# noindexed, so it stays reachable only for people who were handed the URL.
+def login_test(request):
+    if request.user.is_authenticated:
+        return redirect("dashboard")
 
-oauth.register(
-    name="hackclub",
-    server_metadata_url="https://auth.hackclub.com/.well-known/openid-configuration",
-    client_id = os.environ["HCA_CLIENT_ID"],
-    client_secret = os.environ["HCA_CLIENT_SECRET"],
-    client_kwargs = {
-        "scope": "openid profile email verification_status slack_id"
-    }
-)
+    return render(request, "atlantis_site/login_test.html")
 
 @require_POST
+@rate_limit("login", 2)
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
@@ -78,14 +77,20 @@ def auth_callback(request):
             display_name = name
             avatar_url = os.environ["DEFAULT_PFP"]
 
+    defaults = {
+        "verification_status": verification_status,
+        "slack_id": slack_id,
+        "slack_username": display_name,
+        "slack_pfp_url": avatar_url,
+    }
+
+    stored_token = storable_token(token)
+    if stored_token:
+        defaults["encrypted_hca_token"] = encrypt_token(stored_token)
+
     Profile.objects.update_or_create(
         user=user,
-        defaults={
-            "verification_status": verification_status,
-            "slack_id": slack_id,
-            "slack_username": display_name,
-            "slack_pfp_url": avatar_url
-        },
+        defaults=defaults,
     )
 
     login(request, user)

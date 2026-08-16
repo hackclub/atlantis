@@ -42,6 +42,20 @@
     text-decoration: underline;
 }
 
+.bulk-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 12px 0;
+    font-size: 14px;
+}
+
+.bulk-actions .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
 .audit-data {
     border-collapse: collapse;
     margin: 8px 0;

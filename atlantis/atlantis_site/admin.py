@@ -1,6 +1,16 @@
 from django.contrib import admin
 
-from .models import AuditLog
+from .models import AuditLog, LookoutSession
+
+
+@admin.register(LookoutSession)
+class LookoutSessionAdmin(admin.ModelAdmin):
+    list_display = ("session_id", "project", "owner", "status", "tracked_seconds", "screenshot_count", "created_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("session_id", "owner__username", "project__title")
+    # token is a secret credential — keep it out of the changelist.
+    readonly_fields = ("session_id", "token", "created_at", "updated_at")
+    date_hierarchy = "created_at"
 
 
 @admin.register(AuditLog)

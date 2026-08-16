@@ -1,7 +1,23 @@
+from unittest.mock import patch
+
 from django.urls import reverse
 
+from .. import hca
+from ..hca import AddressUnavailable
 from ..models import Item, Order
 from .base import BaseTestCase, make_user, message_texts
+
+ADDRESS = {
+	"id": "adr_1",
+	"first_name": "Test",
+	"last_name": "Person",
+	"line_1": "15 Falls Rd",
+	"city": "Shelburne",
+	"state": "VT",
+	"postal_code": "05482",
+	"country": "US",
+	"primary": True,
+}
 
 
 class ShopListTests(BaseTestCase):
@@ -136,3 +152,60 @@ class OrderItemTests(BaseTestCase):
 		self.assertEqual(Order.objects.count(), 0)
 		self.assertEqual(self._layers(), 100)
 		self.assertIn("This item is out of stock.", message_texts(response))
+
+	@patch.object(hca, "fetch_addresses", return_value=[ADDRESS])
+	def test_order_records_the_address_it_ships_to(self, mock_fetch):
+		self._order()
+		self.assertEqual(Order.objects.get().address_id, "adr_1")
+
+	@patch.object(hca, "fetch_addresses", side_effect=AddressUnavailable("hca down"))
+	def test_order_still_placed_when_address_lookup_fails(self, mock_fetch):
+		self._order()
+		order = Order.objects.get()
+		self.assertEqual(order.address_id, "")
+		self.assertEqual(self._layers(), 75)
+
+
+class ViewOwnAddressTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("buyer")
+		self.client.force_login(self.user)
+
+	def _view(self):
+		return self.client.post(reverse("view_own_address"))
+
+	def test_login_required(self):
+		self.client.logout()
+		self.assertEqual(self._view().status_code, 302)
+
+	def test_get_not_allowed(self):
+		self.assertEqual(self.client.get(reverse("view_own_address")).status_code, 405)
+
+	@patch.object(hca, "fetch_addresses", return_value=[ADDRESS])
+	def test_returns_address_fetched_on_demand(self, mock_fetch):
+		response = self._view()
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.json()["address"]["lines"], [
+			"Test Person", "15 Falls Rd", "Shelburne, VT 05482", "US",
+		])
+		mock_fetch.assert_called_once()
+
+	@patch.object(hca, "fetch_addresses", return_value=[])
+	def test_no_address_on_file(self, mock_fetch):
+		response = self._view()
+		self.assertEqual(response.status_code, 404)
+		self.assertEqual(response.json()["error"], "no_address")
+
+	@patch.object(hca, "fetch_addresses", side_effect=AddressUnavailable("no token"))
+	def test_unavailable_identity_reported_separately(self, mock_fetch):
+		response = self._view()
+		self.assertEqual(response.status_code, 503)
+		self.assertEqual(response.json()["error"], "address_unavailable")
+
+	@patch.object(hca, "fetch_addresses", return_value=[ADDRESS])
+	def test_rate_limited(self, mock_fetch):
+		self.assertEqual(self._view().status_code, 200)
+		response = self._view()
+		self.assertEqual(response.status_code, 429)
+		self.assertEqual(response.json()["error"], "rate_limited")

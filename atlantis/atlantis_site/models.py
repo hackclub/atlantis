@@ -4,7 +4,16 @@ from urllib.parse import urlparse
 from django.db import models
 from django.contrib.auth.models import User
 from django.conf import settings
+from django.urls import reverse
 from django.utils import timezone
+
+
+def media_url(value):
+	if not value:
+		return ""
+	if value.startswith(("http://", "https://")):
+		return value
+	return reverse("serve_media", args=[value])
 
 ALLOWED_EDITORS = [
 	"Fusion 360",
@@ -67,9 +76,54 @@ class Profile(models.Model):
 	slack_pfp_url = models.CharField(max_length=200, blank=True, default="")
 	layers = models.IntegerField(default=0)
 	print_reward_kg = models.IntegerField(default=0)
+	# Encrypted (Fernet) JSON blob of the user's HCA OAuth token. Addresses are
+	# never stored: this token is what buys us one from HCA on demand, on an
+	# explicit "View Address".
+	encrypted_hca_token = models.TextField(blank=True, default="")
 
 	def __str__(self):
 		return self.user.username
+
+	def get_hca_token(self):
+		from .crypto import decrypt_token
+		return decrypt_token(self.encrypted_hca_token)
+
+	def save_hca_token(self, token):
+		"""Persist a token response, keeping the write to this column alone so
+		a refresh mid-request cannot clobber unrelated in-memory changes."""
+		from .crypto import encrypt_token
+		from .hca import storable_token
+		self.encrypted_hca_token = encrypt_token(storable_token(token))
+		if self.pk:
+			Profile.objects.filter(pk=self.pk).update(
+				encrypted_hca_token=self.encrypted_hca_token
+			)
+
+	def get_addresses(self):
+		"""Fetch the user's addresses from HCA. Raises AddressUnavailable if
+		their token is missing or HCA cannot be reached."""
+		from .hca import fetch_addresses
+		return fetch_addresses(self)
+
+	def get_address(self, address_id=None):
+		"""Return the address matching address_id, else the primary, else the
+		first available address (or None)."""
+		addresses = self.get_addresses()
+		if not addresses:
+			return None
+		if address_id:
+			for address in addresses:
+				if address.get("id") == address_id:
+					return address
+		for address in addresses:
+			if address.get("primary"):
+				return address
+		return addresses[0]
+
+	@property
+	def primary_address_id(self):
+		address = self.get_address()
+		return address.get("id", "") if address else ""
 
 # project/ship models
 class Project(models.Model):
@@ -97,6 +151,10 @@ class Project(models.Model):
 	@property
 	def editor_name(self):
 		return detect_editor(self.editor_model_url)
+
+	@property
+	def editor_model_display_url(self):
+		return media_url(self.editor_model_url)
 	
 class Ship(models.Model):
 	project = models.ForeignKey(
@@ -232,6 +290,27 @@ class T3(models.Model):
 
 	internal_notes = models.CharField(blank=True)
 
+class InternalComment(models.Model):
+	ship = models.ForeignKey(
+		Ship,
+		on_delete=models.CASCADE,
+		related_name="internal_comments"
+	)
+	author = models.ForeignKey(
+		User,
+		on_delete=models.PROTECT,
+		related_name="internal_comments"
+	)
+
+	created_at = models.DateTimeField(auto_now_add=True)
+	text = models.CharField(max_length=1000)
+
+	class Meta:
+		ordering = ["-created_at"]
+
+	def __str__(self):
+		return f"Internal comment on ship {self.ship_id} by {self.author_id}"
+
 class Journal(models.Model):
 	project = models.ForeignKey(
 		Project,
@@ -246,12 +325,122 @@ class Journal(models.Model):
 		null=True
 	)
 
-	time_spent = models.IntegerField()
 	created_at = models.DateTimeField(auto_now_add=True)
 	title = models.CharField(max_length=100)
 	text = models.CharField(max_length=2000)
 	image_url = models.CharField(max_length=2048)
 	model_url = models.CharField(max_length=2048)
+
+	@property
+	def image_display_url(self):
+		return media_url(self.image_url)
+
+	@property
+	def model_display_url(self):
+		return media_url(self.model_url)
+
+	@property
+	def tracked_seconds(self):
+		return self.timelapses.aggregate(total=models.Sum("tracked_seconds"))["total"] or 0
+
+	@property
+	def tracked_minutes(self):
+		return self.tracked_seconds // 60
+
+	@property
+	def tracked_display(self):
+		minutes = self.tracked_minutes
+		return f"{minutes // 60}h {minutes % 60}m"
+
+# lookout timelapse recording sessions
+class LookoutSession(models.Model):
+	class Status(models.TextChoices):
+		PENDING = "pending", "Pending"
+		ACTIVE = "active", "Active"
+		PAUSED = "paused", "Paused"
+		STOPPED = "stopped", "Stopped"
+		COMPILING = "compiling", "Compiling"
+		COMPLETE = "complete", "Complete"
+		FAILED = "failed", "Failed"
+
+	project = models.ForeignKey(
+		Project,
+		on_delete=models.CASCADE,
+		related_name="timelapses"
+	)
+	owner = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="timelapses"
+	)
+	journal = models.ForeignKey(
+		Journal,
+		on_delete=models.SET_NULL,
+		related_name="timelapses",
+		null=True,
+		blank=True
+	)
+
+	session_id = models.CharField(max_length=64, unique=True)
+	token = models.CharField(max_length=128, unique=True)
+
+	status = models.CharField(
+		max_length=16,
+		choices=Status.choices,
+		default=Status.PENDING,
+	)
+
+	tracked_seconds = models.IntegerField(default=0)
+	total_active_seconds = models.IntegerField(default=0)
+	screenshot_count = models.IntegerField(default=0)
+
+	heartbeats_forwarded = models.BooleanField(default=False)
+
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	class Meta:
+		ordering = ["-created_at"]
+
+	def __str__(self):
+		return f"Timelapse {self.session_id} ({self.status}) for project {self.project_id}"
+
+	@property
+	def is_recordable(self):
+		return self.status in (
+			self.Status.PENDING,
+			self.Status.ACTIVE,
+			self.Status.PAUSED,
+		)
+
+	@property
+	def is_complete(self):
+		return self.status == self.Status.COMPLETE
+
+	@property
+	def is_processing(self):
+		"""Recording is over but Lookout hasn't produced the video yet."""
+		return self.status in (self.Status.STOPPED, self.Status.COMPILING)
+
+	@property
+	def is_attachable(self):
+		return self.is_complete and self.journal_id is None
+
+	@property
+	def tracked_display(self):
+		total = self.tracked_seconds or 0
+		return f"{total // 3600}h {(total % 3600) // 60}m"
+
+	@property
+	def video_url(self):
+		base = settings.LOOKOUT_BASE_URL.rstrip("/")
+		return f"{base}/api/media/{self.session_id}/video.mp4"
+
+	@property
+	def thumbnail_url(self):
+		base = settings.LOOKOUT_BASE_URL.rstrip("/")
+		return f"{base}/api/media/{self.session_id}/thumbnail.jpg"
+
 
 # shop models
 class Item(models.Model):

@@ -24,18 +24,26 @@ HCA_CLIENT_ID = os.environ.get("HCA_CLIENT_ID")
 HCA_CLIENT_SECRET = os.environ.get("HCA_CLIENT_SECRET")
 HCA_CALLBACK_URI = os.environ.get("HCA_CALLBACK_URI")
 
+# Fernet key (url-safe base64-encoded 32 bytes) used to encrypt the HCA OAuth
+# tokens that shipping addresses are fetched with at rest. Addresses themselves
+# are never stored. Generate with: Fernet.generate_key().decode()
+ADDRESS_ENCRYPTION_KEY = os.environ.get("ADDRESS_ENCRYPTION_KEY")
+
 # fucking cloudflare bs
 AWS_ACCESS_KEY_ID = os.environ["R2_ACCESS_KEY_ID"]
-AWS_SECRET_ACCESS_KEY = os.environ["R2_SECRET_ACCESS_KEY"]
+AWS_SECRET_ACCESS_KEY = os.environ["R2_ACCESS_KEY"]
 AWS_STORAGE_BUCKET_NAME = os.environ["R2_BUCKET_NAME"]
-AWS_S3_ENDPOINT_URL = f"https://{os.environ['CF_ACCOUNT_ID']}.r2.cloudflarestorage.com"
-AWS_S3_REGION_NAME = "auto"  
+AWS_S3_ENDPOINT_URL = os.environ["R2_ENDPOINT"]
+AWS_S3_REGION_NAME = "auto"
 AWS_S3_SIGNATURE_VERSION = "s3v4"
 AWS_DEFAULT_ACL = None
-AWS_S3_FILE_OVERWRITE = False
-AWS_S3_CUSTOM_DOMAIN = os.environ["R2_PUBLIC_URL"].replace("https://", "")
+AWS_S3_FILE_OVERWRITE = True
 
 SLACK_TOKEN = os.environ["SLACK_TOKEN"]
+
+LOOKOUT_TOKEN = os.environ["LOOKOUT_TOKEN"]
+LOOKOUT_BASE_URL = os.environ.get("LOOKOUT_BASE_URL", "https://lookout.hackclub.com")
+LOOKOUT_APP_NAME = os.environ.get("LOOKOUT_APP_NAME", "Atlantis")
 
 STORAGES = {
     "default": {
@@ -72,6 +80,12 @@ INSTALLED_APPS = [
     'atlantis_site',
     'storages'
 ]
+
+try:
+    import django_extensions  # noqa: F401
+    INSTALLED_APPS.append('django_extensions')
+except ImportError:
+    pass
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -119,6 +133,25 @@ DATABASES = {
 }
 
 
+# Cache
+# https://docs.djangoproject.com/en/6.0/topics/cache/
+#
+# Backed by a Postgres table (created by migration 0041) so cache state — most
+# importantly the rate-limit windows in views.helpers.rate_limit — is shared
+# across all gunicorn workers rather than living per-process. A high MAX_ENTRIES
+# keeps active rate-limit windows from being culled early under load.
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "atlantis_cache",
+        "OPTIONS": {
+            "MAX_ENTRIES": 10000,
+        },
+    }
+}
+
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
@@ -138,10 +171,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 CSRF_TRUSTED_ORIGINS = [
-    'https://yfvyqtuytp2qa4rsw2cfxv7t.a.shipwrights.dev/',
-    'https://*.yfvyqtuytp2qa4rsw2cfxv7t.a.shipwrights.dev/',
-    'https://atlantis.hacklub.com',
-    'https://*.atlantis.hacklub.com'
+    'https://atlantis.hackclub.com',
+    'https://*.atlantis.hackclub.com',
+    'https://localhost:8000'
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -172,6 +204,7 @@ JAZZMIN_SETTINGS = {
     "site_title": "Atlantis Supadmin",
     "site_header": "Atlantis Supadmin",
     "site_brand": "Atlantis",
+    "site_icon": "atlantis_site/assets/img/favicon.png?v=2",
     "welcome_sign": "log in you naughty naughty",
     "copyright": "Hack Club",
     "search_model": "auth.User",

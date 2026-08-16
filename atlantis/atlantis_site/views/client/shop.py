@@ -3,8 +3,13 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db import transaction
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 
 from ...models import Profile, Item, Order
+from ...crypto import format_address
+from ...hca import AddressUnavailable
+from ..helpers import rate_limit
 
 @login_required
 def shop(request):
@@ -28,6 +33,7 @@ def order_page(request, item_id):
     return redirect("item_detail", item_id=item_id)
 
 @login_required
+@rate_limit("order_item", 2)
 def order_item(request, item_id):
     if request.method != "POST":
         return redirect("item_detail", item_id=item_id)
@@ -49,6 +55,14 @@ def order_item(request, item_id):
         return redirect("item_detail", item_id=item_id)
     
     total_cost = item.cost * quantity
+
+    # Resolved before the transaction: this calls out to HCA, which has no
+    # business happening while row locks are held. An order still goes through
+    # if the lookup fails — fulfillment resolves the primary address anyway.
+    try:
+        address_id = request.user.hackclub_profile.primary_address_id
+    except AddressUnavailable:
+        address_id = ""
 
     with transaction.atomic():
         item = Item.objects.select_for_update().get(id=item.id)
@@ -83,8 +97,30 @@ def order_item(request, item_id):
             owner=request.user,
             item=item,
             quantity=quantity,
-            user_notes=user_notes
+            user_notes=user_notes,
+            address_id=address_id,
         )
 
     messages.success(request, f"Successfully ordered {quantity}x {item.name}!")
     return redirect("shop")
+
+
+@login_required
+@require_POST
+@rate_limit("view_own_address", 2, json=True)
+def view_own_address(request):
+    profile = request.user.hackclub_profile
+
+    try:
+        address = format_address(profile.get_address())
+    except AddressUnavailable:
+        return JsonResponse(
+            {"ok": False, "error": "address_unavailable"}, status=503
+        )
+
+    if address is None:
+        return JsonResponse(
+            {"ok": False, "error": "no_address"}, status=404
+        )
+
+    return JsonResponse({"ok": True, "address": address})

@@ -1,9 +1,10 @@
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 
-from ..models import Journal, Project, Ship
+from ..models import Journal, LookoutSession, Project, Ship
 from .base import (
 	VALID_EDITOR_LINK,
 	VALID_PRINTABLES_URL,
@@ -13,6 +14,7 @@ from .base import (
 	make_journal,
 	make_project,
 	make_ship,
+	make_timelapse,
 	make_user,
 	message_texts,
 	stl_upload,
@@ -329,9 +331,12 @@ class CreateJournalTests(BaseTestCase):
 		self.project = make_project(self.user)
 		self.client.force_login(self.user)
 
-	def _create(self, project=None, **overrides):
+	def _create(self, project=None, timelapses=None, **overrides):
+		project = project or self.project
+		if timelapses is None:
+			timelapses = [str(make_timelapse(project, minutes=60).pk)]
 		data = {
-			"time_spent": "60",
+			"timelapses": timelapses,
 			"title": "Progress update",
 			"text": "x" * 300,
 			"image": image_upload(),
@@ -339,7 +344,6 @@ class CreateJournalTests(BaseTestCase):
 		}
 		data.update(overrides)
 		data = {k: v for k, v in data.items() if v is not None}
-		project = project or self.project
 		return self.client.post(reverse("create_journal", args=[project.id]), data)
 
 	def test_get_redirects_without_creating(self):
@@ -353,11 +357,12 @@ class CreateJournalTests(BaseTestCase):
 
 		journal = Journal.objects.get()
 		self.assertEqual(journal.project, self.project)
-		self.assertEqual(journal.time_spent, 60)
+		self.assertEqual(journal.tracked_minutes, 60)
 		self.assertEqual(journal.title, "Progress update")
 		self.assertIsNone(journal.ship)
-		self.assertIn("/images/", journal.image_url)
-		self.assertIn("/models/", journal.model_url)
+		# Stored as private-bucket object keys, not public URLs.
+		self.assertTrue(journal.image_url.startswith("images/"))
+		self.assertTrue(journal.model_url.startswith("models/"))
 		self.assertTrue(journal.model_url.endswith(".stl"))
 
 	@override_settings(ALLOW_JOURNALING=False)
@@ -384,13 +389,60 @@ class CreateJournalTests(BaseTestCase):
 		self._create()
 		self.assertEqual(Journal.objects.count(), 0)
 
-	def test_time_spent_boundaries(self):
-		cases = {"29": 0, "30": 1, "240": 1, "241": 0, "abc": 0, "": 0}
-		for raw, created in cases.items():
-			with self.subTest(time_spent=raw):
-				Journal.objects.all().delete()
-				self._create(time_spent=raw)
-				self.assertEqual(Journal.objects.count(), created)
+	def test_requires_at_least_one_timelapse(self):
+		response = self._create(timelapses=[])
+		self.assertEqual(Journal.objects.count(), 0)
+		self.assertIn(
+			"You must attach at least one finished timelapse to your journal entry!",
+			message_texts(response),
+		)
+
+	def test_rejects_non_integer_timelapse_ids(self):
+		response = self._create(timelapses=["abc"])
+		self.assertEqual(Journal.objects.count(), 0)
+		self.assertIn("Invalid timelapse selection.", message_texts(response))
+
+	def test_time_is_the_sum_of_attached_timelapses(self):
+		ids = [
+			str(make_timelapse(self.project, minutes=90).pk),
+			str(make_timelapse(self.project, minutes=45).pk),
+		]
+		self._create(timelapses=ids)
+		self.assertEqual(Journal.objects.get().tracked_minutes, 135)
+
+	def test_rejects_unfinished_timelapse(self):
+		timelapse = make_timelapse(
+			self.project, minutes=60, status=LookoutSession.Status.ACTIVE
+		)
+		self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 0)
+
+	def test_rejects_timelapse_from_another_project(self):
+		other = make_project(self.user, title="Other")
+		timelapse = make_timelapse(other, minutes=60)
+		self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 0)
+
+	def test_rejects_another_users_timelapse(self):
+		timelapse = make_timelapse(
+			self.project, minutes=60, owner=make_user("stranger")
+		)
+		self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 0)
+
+	def test_cannot_reuse_an_already_attached_timelapse(self):
+		timelapse = make_timelapse(self.project, minutes=60)
+		self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 1)
+
+		# Clear the create_journal rate limit so the reuse guard is what's tested.
+		cache.clear()
+		response = self._create(timelapses=[str(timelapse.pk)])
+		self.assertEqual(Journal.objects.count(), 1)
+		self.assertIn(
+			"One or more of those timelapses can't be attached. Refresh and try again.",
+			message_texts(response),
+		)
 
 	def test_text_length_boundaries(self):
 		cases = {199: 0, 200: 1, 2000: 1, 2001: 0}
@@ -549,6 +601,97 @@ class ShipProjectTests(BaseTestCase):
 		self.assertEqual(old_journal.ship, old_ship)
 
 
+class DebugOrganizerShipBypassTests(BaseTestCase):
+	"""Organizers running with DEBUG on may ship with no journals and no time.
+
+	Both halves are required — the bypass must stay shut for organizers in
+	production and for ordinary users in development.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.organizer = grant_perms(make_user("org"), "organizer")
+		self.project = make_project(self.organizer, shippable=True)
+		self.client.force_login(self.organizer)
+
+	def _ship(self, project=None):
+		project = project or self.project
+		return self.client.post(reverse("ship_project", args=[project.id]))
+
+	@override_settings(DEBUG=True)
+	def test_organizer_ships_with_no_journals_or_time(self):
+		response = self._ship()
+		self.assertIn(
+			f'Successfully shipped project "{self.project.title}"!', message_texts(response)
+		)
+		ship = Ship.objects.get()
+		self.assertEqual(ship.status, Ship.ShipStatus.T1_QUEUE)
+		self.assertEqual(ship.journals.count(), 0)
+
+	@override_settings(DEBUG=True)
+	def test_organizer_reships_without_new_time(self):
+		make_ship(self.project, status=Ship.ShipStatus.FINALIZED)
+		self._ship()
+		self.assertEqual(Ship.objects.count(), 2)
+
+	@override_settings(DEBUG=True)
+	def test_bypass_does_not_skip_printables_requirement(self):
+		self.project.printablesUrl = ""
+		self.project.save()
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 0)
+		self.assertIn("You need a printables URL to ship!", message_texts(response))
+
+	@override_settings(DEBUG=True)
+	def test_bypass_does_not_skip_locked_project(self):
+		self.project.locked = True
+		self.project.save()
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 0)
+		self.assertIn(
+			"This project is locked. You cannot ship a locked project.", message_texts(response)
+		)
+
+	@override_settings(DEBUG=True)
+	def test_bypass_does_not_skip_in_flight_ship_check(self):
+		make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE)
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 1)
+		self.assertIn(
+			"You cannot reship until your most recent ship has been finalized or rejected.",
+			message_texts(response),
+		)
+
+	@override_settings(DEBUG=False)
+	def test_organizer_still_gated_without_debug(self):
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 0)
+		self.assertIn(
+			"Your project must have at least one journal to be shipped", message_texts(response)
+		)
+
+	@override_settings(DEBUG=True)
+	def test_non_organizer_still_gated_with_debug(self):
+		user = make_user("plain", slack_id="U0PLAIN")
+		project = make_project(user, shippable=True)
+		self.client.force_login(user)
+		response = self._ship(project)
+		self.assertEqual(Ship.objects.count(), 0)
+		self.assertIn(
+			"Your project must have at least one journal to be shipped", message_texts(response)
+		)
+
+	@override_settings(DEBUG=True)
+	def test_ship_button_enabled_for_organizer(self):
+		response = self.client.get(reverse("project_detail", args=[self.project.id]))
+		self.assertTrue(response.context["can_ship"])
+
+	@override_settings(DEBUG=False)
+	def test_ship_button_disabled_without_debug(self):
+		response = self.client.get(reverse("project_detail", args=[self.project.id]))
+		self.assertFalse(response.context["can_ship"])
+
+
 class UpdateEditorModelTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()
@@ -611,7 +754,8 @@ class UpdateEditorModelTests(BaseTestCase):
 		response = self._update(editor_model_file=SimpleUploadedFile("part.f3d", b"fusion data"))
 		self.assertIn("Editor model updated successfully.", message_texts(response))
 		self.project.refresh_from_db()
-		self.assertIn("/editor_models/", self.project.editor_model_url)
+		# Stored as a private-bucket object key, not a public URL.
+		self.assertTrue(self.project.editor_model_url.startswith("editor_models/"))
 		self.assertTrue(self.project.editor_model_url.endswith(".f3d"))
 
 	@override_settings(ALLOW_JOURNALING=True)
@@ -699,7 +843,7 @@ class FollowerNotificationTests(BaseTestCase):
 		self.client.post(
 			reverse("create_journal", args=[self.project.id]),
 			{
-				"time_spent": "60",
+				"timelapses": [str(make_timelapse(self.project, minutes=60).pk)],
 				"title": "Update",
 				"text": "x" * 300,
 				"image": image_upload(),
@@ -736,3 +880,40 @@ class FollowerNotificationTests(BaseTestCase):
 			reverse("project_detail_explore", args=[self.project.id])
 		)
 		mock_dm.assert_called_once_with(f"hello {expected_url}", self.follower.hackclub_profile.slack_id)
+
+
+class ServeMediaTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("viewer")
+		self.client.force_login(self.user)
+
+	def _store(self, key, content=b"filedata"):
+		from django.core.files.base import ContentFile
+		from django.core.files.storage import default_storage
+		return default_storage.save(key, ContentFile(content))
+
+	def test_streams_stored_object(self):
+		key = self._store("images/abc.png", b"pngbytes")
+		response = self.client.get(reverse("serve_media", args=[key]))
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(b"".join(response.streaming_content), b"pngbytes")
+		self.assertEqual(response["Content-Type"], "image/png")
+
+	def test_requires_login(self):
+		self.client.logout()
+		response = self.client.get(reverse("serve_media", args=["images/abc.png"]))
+		self.assertEqual(response.status_code, 302)
+
+	def test_missing_key_returns_404(self):
+		response = self.client.get(reverse("serve_media", args=["images/nope.png"]))
+		self.assertEqual(response.status_code, 404)
+
+	def test_rejects_disallowed_prefix(self):
+		self._store("secrets/private.txt", b"secret")
+		response = self.client.get(reverse("serve_media", args=["secrets/private.txt"]))
+		self.assertEqual(response.status_code, 404)
+
+	def test_rejects_path_traversal(self):
+		response = self.client.get("/media/images/../secrets/x")
+		self.assertEqual(response.status_code, 404)

@@ -4,13 +4,14 @@ from django.contrib.auth import get_user_model
 from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db.models import Q, Sum
+from django.db.models import Q
+from django.db import transaction
 from django.contrib import messages
 
 import os
 
 from ...models import Project
-from ..helpers import check_perms, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url
+from ..helpers import check_perms, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, tracked_minutes_for_journals, format_minutes
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer"])
@@ -114,8 +115,9 @@ def manage_projects(request):
         )
 
     for project in projects:
-        total_time = project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
-        project.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
+        project.time_spent_display = format_minutes(
+            tracked_minutes_for_journals(project.journals.all())
+        )
         project.journal_count = project.journals.count()
         latest_ship = project.ships.order_by("-created_at").first()
         project.status_display = latest_ship.get_status_display() if latest_ship else "No ships yet"
@@ -186,6 +188,28 @@ def admin_edit_project(request, project_id):
 
     return redirect("manage_projects")
 
+def _purge_project(project):
+    """Hard-delete a project with its journals and ships. Returns audit metadata."""
+    metadata = {
+        "project_id": project.id,
+        "title": project.title,
+        "owner_id": project.owner_id,
+        "owner_username": project.owner.username,
+        "journals_deleted": project.journals.count(),
+        "ships_deleted": project.ships.count(),
+    }
+
+    with transaction.atomic():
+        for journal in project.journals.all():
+            journal.delete()
+
+        for ship in project.ships.all():
+            ship.delete()
+
+        project.delete()
+
+    return metadata
+
 @staff_member_required
 @check_perms(["atlantis_site.organizer"])
 @require_POST
@@ -193,20 +217,60 @@ def db_delete_project(request, project_id):
     project = get_object_or_404(Project, id=project_id)
     title = project.title
 
-    journals = project.journals.all()
-    ships = project.ships.all()
-
     try:
-        for journal in journals:
-            journal.delete()
-
-        for ship in ships:
-            ship.delete()
-
-        project.delete()
+        metadata = _purge_project(project)
     except Exception as e:
         messages.error(request, f"DB delete failed, {e}")
         return redirect("manage_projects")
-    
+
+    record_audit(request, "db_delete_project", target=f"Project #{project_id} ({title})", metadata={
+        **metadata,
+        "bulk": False,
+    })
+
     messages.success(request, f"Removed {title} from the DB")
+    return redirect("manage_projects")
+
+@staff_member_required
+@check_perms(["atlantis_site.organizer"])
+@require_POST
+def db_delete_projects(request):
+    project_ids = []
+    for raw_id in request.POST.getlist("project_ids"):
+        try:
+            project_ids.append(int(raw_id))
+        except (ValueError, TypeError):
+            continue
+
+    if not project_ids:
+        messages.error(request, "No projects selected")
+        return redirect("manage_projects")
+
+    projects = Project.objects.filter(id__in=project_ids)
+    if not projects:
+        messages.error(request, "None of the selected projects exist")
+        return redirect("manage_projects")
+
+    deleted = 0
+    for project in projects:
+        title = project.title
+
+        try:
+            metadata = _purge_project(project)
+        except Exception as e:
+            messages.error(request, f"DB delete failed for {title}, {e}")
+            continue
+
+        # One entry per project, same action as a single delete, so the audit log
+        # stays filterable by project regardless of how the delete was triggered.
+        record_audit(request, "db_delete_project", target=f"Project #{metadata['project_id']} ({title})", metadata={
+            **metadata,
+            "bulk": True,
+            "batch_ids": project_ids,
+        })
+        deleted += 1
+
+    if deleted:
+        messages.success(request, f"Removed {deleted} project(s) from the DB")
+
     return redirect("manage_projects")

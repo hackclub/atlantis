@@ -5,3 +5,5 @@ db.sqlite3
 TODO.md
 pgdata/
 staticfiles
+certs/
+.claude

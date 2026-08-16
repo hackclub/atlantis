@@ -36,7 +36,7 @@
                             <td><a href="{% url 'item_detail' item.id %}">{{ item.name }}</a>{% if item.is_print_reward %} <span class="reward-badge" title="Auto-ordered when a printer hits each 1kg milestone">(print reward)</span>{% endif %}</td>
                             <td>{{ item.description|truncatechars:80 }}</td>
                             <td>{{ item.category }}</td>
-                            <td>{{ item.cost }} spools</td>
+                            <td>{{ item.cost }} pearls</td>
                             <td>{% if item.unlimited_stock %}Unlimited{% else %}{{ item.stock }}{% endif %}</td>
                             <td>
                                 <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}" data-category="{{ item.category }}" data-is-print-reward="{{ item.is_print_reward|yesno:'1,' }}" data-stock="{{ item.stock }}">Edit</button>

@@ -3,23 +3,39 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Sum
 from django.core.files.storage import default_storage
 from django.db import transaction
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
-from math import floor
+from django.http import FileResponse, Http404
+
+from botocore.exceptions import ClientError
+
+import mimetypes
 
 from ...models import (
-    Project, Ship, Print, Journal, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
+    Project, Ship, Print, Journal, LookoutSession, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
 )
 from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
     sniff_image_extension, random_storage_key, build_journal_timeline,
-    notify_followers,
+    notify_followers, rate_limit, tracked_minutes_for_journals, format_minutes,
+    can_bypass_ship_requirements,
 )
 
 import os
+
+def _attachable_timelapses(project, user, ids=None):
+    """Finished timelapses the user can still attach to a new journal entry."""
+    qs = LookoutSession.objects.filter(
+        project=project,
+        owner=user,
+        status=LookoutSession.Status.COMPLETE,
+        journal__isnull=True,
+    )
+    if ids is not None:
+        qs = qs.filter(id__in=ids)
+    return qs
 
 @login_required
 def projects(request):
@@ -29,6 +45,7 @@ def projects(request):
 
 @login_required
 @require_POST
+@rate_limit("create_project", 2)
 def create_project(request):
     title = request.POST.get("title", "").strip()
     description = request.POST.get("description", "").strip()
@@ -68,6 +85,7 @@ def create_project(request):
 
 @login_required
 @require_POST
+@rate_limit("edit_project", 2)
 def edit_project(request, project_id):
     project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
 
@@ -109,6 +127,7 @@ def edit_project(request, project_id):
 
 @login_required
 @require_POST
+@rate_limit("update_editor_model", 3)
 def update_editor_model(request, project_id):
     project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
 
@@ -137,7 +156,9 @@ def update_editor_model(request, project_id):
             messages.error(request, "File uploads are currently disabled.")
             return redirect("project_detail", project_id=project_id)
 
-        project.editor_model_url = default_storage.url(editor_model_key)
+        # Store the object key (not a URL) — the bucket is private and served
+        # through serve_media. External links are kept verbatim below.
+        project.editor_model_url = editor_model_key
     elif editor_model_link:
         if not editor_model_link.lower().startswith(("http://", "https://")):
             messages.error(request, "Editor model link must be a valid URL.")
@@ -159,6 +180,7 @@ def update_editor_model(request, project_id):
 
 @login_required
 @require_POST
+@rate_limit("delete_project", 2)
 def delete_project(request, project_id):
     project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
 
@@ -186,8 +208,7 @@ def project_detail(request, project_id):
     ships = project.ships.order_by('-created_at')
     journals = project.journals.order_by('-id')
 
-    total_time = journals.aggregate(total=Sum('time_spent'))['total'] or 0
-    time_spent = f"{floor(total_time / 60)}h {total_time % 60}m"
+    time_spent = format_minutes(tracked_minutes_for_journals(journals))
 
     latest_ship = ships.first()
     ship_pending = latest_ship is not None and latest_ship.status not in (Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED)
@@ -204,7 +225,7 @@ def project_detail(request, project_id):
     elif ship_pending:
         can_ship = False
         ship_disabled_reason = "Your most recent ship must be finalized or rejected before you can reship."
-    elif not project.journals.exists():
+    elif not project.journals.exists() and not can_bypass_ship_requirements(request.user):
         can_ship = False
         ship_disabled_reason = "You must have at least one journal entry before you can ship."
     else:
@@ -237,6 +258,9 @@ def project_detail(request, project_id):
 
     timeline = build_journal_timeline(journals, ships)
 
+    timelapses = project.timelapses.filter(owner=request.user).select_related("journal")
+    attachable_timelapses = _attachable_timelapses(project, request.user)
+
     return render(request, "atlantis_site/project_detail.html", {
         "project": project,
         "user": user,
@@ -250,6 +274,8 @@ def project_detail(request, project_id):
         "printablesData": printablesData,
         "allowed_editors": ALLOWED_EDITORS,
         "allowed_editor_extensions": ",".join(EDITOR_FILE_EXTENSIONS.keys()),
+        "timelapses": timelapses,
+        "attachable_timelapses": attachable_timelapses,
     })
 
 @login_required
@@ -272,8 +298,7 @@ def project_detail_explore(request, project_id):
     ships = project.ships.order_by("-created_at")
     journals = project.journals.order_by("-id")
 
-    total_time = journals.aggregate(total=Sum('time_spent'))['total'] or 0
-    time_spent = f"{floor(total_time / 60)}h {total_time % 60}m"
+    time_spent = format_minutes(tracked_minutes_for_journals(journals))
 
     if project.printablesUrl:
         try:
@@ -304,6 +329,7 @@ def project_detail_explore(request, project_id):
 
 @login_required
 @require_POST
+@rate_limit("follow_project", 1)
 def follow_project(request, project_id):
     project = get_object_or_404(Project, id=project_id, deleted=False)
     if project.locked and not request.user.has_perm("atlantis_site.organizer"):
@@ -319,6 +345,7 @@ def follow_project(request, project_id):
 
 @login_required
 @require_POST
+@rate_limit("unfollow_project", 1)
 def unfollow_project(request, project_id):
     project = get_object_or_404(Project, id=project_id, deleted=False)
     project.followers.remove(request.user)
@@ -326,6 +353,7 @@ def unfollow_project(request, project_id):
     return redirect("project_detail_explore", project_id=project_id)
 
 @login_required
+@rate_limit("create_journal", 3)
 def create_journal(request, project_id):
     if request.method != 'POST':
         return redirect("project_detail", project_id=project_id)
@@ -339,20 +367,23 @@ def create_journal(request, project_id):
     if project.locked:
         messages.error(request, "You cannot create a journal on a locked project.")
         return redirect("projects")
-    time_spent_raw = request.POST.get("time_spent", "0").strip()
-    try:
-        time_spent = int(time_spent_raw)
 
-        if time_spent > 240:
-            messages.error(request, "Time spent must not be greater than 4 hours!")
-            return redirect("project_detail", project_id=project_id)
-        if time_spent < 30:
-            messages.error(request, "You must spend at least 30 minutes on your journal entry!")
-            return redirect("project_detail", project_id=project_id)
+    # Time is never self-reported — an entry's time is the sum of the Lookout
+    # timelapses attached to it, so at least one is required.
+    try:
+        timelapse_ids = {int(raw) for raw in request.POST.getlist("timelapses")}
     except ValueError:
-        messages.error(request, "Journal time spent must be an integer!")
+        messages.error(request, "Invalid timelapse selection.")
         return redirect("project_detail", project_id=project_id)
-    
+
+    if not timelapse_ids:
+        messages.error(request, "You must attach at least one finished timelapse to your journal entry!")
+        return redirect("project_detail", project_id=project_id)
+
+    if _attachable_timelapses(project, request.user, timelapse_ids).count() != len(timelapse_ids):
+        messages.error(request, "One or more of those timelapses can't be attached. Refresh and try again.")
+        return redirect("project_detail", project_id=project_id)
+
     title = request.POST.get("title", "").strip()
     text = request.POST.get("text", "").strip()
 
@@ -392,17 +423,24 @@ def create_journal(request, project_id):
     image_key = default_storage.save(random_storage_key("images", image_ext), image_file)
     model_key = default_storage.save(random_storage_key("models", ".stl"), model_file)
 
-    image_url = default_storage.url(image_key)
-    model_url = default_storage.url(model_key)
+    # Store the object keys (not URLs) — the bucket is private and served
+    # through serve_media.
+    with transaction.atomic():
+        available = _attachable_timelapses(
+            project, request.user, timelapse_ids
+        ).select_for_update()
+        if available.count() != len(timelapse_ids):
+            messages.error(request, "One or more of those timelapses can't be attached. Refresh and try again.")
+            return redirect("project_detail", project_id=project_id)
 
-    Journal.objects.create(
-        project=project,
-        time_spent=time_spent,
-        title=title,
-        text=text,
-        image_url=image_url,
-        model_url=model_url
-    )
+        journal = Journal.objects.create(
+            project=project,
+            title=title,
+            text=text,
+            image_url=image_key,
+            model_url=model_key
+        )
+        available.update(journal=journal)
 
     notify_followers(
         request,
@@ -414,6 +452,7 @@ def create_journal(request, project_id):
     return redirect("project_detail", project_id=project_id)
     
 @login_required
+@rate_limit("ship_project", 3)
 def ship_project(request, project_id):
     # remember to check if the weight is greater than the time spent x 100
     if request.method != 'POST':
@@ -432,8 +471,12 @@ def ship_project(request, project_id):
     if not project.description:
         messages.error(request, "Your project must have a description before you can ship!")
         return redirect("projects")
+    # DEBUG-only, organizer-only: skip the journal and tracked-time gates so the
+    # rest of the pipeline can be exercised without hours of real recording.
+    bypass_requirements = can_bypass_ship_requirements(request.user)
+
     unassigned_journals = project.journals.filter(ship__isnull=True)
-    if not unassigned_journals.exists():
+    if not bypass_requirements and not unassigned_journals.exists():
         messages.error(request, "Your project must have at least one journal to be shipped")
         return redirect("projects")
 
@@ -442,15 +485,16 @@ def ship_project(request, project_id):
         messages.error(request, "You cannot reship until your most recent ship has been finalized or rejected.")
         return redirect("project_detail", project_id=project_id)
 
-    unassigned_time = unassigned_journals.aggregate(total=Sum('time_spent'))['total'] or 0
-    if latest_ship:
-        if unassigned_time <= 120:
-            messages.error(request, "Can't ship again without at least 2 hours of work!")
-            return redirect("projects")
-    else:
-        if unassigned_time <= 180:
-            messages.error(request, "You must have atleast 3 hours of logged time before you can ship!")
-            return redirect("projects")
+    if not bypass_requirements:
+        unassigned_time = tracked_minutes_for_journals(unassigned_journals)
+        if latest_ship:
+            if unassigned_time <= 120:
+                messages.error(request, "Can't ship again without at least 2 hours of work!")
+                return redirect("projects")
+        else:
+            if unassigned_time <= 180:
+                messages.error(request, "You must have atleast 3 hours of logged time before you can ship!")
+                return redirect("projects")
 
     with transaction.atomic():
         ship = Ship.objects.create(
@@ -467,3 +511,34 @@ def ship_project(request, project_id):
 
     messages.success(request, f'Successfully shipped project "{project.title}"!')
     return redirect("projects")
+
+
+# Object-key prefixes we upload to (see random_storage_key). serve_media only
+# streams keys under these, so the view can never be used to read arbitrary
+# objects out of the bucket.
+ALLOWED_MEDIA_PREFIXES = ("images/", "models/", "editor_models/")
+
+
+@login_required
+def serve_media(request, key):
+    """Stream a private-bucket object back to the browser.
+
+    The R2 bucket has no public URL, so uploaded files (stored as object keys)
+    are proxied through here: we open the object with the server's S3
+    credentials and stream it to the (authenticated) requester.
+    """
+    if ".." in key or not key.startswith(ALLOWED_MEDIA_PREFIXES):
+        raise Http404
+
+    try:
+        file = default_storage.open(key)
+        # S3 opens lazily, so force the object to be fetched now: a missing or
+        # inaccessible key then surfaces here as a 404 instead of a 500 raised
+        # mid-stream, outside this view.
+        file.read(1)
+        file.seek(0)
+    except (FileNotFoundError, OSError, ClientError):
+        raise Http404
+
+    content_type, _ = mimetypes.guess_type(key)
+    return FileResponse(file, content_type=content_type or "application/octet-stream")

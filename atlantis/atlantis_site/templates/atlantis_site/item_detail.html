@@ -20,7 +20,7 @@
         <div class="item-detail-info">
             <h1>{{ item.name }}</h1>
             <p class="item-detail-category">{{ item.category }}</p>
-            <p class="item-detail-cost">{{ item.cost }} spools</p>
+            <p class="item-detail-cost">{{ item.cost }} pearls</p>
             <p>{{ item.description }}</p>
 
             {% if not item.unlimited_stock %}
@@ -46,10 +46,71 @@
 
                 <button type="submit">Order</button>
             </form>
+
+            <div class="shipping-address">
+                <p class="shipping-address-hint">This order will be shipped to your Hack Club address.</p>
+                <button type="button" id="view-address-btn" class="link-button"
+                        data-url="{% url 'view_own_address' %}">View Address</button>
+                <div id="address-box" class="address-box" hidden></div>
+            </div>
             {% else %}
                 <p>This item is currently out of stock. Check back later!</p>
             {% endif %}
         </div>
     </div>
 </div>
+
+<script>
+(function () {
+    const btn = document.getElementById("view-address-btn");
+    if (!btn) return;
+    const box = document.getElementById("address-box");
+
+    function getCookie(name) {
+        const match = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
+        return match ? match.pop() : "";
+    }
+
+    btn.addEventListener("click", async function () {
+        if (!box.hidden) {
+            box.hidden = true;
+            btn.textContent = "View Address";
+            return;
+        }
+
+        btn.disabled = true;
+        try {
+            const resp = await fetch(btn.dataset.url, {
+                method: "POST",
+                headers: { "X-CSRFToken": getCookie("csrftoken") },
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                box.textContent = "";
+                data.address.lines.forEach(function (line) {
+                    const div = document.createElement("div");
+                    div.textContent = line;
+                    box.appendChild(div);
+                });
+                box.hidden = false;
+                btn.textContent = "Hide Address";
+            } else if (data.error === "no_address") {
+                box.textContent = "No address on file. Complete address verification in your Hack Club identity.";
+                box.hidden = false;
+            } else if (data.error === "address_unavailable") {
+                box.textContent = "Couldn't reach your Hack Club identity. Log out and back in, then try again.";
+                box.hidden = false;
+            } else {
+                box.textContent = "Could not load address. Please try again.";
+                box.hidden = false;
+            }
+        } catch (err) {
+            box.textContent = "Could not load address. Please try again.";
+            box.hidden = false;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();
+</script>
 {% endblock %}

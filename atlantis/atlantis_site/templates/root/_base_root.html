@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <title>{% block title %}Atlantis Admin{% endblock %}</title>
     <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
+    {% include '_favicon.html' %}
 </head>
 <body class="page" id="{% block page_id %}base-page{% endblock %}">
     {% include 'root/_navbar_root.html' %}

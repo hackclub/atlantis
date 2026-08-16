@@ -36,7 +36,7 @@
                             {% endif %}
                             <a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
                         </td>
-                        <td>{{ order.item.cost }} spool</td>
+                        <td>{{ order.item.cost }} pearl</td>
                         <td>{{ order.owner.get_full_name|default:order.owner.username }}</td>
                         <td>{{ order.quantity }}</td>
                         <td>{{ order.get_status_display }}</td>
@@ -55,6 +55,9 @@
                                     <button type="submit" name="action" value="refunded" class="link-button">Refund</button>
                                 </div>
                             </form>
+                            <button type="button" class="link-button view-address-btn"
+                                    data-url="{% url 'view_order_address' order.id %}">View Address</button>
+                            <div class="address-box" hidden></div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -92,7 +95,7 @@
                             {% endif %}
                             <a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
                         </td>
-                        <td>{{ order.item.cost }} spools</td>
+                        <td>{{ order.item.cost }} pearls</td>
                         <td>{{ order.owner.get_full_name|default:order.owner.username }}</td>
                         <td>{{ order.quantity }}</td>
                         <td>{{ order.get_status_display }}</td>
@@ -111,6 +114,9 @@
                                     <button type="submit" name="action" value="refunded" class="link-button">Refund</button>
                                 </div>
                             </form>
+                            <button type="button" class="link-button view-address-btn"
+                                    data-url="{% url 'view_order_address' order.id %}">View Address</button>
+                            <div class="address-box" hidden></div>
                         </td>
                     </tr>
                     {% endfor %}
@@ -121,4 +127,57 @@
         {% endif %}
     </section>
 </div>
+
+<script>
+(function () {
+    function getCookie(name) {
+        const match = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
+        return match ? match.pop() : "";
+    }
+
+    document.querySelectorAll(".view-address-btn").forEach(function (btn) {
+        const box = btn.nextElementSibling;
+        btn.addEventListener("click", async function () {
+            if (!box.hidden) {
+                box.hidden = true;
+                btn.textContent = "View Address";
+                return;
+            }
+
+            btn.disabled = true;
+            try {
+                const resp = await fetch(btn.dataset.url, {
+                    method: "POST",
+                    headers: { "X-CSRFToken": getCookie("csrftoken") },
+                });
+                const data = await resp.json();
+                if (data.ok) {
+                    box.textContent = "";
+                    data.address.lines.forEach(function (line) {
+                        const div = document.createElement("div");
+                        div.textContent = line;
+                        box.appendChild(div);
+                    });
+                    box.hidden = false;
+                    btn.textContent = "Hide Address";
+                } else if (data.error === "no_address") {
+                    box.textContent = "No address on file for this order.";
+                    box.hidden = false;
+                } else if (data.error === "address_unavailable") {
+                    box.textContent = "Couldn't fetch this address from Hack Club identity — the buyer may need to log in again.";
+                    box.hidden = false;
+                } else {
+                    box.textContent = "Could not load address. Please try again.";
+                    box.hidden = false;
+                }
+            } catch (err) {
+                box.textContent = "Could not load address. Please try again.";
+                box.hidden = false;
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    });
+})();
+</script>
 {% endblock %}

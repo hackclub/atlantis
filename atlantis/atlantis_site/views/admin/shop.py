@@ -4,9 +4,12 @@ from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 
 from ...models import Profile, Item, Order
+from ...crypto import format_address
+from ...hca import AddressUnavailable
 from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_url
 
 @staff_member_required
@@ -106,13 +109,42 @@ def update_order_status(request, order_id):
         dm_messages = {
             Order.OrderStatus.FULFILLED: f"Your order for {order.quantity}x {order.item.name} has been fulfilled!",
             Order.OrderStatus.DENIED: f"Your order for {order.quantity}x {order.item.name} was denied. Ask in #atlantis-help for more details.",
-            Order.OrderStatus.REFUNDED: f"Your order for {order.quantity}x {order.item.name} was refunded and {amount_refunded} spools have been added back to your balance.",
+            Order.OrderStatus.REFUNDED: f"Your order for {order.quantity}x {order.item.name} was refunded and {amount_refunded} pearls have been added back to your balance.",
             Order.OrderStatus.PENDING: f"Your order for {order.quantity}x {order.item.name} has been marked as pending again.",
         }
         send_slack_dm(dm_messages[order.status], owner_slack_id)
 
     messages.success(request, f"Order #{order.id} updated to {order.get_status_display().lower()}.")
     return redirect("fulfillment_dash")
+
+@staff_member_required
+@require_POST
+@check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])
+def view_order_address(request, order_id):
+    """Fetch and return the shipping address for an order during fulfillment.
+
+    The address is pulled live from HCA with the buyer's stored token; access to
+    a customer's plaintext address is audit-logged since it is PII.
+    """
+    order = get_object_or_404(Order.objects.select_related("owner"), id=order_id)
+    profile = getattr(order.owner, "hackclub_profile", None)
+
+    try:
+        address = format_address(profile.get_address(order.address_id)) if profile else None
+    except AddressUnavailable:
+        return JsonResponse({"ok": False, "error": "address_unavailable"}, status=503)
+
+    if address is None:
+        return JsonResponse({"ok": False, "error": "no_address"}, status=404)
+
+    record_audit(request, "view_order_address", target=f"Order #{order.id}", metadata={
+        "order_id": order.id,
+        "owner": order.owner.username,
+        "address_id": address.get("id", ""),
+    })
+
+    return JsonResponse({"ok": True, "address": address})
+
 
 @staff_member_required
 @require_POST

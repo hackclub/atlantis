@@ -4,11 +4,16 @@ from unittest.mock import MagicMock, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
+from django.utils import timezone
 
 from slack_sdk.errors import SlackApiError
 
 from ..models import (
 	AuditLog,
+	InternalComment,
+	Print,
+	T1,
+	T2,
 	detect_editor,
 	detect_editor_from_filename,
 	detect_editor_from_link,
@@ -17,8 +22,10 @@ from ..views import helpers
 from ..views.helpers import (
 	add_bars,
 	build_journal_timeline,
+	build_review_history,
 	display_name,
 	get_client_ip,
+	internal_comments_for_project,
 	is_valid_editor_model_url,
 	is_valid_image_url,
 	is_valid_printables_url,
@@ -93,18 +100,17 @@ class UrlValidatorTests(TestCase):
 		self.assertFalse(is_valid_printables_url("https://printables.computer/model/1"))
 
 	def test_valid_editor_model_urls(self):
-		self.assertTrue(is_valid_editor_model_url(
-			"https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/editor_models/a.f3d"
-		))
-		self.assertTrue(is_valid_editor_model_url(
-			"https://cdn.pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/x"
-		))
+		# An uploaded file, stored as a private-bucket object key with a known
+		# CAD extension.
+		self.assertTrue(is_valid_editor_model_url("editor_models/abc123.f3d"))
+		# A link to a supported editor.
+		self.assertTrue(is_valid_editor_model_url("https://cad.onshape.com/documents/abc123"))
 
 	def test_invalid_editor_model_urls(self):
-		self.assertFalse(is_valid_editor_model_url("https://evil.r2.dev/x"))
-		self.assertFalse(is_valid_editor_model_url(
-			"https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev.evil.com/x"
-		))
+		# Unknown host and no CAD extension.
+		self.assertFalse(is_valid_editor_model_url("https://evil.example.com/model"))
+		# A key without a recognised editor extension.
+		self.assertFalse(is_valid_editor_model_url("editor_models/notes.txt"))
 		self.assertFalse(is_valid_editor_model_url(""))
 
 
@@ -156,8 +162,81 @@ class BuildJournalTimelineTests(TestCase):
 		events = build_journal_timeline([], [ship])
 		self.assertEqual(events[0]["feedback"], "")
 
+	def test_internal_comments_never_reach_the_journal_timeline(self):
+		ship = make_ship(self.project, journal_minutes=())
+		InternalComment.objects.create(ship=ship, author=self.user, text="sus")
+
+		events = build_journal_timeline([], [ship])
+
+		self.assertEqual([e["type"] for e in events], ["ship"])
+
 	def test_empty_inputs(self):
 		self.assertEqual(build_journal_timeline([], []), [])
+
+
+class InternalCommentsForProjectTests(TestCase):
+	def test_covers_every_ship_of_the_project_only(self):
+		user = make_user("commenter")
+		project = make_project(user)
+		other_project = make_project(user)
+		first = make_ship(project, journal_minutes=())
+		second = make_ship(project, journal_minutes=())
+		elsewhere = make_ship(other_project, journal_minutes=())
+
+		older = InternalComment.objects.create(ship=first, author=user, text="first ship")
+		newer = InternalComment.objects.create(ship=second, author=user, text="second ship")
+		InternalComment.objects.create(ship=elsewhere, author=user, text="other project")
+
+		self.assertEqual(list(internal_comments_for_project(project)), [newer, older])
+
+
+class BuildReviewHistoryTests(TestCase):
+	def setUp(self):
+		self.user = make_user("historian", slack_username="Historian")
+		self.project = make_project(self.user)
+		self.ship = make_ship(self.project, journal_minutes=())
+
+	def test_actions_and_comments_interleave_oldest_first(self):
+		t1 = T1.objects.create(
+			ship=self.ship, reviewer=self.user, feedback="ok", internal_notes="hmm", approved=True
+		)
+		comment = InternalComment.objects.create(
+			ship=self.ship, author=self.user, text="checking the remix claim"
+		)
+		printed = Print.objects.create(
+			ship=self.ship, printer=self.user, finished_time=timezone.now()
+		)
+		t2 = T2.objects.create(
+			ship=self.ship, reviewer=self.user, feedback="good", justification="solid"
+		)
+
+		events = build_review_history(self.ship)
+
+		self.assertEqual([e["type"] for e in events], ["t1", "comment", "print", "t2"])
+		self.assertEqual([e["label"] for e in events],
+						 ["T1 Review", "Internal comment", "Print", "T2 Review"])
+		self.assertEqual([e["at"] for e in events],
+						 [t1.reviewed_at, comment.created_at, printed.finished_time, t2.reviewed_at])
+		self.assertEqual({e["actor"] for e in events}, {"Historian"})
+
+	def test_unfinished_print_sorts_by_claim_time(self):
+		claimed = Print.objects.create(ship=self.ship, printer=self.user)
+		events = build_review_history(self.ship)
+		self.assertEqual(events[0]["at"], claimed.claimed_time)
+
+	def test_comments_from_other_ships_of_the_project_are_flagged(self):
+		earlier_ship = make_ship(self.project, journal_minutes=())
+		InternalComment.objects.create(ship=earlier_ship, author=self.user, text="from the last ship")
+		InternalComment.objects.create(ship=self.ship, author=self.user, text="on this ship")
+
+		events = build_review_history(self.ship)
+
+		self.assertEqual([e["other_ship"] for e in events], [True, False])
+
+	def test_other_projects_are_untouched(self):
+		other_ship = make_ship(make_project(self.user), journal_minutes=())
+		InternalComment.objects.create(ship=other_ship, author=self.user, text="elsewhere")
+		self.assertEqual(build_review_history(self.ship), [])
 
 
 class GetClientIpTests(TestCase):
@@ -303,39 +382,74 @@ def _response(status=200, headers=None, redirect=False):
 	return response
 
 
-@patch("atlantis_site.views.helpers._host_resolves_to_public", return_value=True)
+@patch("atlantis_site.views.helpers._validated_public_ip", return_value="93.184.216.34")
 class SafeHeadTests(TestCase):
-	def test_rejects_non_http_schemes(self, _dns):
+	def test_rejects_non_http_schemes(self, _ip):
 		self.assertIsNone(helpers._safe_head("ftp://example.com/file"))
 		self.assertIsNone(helpers._safe_head("file:///etc/passwd"))
 		self.assertIsNone(helpers._safe_head("not a url"))
 
-	@patch("atlantis_site.views.helpers.requests.head")
-	def test_returns_response_for_plain_url(self, mock_head, _dns):
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_returns_response_for_plain_url(self, mock_head, _ip):
 		mock_head.return_value = _response(headers={"Content-Type": "image/png"})
 		response = helpers._safe_head("https://example.com/a.png")
 		self.assertIsNotNone(response)
 
-	@patch("atlantis_site.views.helpers.requests.head")
-	def test_follows_redirects_manually(self, mock_head, _dns):
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_follows_redirects_manually(self, mock_head, _ip):
 		final = _response(headers={"Content-Type": "image/png"})
 		hop = _response(headers={"Location": "https://example.com/real.png"}, redirect=True)
 		mock_head.side_effect = [hop, final]
 		self.assertIs(helpers._safe_head("https://example.com/a"), final)
 		self.assertEqual(mock_head.call_count, 2)
 
-	@patch("atlantis_site.views.helpers.requests.head")
-	def test_gives_up_after_max_redirects(self, mock_head, _dns):
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_gives_up_after_max_redirects(self, mock_head, _ip):
 		hop = _response(headers={"Location": "https://example.com/loop"}, redirect=True)
 		mock_head.return_value = hop
 		self.assertIsNone(helpers._safe_head("https://example.com/a", max_redirects=3))
 
-	@patch("atlantis_site.views.helpers.requests.head")
-	def test_redirect_to_private_host_blocked(self, mock_head, _dns):
-		_dns.side_effect = [True, False]
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_redirect_to_private_host_blocked(self, mock_head, _ip):
+		_ip.side_effect = ["93.184.216.34", None]
 		hop = _response(headers={"Location": "http://169.254.169.254/meta"}, redirect=True)
 		mock_head.return_value = hop
 		self.assertIsNone(helpers._safe_head("https://example.com/a"))
+
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_head_is_pinned_to_validated_ip(self, mock_head, _ip):
+		# DNS-rebinding guard: the HEAD must target the IP we validated, never
+		# re-resolve the hostname.
+		mock_head.return_value = _response(headers={"Content-Type": "image/png"})
+		helpers._safe_head("https://example.com/a.png")
+		url_arg, ip_arg = mock_head.call_args.args[:2]
+		self.assertEqual(url_arg, "https://example.com/a.png")
+		self.assertEqual(ip_arg, "93.184.216.34")
+
+
+class PinnedIPAdapterTests(TestCase):
+	"""The adapter must connect to the vetted IP while keeping TLS identity."""
+
+	@patch("atlantis_site.views.helpers.HTTPAdapter.send")
+	def test_https_pins_ip_and_preserves_sni(self, mock_super_send):
+		import requests as _requests
+		adapter = helpers._PinnedIPAdapter("93.184.216.34")
+		request = _requests.Request("HEAD", "https://example.com/a.png").prepare()
+		adapter.send(request)
+		sent = mock_super_send.call_args.args[0]
+		self.assertEqual(sent.url, "https://93.184.216.34/a.png")
+		self.assertEqual(sent.headers["Host"], "example.com")
+		self.assertEqual(adapter.poolmanager.connection_pool_kw["server_hostname"], "example.com")
+		self.assertEqual(adapter.poolmanager.connection_pool_kw["assert_hostname"], "example.com")
+
+	@patch("atlantis_site.views.helpers.HTTPAdapter.send")
+	def test_ipv6_target_is_bracketed(self, mock_super_send):
+		import requests as _requests
+		adapter = helpers._PinnedIPAdapter("2606:2800:220:1:248:1893:25c8:1946")
+		request = _requests.Request("HEAD", "https://example.com/a.png").prepare()
+		adapter.send(request)
+		sent = mock_super_send.call_args.args[0]
+		self.assertEqual(sent.url, "https://[2606:2800:220:1:248:1893:25c8:1946]/a.png")
 
 
 class ContentTypeValidatorTests(TestCase):

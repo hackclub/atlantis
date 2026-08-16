@@ -16,6 +16,7 @@ from ..models import (
 	T2,
 	T3,
 )
+from ..views.admin import management as management_views
 from .base import (
 	VALID_PRINTABLES_URL,
 	VALID_R2_URL,
@@ -275,7 +276,8 @@ class DbDeleteProjectTests(BaseTestCase):
 		super().setUp()
 		self.organizer = grant_perms(make_user("organizer"), "organizer")
 		self.client.force_login(self.organizer)
-		self.project = make_project(make_user("owner"), shippable=True)
+		self.owner = make_user("owner")
+		self.project = make_project(self.owner, shippable=True)
 
 	def test_hard_deletes_project_with_journals_and_ships(self):
 		ship = make_ship(self.project, journal_minutes=(60, 60))
@@ -287,6 +289,32 @@ class DbDeleteProjectTests(BaseTestCase):
 		self.assertFalse(Ship.objects.filter(id=ship.id).exists())
 		self.assertEqual(Journal.objects.count(), 0)
 
+	def test_records_audit_log(self):
+		make_ship(self.project, journal_minutes=(60, 60))
+		make_journal(self.project)
+		project_id, title = self.project.id, self.project.title
+
+		self.client.post(reverse("db_delete_project", args=[project_id]))
+
+		log = AuditLog.objects.get(action="db_delete_project")
+		self.assertEqual(log.actor, self.organizer)
+		self.assertEqual(log.target, f"Project #{project_id} ({title})")
+		self.assertEqual(log.metadata["project_id"], project_id)
+		self.assertEqual(log.metadata["title"], title)
+		self.assertEqual(log.metadata["owner_id"], self.owner.id)
+		self.assertEqual(log.metadata["owner_username"], "owner")
+		self.assertEqual(log.metadata["journals_deleted"], 3)
+		self.assertEqual(log.metadata["ships_deleted"], 1)
+		self.assertFalse(log.metadata["bulk"])
+
+	def test_failed_delete_is_not_audited(self):
+		with patch.object(management_views, "_purge_project", side_effect=RuntimeError("boom")):
+			response = self.client.post(reverse("db_delete_project", args=[self.project.id]))
+
+		self.assertIn("DB delete failed, boom", message_texts(response))
+		self.assertTrue(Project.objects.filter(id=self.project.id).exists())
+		self.assertFalse(AuditLog.objects.filter(action="db_delete_project").exists())
+
 	def test_get_not_allowed(self):
 		response = self.client.get(reverse("db_delete_project", args=[self.project.id]))
 		self.assertEqual(response.status_code, 405)
@@ -295,6 +323,117 @@ class DbDeleteProjectTests(BaseTestCase):
 	def test_unknown_project_404(self):
 		response = self.client.post(reverse("db_delete_project", args=[99999]))
 		self.assertEqual(response.status_code, 404)
+
+
+class DbDeleteProjectsBulkTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.organizer = grant_perms(make_user("organizer"), "organizer")
+		self.client.force_login(self.organizer)
+		self.owner = make_user("owner")
+		self.first = make_project(self.owner, title="First")
+		self.second = make_project(self.owner, title="Second")
+		self.keeper = make_project(self.owner, title="Keeper")
+
+	def _bulk_delete(self, ids):
+		return self.client.post(reverse("db_delete_projects"), {"project_ids": ids})
+
+	def test_deletes_only_selected_projects(self):
+		ship = make_ship(self.first, journal_minutes=(60, 60))
+		make_journal(self.second)
+		keeper_journal = make_journal(self.keeper)
+
+		response = self._bulk_delete([self.first.id, self.second.id])
+
+		self.assertIn("Removed 2 project(s) from the DB", message_texts(response))
+		self.assertEqual(list(Project.objects.values_list("id", flat=True)), [self.keeper.id])
+		self.assertFalse(Ship.objects.filter(id=ship.id).exists())
+		self.assertEqual(list(Journal.objects.values_list("id", flat=True)), [keeper_journal.id])
+
+	def test_records_one_audit_log_per_project(self):
+		make_ship(self.first, journal_minutes=(60, 60))
+		batch = [self.first.id, self.second.id]
+
+		self._bulk_delete(batch)
+
+		logs = AuditLog.objects.filter(action="db_delete_project").order_by("id")
+		self.assertEqual(
+			[log.target for log in logs],
+			[f"Project #{self.first.id} (First)", f"Project #{self.second.id} (Second)"],
+		)
+		for log in logs:
+			self.assertEqual(log.actor, self.organizer)
+			self.assertTrue(log.metadata["bulk"])
+			self.assertEqual(log.metadata["batch_ids"], batch)
+
+		first_log, second_log = logs
+		self.assertEqual(first_log.metadata["journals_deleted"], 2)
+		self.assertEqual(first_log.metadata["ships_deleted"], 1)
+		self.assertEqual(second_log.metadata["journals_deleted"], 0)
+		self.assertEqual(second_log.metadata["ships_deleted"], 0)
+
+	def test_audit_target_type_stays_filterable_as_project(self):
+		self._bulk_delete([self.first.id])
+		response = self.client.get(reverse("audit_log"), {"target_type": "Project"})
+		self.assertEqual(
+			[log.target for log in response.context["logs"]],
+			[f"Project #{self.first.id} (First)"],
+		)
+
+	def test_no_selection_is_rejected(self):
+		response = self._bulk_delete([])
+		self.assertIn("No projects selected", message_texts(response))
+		self.assertEqual(Project.objects.count(), 3)
+		self.assertFalse(AuditLog.objects.filter(action="db_delete_project").exists())
+
+	def test_non_integer_ids_ignored(self):
+		response = self._bulk_delete(["not-an-id", self.first.id])
+		self.assertIn("Removed 1 project(s) from the DB", message_texts(response))
+		self.assertFalse(Project.objects.filter(id=self.first.id).exists())
+		self.assertEqual(AuditLog.objects.filter(action="db_delete_project").count(), 1)
+
+	def test_only_garbage_ids_is_rejected(self):
+		response = self._bulk_delete(["nope", ""])
+		self.assertIn("No projects selected", message_texts(response))
+		self.assertEqual(Project.objects.count(), 3)
+
+	def test_nonexistent_ids_are_rejected(self):
+		response = self._bulk_delete([99998, 99999])
+		self.assertIn("None of the selected projects exist", message_texts(response))
+		self.assertEqual(Project.objects.count(), 3)
+		self.assertFalse(AuditLog.objects.filter(action="db_delete_project").exists())
+
+	def test_partial_failure_audits_only_successful_deletes(self):
+		real_purge = management_views._purge_project
+
+		def flaky_purge(project):
+			if project.id == self.second.id:
+				raise RuntimeError("boom")
+			return real_purge(project)
+
+		with patch.object(management_views, "_purge_project", side_effect=flaky_purge):
+			response = self._bulk_delete([self.first.id, self.second.id])
+
+		texts = message_texts(response)
+		self.assertIn("DB delete failed for Second, boom", texts)
+		self.assertIn("Removed 1 project(s) from the DB", texts)
+		self.assertFalse(Project.objects.filter(id=self.first.id).exists())
+		self.assertTrue(Project.objects.filter(id=self.second.id).exists())
+
+		log = AuditLog.objects.get(action="db_delete_project")
+		self.assertEqual(log.metadata["project_id"], self.first.id)
+
+	def test_get_not_allowed(self):
+		response = self.client.get(reverse("db_delete_projects"))
+		self.assertEqual(response.status_code, 405)
+		self.assertEqual(Project.objects.count(), 3)
+
+	def test_non_organizer_cannot_bulk_delete(self):
+		self.client.force_login(grant_perms(make_user("t2rev"), "t2_review"))
+		response = self._bulk_delete([self.first.id, self.second.id])
+		self.assertEqual(response.status_code, 302)
+		self.assertEqual(Project.objects.count(), 3)
+		self.assertFalse(AuditLog.objects.filter(action="db_delete_project").exists())
 
 
 class AuditLogViewTests(BaseTestCase):

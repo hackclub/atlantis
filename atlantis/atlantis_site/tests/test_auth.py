@@ -2,12 +2,20 @@ import os
 from unittest.mock import patch
 
 from django.http import HttpResponseRedirect
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from ..models import Profile
 from ..views.client.auth import FORCE_REAUTH_COOKIE
-from .base import User, make_user
+from .base import TEST_ENCRYPTION_KEY, User, make_user
+
+TOKEN = {
+	"access_token": "at-123",
+	"refresh_token": "rt-456",
+	"token_type": "Bearer",
+	"expires_at": 1893456000,
+	"id_token": "jwt-not-worth-keeping",
+}
 
 USERINFO = {
 	"sub": "user!abc123",
@@ -67,12 +75,16 @@ class LogoutViewTests(TestCase):
 		self.assertEqual(self.client.get(reverse("dashboard")).status_code, 302)
 
 
+@override_settings(ADDRESS_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY)
 @patch.dict(os.environ, {"DEFAULT_PFP": "https://example.com/default.png"})
 @patch("atlantis_site.views.client.auth.slack_client.users_info")
 @patch("atlantis_site.views.client.auth.oauth.hackclub.authorize_access_token")
 class AuthCallbackTests(TestCase):
-	def _callback(self, mock_token, userinfo=None):
-		mock_token.return_value = {"userinfo": userinfo or dict(USERINFO)}
+	def _callback(self, mock_token, userinfo=None, token=None):
+		mock_token.return_value = {
+			"userinfo": userinfo or dict(USERINFO),
+			**(token if token is not None else TOKEN),
+		}
 		return self.client.get(reverse("auth_callback"))
 
 	def test_creates_user_and_profile(self, mock_token, mock_slack):
@@ -125,3 +137,28 @@ class AuthCallbackTests(TestCase):
 		self._callback(mock_token)
 		profile = User.objects.get(username="user_abc123").hackclub_profile
 		self.assertEqual(profile.slack_username, "Real Name")
+
+	def test_stores_encrypted_token_and_no_address(self, mock_token, mock_slack):
+		mock_slack.return_value = SLACK_USER_RESPONSE
+		self._callback(mock_token, userinfo={**USERINFO, "addresses": [{"id": "adr_1", "line_1": "15 Falls Rd"}]})
+
+		profile = User.objects.get(username="user_abc123").hackclub_profile
+		self.assertNotIn("at-123", profile.encrypted_hca_token)
+		self.assertNotIn("15 Falls Rd", profile.encrypted_hca_token)
+		# The id_token is single-use, so it is not worth carrying around.
+		self.assertEqual(profile.get_hca_token(), {
+			"access_token": "at-123",
+			"refresh_token": "rt-456",
+			"token_type": "Bearer",
+			"expires_at": 1893456000,
+		})
+
+	def test_signin_without_usable_token_keeps_the_stored_one(self, mock_token, mock_slack):
+		mock_slack.return_value = SLACK_USER_RESPONSE
+		self._callback(mock_token)
+		self.client.post(reverse("logout"))
+
+		self._callback(mock_token, token={})
+
+		profile = User.objects.get(username="user_abc123").hackclub_profile
+		self.assertEqual(profile.get_hca_token()["access_token"], "at-123")

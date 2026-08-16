@@ -1,23 +1,302 @@
-{% extends "atlantis_site/_base.html" %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Atlantis</title>
+    {% include '_favicon.html' %}
+    <style>
+        @font-face {
+            font-family: "Patrick Hand";
+            src: url("{% static 'atlantis_site/assets/fonts/patrickhand.ttf' %}") format("truetype");
+        }
 
-{% block page_id %}dashboard{% endblock %}
-{% block title %}Dashboard{% endblock %}
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1b7fc4;
+            font-family: "Patrick Hand", sans-serif;
+        }
 
-{% block content %}
-<div class="content">
-    {% include "root/_messages.html" %}
-    <h1 style="color: red;">THIS IS A BETA TEST</h1>
-    <h1>Hack Club Atlantis</h1>
-    <h3>your information (fetched from Hack Club Auth): </h3>
-    <p>your email: {{ user.email }}</p>
-    <p>your name: {{ user.get_full_name }}</p>
-    <p>your verification status: {{ user.hackclub_profile.verification_status }}</p>
-    <p>your slack id: {{ user.hackclub_profile.slack_id }}</p>
-    <p>your slack username: {{ user.hackclub_profile.slack_username }}</p>
-    <br>
-    <div style="display: flex; align-items: center;">
-        <p>your slack PFP (64x64px):</p>
-        <img src="{{ user.hackclub_profile.slack_pfp_url }}" style="width: 64px; height: auto; padding-left: 30px;">
+        #scene {
+            position: fixed;
+            left: 50%;
+            bottom: 0;
+            translate: -50% 0;
+            aspect-ratio: 2500 / 1462;
+            width: 100vw;
+            min-width: calc(100vh * 2500 / 1462);
+            min-width: calc(100dvh * 2500 / 1462);
+        }
+
+        @media (max-aspect-ratio: 6 / 5) {
+            #scene {
+                min-width: 0;
+                bottom: 50%;
+                translate: -50% 50%;
+            }
+
+            #backdrop {
+                position: fixed;
+                inset: 0;
+                background: url("{% static 'atlantis_site/assets/img/dashboard/background.png' %}") center / cover;
+                filter: blur(28px) brightness(0.8);
+                scale: 1.1;
+            }
+        }
+
+        #scene-bg {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #chest-art {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            transform-origin: 27.26% 79.92%;
+        }
+
+        /* --tilt turns the whole anchor rather than just the art, so the click
+           target stays wrapped around the item instead of being left behind
+           axis-aligned. Its label counter-rotates back to level below. */
+        .item {
+            position: absolute;
+            left: var(--x);
+            top: var(--y);
+            width: var(--w);
+            rotate: var(--tilt, 0deg);
+            transition: scale 0.15s ease-out;
+        }
+
+        .item img,
+        #chest-art {
+            filter: drop-shadow(0 0 0.32vw rgba(255, 244, 199, 0.8));
+            transition: filter 0.15s ease-out, scale 0.15s ease-out;
+        }
+
+        .item img {
+            display: block;
+            position: absolute;
+            left: calc(var(--art-x) * -100%);
+            top: calc(var(--art-y) * -100%);
+            width: calc(var(--art) * 100%);
+            height: auto;
+            pointer-events: none;
+        }
+
+        #item-scroll {
+            --x: 54.6%; --y: 75.4%; --w: 7.8%;
+            --art: 1.86013; --art-x: 0.51135; --art-y: 0.23483;
+            --tilt: 0deg;
+            --label-x: 60%;--label-y: 105%;
+            aspect-ratio: 1101 / 1533;
+        }
+
+        #item-scroll img {
+            transform: scaleX(-1);
+        }
+
+        #item-book {
+            --x: 65.8%; --y: 74.2%; --w: 14.7%;
+            --art: 1.99028; --art-x: 0.35277; --art-y: 0.89691;
+            --label-x: 45%; --label-y: 92%;
+            aspect-ratio: 1029 / 776;
+        }
+
+        #item-map {
+            --x: 82.7%; --y: 73.8%; --w: 14.3%;
+            --art: 1.50257; --art-x: 0.28100; --art-y: 0.48234;
+            aspect-ratio: 1363 / 1161;
+        }
+
+        #item-spyglass {
+            --x: 84.8%; --y: 50.6%; --w: 13.4%;
+            --art: 1.56217; --art-x: 0.34859; --art-y: 0.67455;
+            --tilt: 60deg;
+            --label-y: 122%;
+            aspect-ratio: 1311 / 719;
+        }
+
+        #item-chest {
+            --x: 18.96%; --y: 63.95%; --w: 16.60%;
+            height: 31.94%;
+        }
+
+        .item:hover img,
+        .item:focus-visible img,
+        #item-chest:hover ~ #chest-art,
+        #item-chest:focus-visible ~ #chest-art {
+            filter: brightness(1.08) drop-shadow(0 0 0.7vw rgba(255, 244, 199, 0.95));
+        }
+
+        .item:hover,
+        .item:focus-visible,
+        #item-chest:hover ~ #chest-art,
+        #item-chest:focus-visible ~ #chest-art {
+            scale: 1.04;
+        }
+
+        /* A copy of the item's box turned back the other way. Both rotations
+           pivot on the same centre, so they cancel and this lands exactly where
+           an untilted item would sit. Labels position against it, which keeps
+           --label-x/--label-y in plain screen axes: left is left and up is up
+           however the item is tilted, and changing --tilt cannot fling a label
+           off to some unrelated side. */
+        .item-label-frame {
+            position: absolute;
+            inset: 0;
+            rotate: calc(-1 * var(--tilt, 0deg));
+            pointer-events: none;
+        }
+
+        .item-label {
+            position: absolute;
+            left: var(--label-x, 50%);
+            bottom: var(--label-y, 100%);
+            translate: -50% 0;
+            margin-bottom: 0.4em;
+            padding: 0.05em 0.6em 0.15em;
+            border-radius: 0.6em;
+            background-color: rgba(0, 46, 79, 0.72);
+            color: #E5F2FC;
+            font-size: clamp(15px, 1.35vw, 26px);
+            line-height: 1.35;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.15s ease-out;
+        }
+
+        .item:hover .item-label,
+        .item:focus-visible .item-label {
+            opacity: 1;
+        }
+
+        @media (hover: none) {
+            .item-label {
+                opacity: 1;
+            }
+        }
+
+        .hud {
+            position: fixed;
+            top: clamp(12px, 2.2vh, 34px);
+            display: flex;
+            align-items: center;
+            gap: clamp(8px, 0.85vw, 18px);
+            color: #FFFFFF;
+            text-shadow: 0 0.06em 0.25em rgba(0, 46, 79, 0.55);
+        }
+
+        #hud-profile {
+            left: clamp(12px, 1.6vw, 34px);
+            text-decoration: none;
+            opacity: 0.55;
+            transition: opacity 0.15s ease-out;
+        }
+
+        #hud-profile:hover,
+        #hud-profile:focus-visible {
+            opacity: 1;
+        }
+
+        #hud-profile img {
+            display: block;
+            width: clamp(44px, 5.4vw, 104px);
+            height: clamp(44px, 5.4vw, 104px);
+            border-radius: 0.35em;
+            object-fit: cover;
+            background-color: rgba(0, 46, 79, 0.25);
+        }
+
+        #hud-name {
+            font-size: clamp(20px, 2.35vw, 46px);
+            line-height: 1.1;
+        }
+
+        #hud-email {
+            font-size: clamp(14px, 1.55vw, 30px);
+            line-height: 1.1;
+            word-break: break-all;
+            opacity: 0;
+            transition: opacity 0.15s ease-out;
+        }
+
+        #hud-profile:hover #hud-email,
+        #hud-profile:focus-visible #hud-email {
+            opacity: 0.92;
+        }
+
+        #hud-counters {
+            right: clamp(12px, 1.6vw, 34px);
+            gap: clamp(4px, 0.5vw, 12px);
+            font-size: clamp(22px, 2.5vw, 48px);
+        }
+
+        #hud-pearl {
+            position: relative;
+            width: clamp(30px, 3.3vw, 64px);
+            aspect-ratio: 1;
+            overflow: hidden;
+        }
+
+        #hud-pearl img {
+            position: absolute;
+            left: -55.541%;
+            top: -61.082%;
+            width: 270.185%;
+        }
+    </style>
+</head>
+<body>
+    <div id="backdrop" aria-hidden="true"></div>
+
+    <div id="scene">
+        <img id="scene-bg" src="{% static 'atlantis_site/assets/img/dashboard/background.png' %}" alt="The bow of a boat at sea, carrying a treasure chest, a scroll, a book, a map and a spyglass.">
+
+        <a class="item" id="item-chest" href="{% url 'shop' %}" aria-label="Shop">
+            <span class="item-label-frame"><span class="item-label">shop</span></span>
+        </a>
+        <img id="chest-art" src="{% static 'atlantis_site/assets/img/dashboard/chest.png' %}" alt="">
+
+        <a class="item" id="item-scroll" href="{% url 'guides' %}" aria-label="Guides">
+            <img src="{% static 'atlantis_site/assets/img/dashboard/scroll.png' %}" alt="">
+            <span class="item-label-frame"><span class="item-label">guides/faq</span></span>
+        </a>
+
+        <a class="item" id="item-book" href="{% url 'projects' %}" aria-label="Projects">
+            <img src="{% static 'atlantis_site/assets/img/dashboard/book.png' %}" alt="">
+            <span class="item-label-frame"><span class="item-label">projects</span></span>
+        </a>
+
+        <a class="item" id="item-map" href="{% url 'printer_select' %}" aria-label="Pick your printer">
+            <img src="{% static 'atlantis_site/assets/img/dashboard/map.png' %}" alt="">
+            <span class="item-label-frame"><span class="item-label">printer</span></span>
+        </a>
+
+        <a class="item" id="item-spyglass" href="{% url 'explore' %}" aria-label="Explore">
+            <img src="{% static 'atlantis_site/assets/img/dashboard/spyglass.png' %}" alt="">
+            <span class="item-label-frame"><span class="item-label">explore</span></span>
+        </a>
     </div>
-</div>
-{% endblock %}
+
+    <a class="hud" id="hud-profile" href="{% url 'user_profile' user.id %}">
+        <img src="{{ profile.slack_pfp_url }}" alt="">
+        <div>
+            <div id="hud-name">{{ profile.slack_username }}</div>
+            <div id="hud-email">{{ user.email }}</div>
+        </div>
+    </a>
+
+    <div class="hud" id="hud-counters" title="{{ profile.layers }} pearls">
+        <span id="hud-pearl">
+            <img src="{% static 'atlantis_site/assets/img/dashboard/pearl.png' %}" alt="Pearls:">
+        </span>
+        <span>{{ profile.layers }}</span>
+    </div>
+</body>
+</html>

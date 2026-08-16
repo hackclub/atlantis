@@ -4,14 +4,25 @@ from django.shortcuts import get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.db import transaction
-from django.db.models import Sum
 
-from ...models import Profile, Project, Ship, T1, T2, T3
-from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, grant_print_rewards
+from ...models import InternalComment, Profile, Project, Ship, T1, T2, T3
+from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, grant_print_rewards, tracked_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back
 
 T1_PAY = 1
 T2_PAY = 2
 T3_PAY = 1
+
+INTERNAL_COMMENT_MAX_LENGTH = 1000
+
+# Every /root review page can leave one, so the perms are the union of the ones
+# guarding those pages.
+COMMENT_PERMS = [
+    "atlantis_site.t1_review",
+    "atlantis_site.t2_review",
+    "atlantis_site.t3_review",
+    "atlantis_site.printer",
+    "atlantis_site.organizer",
+]
 
 @staff_member_required
 @check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
@@ -22,8 +33,9 @@ def review_dash(request):
         .order_by("-created_at")
     )
     for ship in ships:
-        total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
-        ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
+        ship.time_spent_display = format_minutes(
+            tracked_minutes_for_journals(ship.project.journals.all())
+        )
     return render(request, "root/review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboard("t1_reviews"),
@@ -44,6 +56,7 @@ def review_project(request, ship_id):
         "ship": ship,
         "journals": journals,
         "timeline": timeline,
+        "review_history": build_review_history(ship),
         "hasMake": hasMake,
     })
 
@@ -119,8 +132,9 @@ def ysws_review_dash(request):
         .order_by("-created_at")
     )
     for ship in ships:
-        total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
-        ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
+        ship.time_spent_display = format_minutes(
+            tracked_minutes_for_journals(ship.project.journals.all())
+        )
     return render(request, "root/ysws_review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboard("t2_reviews"),
@@ -136,6 +150,7 @@ def ysws_review_project(request, ship_id):
         "ship": ship,
         "journals": journals,
         "timeline": timeline,
+        "review_history": build_review_history(ship),
     })
 
 @require_POST
@@ -167,7 +182,7 @@ def t2_decision(request, ship_id):
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
         journals = ship.journals.order_by("-id")
 
-        total_time = journals.aggregate(total=Sum('time_spent'))['total'] or 0
+        total_time = tracked_minutes_for_journals(journals)
         if total_time <= deductions:
             messages.error(request, f"Deduction too large. (total_time: {total_time}, deductions: {deductions})")
             return redirect("ysws_review_dash")
@@ -228,8 +243,9 @@ def fraud_review_dash(request):
         .order_by("-created_at")
     )
     for ship in ships:
-        total_time = ship.project.journals.aggregate(total=Sum("time_spent"))["total"] or 0
-        ship.time_spent_display = f"{total_time // 60}h {total_time % 60}m"
+        ship.time_spent_display = format_minutes(
+            tracked_minutes_for_journals(ship.project.journals.all())
+        )
     return render(request, "root/fraud_review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboard("t3_reviews"),
@@ -241,7 +257,7 @@ def fraud_review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
     journals = ship.project.journals.order_by('-id')
     timeline = build_journal_timeline(journals, ship.project.ships.all())
-    logged_time = ship.journals.aggregate(total=Sum('time_spent'))['total'] or 0
+    logged_time = tracked_minutes_for_journals(ship.journals.all())
 
     latest_t2 = ship.t2_reviews.order_by('-id').first()
     deductions = latest_t2.deductions if latest_t2 else 0
@@ -251,6 +267,7 @@ def fraud_review_project(request, ship_id):
         "ship": ship,
         "journals": journals,
         "timeline": timeline,
+        "review_history": build_review_history(ship),
         "logged_time": logged_time,
         "deductions": deductions,
         "total_time": total_time
@@ -319,7 +336,7 @@ def t3_decision(request, ship_id):
         )
 
     owner_slack_id = ship.project.owner.hackclub_profile.slack_id
-    send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized and you've received {payout_layers} spools for it!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
+    send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized and you've received {payout_layers} pearls for it!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
 
     record_audit(request, "t3_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
@@ -354,6 +371,33 @@ def t3_decision(request, ship_id):
 
     messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}")
     return redirect("fraud_review_dash")
+
+@staff_member_required
+@require_POST
+@check_perms(COMMENT_PERMS)
+@rate_limit("internal_comment", 2)
+def add_internal_comment(request, ship_id):
+    ship = get_object_or_404(Ship, id=ship_id)
+    text = request.POST.get("text", "").strip()
+
+    if not text:
+        messages.error(request, "An internal comment can't be empty.")
+        return safe_redirect_back(request)
+
+    if len(text) > INTERNAL_COMMENT_MAX_LENGTH:
+        messages.error(request, f"Internal comment too long (max {INTERNAL_COMMENT_MAX_LENGTH} characters).")
+        return safe_redirect_back(request)
+
+    comment = InternalComment.objects.create(ship=ship, author=request.user, text=text)
+
+    record_audit(request, "internal_comment", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
+        "ship_id": ship.id,
+        "comment_id": comment.id,
+        "project": ship.project.title,
+    })
+
+    messages.success(request, "Internal comment added.")
+    return safe_redirect_back(request)
 
 @staff_member_required
 @require_POST
