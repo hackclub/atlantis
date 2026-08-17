@@ -219,6 +219,7 @@ class ProjectDetailTests(BaseTestCase):
 			("locked", dict(shippable=True, locked=True), "locked"),
 			("no printables url", dict(shippable=True, printablesUrl=""), "Printables URL"),
 			("no editor model", dict(shippable=True, editor_model_url=""), "editor model"),
+			("no screenshot", dict(shippable=True, image_url=""), "screenshot"),
 		]
 		for label, kwargs, expected_fragment in cases:
 			with self.subTest(label=label):
@@ -557,6 +558,17 @@ class ShipProjectTests(BaseTestCase):
 			message_texts(response),
 		)
 
+	def test_cannot_ship_without_screenshot(self):
+		self.project.image_url = ""
+		self.project.save()
+		make_journal(self.project, time_spent=200)
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 0)
+		self.assertIn(
+			"You need to upload a screenshot of your project before you can ship!",
+			message_texts(response),
+		)
+
 	def test_cannot_ship_without_unassigned_journals(self):
 		response = self._ship()
 		self.assertEqual(Ship.objects.count(), 0)
@@ -772,6 +784,78 @@ class UpdateEditorModelTests(BaseTestCase):
 		big = SimpleUploadedFile("part.f3d", b"\0" * (50 * 1024 * 1024 + 1))
 		response = self._update(editor_model_file=big)
 		self.assertIn("Editor model file too large. Max 50MB.", message_texts(response))
+
+
+@override_settings(ALLOW_JOURNALING=True)
+class UpdateProjectImageTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("screenshotter")
+		self.project = make_project(self.user)
+		self.client.force_login(self.user)
+
+	def _update(self, project=None, **data):
+		project = project or self.project
+		return self.client.post(reverse("update_project_image", args=[project.id]), data)
+
+	def test_screenshot_saved_to_images_prefix(self):
+		response = self._update(image=image_upload())
+		self.assertIn("Screenshot updated successfully.", message_texts(response))
+		self.project.refresh_from_db()
+		# Stored as a private-bucket object key, not a public URL.
+		self.assertTrue(self.project.image_url.startswith("images/"))
+		self.assertTrue(self.project.image_url.endswith(".png"))
+
+	def test_redirects_to_projects_by_default(self):
+		self.assertRedirects(self._update(image=image_upload()), reverse("projects"))
+
+	def test_redirects_to_detail_when_asked(self):
+		response = self._update(image=image_upload(), next="detail")
+		self.assertRedirects(response, reverse("project_detail", args=[self.project.id]))
+
+	def test_requires_a_file(self):
+		response = self._update()
+		self.assertIn("Choose a screenshot to upload.", message_texts(response))
+		self.project.refresh_from_db()
+		self.assertEqual(self.project.image_url, "")
+
+	def test_non_image_rejected(self):
+		response = self._update(image=stl_upload("shot.png"))
+		self.assertIn(
+			"Uploaded image must be a valid PNG, JPEG, GIF, or WEBP file.", message_texts(response)
+		)
+		self.project.refresh_from_db()
+		self.assertEqual(self.project.image_url, "")
+
+	def test_oversized_image_rejected(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		big = SimpleUploadedFile("shot.png", b"\0" * (5 * 1024 * 1024 + 1), content_type="image/png")
+		response = self._update(image=big)
+		self.assertIn("Max file size for images is 5MB.", message_texts(response))
+		self.project.refresh_from_db()
+		self.assertEqual(self.project.image_url, "")
+
+	def test_locked_project_rejected(self):
+		self.project.locked = True
+		self.project.save()
+		self._update(image=image_upload())
+		self.project.refresh_from_db()
+		self.assertEqual(self.project.image_url, "")
+
+	def test_not_owner_404(self):
+		other_project = make_project(make_user("other"))
+		self.assertEqual(self._update(project=other_project, image=image_upload()).status_code, 404)
+
+	def test_get_not_allowed(self):
+		response = self.client.get(reverse("update_project_image", args=[self.project.id]))
+		self.assertEqual(response.status_code, 405)
+
+	@override_settings(ALLOW_JOURNALING=False)
+	def test_uploads_disabled_when_journaling_off(self):
+		response = self._update(image=image_upload())
+		self.assertIn("File uploads are currently disabled.", message_texts(response))
+		self.project.refresh_from_db()
+		self.assertEqual(self.project.image_url, "")
 
 
 class FollowProjectTests(BaseTestCase):

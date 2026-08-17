@@ -17,6 +17,7 @@ urlpatterns = [
     path("projects/<int:project_id>/journal", create_journal, name="create_journal"),
     path("projects/<int:project_id>/edit/", edit_project, name="edit_project"),
     path("projects/<int:project_id>/editor-model/", update_editor_model, name="update_editor_model"),
+    path("projects/<int:project_id>/image/", update_project_image, name="update_project_image"),
     path("projects/<int:project_id>/delete/", delete_project, name="delete_project"),
     path("projects/<int:project_id>/lock/", lock_project, name="lock_project"),
     path("projects/<int:project_id>/unlock/", unlock_project, name="unlock_project"),
