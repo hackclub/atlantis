@@ -136,6 +136,8 @@ class Project(models.Model):
 	description = models.CharField(max_length=1000)
 	printablesUrl = models.CharField(max_length=150, blank=True)
 	editor_model_url = models.CharField(max_length=2048, blank=True)
+	# Screenshot of the model, shown on the project's book cover. Required to ship.
+	image_url = models.CharField(max_length=2048, blank=True)
 	created_at = models.DateTimeField(auto_now_add=True)
 	locked = models.BooleanField(default=False)
 	deleted = models.BooleanField(default=False)
@@ -155,6 +157,10 @@ class Project(models.Model):
 	@property
 	def editor_model_display_url(self):
 		return media_url(self.editor_model_url)
+
+	@property
+	def image_display_url(self):
+		return media_url(self.image_url)
 	
 class Ship(models.Model):
 	project = models.ForeignKey(

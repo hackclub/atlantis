@@ -25,6 +25,7 @@ TEST_ENCRYPTION_KEY = Fernet.generate_key().decode()
 VALID_PRINTABLES_URL = "https://www.printables.com/model/12345-cool-thing"
 VALID_EDITOR_LINK = "https://cad.onshape.com/documents/abc123"
 VALID_R2_URL = "https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/models/thing.f3d"
+PROJECT_IMAGE_KEY = "images/screenshot.png"
 
 ALL_SITE_PERMS = ["t1_review", "t2_review", "t3_review", "printer", "fulfillment", "organizer"]
 
@@ -66,6 +67,7 @@ def make_project(owner, shippable=False, **kwargs):
 	if shippable:
 		defaults["printablesUrl"] = VALID_PRINTABLES_URL
 		defaults["editor_model_url"] = VALID_EDITOR_LINK
+		defaults["image_url"] = PROJECT_IMAGE_KEY
 	defaults.update(kwargs)
 	return Project.objects.create(owner=owner, **defaults)
 

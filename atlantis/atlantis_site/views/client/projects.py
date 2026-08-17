@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.files.storage import default_storage
 from django.db import transaction
+from django.db.models import Sum
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.http import FileResponse, Http404
@@ -39,8 +40,21 @@ def _attachable_timelapses(project, user, ids=None):
 
 @login_required
 def projects(request):
-    projects = request.user.projects.filter(deleted=False).order_by("id")
+    projects = list(request.user.projects.filter(deleted=False).order_by("id"))
     profile = request.user.hackclub_profile
+
+    # Every book cover shows tracked time, so total it for all of them in one
+    # query rather than one per book.
+    tracked_seconds = dict(
+        LookoutSession.objects.filter(journal__project__in=projects)
+        .order_by()  # Meta.ordering would otherwise land in the GROUP BY
+        .values_list("journal__project")
+        .annotate(total=Sum("tracked_seconds"))
+    )
+
+    for project in projects:
+        project.tracked_hours = f"{tracked_seconds.get(project.id, 0) / 3600:.1f}h"
+
     return render(request, "atlantis_site/projects.html", {"projects": projects, "profile": profile})
 
 @login_required
@@ -180,6 +194,47 @@ def update_editor_model(request, project_id):
 
 @login_required
 @require_POST
+@rate_limit("update_project_image", 2)
+def update_project_image(request, project_id):
+    """Store the screenshot shown on the project's book cover."""
+    project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
+
+    # "detail" is the only alternative — never trust the value as a URL.
+    back = redirect("project_detail", project_id=project_id) if request.POST.get("next") == "detail" else redirect("projects")
+
+    if project.locked:
+        messages.error(request, "You cannot edit a locked project.")
+        return back
+
+    if not settings.ALLOW_JOURNALING:
+        messages.error(request, "File uploads are currently disabled.")
+        return back
+
+    image_file = request.FILES.get("image")
+    if not image_file:
+        messages.error(request, "Choose a screenshot to upload.")
+        return back
+
+    if not validate_file_size(image_file, 5):
+        messages.error(request, "Max file size for images is 5MB.")
+        return back
+
+    image_ext = sniff_image_extension(image_file)
+    if not image_ext:
+        messages.error(request, "Uploaded image must be a valid PNG, JPEG, GIF, or WEBP file.")
+        return back
+
+    # Store the object key (not a URL) — the bucket is private and served
+    # through serve_media.
+    project.image_url = default_storage.save(random_storage_key("images", image_ext), image_file)
+    project.save()
+
+    messages.success(request, "Screenshot updated successfully.")
+    return back
+
+
+@login_required
+@require_POST
 @rate_limit("delete_project", 2)
 def delete_project(request, project_id):
     project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
@@ -222,6 +277,9 @@ def project_detail(request, project_id):
     elif not project.editor_model_url:
         can_ship = False
         ship_disabled_reason = "You need to upload or link your editor model before you can ship."
+    elif not project.image_url:
+        can_ship = False
+        ship_disabled_reason = "You need to upload a screenshot of your project before you can ship."
     elif ship_pending:
         can_ship = False
         ship_disabled_reason = "Your most recent ship must be finalized or rejected before you can reship."
@@ -467,6 +525,9 @@ def ship_project(request, project_id):
         return redirect("projects")
     if not project.editor_model_url:
         messages.error(request, "You need to upload or link your editor model before you can ship!")
+        return redirect("projects")
+    if not project.image_url:
+        messages.error(request, "You need to upload a screenshot of your project before you can ship!")
         return redirect("projects")
     if not project.description:
         messages.error(request, "Your project must have a description before you can ship!")

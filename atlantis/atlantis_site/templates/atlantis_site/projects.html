@@ -1,267 +1,803 @@
-{% extends "atlantis_site/_base.html" %}
 {% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Projects</title>
+    {% include '_favicon.html' %}
+    <style>
+        @font-face {
+            font-family: "Atlantis Hand";
+            src: url("{% static 'atlantis_site/assets/fonts/atlantishand.ttf' %}") format("truetype");
+        }
 
-{% block page_id %}projects{% endblock %}
-{% block title %}Projects{% endblock %}
+        body {
+            margin: 0;
+            background-color: #FFFFFF;
+            color: #1D1D1F;
+            font-family: "Atlantis Hand", sans-serif;
+        }
 
-{% block content %}
-<div class="content">
-    {% include "root/_messages.html" %}
-    <h1 style="color: red;">THIS IS A BETA TEST</h1>
-    <h1>Projects</h1>
-    <button type="button" id="openCreateModal">Create new project</button>
-    <section class="project-list">
-        <h3>Your Projects</h3>
-        {% if projects %}
-            <div class="card-grid">
-                {% for project in projects %}
-                    {% if not project.deleted %}
-                    <div class="project-card" data-project-id="{{ project.id }}">
-                        <div class="card-row">
-                            <div class="card-main">
-                                <strong><a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></strong>
-                                <p>{{ project.description }}</p>
-                                {% if project.printablesUrl %}
-                                    <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
-                                {% endif %}
-                                <p class="project-byline">Status: {% if project.ships.last %}{{ project.ships.last.get_status_display }}{% else %}No ships yet{% endif %}</p>
-                            </div>
-                            {% if not project.locked %}
-                                <div class="card-controls">
-                                    <button type="button" class="menu-toggle" aria-haspopup="true" aria-expanded="false">⋯</button>
-                                    <div class="card-dropdown" aria-hidden="true">
-                                        <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-description="{{ project.description }}" data-printables="{{ project.printablesUrl|default_if_none:"" }}">Edit</button>
-                                        <button type="button" class="dropdown-item open-delete delete-button" data-project-id="{{ project.id }}" data-title="{{ project.title }}">Delete</button>
-                                    </div>
-                                </div>
-                            {% else %}
-                                <div class="card-controls">
-                                    <p class="project-locked"><strong>Locked</strong></p>
-                                </div>
-                            {% endif %}
-                        </div>
-                        <a href="{% url 'project_detail' project.id %}" class="card-detail-link">View project</a>
-                    </div>
-                    {% endif %}
-                {% endfor %}
-            </div>
-        {% else %}
-            <p>No projects yet. Create your first one!</p>
+        .sheet {
+            max-width: 1560px;
+            margin: 0 auto;
+            padding: clamp(16px, 2.2vw, 34px) clamp(18px, 3vw, 52px) clamp(40px, 6vw, 96px);
+        }
+
+        .topbar {
+            display: flex;
+            align-items: baseline;
+            gap: clamp(10px, 1.2vw, 20px);
+        }
+
+        #back-link {
+            color: #77777C;
+            text-decoration: none;
+            font-size: clamp(18px, 1.6vw, 28px);
+        }
+
+        #back-link:hover,
+        #back-link:focus-visible {
+            color: #1D1D1F;
+        }
+
+        .messages {
+            margin: clamp(8px, 1vw, 16px) 0 0;
+        }
+
+        .message {
+            margin: 4px 0;
+            color: #C0392B;
+            font-size: clamp(16px, 1.35vw, 24px);
+        }
+
+        #empty-note {
+            margin: clamp(12px, 1.4vw, 22px) 0 0;
+            color: #77777C;
+            font-size: clamp(18px, 1.5vw, 26px);
+        }
+
+        #shelf {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(min(340px, 100%), 1fr));
+            gap: clamp(28px, 4.5vw, 80px);
+            align-items: center;
+            justify-items: center;
+            margin-top: clamp(18px, 2.5vw, 40px);
+        }
+
+        .book,
+        .add-project {
+            width: 100%;
+            max-width: 470px;
+        }
+
+        .book {
+            position: relative;
+            container-type: inline-size;
+            transition: scale 0.15s ease-out, filter 0.15s ease-out;
+        }
+
+        /* The scale lives on .book, not on .book-face: a transform there would
+           trap the cover in its own stacking context and bury the screenshot
+           button under the link overlay. */
+        .book:has(.book-link:hover),
+        .book:has(.book-link:focus-visible) {
+            scale: 1.025;
+            filter: brightness(1.06);
+        }
+
+        .book-face {
+            position: relative;
+            aspect-ratio: 765 / 1148;
+            overflow: hidden;
+        }
+
+        /* Covers the whole book so anywhere but the controls opens the project. */
+        .book-link {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+        }
+
+        /* book.png is a small book on a big transparent canvas — pull the cover
+           out of it the way the dashboard crops its dock items. */
+        .book-art {
+            position: absolute;
+            left: -80.131%;
+            top: -7.666%;
+            width: 326.797%;
+            height: auto;
+            pointer-events: none;
+            filter: drop-shadow(0 0.5cqw 1.2cqw rgba(58, 36, 12, 0.28));
+        }
+
+        .book-content {
+            position: absolute;
+            left: 17%;
+            right: 8%;
+            top: 10%;
+            bottom: 15%;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .book-photo {
+            box-sizing: border-box;
+            align-self: flex-start;
+            width: 86%;
+            margin-bottom: 7%;
+            padding: 4% 4% 6%;
+            background-color: #FFFFFF;
+            rotate: -2.5deg;
+            box-shadow: 0 0.6cqw 1.6cqw rgba(30, 18, 4, 0.45);
+        }
+
+        .book-photo img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 4 / 3;
+            object-fit: cover;
+            background-color: #E7E1D3;
+        }
+
+        /* Same slot as .book-photo, so a book keeps its shape before the
+           screenshot lands. Raised above .book-link so it stays clickable. */
+        .book-photo-empty {
+            position: relative;
+            z-index: 2;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            align-self: flex-start;
+            width: 86%;
+            aspect-ratio: 4 / 3;
+            margin-bottom: 7%;
+            padding: 6%;
+            border: 0.6cqw dashed rgba(248, 234, 205, 0.5);
+            border-radius: 1.4cqw;
+            background: none;
+            font: inherit;
+            font-size: 15px;
+            font-size: 5cqw;
+            line-height: 1.3;
+            color: rgba(248, 234, 205, 0.72);
+            text-align: center;
+            transition: border-color 0.15s ease-out, color 0.15s ease-out;
+        }
+
+        button.book-photo-empty {
+            cursor: pointer;
+        }
+
+        button.book-photo-empty:hover,
+        button.book-photo-empty:focus-visible {
+            border-color: rgba(248, 234, 205, 0.9);
+            color: #FBEFD6;
+        }
+
+        .book-title {
+            margin: 0;
+            font-weight: 400;
+            font-size: 26px;
+            font-size: 9cqw;
+            line-height: 1.1;
+            /* The clamp crops at the padding edge, so without this the tails of
+               g/j/p/y on the last line get sliced off. */
+            padding-bottom: 0.18em;
+            color: #FBEFD6;
+            overflow-wrap: anywhere;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .book-meta {
+            display: flex;
+            align-items: baseline;
+            gap: 6%;
+            margin: 1% 0 0;
+            font-size: 18px;
+            font-size: 6cqw;
+            line-height: 1.2;
+            color: #F1E2C2;
+        }
+
+        /* Each editor gets its own brand colour, same palette as the chips in
+           css/labels.css — lightened where the chip colour was mixed for white
+           text on a white page and would sink into the cover here. */
+        .book-editor {
+            color: #E8D7B4;
+            white-space: nowrap;
+        }
+
+        .editor-fusion-360 { color: #FF6B01; }
+        .editor-onshape { color: #64BB58; }
+        .editor-shapr3d { color: #7795FF; }
+        .editor-solidworks { color: #E7746B; }
+        .editor-freecad { color: #DD7A80; }
+        .editor-openscad { color: #FFF662; }
+        .editor-blender { color: #E87D0D; }
+        .editor-solvespace { color: #589EBC; }
+
+        .book-desc {
+            margin: 7% 0 0;
+            font-size: 15px;
+            font-size: 5.2cqw;
+            line-height: 1.35;
+            padding-bottom: 0.12em;
+            color: rgba(248, 234, 205, 0.62);
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .card-controls {
+            position: absolute;
+            top: 3.2%;
+            right: 6%;
+            z-index: 2;
+        }
+
+        .menu-toggle {
+            display: block;
+            padding: 0 0.45em;
+            border: none;
+            border-radius: 999px;
+            background-color: rgba(28, 16, 4, 0.32);
+            color: #F6E7C8;
+            font: inherit;
+            font-size: 20px;
+            font-size: 7cqw;
+            line-height: 1.1;
+            cursor: pointer;
+            opacity: 0.55;
+            transition: opacity 0.15s ease-out;
+        }
+
+        .menu-toggle:hover,
+        .menu-toggle:focus-visible,
+        .card-dropdown.open + .menu-toggle {
+            opacity: 1;
+        }
+
+        .card-dropdown {
+            display: none;
+            position: absolute;
+            top: 115%;
+            right: 0;
+            min-width: 130px;
+            border-radius: 12px;
+            background-color: #FFFDF7;
+            box-shadow: 0 12px 32px rgba(40, 26, 10, 0.28);
+            overflow: hidden;
+        }
+
+        .card-dropdown.open {
+            display: block;
+        }
+
+        .dropdown-item {
+            display: block;
+            width: 100%;
+            padding: 10px 16px;
+            border: none;
+            background: none;
+            font: inherit;
+            font-size: 19px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .dropdown-item:hover,
+        .dropdown-item:focus-visible {
+            background-color: #F2EDE1;
+        }
+
+        .delete-button {
+            color: #C0392B;
+        }
+
+        .book-locked {
+            position: absolute;
+            top: 3.2%;
+            right: 6%;
+            z-index: 2;
+            padding: 0 0.6em 0.1em;
+            border-radius: 999px;
+            background-color: rgba(28, 16, 4, 0.32);
+            color: #F6E7C8;
+            font-size: 16px;
+            font-size: 5.4cqw;
+        }
+
+        .add-project {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: clamp(8px, 1vw, 18px);
+            padding: 0;
+            border: none;
+            background: none;
+            font: inherit;
+            color: #111111;
+            cursor: pointer;
+            transition: scale 0.15s ease-out;
+        }
+
+        .add-project:hover,
+        .add-project:focus-visible {
+            scale: 1.05;
+        }
+
+        .add-project svg {
+            width: 38%;
+            max-width: 132px;
+            height: auto;
+            fill: currentColor;
+        }
+
+        .add-project span {
+            color: #77777C;
+            font-size: clamp(22px, 2.2vw, 40px);
+        }
+
+        .add-project:hover span,
+        .add-project:focus-visible span {
+            color: #1D1D1F;
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            z-index: 20;
+        }
+
+        .modal.hidden {
+            display: none;
+        }
+
+        [hidden] {
+            display: none !important;
+        }
+
+        .modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(24, 15, 5, 0.45);
+        }
+
+        .modal-panel {
+            position: relative;
+            z-index: 1;
+            box-sizing: border-box;
+            width: min(92vw, 520px);
+            padding: 24px 26px;
+            border: 2px solid #E4D8BE;
+            border-radius: 18px;
+            background-color: #FFFDF7;
+            box-shadow: 0 24px 60px rgba(40, 26, 10, 0.3);
+        }
+
+        .modal-panel h3 {
+            margin: 0 0 16px;
+            font-weight: 400;
+            font-size: 30px;
+        }
+
+        .modal-panel p {
+            margin: 0 0 16px;
+            font-size: 20px;
+            color: #4A4A4F;
+        }
+
+        .modal-panel form {
+            display: grid;
+            gap: 14px;
+        }
+
+        .modal-panel label {
+            display: grid;
+            gap: 6px;
+            font-size: 20px;
+            color: #4A4A4F;
+        }
+
+        .modal-panel input,
+        .modal-panel textarea {
+            box-sizing: border-box;
+            width: 100%;
+            padding: 8px 10px;
+            border: 2px solid #E0D3B6;
+            border-radius: 10px;
+            background-color: #FFFFFF;
+            font: inherit;
+            font-size: 19px;
+            color: #1D1D1F;
+        }
+
+        .modal-panel textarea {
+            min-height: 104px;
+            resize: vertical;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-actions button {
+            padding: 8px 20px;
+            border: 2px solid #DCCDAC;
+            border-radius: 999px;
+            background-color: #FFFFFF;
+            font: inherit;
+            font-size: 19px;
+            color: #1D1D1F;
+            cursor: pointer;
+        }
+
+        .modal-actions button:hover {
+            background-color: #F2EDE1;
+        }
+
+        .modal-actions button[type="submit"] {
+            border-color: #6B4A24;
+            background-color: #6B4A24;
+            color: #FBEFD6;
+        }
+
+        .modal-actions button[type="submit"]:hover {
+            background-color: #583C1C;
+        }
+
+        .modal-actions button.delete-button {
+            border-color: #C0392B;
+            background-color: #C0392B;
+            color: #FFF3F1;
+        }
+
+        .modal-actions button.delete-button:hover {
+            background-color: #A32F23;
+        }
+    </style>
+</head>
+<body>
+    <div class="sheet">
+        <div class="topbar">
+            <a id="back-link" href="{% url 'dashboard' %}">&larr; back</a>
+        </div>
+
+        {% include "root/_messages.html" %}
+
+        {% if not projects %}
+            <p id="empty-note">no projects yet &mdash; crack open your first one!</p>
         {% endif %}
-    </section>
-</div>
 
-<div id="createProjectModal" class="modal hidden" aria-hidden="true" hidden>
-    <div class="modal-backdrop" id="modalBackdrop"></div>
+        <main id="shelf">
+            {% for project in projects %}
+                <article class="book" data-project-id="{{ project.id }}">
+                    <div class="book-face">
+                        <img class="book-art" src="{% static 'atlantis_site/assets/img/projects/book.png' %}" alt="">
+                        <div class="book-content">
+                            {% if project.image_url %}
+                                <span class="book-photo"><img src="{{ project.image_display_url }}" alt="Screenshot of {{ project.title }}" loading="lazy"></span>
+                            {% elif not project.locked %}
+                                <button type="button" class="book-photo-empty open-screenshot" data-project-id="{{ project.id }}" data-title="{{ project.title }}">upload a screenshot to show here</button>
+                            {% else %}
+                                <span class="book-photo-empty">no screenshot</span>
+                            {% endif %}
+                            <h2 class="book-title">{{ project.title }}</h2>
+                            <p class="book-meta">
+                                <span>{{ project.tracked_hours }}</span>
+                                {% if project.editor_name %}<span class="book-editor editor-{{ project.editor_name|slugify }}">{{ project.editor_name|lower }}</span>{% endif %}
+                            </p>
+                            <p class="book-desc">{{ project.description }}</p>
+                        </div>
+                    </div>
 
-    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="createProjectTitle">
-        <h3 id="createProjectTitle">Create Project</h3>
+                    <a class="book-link" href="{% url 'project_detail' project.id %}" aria-label="{{ project.title }}"></a>
 
-        <form action="{% url 'create_project' %}" method="post">
-            {% csrf_token %}
-            <label>
-                Title
-                <input name="title" maxlength="60" placeholder="Project title" required>
-            </label>
+                    {% if project.locked %}
+                        <span class="book-locked">locked</span>
+                    {% else %}
+                        <div class="card-controls">
+                            <div class="card-dropdown" aria-hidden="true">
+                                <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-description="{{ project.description }}" data-printables="{{ project.printablesUrl|default_if_none:"" }}">edit</button>
+                                <button type="button" class="dropdown-item open-screenshot" data-project-id="{{ project.id }}" data-title="{{ project.title }}">screenshot</button>
+                                <button type="button" class="dropdown-item open-delete delete-button" data-project-id="{{ project.id }}" data-title="{{ project.title }}">delete</button>
+                            </div>
+                            <button type="button" class="menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Options for {{ project.title }}">&#8943;</button>
+                        </div>
+                    {% endif %}
+                </article>
+            {% endfor %}
 
-            <label>
-                Description
-                <textarea name="description" placeholder="Description" required></textarea>
-            </label>
-
-            <label>
-                Printables URL
-                <input name="printables_url" placeholder="https://printables.com/..." type="url">
-            </label>
-
-            <div class="modal-actions">
-                <button type="button" id="cancelCreateModal">Cancel</button>
-                <button type="submit">Create</button>
-            </div>
-        </form>
+            <button type="button" class="add-project" id="openCreateModal" aria-label="Add project">
+                <svg viewBox="0 0 100 100" aria-hidden="true">
+                    <rect x="37" y="7" width="26" height="86" rx="11"></rect>
+                    <rect x="7" y="37" width="86" height="26" rx="11"></rect>
+                </svg>
+                <span>add project</span>
+            </button>
+        </main>
     </div>
-</div>
 
-<div id="editProjectModal" class="modal hidden" aria-hidden="true" hidden>
-    <div class="modal-backdrop" id="editModalBackdrop"></div>
+    <div id="createProjectModal" class="modal hidden" aria-hidden="true" hidden>
+        <div class="modal-backdrop" id="modalBackdrop"></div>
 
-    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="editProjectTitle">
-        <h3 id="editProjectTitle">Edit Project</h3>
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="createProjectTitle">
+            <h3 id="createProjectTitle">Create Project</h3>
 
-        <form id="editProjectForm" action="" method="post">
-            {% csrf_token %}
-            <label>
-                Title
-                <input id="editTitle" name="title" maxlength="60" placeholder="Project title" required>
-            </label>
+            <form action="{% url 'create_project' %}" method="post">
+                {% csrf_token %}
+                <label>
+                    Title
+                    <input name="title" maxlength="60" placeholder="Project title" required>
+                </label>
 
-            <label>
-                Description
-                <textarea id="editDescription" name="description" placeholder="Description" required></textarea>
-            </label>
+                <label>
+                    Description
+                    <textarea name="description" placeholder="Description" required></textarea>
+                </label>
 
-            <label>
-                Printables URL
-                <input id="editPrintables" name="printables_url" placeholder="https://printables.com/..." type="url" pattern="https:\/\/(?:www\.)?printables\.com(?:\/.*)?" title="Please enter a valid Printables URL starting with https://" required>
-            </label>
+                <label>
+                    Printables URL
+                    <input name="printables_url" placeholder="https://printables.com/..." type="url">
+                </label>
 
-            <div class="modal-actions">
-                <button type="button" id="cancelEditModal">Cancel</button>
-                <button type="submit">Save</button>
-            </div>
-        </form>
+                <div class="modal-actions">
+                    <button type="button" id="cancelCreateModal">Cancel</button>
+                    <button type="submit">Create</button>
+                </div>
+            </form>
+        </div>
     </div>
-</div>
 
-<div id="deleteProjectModal" class="modal hidden" aria-hidden="true" hidden>
-    <div class="modal-backdrop" id="deleteModalBackdrop"></div>
+    <div id="editProjectModal" class="modal hidden" aria-hidden="true" hidden>
+        <div class="modal-backdrop" id="editModalBackdrop"></div>
 
-    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="deleteProjectTitle">
-        <h3 id="deleteProjectTitle">Delete Project</h3>
-        <p>Are you sure you want to delete "<span id="deleteProjectName"></span>"? This action cannot be undone.</p>
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="editProjectTitle">
+            <h3 id="editProjectTitle">Edit Project</h3>
 
-        <form id="deleteProjectForm" action="" method="post">
-            {% csrf_token %}
-            <div class="modal-actions">
-                <button type="button" id="cancelDeleteModal">Cancel</button>
-                <button type="submit" class="delete-button">Delete</button>
-            </div>
-        </form>
+            <form id="editProjectForm" action="" method="post">
+                {% csrf_token %}
+                <label>
+                    Title
+                    <input id="editTitle" name="title" maxlength="60" placeholder="Project title" required>
+                </label>
+
+                <label>
+                    Description
+                    <textarea id="editDescription" name="description" placeholder="Description" required></textarea>
+                </label>
+
+                <label>
+                    Printables URL
+                    <input id="editPrintables" name="printables_url" placeholder="https://printables.com/..." type="url" pattern="https:\/\/(?:www\.)?printables\.com(?:\/.*)?" title="Please enter a valid Printables URL starting with https://" required>
+                </label>
+
+                <div class="modal-actions">
+                    <button type="button" id="cancelEditModal">Cancel</button>
+                    <button type="submit">Save</button>
+                </div>
+            </form>
+        </div>
     </div>
-</div>
 
-<script>
-    (function () {
-        const modal = document.getElementById("createProjectModal");
-        const openBtn = document.getElementById("openCreateModal");
-        const cancelBtn = document.getElementById("cancelCreateModal");
-        const backdrop = document.getElementById("modalBackdrop");
+    <div id="screenshotModal" class="modal hidden" aria-hidden="true" hidden>
+        <div class="modal-backdrop" id="screenshotModalBackdrop"></div>
 
-        function openModal() {
-            modal.classList.remove("hidden");
-            modal.hidden = false;
-            modal.setAttribute("aria-hidden", "false");
-            
-            const firstInput = modal.querySelector("input, textarea, button");
-            if (firstInput) firstInput.focus();
-        }
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="screenshotTitle">
+            <h3 id="screenshotTitle">Project Screenshot</h3>
+            <p>A screenshot of your model, shown on the cover. You need one before you can ship.</p>
 
-        function closeModal() {
-            modal.classList.add("hidden");
-            modal.hidden = true;
-            modal.setAttribute("aria-hidden", "true");
-            openBtn.focus();
-        }
+            <form id="screenshotForm" action="" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <label>
+                    Screenshot (PNG, JPEG, GIF, or WEBP, max 5MB)
+                    <input id="screenshotFile" type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" required>
+                </label>
 
-        openBtn.addEventListener("click", openModal);
-        cancelBtn.addEventListener("click", closeModal);
-        backdrop.addEventListener("click", closeModal);
+                <div class="modal-actions">
+                    <button type="button" id="cancelScreenshotModal">Cancel</button>
+                    <button type="submit">Upload</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-        document.addEventListener("keydown", (e) => {
-            if (e.key === "Escape" && !modal.classList.contains("hidden")) {
-                closeModal();
+    <div id="deleteProjectModal" class="modal hidden" aria-hidden="true" hidden>
+        <div class="modal-backdrop" id="deleteModalBackdrop"></div>
+
+        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="deleteProjectTitle">
+            <h3 id="deleteProjectTitle">Delete Project</h3>
+            <p>Are you sure you want to delete "<span id="deleteProjectName"></span>"? This action cannot be undone.</p>
+
+            <form id="deleteProjectForm" action="" method="post">
+                {% csrf_token %}
+                <div class="modal-actions">
+                    <button type="button" id="cancelDeleteModal">Cancel</button>
+                    <button type="submit" class="delete-button">Delete</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        (function () {
+            const modal = document.getElementById("createProjectModal");
+            const openBtn = document.getElementById("openCreateModal");
+            const cancelBtn = document.getElementById("cancelCreateModal");
+            const backdrop = document.getElementById("modalBackdrop");
+
+            function openModal() {
+                modal.classList.remove("hidden");
+                modal.hidden = false;
+                modal.setAttribute("aria-hidden", "false");
+
+                const firstInput = modal.querySelector("input, textarea, button");
+                if (firstInput) firstInput.focus();
             }
-        });
-    })();
 
-    (function () {
-        function closeAllMenus() {
-            document.querySelectorAll('.card-dropdown.open').forEach(d => {
-                d.classList.remove('open');
-                d.setAttribute('aria-hidden', 'true');
-                const toggle = d.parentElement.querySelector('.menu-toggle');
-                if (toggle) toggle.setAttribute('aria-expanded', 'false');
-            });
-        }
+            function closeModal() {
+                modal.classList.add("hidden");
+                modal.hidden = true;
+                modal.setAttribute("aria-hidden", "true");
+                openBtn.focus();
+            }
 
-        document.addEventListener('click', (e) => {
-            const toggle = e.target.closest('.menu-toggle');
-            if (toggle) {
-                const dropdown = toggle.parentElement.querySelector('.card-dropdown');
-                const isOpen = dropdown.classList.contains('open');
-                closeAllMenus();
-                if (!isOpen) {
-                    dropdown.classList.add('open');
-                    dropdown.setAttribute('aria-hidden', 'false');
-                    toggle.setAttribute('aria-expanded', 'true');
+            openBtn.addEventListener("click", openModal);
+            cancelBtn.addEventListener("click", closeModal);
+            backdrop.addEventListener("click", closeModal);
+
+            document.addEventListener("keydown", (e) => {
+                if (e.key === "Escape" && !modal.classList.contains("hidden")) {
+                    closeModal();
                 }
-                return;
+            });
+        })();
+
+        (function () {
+            function closeAllMenus() {
+                document.querySelectorAll('.card-dropdown.open').forEach(d => {
+                    d.classList.remove('open');
+                    d.setAttribute('aria-hidden', 'true');
+                    const toggle = d.parentElement.querySelector('.menu-toggle');
+                    if (toggle) toggle.setAttribute('aria-expanded', 'false');
+                });
             }
 
-            if (!e.target.closest('.card-dropdown') && !e.target.closest('.menu-toggle')) {
-                closeAllMenus();
+            document.addEventListener('click', (e) => {
+                const toggle = e.target.closest('.menu-toggle');
+                if (toggle) {
+                    const dropdown = toggle.parentElement.querySelector('.card-dropdown');
+                    const isOpen = dropdown.classList.contains('open');
+                    closeAllMenus();
+                    if (!isOpen) {
+                        dropdown.classList.add('open');
+                        dropdown.setAttribute('aria-hidden', 'false');
+                        toggle.setAttribute('aria-expanded', 'true');
+                    }
+                    return;
+                }
+
+                if (!e.target.closest('.card-dropdown') && !e.target.closest('.menu-toggle')) {
+                    closeAllMenus();
+                }
+            });
+
+            const editModal = document.getElementById('editProjectModal');
+            const editBackdrop = document.getElementById('editModalBackdrop');
+            const editForm = document.getElementById('editProjectForm');
+            const editTitle = document.getElementById('editTitle');
+            const editDescription = document.getElementById('editDescription');
+            const editPrintables = document.getElementById('editPrintables');
+            const cancelEditBtn = document.getElementById('cancelEditModal');
+
+            document.addEventListener('click', (e) => {
+                const openEditBtn = e.target.closest('.open-edit');
+                if (openEditBtn) {
+                    const id = openEditBtn.dataset.projectId;
+                    const title = openEditBtn.dataset.title || '';
+                    const description = openEditBtn.dataset.description || '';
+                    const printables = openEditBtn.dataset.printables || '';
+                    editForm.action = `/projects/${id}/edit/`;
+                    editTitle.value = title;
+                    editDescription.value = description;
+                    editPrintables.value = printables;
+                    editModal.classList.remove('hidden');
+                    editModal.hidden = false;
+                    editModal.setAttribute('aria-hidden', 'false');
+                    const first = editModal.querySelector('input, textarea, button');
+                    if (first) first.focus();
+                    closeAllMenus();
+                }
+            });
+
+            function closeEditModal() {
+                editModal.classList.add('hidden');
+                editModal.hidden = true;
+                editModal.setAttribute('aria-hidden', 'true');
             }
-        });
 
-        const editModal = document.getElementById('editProjectModal');
-        const editBackdrop = document.getElementById('editModalBackdrop');
-        const editForm = document.getElementById('editProjectForm');
-        const editTitle = document.getElementById('editTitle');
-        const editDescription = document.getElementById('editDescription');
-        const editPrintables = document.getElementById('editPrintables');
-        const cancelEditBtn = document.getElementById('cancelEditModal');
+            if (cancelEditBtn) cancelEditBtn.addEventListener('click', closeEditModal);
+            if (editBackdrop) editBackdrop.addEventListener('click', closeEditModal);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !editModal.classList.contains('hidden')) closeEditModal(); });
 
-        document.addEventListener('click', (e) => {
-            const openEditBtn = e.target.closest('.open-edit');
-            if (openEditBtn) {
-                const id = openEditBtn.dataset.projectId;
-                const title = openEditBtn.dataset.title || '';
-                const description = openEditBtn.dataset.description || '';
-                const printables = openEditBtn.dataset.printables || '';
-                editForm.action = `/projects/${id}/edit/`;
-                editTitle.value = title;
-                editDescription.value = description;
-                editPrintables.value = printables;
-                editModal.classList.remove('hidden');
-                editModal.hidden = false;
-                editModal.setAttribute('aria-hidden', 'false');
-                const first = editModal.querySelector('input, textarea, button');
-                if (first) first.focus();
-                closeAllMenus();
+            const screenshotModal = document.getElementById('screenshotModal');
+            const screenshotBackdrop = document.getElementById('screenshotModalBackdrop');
+            const screenshotForm = document.getElementById('screenshotForm');
+            const screenshotFile = document.getElementById('screenshotFile');
+            const cancelScreenshotBtn = document.getElementById('cancelScreenshotModal');
+
+            document.addEventListener('click', (e) => {
+                const openScreenshotBtn = e.target.closest('.open-screenshot');
+                if (openScreenshotBtn) {
+                    const id = openScreenshotBtn.dataset.projectId;
+                    screenshotForm.action = `/projects/${id}/image/`;
+                    screenshotFile.value = '';
+                    screenshotModal.classList.remove('hidden');
+                    screenshotModal.hidden = false;
+                    screenshotModal.setAttribute('aria-hidden', 'false');
+                    screenshotFile.focus();
+                    closeAllMenus();
+                }
+            });
+
+            function closeScreenshotModal() {
+                screenshotModal.classList.add('hidden');
+                screenshotModal.hidden = true;
+                screenshotModal.setAttribute('aria-hidden', 'true');
             }
-        });
 
-        function closeEditModal() {
-            editModal.classList.add('hidden');
-            editModal.hidden = true;
-            editModal.setAttribute('aria-hidden', 'true');
-        }
+            if (cancelScreenshotBtn) cancelScreenshotBtn.addEventListener('click', closeScreenshotModal);
+            if (screenshotBackdrop) screenshotBackdrop.addEventListener('click', closeScreenshotModal);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !screenshotModal.classList.contains('hidden')) closeScreenshotModal(); });
 
-        if (cancelEditBtn) cancelEditBtn.addEventListener('click', closeEditModal);
-        if (editBackdrop) editBackdrop.addEventListener('click', closeEditModal);
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !editModal.classList.contains('hidden')) closeEditModal(); });
+            const deleteModal = document.getElementById('deleteProjectModal');
+            const deleteBackdrop = document.getElementById('deleteModalBackdrop');
+            const deleteForm = document.getElementById('deleteProjectForm');
+            const deleteProjectName = document.getElementById('deleteProjectName');
+            const cancelDeleteBtn = document.getElementById('cancelDeleteModal');
 
-        const deleteModal = document.getElementById('deleteProjectModal');
-        const deleteBackdrop = document.getElementById('deleteModalBackdrop');
-        const deleteForm = document.getElementById('deleteProjectForm');
-        const deleteProjectName = document.getElementById('deleteProjectName');
-        const cancelDeleteBtn = document.getElementById('cancelDeleteModal');
+            document.addEventListener('click', (e) => {
+                const openDeleteBtn = e.target.closest('.open-delete');
+                if (openDeleteBtn) {
+                    const id = openDeleteBtn.dataset.projectId;
+                    const title = openDeleteBtn.dataset.title || 'this project';
+                    deleteForm.action = `/projects/${id}/delete/`;
+                    deleteProjectName.textContent = title;
+                    deleteModal.classList.remove('hidden');
+                    deleteModal.hidden = false;
+                    deleteModal.setAttribute('aria-hidden', 'false');
+                    const first = deleteModal.querySelector('button');
+                    if (first) first.focus();
+                    closeAllMenus();
+                }
+            });
 
-        document.addEventListener('click', (e) => {
-            const openDeleteBtn = e.target.closest('.open-delete');
-            if (openDeleteBtn) {
-                const id = openDeleteBtn.dataset.projectId;
-                const title = openDeleteBtn.dataset.title || 'this project';
-                deleteForm.action = `/projects/${id}/delete/`;
-                deleteProjectName.textContent = title;
-                deleteModal.classList.remove('hidden');
-                deleteModal.hidden = false;
-                deleteModal.setAttribute('aria-hidden', 'false');
-                const first = deleteModal.querySelector('button');
-                if (first) first.focus();
-                closeAllMenus();
+            function closeDeleteModal() {
+                deleteModal.classList.add('hidden');
+                deleteModal.hidden = true;
+                deleteModal.setAttribute('aria-hidden', 'true');
             }
-        });
 
-        function closeDeleteModal() {
-            deleteModal.classList.add('hidden');
-            deleteModal.hidden = true;
-            deleteModal.setAttribute('aria-hidden', 'true');
-        }
-
-        if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
-        if (deleteBackdrop) deleteBackdrop.addEventListener('click', closeDeleteModal);
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !deleteModal.classList.contains('hidden')) closeDeleteModal(); });
-    })();
-</script>
-{% endblock %}
+            if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
+            if (deleteBackdrop) deleteBackdrop.addEventListener('click', closeDeleteModal);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !deleteModal.classList.contains('hidden')) closeDeleteModal(); });
+        })();
+    </script>
+</body>
+</html>
