@@ -333,7 +333,6 @@ class Journal(models.Model):
 
 	created_at = models.DateTimeField(auto_now_add=True)
 	title = models.CharField(max_length=100)
-	text = models.CharField(max_length=2000)
 	image_url = models.CharField(max_length=2048)
 	model_url = models.CharField(max_length=2048)
 

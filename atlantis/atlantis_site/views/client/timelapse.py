@@ -23,7 +23,7 @@ def start_timelapse(request, project_id):
 	project = get_object_or_404(Project, id=project_id, owner=request.user, deleted=False)
 
 	if project.locked:
-		messages.error(request, "You cannot record a timelapse on a locked project.")
+		messages.error(request, "You cannot record a Lookout on a locked project.")
 		return redirect("project_detail", project_id=project_id)
 
 	try:
@@ -35,13 +35,13 @@ def start_timelapse(request, project_id):
 		})
 	except lookout.LookoutError as exc:
 		# Never fail silently — surface it.
-		messages.error(request, f"Couldn't start a timelapse right now: {exc}")
+		messages.error(request, f"Couldn't start a Lookout right now: {exc}")
 		return redirect("project_detail", project_id=project_id)
 
 	token = data.get("token")
 	session_id = data.get("sessionId")
 	if not token or not session_id:
-		messages.error(request, "Lookout returned an unexpected response; timelapse not started.")
+		messages.error(request, "Lookout returned an unexpected response; recording not started.")
 		return redirect("project_detail", project_id=project_id)
 
 	session = LookoutSession.objects.create(

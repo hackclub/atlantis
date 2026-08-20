@@ -233,7 +233,7 @@ class ProjectDetailTests(BaseTestCase):
 		project = make_project(self.user, shippable=True)
 		response = self._detail(project)
 		self.assertFalse(response.context["can_ship"])
-		self.assertIn("journal", response.context["ship_disabled_reason"])
+		self.assertIn("lapse", response.context["ship_disabled_reason"])
 
 	def test_cannot_ship_with_pending_ship(self):
 		project = make_project(self.user, shippable=True)
@@ -339,7 +339,6 @@ class CreateJournalTests(BaseTestCase):
 		data = {
 			"timelapses": timelapses,
 			"title": "Progress update",
-			"text": "x" * 300,
 			"image": image_upload(),
 			"STL": stl_upload(),
 		}
@@ -354,7 +353,7 @@ class CreateJournalTests(BaseTestCase):
 
 	def test_creates_journal_with_uploaded_files(self):
 		response = self._create()
-		self.assertIn("Journal entry created successfully", message_texts(response))
+		self.assertIn("Lapse added successfully", message_texts(response))
 
 		journal = Journal.objects.get()
 		self.assertEqual(journal.project, self.project)
@@ -394,14 +393,14 @@ class CreateJournalTests(BaseTestCase):
 		response = self._create(timelapses=[])
 		self.assertEqual(Journal.objects.count(), 0)
 		self.assertIn(
-			"You must attach at least one finished timelapse to your journal entry!",
+			"Attach at least one finished Lookout to your lapse!",
 			message_texts(response),
 		)
 
 	def test_rejects_non_integer_timelapse_ids(self):
 		response = self._create(timelapses=["abc"])
 		self.assertEqual(Journal.objects.count(), 0)
-		self.assertIn("Invalid timelapse selection.", message_texts(response))
+		self.assertIn("Invalid Lookout selection.", message_texts(response))
 
 	def test_time_is_the_sum_of_attached_timelapses(self):
 		ids = [
@@ -441,17 +440,14 @@ class CreateJournalTests(BaseTestCase):
 		response = self._create(timelapses=[str(timelapse.pk)])
 		self.assertEqual(Journal.objects.count(), 1)
 		self.assertIn(
-			"One or more of those timelapses can't be attached. Refresh and try again.",
+			"One or more of those Lookouts can't be attached. Refresh and try again.",
 			message_texts(response),
 		)
 
-	def test_text_length_boundaries(self):
-		cases = {199: 0, 200: 1, 2000: 1, 2001: 0}
-		for length, created in cases.items():
-			with self.subTest(length=length):
-				Journal.objects.all().delete()
-				self._create(text="x" * length)
-				self.assertEqual(Journal.objects.count(), created)
+	def test_title_required(self):
+		response = self._create(title="   ")
+		self.assertEqual(Journal.objects.count(), 0)
+		self.assertIn("Your lapse needs a title.", message_texts(response))
 
 	def test_image_required(self):
 		response = self._create(image=None)
@@ -929,7 +925,6 @@ class FollowerNotificationTests(BaseTestCase):
 			{
 				"timelapses": [str(make_timelapse(self.project, minutes=60).pk)],
 				"title": "Update",
-				"text": "x" * 300,
 				"image": image_upload(),
 				"STL": stl_upload(),
 			},

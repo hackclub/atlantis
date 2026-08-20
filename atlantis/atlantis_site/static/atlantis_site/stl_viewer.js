@@ -6,7 +6,7 @@ const loader = new STLLoader();
 
 function initViewer(container) {
     const stlUrl = container.dataset.stlUrl;
-    if (!stlUrl) return;
+    if (!stlUrl) return null;
 
     const width = container.clientWidth || 400;
     const height = container.clientHeight || 400;
@@ -29,12 +29,21 @@ function initViewer(container) {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
 
+    let mesh = null;
+    let disposed = false;
+
     loader.load(stlUrl, (geometry) => {
+        // The viewer can be torn down before the model lands.
+        if (disposed) {
+            geometry.dispose();
+            return;
+        }
+
         geometry.computeBoundingBox();
         geometry.center();
 
         const material = new THREE.MeshPhongMaterial({ color: 0x4a90d9, specular: 0x222222, shininess: 60 });
-        const mesh = new THREE.Mesh(geometry, material);
+        mesh = new THREE.Mesh(geometry, material);
         scene.add(mesh);
 
         const size = new THREE.Vector3();
@@ -53,12 +62,37 @@ function initViewer(container) {
     };
     window.addEventListener('resize', resize);
 
+    let frame = null;
     function animate() {
-        requestAnimationFrame(animate);
+        frame = requestAnimationFrame(animate);
         controls.update();
         renderer.render(scene, camera);
     }
     animate();
+
+    // Viewers opened on demand have to give their WebGL context back — browsers
+    // only allow a handful at a time.
+    function dispose() {
+        if (disposed) return;
+        disposed = true;
+        if (frame !== null) cancelAnimationFrame(frame);
+        window.removeEventListener('resize', resize);
+        controls.dispose();
+        if (mesh) {
+            scene.remove(mesh);
+            mesh.geometry.dispose();
+            mesh.material.dispose();
+        }
+        renderer.dispose();
+        renderer.forceContextLoss();
+        renderer.domElement.remove();
+    }
+
+    return { dispose };
 }
+
+// Anything rendered on demand (the project book's close-ups) mounts its own.
+window.AtlantisSTL = { init: initViewer };
+document.dispatchEvent(new CustomEvent('atlantis:stl-ready'));
 
 document.querySelectorAll('.stl-viewer').forEach(initViewer);

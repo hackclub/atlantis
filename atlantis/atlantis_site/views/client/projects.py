@@ -8,15 +8,21 @@ from django.db import transaction
 from django.db.models import Sum
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
+from django.urls import reverse
+from django.utils import timezone
 from django.http import FileResponse, Http404
 
 from botocore.exceptions import ClientError
+
+from datetime import timedelta
 
 import mimetypes
 
 from ...models import (
     Project, Ship, Print, Journal, LookoutSession, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
 )
+from ... import lookout
+from .timelapse import _apply_session_payload
 from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
     sniff_image_extension, random_storage_key, build_journal_timeline,
@@ -27,7 +33,7 @@ from ..helpers import (
 import os
 
 def _attachable_timelapses(project, user, ids=None):
-    """Finished timelapses the user can still attach to a new journal entry."""
+    """Finished Lookouts the user can still attach to a new lapse."""
     qs = LookoutSession.objects.filter(
         project=project,
         owner=user,
@@ -37,6 +43,71 @@ def _attachable_timelapses(project, user, ids=None):
     if ids is not None:
         qs = qs.filter(id__in=ids)
     return qs
+
+
+# Our copy of a Lookout only ever got refreshed by the recorder page, so
+# recording and then closing the tab left the session stuck mid-flight with its
+# time unattachable. The project page now asks Lookout itself, throttled so a
+# reload storm can't hammer the API.
+LOOKOUT_REFRESH_AFTER = timedelta(seconds=20)
+LOOKOUT_REFRESH_LIMIT = 3
+
+
+def _refresh_lookouts(sessions):
+    """Bring our copy of any unfinished Lookout up to date, in place."""
+    stale_before = timezone.now() - LOOKOUT_REFRESH_AFTER
+    asked = 0
+    for session in sessions:
+        if session.is_complete or session.status == LookoutSession.Status.FAILED:
+            continue
+        if session.updated_at > stale_before or asked >= LOOKOUT_REFRESH_LIMIT:
+            continue
+        asked += 1
+        try:
+            data = lookout.get_internal_session(session.session_id)
+        except lookout.LookoutError:
+            # Lookout being unreachable must not take the project page down with
+            # it, and if one call failed the rest will too — each costs a
+            # 10 second timeout, so stop asking.
+            break
+        _apply_session_payload(
+            session,
+            data.get("session"),
+            data.get("trackedSeconds"),
+            data.get("screenshotCount"),
+        )
+
+
+# The project page is an open book, so its content is dealt out into pages
+# rather than scrolled. Page 0 is the project itself (the left page of the
+# first spread) and every page after it is a leaf of lapses.
+LAPSES_PER_PAGE = 3
+
+
+def _book_pages(journals, allow_new):
+    """Lay the lapses out as book pages.
+
+    Returns the page list the template renders: the project page, then the
+    lapses three to a page, oldest first. Writing a new one is the last entry
+    in that run, so it sits in the space the next lapse will fill and moves
+    down the book as the log grows.
+    """
+    pages = [{"kind": "project"}]
+
+    entries = [{"type": "lapse", "journal": journal} for journal in journals]
+    if allow_new:
+        entries.append({"type": "compose"})
+    chunks = [
+        entries[i:i + LAPSES_PER_PAGE]
+        for i in range(0, len(entries), LAPSES_PER_PAGE)
+    ] or [[]]
+    pages += [{"kind": "log", "entries": chunk} for chunk in chunks]
+
+    # Pages are dealt two to a spread, so the book always needs an even count.
+    if len(pages) % 2:
+        pages.append({"kind": "blank"})
+
+    return pages
 
 @login_required
 def projects(request):
@@ -260,12 +331,14 @@ def project_detail(request, project_id):
     project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
     user = request.user
     profile = request.user.hackclub_profile
-    ships = project.ships.order_by('-created_at')
-    journals = project.journals.order_by('-id')
+    ships = list(project.ships.order_by('-created_at'))
+    # Oldest first: the book reads front to back, and the empty space for the
+    # next lapse is at the end of the run.
+    journals = project.journals.order_by('id')
 
     time_spent = format_minutes(tracked_minutes_for_journals(journals))
 
-    latest_ship = ships.first()
+    latest_ship = ships[0] if ships else None
     ship_pending = latest_ship is not None and latest_ship.status not in (Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED)
 
     if project.locked:
@@ -285,7 +358,7 @@ def project_detail(request, project_id):
         ship_disabled_reason = "Your most recent ship must be finalized or rejected before you can reship."
     elif not project.journals.exists() and not can_bypass_ship_requirements(request.user):
         can_ship = False
-        ship_disabled_reason = "You must have at least one journal entry before you can ship."
+        ship_disabled_reason = "You need at least one lapse before you can ship."
     else:
         can_ship = True
         ship_disabled_reason = ""
@@ -314,10 +387,38 @@ def project_detail(request, project_id):
     for ship in ships:
         ship.latest_feedback = get_latest_feedback(ship)
 
-    timeline = build_journal_timeline(journals, ships)
+    timelapses = list(project.timelapses.filter(owner=request.user).select_related("journal"))
+    _refresh_lookouts(timelapses)
+    # Re-read after the refresh: one of them may have just finished.
+    attachable_timelapses = list(_attachable_timelapses(project, request.user))
+    # Recordings that aren't ready to attach yet still need somewhere to be
+    # picked back up from, so the book lists them alongside the picker.
+    unfinished_timelapses = [
+        timelapse for timelapse in timelapses if not timelapse.is_complete
+    ]
+    # However many are mid-flight, they are worth one line between them: which
+    # one to pick back up. Listing each is the same sentence over and over.
+    lookout_status = None
+    recordable = [t for t in unfinished_timelapses if t.is_recordable]
+    processing = [t for t in unfinished_timelapses if t.is_processing]
+    failed = [t for t in unfinished_timelapses if t not in recordable and t not in processing]
+    if recordable:
+        lookout_status = {
+            "label": "recording" if len(recordable) == 1 else f"{len(recordable)} recording",
+            "url": reverse("record_timelapse", args=[recordable[0].pk]),
+        }
+    elif processing:
+        lookout_status = {
+            "label": "building" if len(processing) == 1 else f"{len(processing)} building",
+            "url": reverse("record_timelapse", args=[processing[0].pk]),
+        }
+    elif failed:
+        lookout_status = {
+            "label": "failed" if len(failed) == 1 else f"{len(failed)} failed",
+            "url": "",
+        }
 
-    timelapses = project.timelapses.filter(owner=request.user).select_related("journal")
-    attachable_timelapses = _attachable_timelapses(project, request.user)
+    pages = _book_pages(journals, allow_new=not project.locked)
 
     return render(request, "atlantis_site/project_detail.html", {
         "project": project,
@@ -325,15 +426,16 @@ def project_detail(request, project_id):
         "profile": profile,
         "ships": ships,
         "journals": journals,
-        "timeline": timeline,
+        "pages": pages,
         "time_spent": time_spent,
         "can_ship": can_ship,
         "ship_disabled_reason": ship_disabled_reason,
         "printablesData": printablesData,
         "allowed_editors": ALLOWED_EDITORS,
         "allowed_editor_extensions": ",".join(EDITOR_FILE_EXTENSIONS.keys()),
-        "timelapses": timelapses,
-        "attachable_timelapses": attachable_timelapses,
+        "pickable_timelapses": attachable_timelapses,
+        "unfinished_timelapses": unfinished_timelapses,
+        "lookout_status": lookout_status,
     })
 
 @login_required
@@ -431,25 +533,21 @@ def create_journal(request, project_id):
     try:
         timelapse_ids = {int(raw) for raw in request.POST.getlist("timelapses")}
     except ValueError:
-        messages.error(request, "Invalid timelapse selection.")
+        messages.error(request, "Invalid Lookout selection.")
         return redirect("project_detail", project_id=project_id)
 
     if not timelapse_ids:
-        messages.error(request, "You must attach at least one finished timelapse to your journal entry!")
+        messages.error(request, "Attach at least one finished Lookout to your lapse!")
         return redirect("project_detail", project_id=project_id)
 
     if _attachable_timelapses(project, request.user, timelapse_ids).count() != len(timelapse_ids):
-        messages.error(request, "One or more of those timelapses can't be attached. Refresh and try again.")
+        messages.error(request, "One or more of those Lookouts can't be attached. Refresh and try again.")
         return redirect("project_detail", project_id=project_id)
 
     title = request.POST.get("title", "").strip()
-    text = request.POST.get("text", "").strip()
 
-    if len(text) < 200:
-        messages.error(request, "Journals must have at least 200 characters!")
-        return redirect("project_detail", project_id=project_id)
-    elif len(text) > 2000:
-        messages.error(request, "Journals must not be greater than 2000 characters!")
+    if not title:
+        messages.error(request, "Your lapse needs a title.")
         return redirect("project_detail", project_id=project_id)
 
     image_file = request.FILES.get("image")
@@ -488,13 +586,12 @@ def create_journal(request, project_id):
             project, request.user, timelapse_ids
         ).select_for_update()
         if available.count() != len(timelapse_ids):
-            messages.error(request, "One or more of those timelapses can't be attached. Refresh and try again.")
+            messages.error(request, "One or more of those Lookouts can't be attached. Refresh and try again.")
             return redirect("project_detail", project_id=project_id)
 
         journal = Journal.objects.create(
             project=project,
             title=title,
-            text=text,
             image_url=image_key,
             model_url=model_key
         )
@@ -506,7 +603,7 @@ def create_journal(request, project_id):
         f'A project you follow, "{project.title}", has had a new journal entry! Check it out!'
     )
 
-    messages.success(request, "Journal entry created successfully")
+    messages.success(request, "Lapse added successfully")
     return redirect("project_detail", project_id=project_id)
     
 @login_required

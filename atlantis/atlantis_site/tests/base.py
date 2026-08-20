@@ -101,7 +101,6 @@ def make_journal(project, ship=None, time_spent=60, **kwargs):
 	"""
 	defaults = {
 		"title": "Journal entry",
-		"text": "x" * 200,
 		"image_url": "https://example.com/image.png",
 		"model_url": "https://example.com/model.stl",
 	}

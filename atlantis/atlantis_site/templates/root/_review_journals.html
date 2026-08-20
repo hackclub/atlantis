@@ -18,7 +18,6 @@
                         <li>No timelapse attached &mdash; no verifiable time.</li>
                     {% endfor %}
                 </ul>
-                <p id="journal-content">{{ event.journal.text }}</p>
                 <div class="journal-media">
                     {% if event.journal.image_url %}
                         <img src="{{ event.journal.image_display_url }}" alt="{{ event.journal.title }}" class="journal-image">

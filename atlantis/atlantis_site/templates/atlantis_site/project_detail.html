@@ -1,426 +1,1717 @@
-{% extends "atlantis_site/_base.html" %}
 {% load static %}
-
-{% block page_id %}project_detail{% endblock %}
-{% block title %}Project {{ project.title }}{% endblock %}
-
-{% block content %}
-<script type="importmap">
-    {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ project.title }}</title>
+    {% include '_favicon.html' %}
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
         }
-    }
-</script>
-<script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
-<div class="content">
-    {% include "root/_messages.html" %}
-    <div class="project-info">
-        <div class="card-row">
-            <div class="card-main">
-                <h1>{{ project.title }}</h1>
-                <p id="time_spent">Time spent: {{ time_spent }}</p>
-                {% if project.locked %}
-                    <p style="color: red; font-weight: bold;">Locked</p>
-                {% endif %}
-                <p>{{ project.description }}</p>
-                {% if project.printablesUrl %}
-                    <p>
-                        <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer noopener">View on Printables</a>
-                        - {{ printablesData.makesCount }} makes on Printables
+    </script>
+    <script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
+    <style>
+        @font-face {
+            font-family: "Atlantis Hand";
+            src: url("{% static 'atlantis_site/assets/fonts/atlantishand.ttf' %}") format("truetype");
+        }
+
+        :root {
+            --ink: #35270F;
+            --ink-soft: #7B6640;
+            --ink-faint: #A08A6A;
+            --ink-link: #2B5A78;
+            --ink-danger: #A33C2B;
+            --paper: #F3E5C7;
+            --paper-edge: #DCC79C;
+
+            /* Where the two pages meet in book_open.png, as a fraction of the
+               cropped art. Everything on the book is placed off this. */
+            --page-top: 13.5%;
+            --page-bottom: 71.5%;
+            --page-outer: 5.5%;
+            --page-width: 41.1%;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background-color: #FFFFFF;
+            color: var(--ink);
+            font-family: "Atlantis Hand", sans-serif;
+        }
+
+        /* The book fills the window and stays put; only the narrow-screen
+           layout below has anything to scroll. */
+        body[data-mode="book"] {
+            overflow: hidden;
+        }
+
+        button,
+        input,
+        textarea {
+            font: inherit;
+            color: inherit;
+        }
+
+        /* ---------- the desk ---------- */
+
+        .desk {
+            position: relative;
+            min-height: 100vh;
+            min-height: 100dvh;
+            padding: clamp(14px, 1.8vw, 28px);
+        }
+
+        #back-link {
+            position: relative;
+            z-index: 4;
+            color: #77777C;
+            text-decoration: none;
+            font-size: clamp(18px, 1.6vw, 28px);
+        }
+
+        #back-link:hover,
+        #back-link:focus-visible {
+            color: var(--ink);
+        }
+
+        .messages {
+            position: fixed;
+            cursor: pointer;
+            left: 50%;
+            top: clamp(10px, 1.4vw, 22px);
+            z-index: 30;
+            translate: -50% 0;
+            width: min(92vw, 620px);
+            padding: 0.35em 1em 0.5em;
+            border-radius: 12px;
+            background-color: rgba(53, 39, 15, 0.9);
+            color: #FBEFD6;
+            text-align: center;
+            box-shadow: 0 14px 34px rgba(40, 26, 10, 0.3);
+        }
+
+        .message {
+            margin: 0.1em 0;
+            font-size: clamp(16px, 1.35vw, 24px);
+        }
+
+        /* ---------- the book ---------- */
+
+        .book {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            translate: -50% -50%;
+            /* The art's own ink, with its transparent margin cropped away. */
+            aspect-ratio: 1429 / 903;
+            width: min(95vw, 140vh, 1720px);
+            width: min(95vw, 140dvh, 1720px);
+            container-type: inline-size;
+        }
+
+        .book-art {
+            position: absolute;
+            left: -39.958%;
+            top: -33.887%;
+            width: 174.94%;
+            height: auto;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        /* A page of the book. */
+        .sheet {
+            position: absolute;
+            top: var(--page-top);
+            bottom: calc(100% - var(--page-bottom));
+            width: var(--page-width);
+        }
+
+        .sheet--left {
+            left: var(--page-outer);
+        }
+
+        .sheet--right {
+            right: var(--page-outer);
+        }
+
+        /* ---------- page furniture ---------- */
+
+        .turn {
+            position: absolute;
+            bottom: 21%;
+            z-index: 4;
+            padding: 0 0.3em 0.1em;
+            border: none;
+            border-radius: 0.5em;
+            background: none;
+            color: var(--ink-faint);
+            font-size: 3.4cqw;
+            line-height: 1;
+            cursor: pointer;
+            transition: color 0.15s ease-out, translate 0.15s ease-out;
+        }
+
+        .turn:hover,
+        .turn:focus-visible {
+            color: var(--ink);
+        }
+
+        .turn--next {
+            right: var(--page-outer);
+        }
+
+        .turn--next:hover,
+        .turn--next:focus-visible {
+            translate: 0.25em 0;
+        }
+
+        .turn--prev {
+            left: var(--page-outer);
+        }
+
+        .turn--prev:hover,
+        .turn--prev:focus-visible {
+            translate: -0.25em 0;
+        }
+
+        .turn[hidden] {
+            display: none;
+        }
+
+        /* ---------- what goes on a page ---------- */
+
+        .page {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-size: 1.62cqw;
+            line-height: 1.4;
+        }
+
+        .page > * {
+            flex: none;
+        }
+
+        .page-title {
+            margin: 0.1em 0 0;
+            font-weight: 400;
+            font-size: 2.8cqw;
+            line-height: 1.1;
+            /* The clamp crops at the padding edge, so without this the tails of
+               g/j/p/y on the last line get sliced off. */
+            padding-bottom: 0.2em;
+            overflow-wrap: anywhere;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .page-line {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 0 1em;
+            margin: 0.15em 0 0;
+            color: var(--ink-soft);
+        }
+
+        /* Contains the floated photo the description sets around. */
+        .page-flow {
+            display: flow-root;
+            min-height: 0;
+        }
+
+        .page-body {
+            margin: 0.6em 0 0;
+            padding-bottom: 0.14em;
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Two lines of blurb: the lower block and the actions under it need
+           the rest of the page. The full description is a click away in edit. */
+        .page-flow .page-body {
+            display: block;
+            max-height: 3.0em;
+            overflow: hidden;
+        }
+
+        .page-empty {
+            margin: auto 0;
+            color: var(--ink-soft);
+            text-align: center;
+        }
+
+        .dim {
+            color: var(--ink-soft);
+        }
+
+        .warn {
+            color: var(--ink-danger);
+        }
+
+        .editor-fusion-360 { color: #C4520A; }
+        .editor-onshape { color: #3F7C36; }
+        .editor-shapr3d { color: #4257A8; }
+        .editor-solidworks { color: #A8443C; }
+        .editor-freecad { color: #A44C52; }
+        .editor-openscad { color: #8A7A00; }
+        .editor-blender { color: #B15E08; }
+        .editor-solvespace { color: #3C6E88; }
+
+        .page-links {
+            margin: 0.45em 0 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        .page-links a {
+            color: var(--ink-link);
+            text-decoration: underline;
+            text-underline-offset: 0.18em;
+        }
+
+        .page-links a:hover,
+        .page-links a:focus-visible {
+            text-decoration-thickness: 0.12em;
+        }
+
+        .ink-link {
+            padding: 0;
+            border: none;
+            background: none;
+            color: var(--ink-soft);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .ink-link:hover,
+        .ink-link:focus-visible {
+            color: var(--ink);
+            text-decoration: underline;
+            text-underline-offset: 0.18em;
+        }
+
+        .ink-link--danger:hover,
+        .ink-link--danger:focus-visible {
+            color: var(--ink-danger);
+        }
+
+        .page-actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.4em 0.6em;
+            margin-top: 0.5em;
+        }
+
+        .page-actions form {
+            margin: 0;
+        }
+
+        .page-actions--minor {
+            display: block;
+            margin-top: 0.35em;
+            font-size: 1.5cqw;
+            line-height: 1.3;
+        }
+
+        .page-actions--minor .ink-link {
+            display: block;
+            margin-top: 0.15em;
+        }
+
+        /* Everything you can do to the project, ruled off along the foot. */
+        .page-actions--bottom {
+            margin-top: 0.4em;
+        }
+
+        .minor-icons {
+            display: flex;
+            align-items: center;
+            gap: 0.5em;
+            margin-left: 0.2em;
+        }
+
+        .ship-gate {
+            display: inline-flex;
+        }
+
+        /* Same pill vocabulary as the buttons above, sized so the row is no
+           taller than the bare icons were. */
+        .icon-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.25em;
+            border: 0.07em solid #9C7F4F;
+            border-radius: 999px;
+            background-color: rgba(255, 251, 240, 0.55);
+            color: var(--ink-soft);
+            cursor: pointer;
+            transition: background-color 0.15s ease-out, border-color 0.15s ease-out, color 0.15s ease-out;
+        }
+
+        .icon-btn svg {
+            display: block;
+            width: 1.15em;
+            height: 1.15em;
+        }
+
+        .icon-btn:hover,
+        .icon-btn:focus-visible {
+            background-color: #FFFBF0;
+            color: var(--ink);
+        }
+
+        .icon-btn--danger {
+            border-color: var(--ink-danger);
+            background-color: var(--ink-danger);
+            color: #FFF3F1;
+        }
+
+        .icon-btn--danger:hover,
+        .icon-btn--danger:focus-visible {
+            border-color: #8A3023;
+            background-color: #8A3023;
+            color: #FFF3F1;
+        }
+
+        /* Pinned to the foot of the page so it always meets the actions. */
+        .page-ships {
+            margin-top: auto;
+            padding-top: 0.4em;
+        }
+
+        .ship-line {
+            margin: 0.1em 0 0;
+        }
+
+        .ship-status {
+            color: #8E3728;
+        }
+
+        .ship-note {
+            margin: 0;
+            padding-bottom: 0.16em;
+            color: var(--ink-soft);
+            font-size: 1.5cqw;
+            display: -webkit-box;
+            -webkit-line-clamp: 1;
+            line-clamp: 1;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .ink-btn {
+            padding: 0.14em 0.9em 0.26em;
+            border: 0.07em solid #9C7F4F;
+            border-radius: 999px;
+            background-color: rgba(255, 251, 240, 0.55);
+            cursor: pointer;
+            transition: background-color 0.15s ease-out, color 0.15s ease-out;
+        }
+
+        .ink-btn:hover:not(:disabled),
+        .ink-btn:focus-visible:not(:disabled) {
+            background-color: #FFFBF0;
+        }
+
+        .ink-btn:disabled {
+            border-color: #BCA986;
+            color: var(--ink-faint);
+            cursor: not-allowed;
+        }
+
+        .ink-btn--strong {
+            border-color: #6B4A24;
+            background-color: #6B4A24;
+            color: #FBEFD6;
+        }
+
+        .ink-btn--strong:hover:not(:disabled),
+        .ink-btn--strong:focus-visible:not(:disabled) {
+            background-color: #55391A;
+            color: #FBEFD6;
+        }
+
+        /* ---------- taped-in photos ---------- */
+
+        .snap {
+            position: relative;
+            display: block;
+            padding: 0;
+            border: none;
+            background: none;
+            cursor: pointer;
+        }
+
+        .snap-frame {
+            display: block;
+            padding: 4% 4% 9%;
+            background-color: #FFFDF6;
+            box-shadow: 0 0.24em 0.65em rgba(40, 25, 6, 0.32);
+        }
+
+        .snap img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 3 / 2;
+            object-fit: cover;
+            background-color: #E7E1D3;
+        }
+
+        /* the strip of tape holding it down */
+        .snap-frame::before {
+            content: "";
+            position: absolute;
+            left: 50%;
+            top: -6%;
+            width: 36%;
+            height: 14%;
+            translate: -50% 0;
+            rotate: -3deg;
+            background-color: rgba(214, 226, 168, 0.68);
+            box-shadow: 0 0.06em 0.18em rgba(40, 25, 6, 0.18);
+        }
+
+        /* Taped into the blurb, which sets around it. Stacked under the text
+           it could only be as tall as the page had left over — a two-line title
+           over a ship note left it nothing — so it went in the flow instead,
+           where the width beside two clamped lines is going spare. */
+        .page-photo {
+            float: right;
+            width: 48%;
+            margin: 0.1em 0 0.45em 1.1em;
+            rotate: 2.2deg;
+        }
+
+        /* The screenshot is its own upload control: click it or drop on it. */
+        .page-photo label {
+            position: relative;
+            display: block;
+            cursor: pointer;
+        }
+
+        .page-photo .snap-frame {
+            display: block;
+            padding: 3% 3% 7%;
+        }
+
+        .page-photo img {
+            display: block;
+            width: 100%;
+            aspect-ratio: 3 / 2;
+            object-fit: cover;
+            background-color: #E7E1D3;
+        }
+
+        .page-photo:hover .snap-frame,
+        .page-photo:focus-within .snap-frame {
+            box-shadow: 0 0.36em 0.95em rgba(40, 25, 6, 0.4);
+        }
+
+        .page-photo .snap--empty {
+            display: flex;
+            width: 100%;
+        }
+
+        .page-photo input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* Only the project screenshot has an empty state, so it keeps the
+           same 3/2 box the photo will fill. */
+        .snap--empty {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            aspect-ratio: 3 / 2;
+            padding: 5%;
+            border: 0.11em dashed var(--ink-faint);
+            border-radius: 0.25em;
+            color: var(--ink-soft);
+            font-size: 1.5cqw;
+            line-height: 1.25;
+            text-align: center;
+        }
+
+        /* An image already in place says so differently: it dims and outlines. */
+        .page-photo.is-dropping .snap-frame {
+            outline: 0.14em solid var(--ink);
+            outline-offset: 0.12em;
+        }
+
+        .page-photo.is-dropping img {
+            opacity: 0.5;
+        }
+
+        .is-dropping .snap--empty,
+        .compose-photo.is-dropping {
+            border-color: var(--ink);
+            border-style: solid;
+            background-color: rgba(255, 251, 240, 0.6);
+            color: var(--ink);
+        }
+
+        /* ---------- the log ---------- */
+
+        .log {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            justify-content: space-evenly;
+            min-height: 0;
+            margin: 0.2em 0 0;
+            padding: 0;
+            list-style: none;
+        }
+
+        /* Three to a page, so each one is a row: photo taped at the margin,
+           what it was written beside it. */
+        .lapse {
+            display: flex;
+            flex: none;
+            align-items: center;
+            gap: 5%;
+            min-height: 0;
+        }
+
+        /* As wide as three of them go down the page with air left between
+           them, and no wider than the screenshot they face. */
+        .lapse .snap {
+            flex: none;
+            width: 38%;
+        }
+
+        /* Photos alternate sides down the page, the way you'd paste them in.
+           The composer keeps its own side: mirrored form fields read badly. */
+        .lapse:nth-child(even):not(.lapse--compose) {
+            flex-direction: row-reverse;
+            text-align: right;
+        }
+
+        .lapse:nth-child(odd) .snap {
+            rotate: -2.4deg;
+        }
+
+        .lapse:nth-child(even) .snap {
+            rotate: 2deg;
+        }
+
+        .snap:hover .snap-frame,
+        .snap:focus-visible .snap-frame {
+            box-shadow: 0 0.36em 0.95em rgba(40, 25, 6, 0.4);
+        }
+
+        .lapse-body {
+            min-width: 0;
+        }
+
+        .lapse-title {
+            display: block;
+            margin: 0;
+            font-weight: 400;
+            font-size: 2.05cqw;
+            line-height: 1.15;
+            padding-bottom: 0.2em;
+            overflow-wrap: anywhere;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .lapse-meta {
+            display: block;
+            margin: 0.1em 0 0;
+            color: var(--ink-soft);
+            font-size: 1.5cqw;
+        }
+
+        /* ---------- writing the next lapse, in its own space ---------- */
+
+        .lapse--compose {
+            align-items: flex-start;
+        }
+
+        .compose-photo {
+            position: relative;
+            flex: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38%;
+            aspect-ratio: 3 / 2;
+            border: 0.11em dashed var(--ink-faint);
+            border-radius: 0.25em;
+            background-position: center;
+            background-size: cover;
+            color: var(--ink-soft);
+            font-size: 1.5cqw;
+            text-align: center;
+            cursor: pointer;
+            rotate: -1.6deg;
+        }
+
+        .compose-photo input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .compose-photo:hover,
+        .compose-photo:focus-within {
+            border-color: var(--ink-soft);
+            color: var(--ink);
+        }
+
+        .compose-photo.has-file {
+            border-style: solid;
+            border-color: #FFFDF6;
+            box-shadow: 0 0.24em 0.65em rgba(40, 25, 6, 0.32);
+        }
+
+        .compose-photo.has-file .compose-photo-text {
+            display: none;
+        }
+
+        .compose-title {
+            width: 100%;
+            padding: 0 0.1em 0.1em;
+            border: none;
+            border-bottom: 0.06em solid #A98F5E;
+            background: none;
+            font-size: 2.05cqw;
+            line-height: 1.3;
+        }
+
+        .compose-title:focus {
+            outline: none;
+            border-bottom-color: var(--ink);
+        }
+
+        .compose-title::placeholder {
+            color: var(--ink-faint);
+        }
+
+        .compose-line {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.3em 0.4em;
+            margin-top: 0.5em;
+        }
+
+        .chip-form {
+            display: contents;
+        }
+
+        /* One control that says what is attached and opens the list. */
+        .picker-btn {
+            display: inline-flex;
+            align-items: baseline;
+            gap: 0.4em;
+            padding: 0.05em 0.7em 0.15em;
+            border: 0.06em solid #A98F5E;
+            border-radius: 999px;
+            background: none;
+            color: var(--ink-soft);
+            font-size: 1.5cqw;
+            line-height: 1.35;
+            cursor: pointer;
+            transition: background-color 0.15s ease-out, color 0.15s ease-out;
+        }
+
+        .picker-btn:hover,
+        .picker-btn:focus-visible {
+            color: var(--ink);
+        }
+
+        .picker-btn.is-set {
+            border-color: #6B4A24;
+            background-color: #6B4A24;
+            color: #FBEFD6;
+        }
+
+        .picker-caret {
+            font-size: 0.75em;
+        }
+
+        .chip {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            padding: 0.05em 0.6em 0.15em;
+            border: 0.06em solid #A98F5E;
+            border-radius: 999px;
+            color: var(--ink-soft);
+            font-size: 1.5cqw;
+            line-height: 1.35;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background-color 0.15s ease-out, color 0.15s ease-out;
+        }
+
+        .chip input {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .chip:hover,
+        .chip:focus-within {
+            color: var(--ink);
+        }
+
+        .chip:has(input:checked) {
+            border-color: #6B4A24;
+            background-color: #6B4A24;
+            color: #FBEFD6;
+        }
+
+        .chip--action {
+            background: none;
+        }
+
+        .chip--file.has-file {
+            border-style: dashed;
+        }
+
+        .compose-note {
+            color: var(--ink-soft);
+            font-size: 1.5cqw;
+        }
+
+        .compose-note.is-invalid {
+            color: var(--ink-danger);
+        }
+
+        .chip--busy {
+            border-style: dashed;
+            color: var(--ink-link);
+            text-decoration: none;
+        }
+
+        .chip--dead {
+            border-color: rgba(163, 60, 43, 0.5);
+            color: var(--ink-danger);
+            cursor: default;
+        }
+
+        /* ---------- slips laid on the book ---------- */
+
+        .slip-layer {
+            position: fixed;
+            inset: 0;
+            z-index: 40;
+            display: grid;
+            place-items: center;
+        }
+
+        .slip-layer[hidden] {
+            display: none;
+        }
+
+        .slip-backdrop {
+            position: absolute;
+            inset: 0;
+            background-color: rgba(24, 15, 5, 0.42);
+        }
+
+        .slip {
+            position: relative;
+            z-index: 1;
+            width: min(92vw, 560px);
+            max-height: 88vh;
+            padding: 22px 26px 24px;
+            overflow-y: auto;
+            border-radius: 4px 14px 6px 12px;
+            background-color: var(--paper);
+            box-shadow: 0 26px 60px rgba(40, 26, 10, 0.42);
+        }
+
+        .slip[hidden] {
+            display: none;
+        }
+
+        .slip--wide {
+            width: min(94vw, 900px);
+        }
+
+        .slip h2 {
+            margin: 0 0 0.35em;
+            font-weight: 400;
+            font-size: clamp(24px, 2.2vw, 34px);
+            line-height: 1.1;
+        }
+
+        .slip p {
+            margin: 0 0 0.6em;
+            font-size: clamp(16px, 1.35vw, 21px);
+        }
+
+        .slip label {
+            display: block;
+            margin-bottom: 12px;
+            font-size: clamp(16px, 1.35vw, 21px);
+            color: #5C4A2C;
+        }
+
+        .slip input[type="text"],
+        .slip input[type="url"],
+        .slip input[type="file"],
+        .slip textarea {
+            display: block;
+            width: 100%;
+            margin-top: 4px;
+            padding: 7px 10px;
+            border: 2px solid var(--paper-edge);
+            border-radius: 9px;
+            background-color: #FFFDF7;
+            font-size: clamp(16px, 1.3vw, 20px);
+            color: var(--ink);
+        }
+
+        .slip textarea {
+            min-height: 96px;
+            resize: vertical;
+        }
+
+        .slip-actions {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            justify-content: flex-end;
+            margin-top: 14px;
+        }
+
+        .slip-actions button {
+            padding: 6px 18px 8px;
+            border: 2px solid var(--paper-edge);
+            border-radius: 999px;
+            background-color: #FFFDF7;
+            font-size: clamp(16px, 1.3vw, 20px);
+            cursor: pointer;
+        }
+
+        .slip-actions button:hover {
+            background-color: #FFFFFF;
+        }
+
+        .slip-actions button[type="submit"] {
+            border-color: #6B4A24;
+            background-color: #6B4A24;
+            color: #FBEFD6;
+        }
+
+        .slip-actions button[type="submit"]:hover {
+            background-color: #55391A;
+        }
+
+        .slip-actions button.is-danger {
+            border-color: var(--ink-danger);
+            background-color: var(--ink-danger);
+            color: #FFF3F1;
+        }
+
+        .slip-actions button.is-danger:hover {
+            background-color: #8A3023;
+        }
+
+        .lookout-list {
+            margin: 0 0 4px;
+            padding: 0;
+            list-style: none;
+            max-height: 46vh;
+            overflow-y: auto;
+        }
+
+        .lookout-list li {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 2px;
+            border-bottom: 1px dotted var(--paper-edge);
+            font-size: clamp(16px, 1.35vw, 21px);
+        }
+
+        .lookout-list label {
+            display: flex;
+            flex: 1;
+            align-items: baseline;
+            gap: 10px;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .lookout-list input {
+            width: 1em;
+            height: 1em;
+            accent-color: #6B4A24;
+        }
+
+        .lookout-list strong {
+            min-width: 4.2em;
+            font-weight: 400;
+            white-space: nowrap;
+        }
+
+        .lookout-list a {
+            color: var(--ink-link);
+            white-space: nowrap;
+        }
+
+        .lookout-when {
+            display: flex;
+            flex: 1;
+            align-items: baseline;
+            gap: 10px;
+        }
+
+        .lookout-heading {
+            margin: 14px 0 2px;
+            font-weight: 400;
+            font-size: clamp(17px, 1.5vw, 23px);
+            color: var(--ink-soft);
+        }
+
+        .zoom-media {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .zoom-media img,
+        .zoom-media video {
+            width: 100%;
+            max-height: 58vh;
+            object-fit: contain;
+            border-radius: 8px;
+            background-color: #E7E1D3;
+        }
+
+        .zoom-media .stl-viewer {
+            aspect-ratio: 4 / 3;
+            border-radius: 8px;
+            background-color: rgba(255, 253, 247, 0.6);
+        }
+
+        .zoom-media--single {
+            grid-template-columns: 1fr;
+        }
+
+        /* ---------- narrow screens: unbind the book ---------- */
+
+        .page-store {
+            position: relative;
+            z-index: 2;
+            display: none;
+            max-width: 720px;
+            margin: 0 auto;
+            padding: clamp(10px, 2vw, 20px) 0 60px;
+        }
+
+        body[data-mode="flow"] .book {
+            display: none;
+        }
+
+        /* With no book to centre, the desk is just the back link. */
+        body[data-mode="flow"] .desk {
+            min-height: 0;
+            padding-bottom: 0;
+        }
+
+        body[data-mode="flow"] .page-store {
+            display: block;
+        }
+
+        body[data-mode="flow"] .page {
+            height: auto;
+            margin-top: clamp(14px, 2.5vw, 24px);
+            padding: clamp(16px, 3vw, 26px);
+            overflow: visible;
+            border-radius: 6px 16px 8px 14px;
+            background-color: var(--paper);
+            box-shadow: 0 12px 30px rgba(40, 26, 10, 0.18);
+            font-size: 18px;
+        }
+
+        body[data-mode="flow"] .page--blank {
+            display: none;
+        }
+
+        body[data-mode="flow"] .lapse-meta,
+        body[data-mode="flow"] .ship-note,
+        body[data-mode="flow"] .picker-btn,
+        body[data-mode="flow"] .page-actions--minor,
+        body[data-mode="flow"] .chip,
+        body[data-mode="flow"] .compose-note,
+        body[data-mode="flow"] .compose-photo,
+        body[data-mode="flow"] .snap--empty {
+            font-size: 16px;
+        }
+
+        body[data-mode="flow"] .page-title {
+            font-size: 34px;
+        }
+
+        body[data-mode="flow"] .lapse-title {
+            font-size: 25px;
+        }
+
+        body[data-mode="flow"] .lapse .snap,
+        body[data-mode="flow"] .compose-photo {
+            width: 44%;
+        }
+
+        /* Unbound from the book the screenshot still leads the page, so it
+           keeps more of the width than the lapse photos under it. */
+        body[data-mode="flow"] .page-photo {
+            width: 52%;
+        }
+
+        body[data-mode="flow"] .lapse {
+            margin: 20px 0;
+        }
+
+        body[data-mode="flow"] .compose-title {
+            font-size: 22px;
+        }
+    </style>
+</head>
+<body data-mode="book">
+    <div class="desk">
+        <a id="back-link" href="{% url 'projects' %}">&larr; back</a>
+
+        {% include "root/_messages.html" %}
+
+        <div class="book" id="book">
+            <img class="book-art" src="{% static 'atlantis_site/assets/img/projects/book_open.png' %}" alt="">
+
+            <div class="sheet sheet--left" id="sheet-left"></div>
+            <div class="sheet sheet--right" id="sheet-right"></div>
+
+            <button type="button" class="turn turn--prev" id="turn-prev" aria-label="Previous page" hidden>&larr;</button>
+            <button type="button" class="turn turn--next" id="turn-next" aria-label="Next page">&rarr;</button>
+        </div>
+    </div>
+
+    <div class="page-store" id="page-store">
+        {% for page in pages %}
+            {% if page.kind == "project" %}
+                <section class="page page--project" data-page="{{ forloop.counter0 }}">
+                    <h1 class="page-title">{{ project.title }}</h1>
+                    <p class="page-line">
+                        <span>{{ time_spent }} logged</span>
+                        {% if project.editor_name %}<span class="editor-{{ project.editor_name|slugify }}">{{ project.editor_name|lower }}</span>{% endif %}
+                        {% if project.locked %}<span class="warn">locked</span>{% endif %}
                     </p>
-                {% endif %}
-                {% if project.editor_model_url %}
-                    <p><a href="{{ project.editor_model_display_url }}" target="_blank" rel="noreferrer noopener">Download editor model</a> ({{ project.editor_name }})</p>
-                {% endif %}
-            </div>
-            {% if project.owner == user %}
-                <div class="card-controls">
-                    {% if can_ship %}
-                        <form action="{% url 'ship_project' project.id %}" method="post">
-                            {% csrf_token %}
-                            <button type="submit">Ship</button>
-                        </form>
-                    {% else %}
-                        <button type="button" disabled title="{{ ship_disabled_reason }}">Ship</button>
-                    {% endif %}
-                    <form id="deleteProjectForm" action="{% url 'delete_project' project.id %}" method="post">
-                        {% csrf_token %}
-                        <button type="button" id="openDeleteModal" style="color: red;">Delete</button>
-                    </form>
-                </div>
-            {% endif %}
-        </div>
-        {% if project.owner == user and not project.locked %}
-            <div class="project-editor-upload">
-                <form action="{% url 'update_editor_model' project.id %}" method="post" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    <label for="editor_model_file">Upload your editor model file</label>
-                    <input type="file" id="editor_model_file" name="editor_model_file" accept="{{ allowed_editor_extensions }}">
-                    <label for="editor_model_link">Or paste a link to it</label>
-                    <input type="url" id="editor_model_link" name="editor_model_link" placeholder="https://...">
-                    <button type="submit">Save editor model</button>
-                </form>
-            </div>
-            <div class="project-editor-upload">
-                <form action="{% url 'update_project_image' project.id %}" method="post" enctype="multipart/form-data">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="detail">
-                    <label for="project_image">{% if project.image_url %}Replace your project screenshot{% else %}Upload a screenshot of your project{% endif %}</label>
-                    <input type="file" id="project_image" name="image" accept="image/png,image/jpeg,image/gif,image/webp" required>
-                    <button type="submit">Save screenshot</button>
-                </form>
-            </div>
-        {% endif %}
-    </div>
-    {% if project.owner == user %}
-    <div class="timelapse-section" id="timelapses">
-        <div class="section-head">
-            <h2>Timelapses</h2>
-            {% if not project.locked %}
-                <form action="{% url 'start_timelapse' project.id %}" method="post">
-                    {% csrf_token %}
-                    <button type="submit" class="tl-btn tl-btn--primary">Record a timelapse</button>
-                </form>
-            {% endif %}
-        </div>
-        <p class="section-hint">
-            A timelapse screenshots your screen about once a minute while you work. It's the only
-            way time gets logged. The hours land on whichever journal entry you attach it to.
-        </p>
-        {% if timelapses %}
-            <div class="timelapse-grid">
-                {% for timelapse in timelapses %}
-                    <div class="timelapse-card">
-                        <div class="timelapse-thumb">
-                            {% if timelapse.is_complete %}
-                                <video controls preload="none" poster="{{ timelapse.thumbnail_url }}" src="{{ timelapse.video_url }}"></video>
-                            {% elif timelapse.status == "failed" %}
-                                <span>This one couldn't be turned into a video</span>
-                            {% elif timelapse.is_processing %}
-                                <span>Building your video&hellip;</span>
-                            {% else %}
-                                <span>No video until you finish recording</span>
+
+                    {# the screenshot is taped into the blurb and the text sets around it #}
+                    <div class="page-flow">
+                        {% if project.locked %}
+                            {% if project.image_url %}
+                                <span class="page-photo snap-frame"><img src="{{ project.image_display_url }}" alt="Screenshot of {{ project.title }}"></span>
                             {% endif %}
-                        </div>
-                        <div class="timelapse-body">
-                            {% if timelapse.is_complete %}
-                                <span class="tl-pill tl-pill--done">Ready</span>
-                            {% elif timelapse.status == "failed" %}
-                                <span class="tl-pill tl-pill--error">Failed</span>
-                            {% elif timelapse.status == "active" %}
-                                <span class="tl-pill tl-pill--live"><span class="tl-dot"></span>Recording</span>
-                            {% elif timelapse.status == "paused" %}
-                                <span class="tl-pill tl-pill--paused">Paused</span>
-                            {% elif timelapse.is_processing %}
-                                <span class="tl-pill tl-pill--processing">Building video</span>
-                            {% else %}
-                                <span class="tl-pill">Not started</span>
-                            {% endif %}
-                            <div class="timelapse-time">{{ timelapse.tracked_display }}</div>
-                            <p class="timelapse-meta" title="{{ timelapse.created_at }}">Started {{ timelapse.created_at|timesince }} ago</p>
-                            {% if timelapse.journal %}
-                                <p class="timelapse-meta">Attached to &ldquo;{{ timelapse.journal.title }}&rdquo;</p>
-                            {% elif timelapse.is_complete %}
-                                <p class="timelapse-meta">Not attached yet; this time isn't counted until it is.</p>
-                                <a href="#new-journal" class="card-detail-link">Attach to an entry &rarr;</a>
-                            {% elif timelapse.is_recordable %}
-                                <a href="{% url 'record_timelapse' timelapse.pk %}" class="card-detail-link">Continue recording &rarr;</a>
-                            {% elif timelapse.is_processing %}
-                                <a href="{% url 'record_timelapse' timelapse.pk %}" class="card-detail-link">View progress &rarr;</a>
-                            {% endif %}
-                        </div>
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="tl-empty">
-                <p>No timelapses yet. Record one while you work, then attach it to a journal entry to log the time.</p>
-            </div>
-        {% endif %}
-    </div>
-    {% endif %}
-    <div class="journal-section">
-    <h2>Journal Entries</h2>
-        {% if project.owner == user %}
-            <form action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data" id="new-journal">
-                {% csrf_token %}
-                <input type="text" name="title" placeholder="Title" required>
-                <fieldset class="timelapse-picker" id="timelapse_picker">
-                    <legend>Attach your timelapses</legend>
-                    {% if attachable_timelapses %}
-                        <p class="picker-hint">
-                            Pick at least one. The entry logs the total of whatever you attach here,
-                            and each timelapse can only be used once.
-                        </p>
-                        <div class="picker-grid">
-                            {% for timelapse in attachable_timelapses %}
-                                <div class="picker-option">
-                                    <label class="picker-choice">
-                                        <input type="checkbox" name="timelapses" value="{{ timelapse.pk }}" data-seconds="{{ timelapse.tracked_seconds }}">
-                                        <span class="picker-text">
-                                            <strong>{{ timelapse.tracked_display }}</strong>
-                                            <span title="{{ timelapse.created_at }}">recorded {{ timelapse.created_at|timesince }} ago</span>
-                                        </span>
+                        {% else %}
+                            <form class="page-photo" action="{% url 'update_project_image' project.id %}" method="post" enctype="multipart/form-data" data-drop="submit">
+                                {% csrf_token %}
+                                <input type="hidden" name="next" value="detail">
+                                {% if project.image_url %}
+                                    <label class="snap-frame" title="click or drop an image to replace this">
+                                        <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp">
+                                        <img src="{{ project.image_display_url }}" alt="Screenshot of {{ project.title }}">
                                     </label>
-                                    <button
-                                        type="button"
-                                        class="tl-btn picker-preview"
-                                        data-video="{{ timelapse.video_url }}"
-                                        data-poster="{{ timelapse.thumbnail_url }}"
-                                        data-label="{{ timelapse.tracked_display }} &middot; recorded {{ timelapse.created_at|timesince }} ago"
-                                    >Preview</button>
-                                </div>
-                            {% endfor %}
-                        </div>
-                        <p class="picker-total"><span id="attach_summary">Nothing attached yet.</span></p>
-                        <p class="picker-error" id="attach_error" hidden>
-                            Attach at least one timelapse before submitting. An entry with no tracked time can't be saved.
-                        </p>
-                    {% else %}
-                        <p class="picker-hint">
-                            You have no finished timelapses to attach. <a href="#timelapses">Record one first</a>.
-                            Time can only come from a timelapse, so an entry can't be submitted without one.
-                        </p>
-                    {% endif %}
-                </fieldset>
-                <p>Characters: <span id="character_count">0</span> (min 200, max 2000)</p>
-                <textarea
-                    minlength="200"
-                    maxlength="2000"
-                    placeholder="What did you do?"
-                    style="display:block; width: 500px; height: 500px; text-align: left; resize: none; padding: 10px; box-sizing: border-box; margin-bottom: 20px;"
-                    name="text"
-                    id="journal_content"
-                    required
-                ></textarea>
-                <label for="image">Upload a photo of what you did!</label>
-                <input type="file" id="image" name="image" accept="image/*" required>
-                <br>
-                <br>
-                <label for="STL">Upload an STL of your current project!</label>
-                <input type="file" id="STL" name="STL" accept=".stl" required>
-                <br>
-                <br>
-                {% if project.locked %}
-                    <button type="button" class="tl-btn" disabled title="You can't make journals on a locked project.">Submit entry!</button>
-                {% elif not attachable_timelapses %}
-                    <button type="button" class="tl-btn" disabled title="Finish a timelapse first. It's where the entry's time comes from.">Submit entry!</button>
-                {% else %}
-                    <button type="submit" class="tl-btn tl-btn--primary">Submit entry!</button>
-                {% endif %}
-            </form>
-        {% endif %}
-        <br>
-        {% if timeline %}
-            {% for event in timeline %}
-                {% if event.type == "ship" %}
-                    {% include "atlantis_site/_ship_event.html" with event=event show_ship_status=True %}
-                    <br>
-                    <br>
-                {% else %}
-                    <div class="journal-card">
-                        <h3>{{ event.journal.title }}</h3>
-                        <p>{{ event.journal.tracked_display }} tracked</p>
-                        <p id="journal-content">{{ event.journal.text }}</p>
-                        <div class="journal-media">
-                            {% if event.journal.image_url %}
-                                <img src="{{ event.journal.image_display_url }}" alt="{{ event.journal.title }}" class="journal-image">
+                                {% else %}
+                                    <label class="snap--empty" title="click or drop an image">
+                                        <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp">
+                                        <span>tape in a screenshot<br><span class="dim">or drop one here</span></span>
+                                    </label>
+                                {% endif %}
+                            </form>
+                        {% endif %}
+
+                        <p class="page-body">{{ project.description }}</p>
+
+                        <p class="page-links">
+                            {% if project.printablesUrl %}
+                                <a href="{{ project.printablesUrl }}" target="_blank" rel="noreferrer noopener">printables</a> <span class="dim">{{ printablesData.makesCount }} make{{ printablesData.makesCount|pluralize }}</span>
+                            {% else %}
+                                <span class="dim">no printables link</span>
                             {% endif %}
-                            {% if event.journal.model_url %}
-                                <div class="stl-viewer" data-stl-url="{{ event.journal.model_display_url }}"></div>
+                            <span class="dim">&middot;</span>
+                            {% if project.editor_model_url %}
+                                <a href="{{ project.editor_model_display_url }}" target="_blank" rel="noreferrer noopener">{% if project.editor_name %}{{ project.editor_name|lower }}{% else %}editor{% endif %} file</a>
+                            {% else %}
+                                <span class="dim">no editor file</span>
                             {% endif %}
-                        </div>
-                        {% if event.journal.model_url %}
-                            <p><a href="{{ event.journal.model_display_url }}" target="_blank" rel="noreferrer noopener">Download STL</a></p>
+                        </p>
+
+                        {% if not project.locked %}
+                            <div class="page-actions--minor">
+                                <button type="button" class="ink-link js-slip" data-slip="slip-model">upload editor file</button>
+                            </div>
                         {% endif %}
                     </div>
-                    <br>
-                    <br>
-                {% endif %}
-            {% endfor %}
-        {% else %}
-            <p>No journal entries yet!</p>
-        {% endif %}
-        <p><a href="{% url 'projects' %}">Back to projects</a></p>
+
+
+                    {# the ship line explains the button under it, so it sits on top of it #}
+                    <div class="page-ships">
+                        {% for ship in ships|slice:":1" %}
+                            <p class="ship-line">
+                                shipped {{ ship.created_at|date:"M j" }} &mdash;
+                                <span class="ship-status">{{ ship.get_status_display|lower }}</span>
+                            </p>
+                            {% if forloop.first and ship.latest_feedback %}
+                                <p class="ship-note">&ldquo;{{ ship.latest_feedback }}&rdquo;</p>
+                            {% endif %}
+                        {% empty %}
+                            <p class="ship-line dim">nothing shipped yet.</p>
+                        {% endfor %}
+                    </div>
+
+                    <div class="page-actions page-actions--bottom">
+                        {% if can_ship %}
+                            <form action="{% url 'ship_project' project.id %}" method="post">
+                                {% csrf_token %}
+                                <button type="submit" class="ink-btn ink-btn--strong">ship it</button>
+                            </form>
+                        {% else %}
+                            {# a disabled button gets no pointer events, so the reason hangs on a wrapper #}
+                            <span class="ship-gate" title="{{ ship_disabled_reason }}">
+                                <button type="button" class="ink-btn" disabled>ship it</button>
+                            </span>
+                        {% endif %}
+                        {% if not project.locked %}
+                            <form action="{% url 'start_timelapse' project.id %}" method="post">
+                                {% csrf_token %}
+                                <button type="submit" class="ink-btn">record a lookout</button>
+                            </form>
+                            <span class="minor-icons">
+                            <button type="button" class="icon-btn js-slip" data-slip="slip-edit" title="edit" aria-label="Edit project">
+                                {# a pencil cut the same way as the bin: outlined barrel, banded ferrule, solid nib #}
+                                <svg viewBox="0 0 32 32" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" aria-hidden="true" focusable="false">
+                                    <g transform="rotate(45 16 16) translate(16 16) scale(1.07) translate(-16 -16)">
+                                        <path d="M12.9 3.5h6.2a1.4 1.4 0 0 1 1.4 1.4v1.7a1.4 1.4 0 0 1-1.4 1.4h-6.2a1.4 1.4 0 0 1-1.4-1.4V4.9a1.4 1.4 0 0 1 1.4-1.4z"/>
+                                        <path d="M12.6 9.4h6.8a.6.6 0 0 1 .6.6v13h-8V10a.6.6 0 0 1 .6-.6zM14 11.6V21h4v-9.4h-4z"/>
+                                        <path d="M12 23h8l-3.3 6.1a.85.85 0 0 1-1.4 0L12 23z"/>
+                                    </g>
+                                </svg>
+                            </button>
+                            <button type="button" class="icon-btn icon-btn--danger js-slip" data-slip="slip-delete" title="delete" aria-label="Delete project">
+                                <svg viewBox="0 0 32 32" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" aria-hidden="true" focusable="false">
+                                    <path d="M8.391 12.32c-.636-.131-1.248.368-1.213 1.016.808 14.714 1.271 14.711 7.681 14.669C15.22 28.003 15.6 28 16 28s.78.003 1.141.005c6.41.042 6.873.045 7.681-14.669.035-.648-.577-1.147-1.212-1.016a.975.975 0 0 0-.784.896c-.17 3.094-.323 5.51-.519 7.407-.266 2.584-.588 3.883-.95 4.566-.225.426-.422.586-1.067.701-.716.128-1.615.123-3.019.115h-.002a161.358 161.358 0 0 0-2.538 0h-.001c-1.405.008-2.304.013-3.02-.115-.645-.115-.842-.275-1.067-.701-.362-.683-.684-1.982-.95-4.566-.196-1.897-.349-4.313-.519-7.407a.975.975 0 0 0-.783-.896z"/>
+                                    <path d="M6 10a1 1 0 0 1 1-1h18a1 1 0 0 1 0 2H7a1 1 0 0 1-1-1z" fill-rule="nonzero"/>
+                                    <path d="M12.25 7.973C12.112 8.185 12 8.5 12 9h-2c0-.81.186-1.525.576-2.121.366-.536.963-1.006 1.525-1.271C13.24 5.087 14.687 5 16 5c1.313 0 2.76.087 3.899.608.562.265 1.158.735 1.525 1.271C21.814 7.475 22 8.19 22 9h-2c0-.5-.112-.815-.25-1.027-.161-.272-.324-.388-.684-.546C18.36 7.103 17.306 7 16 7c-1.306 0-2.36.103-3.066.427-.36.158-.523.274-.684.546z"/>
+                                    <path d="M12.044 14.086a1 1 0 1 1 1.998-.087l.349 7.992a1 1 0 0 1-1.998.087l-.349-7.992zM17.956 13.999a1 1 0 0 1 1.998.087l-.348 7.993a1 1 0 0 1-1.999-.088l.349-7.992z" fill-rule="nonzero"/>
+                                </svg>
+                            </button>
+                            </span>
+                        {% endif %}
+                    </div>
+                </section>
+
+            {% elif page.kind == "log" %}
+                <section class="page page--log" data-page="{{ forloop.counter0 }}">
+                    <ul class="log">
+                        {% for entry in page.entries %}
+                            {% if entry.type == "compose" %}
+                                {# the next lapse's own space, written in where it will sit #}
+                                <li class="lapse lapse--compose">
+                                    <label class="compose-photo" id="compose-photo" data-drop>
+                                        <input type="file" name="image" accept="image/*" form="new-lapse" required>
+                                        <span class="compose-photo-text">+ photo<br><span class="dim">or drop</span></span>
+                                    </label>
+                                    <div class="lapse-body">
+                                        <input class="compose-title" type="text" name="title" maxlength="100" placeholder="what did you do?" form="new-lapse" required>
+
+                                        <div class="compose-line">
+                                            <button type="button" class="picker-btn js-slip" data-slip="slip-lookouts">
+                                                <span id="picker-summary">pick lookouts</span><span class="picker-caret">&#9662;</span>
+                                            </button>
+                                            {% if lookout_status %}
+                                                {% if lookout_status.url %}
+                                                    <a class="chip chip--busy" href="{{ lookout_status.url }}" title="pick it back up">{{ lookout_status.label }}&hellip;</a>
+                                                {% else %}
+                                                    <span class="chip chip--dead" title="this one couldn't be turned into a video">{{ lookout_status.label }}</span>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+
+                                        <div class="compose-line">
+                                            <label class="chip chip--file">
+                                                <input type="file" name="STL" accept=".stl" form="new-lapse" required>
+                                                <span id="stl-name">upload stl</span>
+                                            </label>
+                                            <button type="submit" class="ink-btn ink-btn--strong" form="new-lapse">tape it in</button>
+                                            <span class="compose-note" id="compose-note"></span>
+                                        </div>
+
+                                    </div>
+                                </li>
+                            {% else %}
+                                <li class="lapse">
+                                    <button
+                                        type="button"
+                                        class="snap js-zoom"
+                                        data-title="{{ entry.journal.title }}"
+                                        data-image="{{ entry.journal.image_display_url }}"
+                                        data-model="{{ entry.journal.model_display_url }}"
+                                        data-meta="{{ entry.journal.tracked_display }} &middot; {{ entry.journal.created_at|date:'M j, Y' }}"
+                                    >
+                                        <span class="snap-frame"><img src="{{ entry.journal.image_display_url }}" alt="{{ entry.journal.title }}" loading="lazy"></span>
+                                    </button>
+                                    <div class="lapse-body">
+                                        <h3 class="lapse-title">{{ entry.journal.title }}</h3>
+                                        <p class="lapse-meta">{{ entry.journal.tracked_display }} &middot; {{ entry.journal.created_at|date:"M j, Y" }}</p>
+                                    </div>
+                                </li>
+                            {% endif %}
+                        {% empty %}
+                            <p class="page-empty">this project is locked &mdash; nothing more goes in it.</p>
+                        {% endfor %}
+                    </ul>
+                </section>
+
+            {% else %}
+                <section class="page page--blank" data-page="{{ forloop.counter0 }}"></section>
+            {% endif %}
+        {% endfor %}
     </div>
-</div>
 
-<div id="deleteProjectModal" class="modal hidden" aria-hidden="true" hidden>
-    <div class="modal-backdrop" id="deleteModalBackdrop"></div>
+    {# Lives outside the pages so its fields can sit across both of them. #}
+    <form id="new-lapse" action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data" hidden>
+        {% csrf_token %}
+    </form>
 
-    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="deleteProjectTitle">
-        <h3 id="deleteProjectTitle">Delete Project</h3>
-        <p>Are you sure you want to delete "{{ project.title }}"? This action cannot be undone.</p>
+    <div class="slip-layer" id="slip-layer" hidden>
+        <div class="slip-backdrop" data-close></div>
 
-        <div class="modal-actions">
-            <button type="button" id="cancelDeleteModal">Cancel</button>
-            <button type="button" id="confirmDeleteModal" class="delete-button">Delete</button>
+        <div class="slip" id="slip-edit" hidden>
+            <h2>Edit project</h2>
+            <form action="{% url 'edit_project' project.id %}" method="post">
+                {% csrf_token %}
+                <label>
+                    Title
+                    <input type="text" name="title" maxlength="60" value="{{ project.title }}" required>
+                </label>
+                <label>
+                    Description
+                    <textarea name="description" maxlength="1000" required>{{ project.description }}</textarea>
+                </label>
+                <label>
+                    Printables URL
+                    <input type="url" name="printables_url" value="{{ project.printablesUrl }}" placeholder="https://printables.com/...">
+                </label>
+                <div class="slip-actions">
+                    <button type="button" data-close>Cancel</button>
+                    <button type="submit">Save</button>
+                </div>
+            </form>
         </div>
+
+        <div class="slip" id="slip-screenshot" hidden>
+            <h2>Project screenshot</h2>
+            <p>A screenshot of your model, shown on the cover. You need one before you can ship.</p>
+            <form action="{% url 'update_project_image' project.id %}" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="detail">
+                <label>
+                    PNG, JPEG, GIF or WEBP, max 5MB
+                    <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" required>
+                </label>
+                <div class="slip-actions">
+                    <button type="button" data-close>Cancel</button>
+                    <button type="submit">Upload</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="slip" id="slip-model" hidden>
+            <h2>Editor file</h2>
+            <p>Your source model, from any of: {{ allowed_editors|join:", " }}.</p>
+            <form action="{% url 'update_editor_model' project.id %}" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                <label>
+                    Upload the file
+                    <input type="file" name="editor_model_file" accept="{{ allowed_editor_extensions }}">
+                </label>
+                <label>
+                    Or paste a link to it
+                    <input type="url" name="editor_model_link" placeholder="https://...">
+                </label>
+                <div class="slip-actions">
+                    <button type="button" data-close>Cancel</button>
+                    <button type="submit">Save</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="slip" id="slip-delete" hidden>
+            <h2>Delete project</h2>
+            <p>Are you sure you want to delete &ldquo;{{ project.title }}&rdquo;? This cannot be undone.</p>
+            <form action="{% url 'delete_project' project.id %}" method="post">
+                {% csrf_token %}
+                <div class="slip-actions">
+                    <button type="button" data-close>Cancel</button>
+                    <button type="submit" class="is-danger">Delete</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="slip" id="slip-lookouts" hidden>
+            <h2>Which Lookouts?</h2>
+            <p>A lapse logs the time from the recordings you attach to it, and each one can only be used once.</p>
+            <ul class="lookout-list">
+                {% for timelapse in pickable_timelapses %}
+                    <li>
+                        <label>
+                            <input type="checkbox" name="timelapses" value="{{ timelapse.pk }}" data-seconds="{{ timelapse.tracked_seconds }}" form="new-lapse">
+                            <strong>{{ timelapse.tracked_display }}</strong>
+                            <span class="dim">
+                                recorded {{ timelapse.created_at|date:"M j, g:i A" }}{% if not timelapse.tracked_seconds %} &middot; nothing on the clock{% endif %}
+                            </span>
+                        </label>
+                        <a href="{{ timelapse.video_url }}" target="_blank" rel="noreferrer noopener">watch</a>
+                    </li>
+                {% empty %}
+                    <li class="dim">Nothing finished yet &mdash; hit &ldquo;record a lookout&rdquo; on the facing page.</li>
+                {% endfor %}
+            </ul>
+
+            {% if unfinished_timelapses %}
+                <h3 class="lookout-heading">still going</h3>
+                <ul class="lookout-list">
+                    {% for timelapse in unfinished_timelapses %}
+                        <li>
+                            <span class="lookout-when">
+                                <strong>{{ timelapse.tracked_display }}</strong>
+                                <span class="dim">started {{ timelapse.created_at|date:"M j, g:i A" }}</span>
+                            </span>
+                            {% if timelapse.is_recordable %}
+                                <a href="{% url 'record_timelapse' timelapse.pk %}">pick it back up</a>
+                            {% elif timelapse.is_processing %}
+                                <a href="{% url 'record_timelapse' timelapse.pk %}">building&hellip;</a>
+                            {% else %}
+                                <span class="warn">failed</span>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+            <div class="slip-actions">
+                <button type="button" data-close>Done</button>
+            </div>
+        </div>
+
+        <div class="slip slip--wide" id="slip-zoom" hidden>
+            <h2 id="zoom-title">Lapse</h2>
+            <p id="zoom-meta" hidden></p>
+            <div class="zoom-media" id="zoom-media"></div>
+            <div class="slip-actions">
+                <a id="zoom-download" class="ink-link" href="" target="_blank" rel="noreferrer noopener" hidden>download stl</a>
+                <button type="button" data-close>Close</button>
+            </div>
+        </div>
+
     </div>
-</div>
 
-<div id="timelapsePreviewModal" class="modal hidden" aria-hidden="true" hidden>
-    <div class="modal-backdrop" id="timelapsePreviewBackdrop"></div>
+    <script>
+        // ---- the book: two pages showing, the rest waiting in the store ----
+        (function () {
+            const body = document.body;
+            const store = document.getElementById('page-store');
+            const pages = Array.from(store.querySelectorAll('.page'));
+            const slotLeft = document.getElementById('sheet-left');
+            const slotRight = document.getElementById('sheet-right');
+            const prevBtn = document.getElementById('turn-prev');
+            const nextBtn = document.getElementById('turn-next');
+            const spreads = Math.ceil(pages.length / 2);
+            const wideEnough = window.matchMedia('(min-width: 820px) and (min-aspect-ratio: 6/5)');
 
-    <div class="modal-panel modal-panel--wide" role="dialog" aria-modal="true" aria-labelledby="timelapsePreviewTitle">
-        <h3 id="timelapsePreviewTitle">Timelapse preview</h3>
-        <div class="preview-stage">
-            <video id="timelapsePreviewVideo" controls preload="none"></video>
-        </div>
+            let spread = 0;
 
-        <div class="modal-actions">
-            <button type="button" class="tl-btn" id="closeTimelapsePreview">Close</button>
-        </div>
-    </div>
-</div>
-
-<script>
-    (function () {
-        const modal = document.getElementById('deleteProjectModal');
-        const backdrop = document.getElementById('deleteModalBackdrop');
-        const openBtn = document.getElementById('openDeleteModal');
-        const cancelBtn = document.getElementById('cancelDeleteModal');
-        const confirmBtn = document.getElementById('confirmDeleteModal');
-        const form = document.getElementById('deleteProjectForm');
-
-        function openModal() {
-            modal.classList.remove('hidden');
-            modal.hidden = false;
-            modal.setAttribute('aria-hidden', 'false');
-            cancelBtn.focus();
-        }
-
-        function closeModal() {
-            modal.classList.add('hidden');
-            modal.hidden = true;
-            modal.setAttribute('aria-hidden', 'true');
-            openBtn.focus();
-        }
-
-        if (openBtn) openBtn.addEventListener('click', openModal);
-        cancelBtn.addEventListener('click', closeModal);
-        backdrop.addEventListener('click', closeModal);
-        confirmBtn.addEventListener('click', () => form.submit());
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
-                closeModal();
+            function park() {
+                // Re-append in order so the narrow-screen layout reads top to bottom.
+                pages.forEach((page) => store.appendChild(page));
             }
-        });
-    })();
-</script>
-<script>
-    const textArea = document.getElementById("journal_content");
-    const countDisplay = document.getElementById("character_count");
 
-    countDisplay.style.color = "red"
+            function show(index) {
+                spread = Math.max(0, Math.min(index, spreads - 1));
+                park();
+                if (pages[spread * 2]) slotLeft.appendChild(pages[spread * 2]);
+                if (pages[spread * 2 + 1]) slotRight.appendChild(pages[spread * 2 + 1]);
+                prevBtn.hidden = spread === 0;
+                nextBtn.hidden = spread >= spreads - 1;
+            }
 
-    textArea.addEventListener('input', () => {
-        const currentLength = textArea.value.length;
-        countDisplay.textContent = currentLength;
+            function turn(direction) {
+                const target = spread + direction;
+                if (target < 0 || target >= spreads) return;
+                show(target);
+            }
 
-        if (currentLength >= 200 && currentLength <= 2000) {
-            countDisplay.style.color = "green"
-        } else {
-            countDisplay.style.color = "red"
-        }
-    });
-</script>
-<script>
-    (function () {
-        const picker = document.getElementById('timelapse_picker');
-        const form = document.getElementById('new-journal');
-        if (!picker || !form) return;
-
-        const boxes = Array.from(picker.querySelectorAll('input[name="timelapses"]'));
-        if (!boxes.length) return;
-
-        const summary = document.getElementById('attach_summary');
-        const errorMessage = document.getElementById('attach_error');
-
-        function update() {
-            let seconds = 0;
-            let count = 0;
-            boxes.forEach((box) => {
-                box.closest('.picker-option').classList.toggle('is-checked', box.checked);
-                if (box.checked) {
-                    seconds += parseInt(box.dataset.seconds || '0', 10);
-                    count += 1;
+            function layout() {
+                if (wideEnough.matches) {
+                    body.dataset.mode = 'book';
+                    show(spread);
+                } else {
+                    body.dataset.mode = 'flow';
+                    park();
                 }
+            }
+
+            nextBtn.addEventListener('click', () => turn(1));
+            prevBtn.addEventListener('click', () => turn(-1));
+
+            document.addEventListener('keydown', (e) => {
+                if (body.dataset.mode !== 'book') return;
+                if (document.querySelector('.slip-layer:not([hidden])')) return;
+                const tag = (e.target.tagName || '').toLowerCase();
+                if (tag === 'input' || tag === 'textarea') return;
+                if (e.key === 'ArrowRight') turn(1);
+                if (e.key === 'ArrowLeft') turn(-1);
             });
 
-            if (count) {
+            wideEnough.addEventListener('change', layout);
+            layout();
+        })();
+
+        // ---- the dashed boxes take a dropped image ----
+        (function () {
+            const zones = document.querySelectorAll('[data-drop]');
+            if (!zones.length) return;
+
+            // Without this a near-miss drop navigates the book away to the file.
+            ['dragover', 'drop'].forEach((type) => {
+                document.addEventListener(type, (e) => e.preventDefault());
+            });
+
+            zones.forEach((zone) => {
+                const input = zone.querySelector('input[type="file"]');
+                if (!input) return;
+
+                ['dragenter', 'dragover'].forEach((type) => {
+                    zone.addEventListener(type, (e) => {
+                        e.preventDefault();
+                        zone.classList.add('is-dropping');
+                    });
+                });
+                ['dragleave', 'dragend', 'drop'].forEach((type) => {
+                    zone.addEventListener(type, () => zone.classList.remove('is-dropping'));
+                });
+
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const image = Array.from(e.dataTransfer.files)
+                        .find((file) => file.type.startsWith('image/'));
+                    if (!image) return;
+                    // A file input can only be set from a DataTransfer list.
+                    const carrier = new DataTransfer();
+                    carrier.items.add(image);
+                    input.files = carrier.files;
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+
+                // The project's own screenshot goes up the moment it lands.
+                if (zone.dataset.drop === 'submit') {
+                    input.addEventListener('change', () => {
+                        if (input.files.length) zone.submit();
+                    });
+                }
+            });
+        })();
+
+        // ---- a note left on the desk is dismissed by touching it ----
+        (function () {
+            const note = document.querySelector('.messages');
+            if (note) note.addEventListener('click', () => note.remove());
+        })();
+
+        // ---- slips laid over the book ----
+        (function () {
+            const layer = document.getElementById('slip-layer');
+            const slips = Array.from(layer.querySelectorAll('.slip'));
+            let opener = null;
+
+            function open(id) {
+                slips.forEach((slip) => { slip.hidden = slip.id !== id; });
+                layer.hidden = false;
+                const focusable = layer.querySelector('.slip:not([hidden]) input, .slip:not([hidden]) button');
+                if (focusable) focusable.focus();
+            }
+
+            function close() {
+                layer.hidden = true;
+                slips.forEach((slip) => { slip.hidden = true; });
+                layer.dispatchEvent(new CustomEvent('slip:closed'));
+                if (opener) opener.focus();
+                opener = null;
+            }
+
+            document.addEventListener('click', (e) => {
+                const trigger = e.target.closest('[data-slip]');
+                if (trigger) {
+                    opener = trigger;
+                    open(trigger.dataset.slip);
+                    return;
+                }
+                if (e.target.closest('[data-close]')) close();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !layer.hidden) close();
+            });
+
+            window.atlantisSlip = { open, close, layer, setOpener: (el) => { opener = el; } };
+        })();
+
+        // ---- a lapse, close up ----
+        (function () {
+            const media = document.getElementById('zoom-media');
+            const title = document.getElementById('zoom-title');
+            const meta = document.getElementById('zoom-meta');
+            const download = document.getElementById('zoom-download');
+            let viewer = null;
+
+            function mountViewer(container) {
+                if (window.AtlantisSTL) {
+                    viewer = window.AtlantisSTL.init(container);
+                } else {
+                    document.addEventListener('atlantis:stl-ready', () => {
+                        if (container.isConnected) viewer = window.AtlantisSTL.init(container);
+                    }, { once: true });
+                }
+            }
+
+            document.addEventListener('click', (e) => {
+                const snap = e.target.closest('.js-zoom');
+                if (!snap) return;
+
+                title.textContent = snap.dataset.title || 'Lapse';
+                meta.innerHTML = snap.dataset.meta || '';
+                meta.hidden = !snap.dataset.meta;
+                media.replaceChildren();
+
+                const image = document.createElement('img');
+                image.src = snap.dataset.image || '';
+                image.alt = snap.dataset.title || '';
+                media.appendChild(image);
+
+                const model = snap.dataset.model;
+                media.classList.toggle('zoom-media--single', !model);
+                download.hidden = !model;
+                if (model) {
+                    download.href = model;
+                    const stage = document.createElement('div');
+                    stage.className = 'stl-viewer';
+                    stage.dataset.stlUrl = model;
+                    media.appendChild(stage);
+                    mountViewer(stage);
+                }
+
+                window.atlantisSlip.setOpener(snap);
+                window.atlantisSlip.open('slip-zoom');
+            });
+
+            // A WebGL context per lapse would pile up, so it goes when the slip does.
+            window.atlantisSlip.layer.addEventListener('slip:closed', () => {
+                if (viewer && viewer.dispose) viewer.dispose();
+                viewer = null;
+                media.replaceChildren();
+            });
+        })();
+
+        // ---- the new lapse, written in the space it will occupy ----
+        (function () {
+            const form = document.getElementById('new-lapse');
+            const boxes = Array.from(document.querySelectorAll('input[name="timelapses"]'));
+            const note = document.getElementById('compose-note');
+            const summary = document.getElementById('picker-summary');
+            const photo = document.getElementById('compose-photo');
+            const stlName = document.getElementById('stl-name');
+            if (!form || !note) return;
+
+            function update() {
+                let seconds = 0;
+                let count = 0;
+                boxes.forEach((box) => {
+                    if (!box.checked) return;
+                    seconds += parseInt(box.dataset.seconds || '0', 10);
+                    count += 1;
+                });
+                note.classList.remove('is-invalid');
+                note.textContent = '';
+                if (!summary) return;
+                const button = summary.closest('.picker-btn');
+                if (!count) {
+                    summary.textContent = 'pick lookouts';
+                    if (button) button.classList.remove('is-set');
+                    return;
+                }
                 const hours = Math.floor(seconds / 3600);
                 const minutes = Math.floor((seconds % 3600) / 60);
-                summary.innerHTML = 'Attaching <span class="picker-total-value">'
-                    + hours + 'h ' + minutes + 'm</span> from ' + count
-                    + (count === 1 ? ' timelapse.' : ' timelapses.');
-                picker.classList.remove('is-invalid');
-                errorMessage.hidden = true;
-            } else {
-                summary.textContent = 'Nothing attached yet. This entry would log no time.';
+                summary.textContent = hours + 'h ' + minutes + 'm from ' + count;
+                if (button) button.classList.add('is-set');
             }
-        }
 
-        boxes.forEach((box) => box.addEventListener('change', update));
-        update();
+            boxes.forEach((box) => box.addEventListener('change', update));
+            update();
 
-        form.addEventListener('submit', (event) => {
-            if (boxes.some((box) => box.checked)) return;
-            event.preventDefault();
-            picker.classList.add('is-invalid');
-            errorMessage.hidden = false;
-            picker.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        });
-    })();
-</script>
-<script>
-    (function () {
-        const modal = document.getElementById('timelapsePreviewModal');
-        const triggers = document.querySelectorAll('.picker-preview');
-        if (!modal || !triggers.length) return;
-
-        const video = document.getElementById('timelapsePreviewVideo');
-        const title = document.getElementById('timelapsePreviewTitle');
-        const backdrop = document.getElementById('timelapsePreviewBackdrop');
-        const closeBtn = document.getElementById('closeTimelapsePreview');
-        let lastTrigger = null;
-
-        function openPreview(trigger) {
-            lastTrigger = trigger;
-            title.textContent = trigger.dataset.label || 'Timelapse preview';
-            video.poster = trigger.dataset.poster || '';
-            video.src = trigger.dataset.video || '';
-            modal.classList.remove('hidden');
-            modal.hidden = false;
-            modal.setAttribute('aria-hidden', 'false');
-            closeBtn.focus();
-        }
-
-        function closePreview() {
-            // Drop the source so a closed popup isn't still streaming.
-            video.pause();
-            video.removeAttribute('src');
-            video.load();
-            modal.classList.add('hidden');
-            modal.hidden = true;
-            modal.setAttribute('aria-hidden', 'true');
-            if (lastTrigger) lastTrigger.focus();
-        }
-
-        triggers.forEach((trigger) => {
-            trigger.addEventListener('click', () => openPreview(trigger));
-        });
-        closeBtn.addEventListener('click', closePreview);
-        backdrop.addEventListener('click', closePreview);
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
-                closePreview();
+            // The dashed frame becomes the photo once one is chosen.
+            if (photo) {
+                const input = photo.querySelector('input');
+                input.addEventListener('change', () => {
+                    const file = input.files && input.files[0];
+                    photo.classList.toggle('has-file', Boolean(file));
+                    photo.style.backgroundImage = file ? 'url("' + URL.createObjectURL(file) + '")' : '';
+                });
             }
-        });
-    })();
-</script>
-{% endblock %}
+
+            if (stlName) {
+                const input = stlName.closest('.chip').querySelector('input');
+                input.addEventListener('change', () => {
+                    const file = input.files && input.files[0];
+                    stlName.closest('.chip').classList.toggle('has-file', Boolean(file));
+                    stlName.textContent = file ? file.name.replace(/\.stl$/i, '').slice(0, 18) : 'stl';
+                });
+            }
+
+            form.addEventListener('submit', (e) => {
+                if (boxes.some((box) => box.checked)) return;
+                e.preventDefault();
+                note.classList.add('is-invalid');
+                note.textContent = boxes.length
+                    ? 'pick a lookout first'
+                    : 'record a lookout first';
+            });
+        })();
+    </script>
+</body>
+</html>
