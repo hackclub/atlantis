@@ -10,8 +10,10 @@
 # Run:
 #   python manage.py runserver_plus --cert-file certs/localhost+2.pem --key-file certs/localhost+2-key.pem
 #
-# Note: pyOpenSSL pulls a newer cryptography than the pinned production version;
-# keep these deps in this dev-only file so production stays on its pinned set.
+# Note: pyOpenSSL caps the cryptography version it accepts (26.4 allows
+# <51,>=49), so this floor has to keep pace with the cryptography pin in
+# requirements.txt or installing this file downgrades it. Keep these deps in
+# this dev-only file so production stays on its pinned set.
 django-extensions>=4.1
 Werkzeug>=3.1
-pyOpenSSL>=26.0
+pyOpenSSL>=26.4

@@ -189,6 +189,13 @@ if SECURE_SSL:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
+# CVE-2026-6873: older Django derived a signed cookie's salt by concatenating
+# the cookie name and salt, so distinct (name, salt) pairs could collide and a
+# cookie could be accepted in a context it wasn't signed for. Django accepts
+# legacy-salted cookies until 7.0 by default; we sign no cookies ourselves, so
+# there is nothing to migrate and the fallback can be off now.
+SIGNED_COOKIE_LEGACY_SALT_FALLBACK = False
+
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
