@@ -572,6 +572,23 @@ class LockUnlockProjectTests(BaseTestCase):
 		)
 		self.assertEqual(response.url, "/root/projects/")
 
+	def test_offsite_referer_is_not_followed(self):
+		# The Referer is attacker-supplied, so lock/unlock must not bounce the
+		# reviewer off to whatever host it names.
+		for view in ("lock_project", "unlock_project"):
+			for referer in ("https://evil.example.com/phish", "//evil.example.com/phish"):
+				with self.subTest(view=view, referer=referer):
+					response = self.client.post(
+						reverse(view, args=[self.project.id]), HTTP_REFERER=referer
+					)
+					self.assertEqual(response.url, "/")
+
+	def test_unlock_redirects_to_onsite_referer(self):
+		response = self.client.post(
+			reverse("unlock_project", args=[self.project.id]), HTTP_REFERER="/root/projects/"
+		)
+		self.assertEqual(response.url, "/root/projects/")
+
 	def test_t1_reviewer_cannot_lock(self):
 		t1_reviewer = grant_perms(make_user("t1only"), "t1_review")
 		self.client.force_login(t1_reviewer)

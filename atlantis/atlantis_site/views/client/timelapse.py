@@ -1,3 +1,5 @@
+import logging
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
@@ -8,6 +10,8 @@ from django.http import JsonResponse
 from ...models import Project, LookoutSession
 from ... import lookout
 from ..helpers import rate_limit
+
+logger = logging.getLogger(__name__)
 
 
 @login_required
@@ -105,7 +109,16 @@ def sync_timelapse(request, session_pk):
 	try:
 		data = lookout.get_internal_session(session.session_id)
 	except lookout.LookoutError as exc:
-		return JsonResponse({"ok": False, "error": str(exc)}, status=502)
+		# LookoutError carries the internal endpoint and the upstream body, so it
+		# stays in the server log; the client only needs to know the hop failed.
+		logger.warning(
+			"Lookout sync failed for session %s (owner %s): %s",
+			session.pk, request.user.pk, exc,
+		)
+		return JsonResponse(
+			{"ok": False, "error": "Could not reach Lookout right now."},
+			status=502,
+		)
 
 	_apply_session_payload(
 		session,

@@ -25,7 +25,6 @@ from PIL import Image
 import os
 import uuid
 import requests
-import re
 import socket
 import ipaddress
 
@@ -36,7 +35,15 @@ ALLOWED_IMAGE_FORMATS = {
     "WEBP": ".webp",
 }
 
-PRINTABLES_URL_RE = re.compile(r"https:\/\/(?:www\.)?printables\.com(?:\/.*)?$", re.IGNORECASE)
+# Longest URL we will look at anywhere in here. Every URL column in models.py
+# is 2048 or smaller, so nothing legitimate is turned away, and it keeps
+# attacker-supplied strings from being walked at all.
+MAX_URL_LENGTH = 2048
+
+PRINTABLES_HOSTS = frozenset({"printables.com", "www.printables.com"})
+
+# The only ports _safe_head will connect to, per scheme.
+ALLOWED_URL_PORTS = {"http": 80, "https": 443}
 
 slack_client = WebClient(token=settings.SLACK_TOKEN, timeout=5)
 
@@ -49,7 +56,29 @@ def check_perms(perms):
     return user_passes_test(check_perms_internal)
 
 def is_valid_printables_url(value):
-    return bool(PRINTABLES_URL_RE.match(value))
+    """True when value is an https URL whose host really is printables.com.
+
+    Compares the parsed host against an allowlist rather than matching the URL
+    with a regex: a pattern ending in `.*$` backtracks over the whole string on
+    input it can't match, and reading the host out of urlparse is both linear
+    and harder to get wrong. It also drops `https://printables.com@evil.com`,
+    where the lookalike is only the userinfo and the real host is evil.com.
+    """
+    if not value or len(value) > MAX_URL_LENGTH:
+        return False
+    try:
+        parsed = urlparse(value)
+    except ValueError:
+        return False
+    if parsed.scheme.lower() != "https":
+        return False
+    try:
+        port = parsed.port
+    except ValueError:
+        return False
+    if port not in (None, ALLOWED_URL_PORTS["https"]):
+        return False
+    return (parsed.hostname or "").lower() in PRINTABLES_HOSTS
 
 def layers_for_minutes(minutes):
     tenths_of_hour = minutes // 6
@@ -289,9 +318,30 @@ def _pinned_head(url, dest_ip, timeout=5):
         session.close()
 
 def _safe_head(url, max_redirects=5):
+    """HEAD a caller-supplied URL without letting it reach anything internal.
+
+    The guard is per hop, because a redirect is just as attacker-controlled as
+    the original URL: reject non-http(s) schemes and off-default ports, resolve
+    the host and refuse it unless every address is public, then hand
+    _pinned_head the address we vetted so the connection cannot be re-resolved
+    to something else in between (DNS rebinding).
+    """
     for _ in range(max_redirects + 1):
-        result = urlparse(url)
+        if not url or len(url) > MAX_URL_LENGTH:
+            return None
+        try:
+            result = urlparse(url)
+        except ValueError:
+            return None
         if result.scheme not in ('http', 'https') or not result.netloc:
+            return None
+        # No legitimate image or model URL is served off-port, and allowing one
+        # turns this into a port prober for any public host.
+        try:
+            port = result.port
+        except ValueError:
+            return None
+        if port not in (None, ALLOWED_URL_PORTS[result.scheme]):
             return None
         dest_ip = _validated_public_ip(result.hostname)
         if dest_ip is None:

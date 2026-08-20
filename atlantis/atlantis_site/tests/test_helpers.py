@@ -1,5 +1,6 @@
 import io
 import ipaddress
+import time
 from unittest.mock import MagicMock, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -88,16 +89,46 @@ class UrlValidatorTests(TestCase):
 		self.assertTrue(is_valid_printables_url("https://www.printables.com/model/123-thing"))
 		self.assertTrue(is_valid_printables_url("HTTPS://WWW.PRINTABLES.COM/model/1"))
 
+	def test_valid_printables_urls_without_a_path(self):
+		# The host is what matters; a query or fragment on the bare domain is
+		# still printables.com.
+		self.assertTrue(is_valid_printables_url("https://printables.com?q=1"))
+		self.assertTrue(is_valid_printables_url("https://printables.com:443/model/1"))
+
 	def test_invalid_printables_urls(self):
 		self.assertFalse(is_valid_printables_url("http://printables.com/model/1"))
 		self.assertFalse(is_valid_printables_url("https://thingiverse.com/thing/1"))
 		self.assertFalse(is_valid_printables_url("https://evil.com/https://printables.com"))
 		self.assertFalse(is_valid_printables_url(""))
+		self.assertFalse(is_valid_printables_url(None))
 
-	def test_printables_regex_is_anchored_at_end(self):
+	def test_printables_host_must_match_exactly(self):
 		# A lookalike host that merely starts with printables.com must not pass.
 		self.assertFalse(is_valid_printables_url("https://printables.com.evil.com/model/1"))
 		self.assertFalse(is_valid_printables_url("https://printables.computer/model/1"))
+		self.assertFalse(is_valid_printables_url("https://printables.com./model/1"))
+
+	def test_printables_lookalike_in_userinfo_is_rejected(self):
+		# The real host here is evil.com; printables.com is only the credentials.
+		self.assertFalse(is_valid_printables_url("https://printables.com@evil.com/"))
+		self.assertFalse(is_valid_printables_url("https://www.printables.com@evil.com/x"))
+
+	def test_printables_off_default_port_is_rejected(self):
+		self.assertFalse(is_valid_printables_url("https://printables.com:22/x"))
+
+	def test_printables_url_length_is_capped(self):
+		# Guards the validator against being handed an unbounded string to walk.
+		self.assertFalse(is_valid_printables_url(
+			"https://printables.com/" + "a" * helpers.MAX_URL_LENGTH
+		))
+
+	def test_printables_validation_is_linear(self):
+		# The old regex ended in `.*$`, which backtracks across the whole input
+		# when the tail cannot match.
+		bait = "https://printables.com/" + "a" * 200_000 + "\n!"
+		started = time.perf_counter()
+		self.assertFalse(is_valid_printables_url(bait))
+		self.assertLess(time.perf_counter() - started, 1.0)
 
 	def test_valid_editor_model_urls(self):
 		# An uploaded file, stored as a private-bucket object key with a known
@@ -413,6 +444,30 @@ class SafeHeadTests(TestCase):
 	def test_redirect_to_private_host_blocked(self, mock_head, _ip):
 		_ip.side_effect = ["93.184.216.34", None]
 		hop = _response(headers={"Location": "http://169.254.169.254/meta"}, redirect=True)
+		mock_head.return_value = hop
+		self.assertIsNone(helpers._safe_head("https://example.com/a"))
+
+	def test_rejects_off_default_ports(self, _ip):
+		# Otherwise a caller-supplied URL turns this into a port prober for any
+		# public host.
+		self.assertIsNone(helpers._safe_head("http://example.com:22/"))
+		self.assertIsNone(helpers._safe_head("https://example.com:6379/"))
+		self.assertIsNone(helpers._safe_head("http://example.com:443/"))
+
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_allows_explicit_default_ports(self, mock_head, _ip):
+		mock_head.return_value = _response(headers={"Content-Type": "image/png"})
+		self.assertIsNotNone(helpers._safe_head("https://example.com:443/a.png"))
+		self.assertIsNotNone(helpers._safe_head("http://example.com:80/a.png"))
+
+	def test_rejects_overlong_urls(self, _ip):
+		self.assertIsNone(
+			helpers._safe_head("https://example.com/" + "a" * helpers.MAX_URL_LENGTH)
+		)
+
+	@patch("atlantis_site.views.helpers._pinned_head")
+	def test_redirect_to_off_default_port_blocked(self, mock_head, _ip):
+		hop = _response(headers={"Location": "http://example.com:6379/"}, redirect=True)
 		mock_head.return_value = hop
 		self.assertIsNone(helpers._safe_head("https://example.com/a"))
 

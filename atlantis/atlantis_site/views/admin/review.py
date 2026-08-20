@@ -418,7 +418,7 @@ def lock_project(request, project_id):
     if owner_slack_id:
         send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{project_id}|{project.title}> has been locked.", owner_slack_id)
 
-    return redirect(request.META.get("HTTP_REFERER", "/"))
+    return safe_redirect_back(request)
 
 @staff_member_required
 @require_POST
@@ -439,4 +439,4 @@ def unlock_project(request, project_id):
     if owner_slack_id:
         send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{project_id}|{project.title}> has been unlocked.", owner_slack_id)
 
-    return redirect(request.META.get("HTTP_REFERER", "/"))
+    return safe_redirect_back(request)
