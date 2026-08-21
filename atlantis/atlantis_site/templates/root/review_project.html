@@ -15,7 +15,7 @@
 </script>
 <script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
 <div class="content">
-    {% include "root/_messages.html" %}
+    {% include "root/_messages_admin.html" %}
     <div class="review-layout">
         <div class="review-main">
             {% include "root/_review_project_header.html" with heading="Review Project" %}
@@ -34,9 +34,9 @@
                 </div>
                 <div class="form-row">
                     {% if hasMake %}
-                        <span>Has make?: <span style="color: green;">True</span></span>
+                        <span>Has make?: <span class="is-yes">True</span></span>
                     {% else %}
-                        <span>Has make?: <span style="color: red;">False</span></span>
+                        <span>Has make?: <span class="is-no">False</span></span>
                     {% endif %}
                 </div>
                 <div class="form-row">

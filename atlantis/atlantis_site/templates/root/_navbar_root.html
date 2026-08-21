@@ -1,4 +1,8 @@
 <nav class="sidebar">
+    <div class="sidebar-brand">
+        <span class="sidebar-brand-name">Atlantis</span>
+        <span class="sidebar-brand-sub">admin</span>
+    </div>
     <a href="/root/">home</a>
     {% if perms.atlantis_site.fulfillment or perms.atlantis_site.organizer %}
         <a href="/root/shop">shop management</a>

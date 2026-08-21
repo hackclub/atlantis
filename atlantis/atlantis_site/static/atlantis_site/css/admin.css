@@ -1,0 +1,831 @@
+/* ============================================================
+   /root admin theme — oceanic
+
+   Everything here is scoped under `.root-page`, the class only
+   templates/root/_base_root.html puts on <body>. style.css is shared with
+   the public site, and a good number of the classes styled below
+   (.page, .content, .sidebar, .project-info, .modal-panel, .journal-card,
+   .address-box, .stl-viewer, ...) are used by both, so an unscoped rule
+   here would leak straight into the public pages. Keep the prefix.
+
+   Dark oceanic: near-black navy grounds, cards lifted a shade above them,
+   and a bright ocean blue doing the accent work (links, primary buttons,
+   chart fills, focus). Flat fills only — no gradients. Depth comes from
+   hairline borders, not from big shadows, which are invisible on dark.
+   ============================================================ */
+
+.root-page {
+    /* structure — the sidebar is the darkest surface, then the page ground,
+       then cards lifted above it. */
+    --oc-abyss: #070e18;
+    --oc-abyss-2: #142534;
+
+    /* text */
+    --oc-ink: #e7eff7;
+    --oc-ink-2: #a4b9cd;
+    --oc-ink-3: #6f889e;
+
+    /* surfaces */
+    --oc-bg: #0b1724;
+    --oc-surface: #111f30;
+    --oc-surface-2: #17273a;
+    --oc-shallow: #16263a;
+    /* Fields sit *below* the card they're on, so they read as recessed. */
+    --oc-field: #0e1d2d;
+
+    /* hairlines — these carry the depth in place of shadows */
+    --oc-line: #203549;
+    --oc-line-2: #2c4560;
+
+    /* accent: bright enough to stay legible on the dark grounds */
+    --oc-tide: #4aa3e8;
+    --oc-tide-2: #74baf0;
+    --oc-tide-soft: #12283c;
+    --oc-lagoon: #2fb8c4;
+    /* Solid fills want a deeper blue so white text on them still passes. */
+    --oc-btn: #1f74be;
+    --oc-btn-2: #2a86d4;
+    --oc-on-accent: #ffffff;
+
+    /* sidebar ink */
+    --oc-sidebar-text: #c3d5e6;
+    --oc-sidebar-dim: #6f8aa3;
+    --oc-sidebar-strong: #f2f8fd;
+    --oc-sidebar-line: rgba(255, 255, 255, 0.08);
+
+    /* semantic */
+    --oc-good: #3cc79e;
+    --oc-good-soft: #0f2b26;
+    --oc-bad: #f0776d;
+    --oc-bad-soft: #2c1517;
+    --oc-bad-line: #5c2b2a;
+    --oc-bad-strong: #ff9a93;
+    --oc-warn: #e2ab52;
+    --oc-warn-soft: #2b2113;
+
+    /* reviewer-only notes keep a warm cast — never the same as a normal card,
+       so an internal note can't be mistaken for something the owner sees */
+    --oc-sand: #241d0f;
+    --oc-sand-line: #4a3b1b;
+    --oc-sand-ink: #f0e6d3;
+
+    --oc-scrim: rgba(2, 7, 13, 0.72);
+    --oc-shadow-modal: 0 24px 60px rgba(0, 0, 0, 0.6);
+
+    --oc-radius: 12px;
+    --oc-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+
+    /* metrics.css drives its stat cards and bar charts off these custom
+       properties. Redefining them on the admin <body> re-themes every chart
+       without touching the shared file. */
+    --mviz-ink: var(--oc-ink);
+    --mviz-ink-2: var(--oc-ink-2);
+    --mviz-muted: var(--oc-ink-3);
+    --mviz-blue: var(--oc-tide);
+    --mviz-track: var(--oc-shallow);
+    --mviz-good: var(--oc-good);
+    --mviz-bad: var(--oc-bad);
+    --mviz-warn: var(--oc-warn);
+    --mviz-border: var(--oc-line);
+
+    color-scheme: dark;
+    background: var(--oc-bg);
+    color: var(--oc-ink);
+}
+
+.root-page.page {
+    grid-template-columns: 236px minmax(0, 1fr);
+}
+
+/* ---------- sidebar ---------- */
+
+.root-page .sidebar {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    box-sizing: border-box;
+    overflow-y: auto;
+    gap: 2px;
+    padding: 20px 14px 20px;
+    background: var(--oc-abyss);
+    border-right: 1px solid var(--oc-line);
+    color: var(--oc-sidebar-text);
+}
+
+.root-page .sidebar-brand {
+    display: block;
+    padding: 6px 12px 16px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--oc-sidebar-line);
+    line-height: 1.2;
+}
+
+.root-page .sidebar-brand-name {
+    display: block;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--oc-sidebar-strong);
+}
+
+.root-page .sidebar-brand-sub {
+    display: block;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--oc-sidebar-dim);
+    margin-top: 2px;
+}
+
+.root-page .sidebar a {
+    padding: 9px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--oc-sidebar-text);
+}
+
+.root-page .sidebar a:hover {
+    background: var(--oc-abyss-2);
+    color: var(--oc-sidebar-strong);
+}
+
+/* "back home" leaves for the public site — pin it away from the admin
+   sections so it can't be mistaken for one of them. */
+.root-page .sidebar a:last-child {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid var(--oc-sidebar-line);
+    border-radius: 0;
+    color: var(--oc-sidebar-dim);
+}
+
+.root-page .sidebar a:last-child:hover {
+    background: none;
+    color: var(--oc-sidebar-strong);
+    text-decoration: underline;
+}
+
+/* ---------- page shell + type ---------- */
+
+.root-page .content {
+    padding: 30px 32px 56px;
+    min-width: 0;
+}
+
+.root-page h1 {
+    margin: 0 0 6px;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--oc-ink);
+}
+
+.root-page h2 {
+    margin: 28px 0 12px;
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--oc-ink);
+}
+
+.root-page h3 {
+    margin: 22px 0 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--oc-ink-2);
+}
+
+.root-page h4 {
+    color: var(--oc-ink);
+}
+
+.root-page .content > h1 + h3 {
+    margin-top: 0;
+    font-weight: 400;
+    color: var(--oc-ink-3);
+}
+
+.root-page a {
+    color: var(--oc-tide);
+}
+
+.root-page a:hover {
+    color: var(--oc-tide-2);
+}
+
+/* ---------- messages ---------- */
+
+.root-page .messages {
+    display: grid;
+    gap: 8px;
+    margin: 0 0 22px;
+}
+
+.root-page .message {
+    padding: 10px 14px;
+    border: 1px solid var(--oc-line-2);
+    border-left: 4px solid var(--oc-tide);
+    border-radius: 10px;
+    background: var(--oc-tide-soft);
+    color: var(--oc-ink);
+    font-size: 14px;
+}
+
+.root-page .message.success {
+    border-left-color: var(--oc-good);
+    background: var(--oc-good-soft);
+}
+
+.root-page .message.warning {
+    border-left-color: var(--oc-warn);
+    background: var(--oc-warn-soft);
+}
+
+.root-page .message.error {
+    border-left-color: var(--oc-bad);
+    background: var(--oc-bad-soft);
+}
+
+/* ---------- tables ---------- */
+
+/* Separate borders (not collapse) so the rounded corners actually clip. */
+.root-page .users-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 18px 0 28px;
+    background: var(--oc-surface);
+    border: 1px solid var(--oc-line);
+    border-radius: var(--oc-radius);
+    box-shadow: var(--oc-shadow);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Corners are rounded per corner-cell rather than by clipping the table with
+   overflow:hidden — a wide table (fulfillment runs 11 columns) then overflows
+   and scrolls instead of having its last column cut off. */
+.root-page .users-table > thead {
+    background: transparent;
+    border-bottom: none;
+}
+
+.root-page .users-table > thead > tr > th:first-child {
+    border-top-left-radius: var(--oc-radius);
+}
+
+.root-page .users-table > thead > tr > th:last-child {
+    border-top-right-radius: var(--oc-radius);
+}
+
+.root-page .users-table > tbody > tr:last-child > td:first-child {
+    border-bottom-left-radius: var(--oc-radius);
+}
+
+.root-page .users-table > tbody > tr:last-child > td:last-child {
+    border-bottom-right-radius: var(--oc-radius);
+}
+
+/* Child combinators throughout: audit_log.html nests an .audit-data table
+   inside a cell, and it must not inherit the outer table's padding. */
+.root-page .users-table > thead > tr > th {
+    padding: 11px 14px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--oc-ink-2);
+    white-space: nowrap;
+    background: var(--oc-shallow);
+    border-bottom: 1px solid var(--oc-line-2);
+}
+
+.root-page .users-table > tbody > tr {
+    border-bottom: none;
+}
+
+.root-page .users-table > tbody > tr > td {
+    padding: 12px 14px;
+    font-size: 14px;
+    vertical-align: top;
+    border-bottom: 1px solid var(--oc-line);
+}
+
+.root-page .users-table > tbody > tr:last-child > td {
+    border-bottom: none;
+}
+
+.root-page .users-table > tbody > tr:hover > td {
+    background: var(--oc-surface-2);
+}
+
+/* Action cells stack short links ("edit project", "view on explore"); left to
+   wrap they break mid-label and inflate every row. The prose columns have
+   slack to give up instead. */
+.root-page .users-table > tbody > tr > td > a,
+.root-page .users-table > tbody > tr > td > button,
+.root-page .users-table > tbody > tr > td > form > button,
+.root-page .users-table > tbody > tr > td > span[aria-disabled] {
+    white-space: nowrap;
+}
+
+.root-page .users-table a {
+    color: var(--oc-tide);
+    text-decoration: none;
+}
+
+.root-page .users-table a:hover {
+    text-decoration: underline;
+}
+
+/* ---------- buttons ---------- */
+
+.root-page button {
+    font: inherit;
+    font-size: 14px;
+    padding: 8px 14px;
+    border: 1px solid var(--oc-btn);
+    border-radius: 8px;
+    background: var(--oc-btn);
+    color: var(--oc-on-accent);
+    cursor: pointer;
+}
+
+.root-page button:hover:not(:disabled) {
+    background: var(--oc-btn-2);
+    border-color: var(--oc-btn-2);
+}
+
+.root-page button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* Secondary — the cancel half of every modal footer. */
+.root-page .modal-actions button[type="button"],
+.root-page button.secondary {
+    background: var(--oc-field);
+    border-color: var(--oc-line-2);
+    color: var(--oc-ink-2);
+}
+
+.root-page .modal-actions button[type="button"]:hover:not(:disabled),
+.root-page button.secondary:hover:not(:disabled) {
+    background: var(--oc-shallow);
+    border-color: var(--oc-line-2);
+    color: var(--oc-ink);
+}
+
+.root-page button.danger {
+    background: transparent;
+    border-color: var(--oc-bad-line);
+    color: var(--oc-bad);
+}
+
+.root-page button.danger:hover:not(:disabled) {
+    background: var(--oc-bad);
+    border-color: var(--oc-bad);
+    color: var(--oc-bad-soft);
+}
+
+/* .link-button has to stay a plain text link, and `.root-page button`
+   above would otherwise out-specify base.css and turn it into a pill. */
+.root-page .link-button {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: none;
+    color: var(--oc-tide);
+    font-size: inherit;
+}
+
+.root-page .link-button:hover:not(:disabled) {
+    background: none;
+    color: var(--oc-tide-2);
+    text-decoration: underline;
+}
+
+.root-page .link-button.danger,
+.root-page .delete-button {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--oc-bad);
+}
+
+.root-page .link-button.danger:hover:not(:disabled),
+.root-page .delete-button:hover:not(:disabled) {
+    background: none;
+    color: var(--oc-bad-strong);
+    text-decoration: underline;
+}
+
+.root-page .card-detail-link {
+    border-color: var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-field);
+    color: var(--oc-tide);
+}
+
+.root-page .card-detail-link:hover {
+    background: var(--oc-btn);
+    border-color: var(--oc-btn);
+    color: var(--oc-on-accent);
+}
+
+/* ---------- fields ---------- */
+
+.root-page input[type="text"],
+.root-page input[type="search"],
+.root-page input[type="number"],
+.root-page input[type="email"],
+.root-page input[type="url"],
+.root-page input[type="password"],
+.root-page input:not([type]),
+.root-page select,
+.root-page textarea {
+    font: inherit;
+    font-size: 14px;
+    padding: 8px 10px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-field);
+    color: var(--oc-ink);
+}
+
+.root-page input::placeholder,
+.root-page textarea::placeholder {
+    color: var(--oc-ink-3);
+}
+
+.root-page input:focus-visible,
+.root-page select:focus-visible,
+.root-page textarea:focus-visible {
+    outline: 2px solid var(--oc-tide);
+    outline-offset: 1px;
+    border-color: var(--oc-tide);
+}
+
+.root-page button:focus-visible,
+.root-page a:focus-visible,
+.root-page summary:focus-visible {
+    outline: 2px solid var(--oc-tide);
+    outline-offset: 2px;
+}
+
+.root-page input[type="checkbox"],
+.root-page input[type="radio"] {
+    accent-color: var(--oc-tide);
+    width: 15px;
+    height: 15px;
+}
+
+.root-page label {
+    font-size: 14px;
+    color: var(--oc-ink);
+}
+
+.root-page .checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.root-page .users-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 0 18px;
+}
+
+.root-page .users-search input[type="search"] {
+    width: 320px;
+    max-width: 100%;
+}
+
+.root-page .bulk-actions {
+    align-items: center;
+    padding: 12px 14px;
+    background: var(--oc-surface);
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+    color: var(--oc-ink-2);
+}
+
+/* ---------- cards ---------- */
+
+.root-page .project-info,
+.root-page .review-card,
+.root-page .journal-card,
+.root-page .ship-card,
+.root-page .ship-event,
+.root-page .order-card,
+.root-page .item-card,
+.root-page .user-card,
+.root-page .audit-entry,
+.root-page .review-sidebar {
+    background: var(--oc-surface);
+    border: 1px solid var(--oc-line);
+    border-radius: var(--oc-radius);
+    box-shadow: var(--oc-shadow);
+    color: var(--oc-ink);
+}
+
+.root-page .project-info,
+.root-page .review-sidebar {
+    padding: 20px;
+}
+
+.root-page .project-info h2 {
+    margin-top: 0;
+}
+
+.root-page .review-sidebar h2 {
+    margin: 0 0 4px;
+    font-size: 17px;
+}
+
+.root-page .internal-comment {
+    background: var(--oc-sand);
+    border: 1px solid var(--oc-sand-line);
+    border-radius: var(--oc-radius);
+    box-shadow: var(--oc-shadow);
+    color: var(--oc-sand-ink);
+}
+
+.root-page .internal-comment .review-event-byline {
+    color: #b6a37f;
+}
+
+.root-page .project-info a:not(.card-detail-link),
+.root-page .review-card a:not(.card-detail-link),
+.root-page .journal-card a:not(.card-detail-link),
+.root-page .ship-card a:not(.card-detail-link),
+.root-page .ship-event a:not(.card-detail-link),
+.root-page .internal-comment a:not(.card-detail-link),
+.root-page .order-card a:not(.card-detail-link) {
+    color: var(--oc-tide);
+}
+
+.root-page .project-info a:not(.card-detail-link):hover,
+.root-page .review-card a:not(.card-detail-link):hover,
+.root-page .journal-card a:not(.card-detail-link):hover,
+.root-page .ship-card a:not(.card-detail-link):hover,
+.root-page .ship-event a:not(.card-detail-link):hover,
+.root-page .internal-comment a:not(.card-detail-link):hover,
+.root-page .order-card a:not(.card-detail-link):hover {
+    color: var(--oc-tide-2);
+    text-decoration: underline;
+}
+
+/* Keep the lock/unlock control level with the project title rather than
+   floating at the vertical centre of a tall description. */
+.root-page .project-info .card-row {
+    align-items: flex-start;
+}
+
+.root-page .review-event-byline,
+.root-page .project-byline {
+    color: var(--oc-ink-3);
+}
+
+.root-page .locked-flag {
+    display: inline-block;
+    margin: 2px 0 6px;
+    padding: 2px 9px;
+    border: 1px solid var(--oc-bad-line);
+    border-radius: 999px;
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.root-page .is-yes {
+    color: var(--oc-good);
+    font-weight: 600;
+}
+
+.root-page .is-no {
+    color: var(--oc-bad);
+    font-weight: 600;
+}
+
+/* ---------- metrics ---------- */
+
+.root-page .metrics-section > h2 {
+    border-bottom: 1px solid var(--oc-line-2);
+    padding-bottom: 8px;
+}
+
+.root-page .stat-card,
+.root-page .chart {
+    background: var(--oc-surface);
+    border-radius: var(--oc-radius);
+    box-shadow: var(--oc-shadow);
+}
+
+.root-page .stat-card {
+    border-left-width: 4px;
+    border-left-color: var(--oc-line-2);
+}
+
+.root-page .stat-card .stat-value {
+    font-variant-numeric: tabular-nums;
+}
+
+/* _metric_chart.html builds the track and fill out of <span>s, so both need
+   blockifying before the height and the JS-assigned width can apply at all. */
+.root-page .chart-track,
+.root-page .chart-fill {
+    display: block;
+    border-radius: 4px;
+}
+
+.root-page .chart-fill {
+    height: 100%;
+    /* metrics.css floors this at 2px, which now that the fill actually paints
+       leaves a stray nub on every zero row. The value label carries the number. */
+    min-width: 0;
+}
+
+.root-page .chart-fill.lagoon {
+    background: var(--oc-lagoon);
+}
+
+/* ---------- review layout ---------- */
+
+.root-page .review-history,
+.root-page .journal-list {
+    margin-bottom: 28px;
+}
+
+.root-page .stl-viewer {
+    background: var(--oc-shallow);
+    border: 1px solid var(--oc-line);
+    box-sizing: border-box;
+}
+
+.root-page .journal-timelapses {
+    margin: 8px 0 12px;
+    padding-left: 20px;
+    color: var(--oc-ink-2);
+    font-size: 14px;
+}
+
+/* ---------- audit log ---------- */
+
+.root-page .audit-filters {
+    padding: 14px 16px;
+    margin-bottom: 18px;
+    background: var(--oc-surface);
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+}
+
+.root-page .audit-filters label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--oc-ink-2);
+}
+
+.root-page summary {
+    cursor: pointer;
+    color: var(--oc-tide);
+    font-size: 13px;
+}
+
+.root-page details[open] > summary {
+    margin-bottom: 6px;
+}
+
+.root-page .audit-data {
+    border-collapse: collapse;
+    background: var(--oc-surface-2);
+    border: 1px solid var(--oc-line);
+    border-radius: 8px;
+    font-size: 12.5px;
+}
+
+.root-page .audit-data th,
+.root-page .audit-data td {
+    padding: 5px 9px;
+    border-bottom: 1px solid var(--oc-line);
+}
+
+.root-page .audit-data tr:last-child th,
+.root-page .audit-data tr:last-child td {
+    border-bottom: none;
+}
+
+.root-page .audit-data th {
+    color: var(--oc-ink-2);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.root-page .pagination {
+    gap: 12px;
+    color: var(--oc-ink-2);
+    font-size: 14px;
+}
+
+.root-page .pagination a {
+    padding: 6px 12px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-field);
+    text-decoration: none;
+}
+
+.root-page .pagination a:hover {
+    background: var(--oc-btn);
+    border-color: var(--oc-btn);
+    color: var(--oc-on-accent);
+}
+
+/* ---------- modals ---------- */
+
+.root-page .modal-panel,
+.root-page dialog {
+    background: var(--oc-surface);
+    color: var(--oc-ink);
+    box-shadow: var(--oc-shadow-modal);
+}
+
+.root-page .modal-panel h3,
+.root-page dialog h3 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--oc-ink);
+}
+
+.root-page .modal-backdrop {
+    background: var(--oc-scrim);
+}
+
+.root-page dialog::backdrop {
+    background: var(--oc-scrim);
+}
+
+.root-page .modal-actions {
+    margin-top: 4px;
+}
+
+.root-page .group-selector legend {
+    color: var(--oc-ink-2);
+    font-size: 14px;
+}
+
+.root-page .group-chip {
+    border-color: var(--oc-line-2);
+    background: var(--oc-field);
+    color: var(--oc-ink-2);
+}
+
+.root-page .group-chip:has(input:checked) {
+    background: var(--oc-btn);
+    border-color: var(--oc-btn);
+    color: var(--oc-on-accent);
+}
+
+/* Sits outside the .order-actions form, so it needs its own gap to line up
+   with the action links stacked above it. */
+.root-page .view-address-btn {
+    display: block;
+    margin-top: 8px;
+}
+
+.root-page .address-box {
+    margin-top: 8px;
+    padding: 10px 12px;
+    background: var(--oc-tide-soft);
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--oc-ink);
+}
+
+@media (max-width: 900px) {
+    .root-page.page {
+        grid-template-columns: 1fr;
+    }
+
+    .root-page .sidebar {
+        position: static;
+        height: auto;
+        border-right: none;
+        border-bottom: 1px solid var(--oc-line);
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .root-page .sidebar a:last-child {
+        margin-top: 0;
+        padding-top: 9px;
+        border-top: none;
+    }
+
+    .root-page .content {
+        padding: 22px 18px 40px;
+    }
+}

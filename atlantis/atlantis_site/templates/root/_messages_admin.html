@@ -1,0 +1,14 @@
+{% comment %}
+Admin-only twin of root/_messages.html.
+
+The plain partial is shared with the public pages, so it can't carry the
+message level. Here the level becomes a class, which admin.css turns into a
+success / warning / error banner.
+{% endcomment %}
+{% if messages %}
+    <div class="messages">
+        {% for message in messages %}
+            <p class="message {{ message.tags }}">{{ message }}</p>
+        {% endfor %}
+    </div>
+{% endif %}

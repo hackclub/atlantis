@@ -5,7 +5,7 @@
 
 {% block content %}
 <div class="content">
-    {% include "root/_messages.html" %}
+    {% include "root/_messages_admin.html" %}
     <h1>Projects</h1>
     <h3>Manage Projects</h3>
     <form method="GET" class="users-search" role="search">
@@ -31,7 +31,7 @@
             Select all shown
         </label>
         <span id="bulkSelectedCount">0 selected</span>
-        <button type="submit" id="bulkDeleteButton" style="color: red;" disabled>db delete selected</button>
+        <button type="submit" id="bulkDeleteButton" class="danger" disabled>db delete selected</button>
     </form>
 
     <table class="users-table">
@@ -85,7 +85,7 @@
                     <br>
                     <form method="POST" action="{% url 'db_delete_project' project.id %}" class="db-delete-project-form" data-title="{{ project.title|default:'' }}" style="display:inline;">
                         {% csrf_token %}
-                        <button type="submit" class="link-button" style="color: red;">db delete</button>
+                        <button type="submit" class="link-button danger">db delete</button>
                     </form>
                 </td>
             </tr>

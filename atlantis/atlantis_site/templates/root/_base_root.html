@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
     {% include '_favicon.html' %}
 </head>
-<body class="page" id="{% block page_id %}base-page{% endblock %}">
+<body class="page root-page" id="{% block page_id %}base-page{% endblock %}">
     {% include 'root/_navbar_root.html' %}
 
     {% block content %}

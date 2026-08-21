@@ -5,7 +5,7 @@
 
 {% block content %}
 <div class="content">
-    {% include "root/_messages.html" %}
+    {% include "root/_messages_admin.html" %}
 
     <h1>Manage Shop Items</h1>
     <button type="button" id="openCreateItemModal">Create item</button>
@@ -43,7 +43,7 @@
                                 <br>
                                 <form action="{% url 'delete_item' item.id %}" method="post" class="delete-form" style="display: inline;">
                                     {% csrf_token %}
-                                    <button type="submit" class="delete-button link-button" style="color: red;">Delete</button>
+                                    <button type="submit" class="delete-button link-button">Delete</button>
                                 </form>
                             </td>
                         </tr>

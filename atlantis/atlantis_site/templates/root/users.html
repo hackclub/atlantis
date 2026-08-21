@@ -5,7 +5,7 @@
 
 {% block content %}
 <div class="content">
-    {% include "root/_messages.html" %}
+    {% include "root/_messages_admin.html" %}
     <h1>Users</h1>
     <h3>Manage Users</h3>
     <form method="GET" class="users-search" role="search">
@@ -52,9 +52,9 @@
                 <td>{{ user.hackclub_profile.layers|default:"0" }}</td>
                 <td>{{ user.groups.all|join:", "|default:"no groups found" }}</td>
                 {% if user.is_staff %}
-                <td style="color: green;">true</td>
+                <td class="is-yes">true</td>
                 {% else %}
-                <td style="color: red;">false</td>
+                <td class="is-no">false</td>
                 {% endif %}
                 <td>
                     <button

@@ -7,7 +7,7 @@
             <p class="project-byline">by {{ ship.project.owner.hackclub_profile.slack_username }}</p>
             <p>Type: {{ ship.project.editor_name }}</p>
             {% if ship.project.locked %}
-                <p style="color: red; font-weight: bold;">Locked</p>
+                <p class="locked-flag">Locked</p>
             {% endif %}
             <p>{{ ship.project.description }}</p>
             {% if ship.project.printablesUrl %}
@@ -22,12 +22,12 @@
                 {% if ship.project.locked %}
                     <form method="post" action="{% url 'unlock_project' ship.project.id %}">
                         {% csrf_token %}
-                        <button type="submit" style="color: red;">Unlock</button>
+                        <button type="submit" class="danger">Unlock</button>
                     </form>
                 {% else %}
                     <form method="post" action="{% url 'lock_project' ship.project.id %}">
                         {% csrf_token %}
-                        <button type="submit" style="color: red;">Lock</button>
+                        <button type="submit" class="danger">Lock</button>
                     </form>
                 {% endif %}
             </div>
