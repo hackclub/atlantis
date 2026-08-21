@@ -19,7 +19,7 @@ from datetime import timedelta
 import mimetypes
 
 from ...models import (
-    Project, Ship, Print, Journal, LookoutSession, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
+    Project, Ship, Journal, LookoutSession, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
 )
 from ... import lookout
 from .timelapse import _apply_session_payload
@@ -379,9 +379,6 @@ def project_detail(request, project_id):
         t2 = ship.t2_reviews.order_by('-reviewed_at').first()
         if t2 and t2.feedback:
             candidates.append((t2.reviewed_at, t2.feedback))
-        pr = ship.prints.exclude(decision=Print.Decision.PRINTING).order_by('-finished_time').first()
-        if pr and pr.feedback and pr.finished_time:
-            candidates.append((pr.finished_time, pr.feedback))
         return max(candidates, key=lambda x: x[0])[1] if candidates else ""
 
     for ship in ships:

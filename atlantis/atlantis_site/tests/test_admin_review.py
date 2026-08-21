@@ -112,22 +112,15 @@ class T1DecisionTests(BaseTestCase):
 			self.client.get(reverse("t1_decision", args=[self.ship.id])).status_code, 405
 		)
 
-	def test_approve_with_print_goes_to_print_queue(self):
-		self._decide(print="on")
-		self.ship.refresh_from_db()
-		self.assertEqual(self.ship.status, Ship.ShipStatus.PRINT_QUEUE)
-
-		t1 = T1.objects.get()
-		self.assertTrue(t1.approved)
-		self.assertTrue(t1.print)
-		self.assertEqual(t1.reviewer, self.reviewer)
-		self.assertEqual(t1.feedback, "nice")
-
-	def test_approve_without_print_goes_to_t2(self):
+	def test_approve_goes_to_t2(self):
 		self._decide()
 		self.ship.refresh_from_db()
 		self.assertEqual(self.ship.status, Ship.ShipStatus.T2_QUEUE)
-		self.assertFalse(T1.objects.get().print)
+
+		t1 = T1.objects.get()
+		self.assertTrue(t1.approved)
+		self.assertEqual(t1.reviewer, self.reviewer)
+		self.assertEqual(t1.feedback, "nice")
 
 	def test_deny_rejects_ship(self):
 		self._decide(approved="denied")
@@ -152,8 +145,8 @@ class T1DecisionTests(BaseTestCase):
 				self.assertEqual(T1.objects.count(), 0)
 
 	def test_ship_must_be_in_t1_queue(self):
-		for status in (Ship.ShipStatus.T2_QUEUE, Ship.ShipStatus.FINALIZED,
-					   Ship.ShipStatus.REJECTED, Ship.ShipStatus.PRINT_QUEUE):
+		for status in (Ship.ShipStatus.T2_QUEUE, Ship.ShipStatus.T3_QUEUE,
+					   Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED):
 			with self.subTest(status=status):
 				ship = make_ship(self.project, status=status, journal_minutes=())
 				response = self._decide(ship=ship)
@@ -216,11 +209,6 @@ class T2DecisionTests(BaseTestCase):
 		t2 = T2.objects.get()
 		self.assertEqual(t2.decision, T2.Decision.APPROVE)
 		self.assertEqual(t2.reviewer, self.reviewer)
-
-	def test_return_to_printers(self):
-		self._decide(decision=T2.Decision.RETURN_PRINT)
-		self.ship.refresh_from_db()
-		self.assertEqual(self.ship.status, Ship.ShipStatus.PRINT_QUEUE)
 
 	def test_return_to_t1(self):
 		self._decide(decision=T2.Decision.RETURN_T1)
@@ -315,7 +303,6 @@ class T3DecisionTests(BaseTestCase):
 		cases = {
 			T3.Decision.RETURN_T1: Ship.ShipStatus.T1_QUEUE,
 			T3.Decision.RETURN_T2: Ship.ShipStatus.T2_QUEUE,
-			T3.Decision.RETURN_PRINT: Ship.ShipStatus.PRINT_QUEUE,
 		}
 		for decision, expected_status in cases.items():
 			with self.subTest(decision=decision):
@@ -474,7 +461,7 @@ class InternalCommentTests(BaseTestCase):
 		organizer = grant_perms(make_user("organizer"), "organizer")
 		self.client.force_login(organizer)
 
-		for name in ("review_project", "ysws_review_project", "fraud_review_project", "print_project"):
+		for name in ("review_project", "ysws_review_project", "fraud_review_project"):
 			with self.subTest(page=name):
 				response = self.client.get(reverse(name, args=[self.ship.id]))
 				self.assertContains(response, "printables listing looks like a remix")
@@ -518,8 +505,8 @@ class InternalCommentTests(BaseTestCase):
 		)
 		self.assertNotContains(explore_view, "printables listing looks like a remix")
 
-	def test_printer_can_comment(self):
-		self.client.force_login(grant_perms(make_user("printerguy"), "printer"))
+	def test_t3_reviewer_can_comment(self):
+		self.client.force_login(grant_perms(make_user("fraudguy"), "t3_review"))
 		self._comment()
 		self.assertEqual(InternalComment.objects.count(), 1)
 

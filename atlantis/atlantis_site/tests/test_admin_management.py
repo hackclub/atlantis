@@ -9,7 +9,6 @@ from ..models import (
 	Item,
 	Journal,
 	Order,
-	Print,
 	Project,
 	Ship,
 	T1,
@@ -65,7 +64,7 @@ class OrganizerOnlyAccessTests(BaseTestCase):
 
 class AdminDashAccessTests(BaseTestCase):
 	def test_any_staff_perm_grants_access(self):
-		for codename in ("organizer", "fulfillment", "t1_review", "t2_review", "t3_review", "printer"):
+		for codename in ("organizer", "fulfillment", "t1_review", "t2_review", "t3_review"):
 			user = grant_perms(make_user(f"dash_{codename}"), codename)
 			self.client.force_login(user)
 			with self.subTest(perm=codename):
@@ -499,8 +498,6 @@ class MetricsViewTests(BaseTestCase):
 						  deductions=10, feedback="", justification="")
 		T3.objects.create(ship=ship, reviewer=reviewer, decision=T3.Decision.APPROVE,
 						  payout_time=120, airtable_time=150, internal_notes="")
-		Print.objects.create(ship=ship, printer=reviewer, weight=25,
-							 decision=Print.Decision.APPROVE)
 		item = Item.objects.create(name="Thing", description="x", cost=5)
 		Order.objects.create(owner=author, item=item, status=Order.OrderStatus.FULFILLED,
 							 fulfiller=reviewer)
@@ -517,7 +514,6 @@ class MetricsViewTests(BaseTestCase):
 		self.assertEqual(context["reviews"]["t1_total"], 1)
 		self.assertEqual(context["reviews"]["t1_approval_rate"], 100.0)
 		self.assertEqual(context["reviews"]["total_layers_paid"], 10)
-		self.assertEqual(context["reviews"]["print_total_weight"], 25)
 		self.assertEqual(context["shop"]["total_orders"], 1)
 		self.assertEqual(context["shop"]["layers_spent"], 5)
 		self.assertEqual(context["users"]["layers_in_circulation"], 30)

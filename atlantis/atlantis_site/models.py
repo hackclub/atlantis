@@ -5,7 +5,6 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.urls import reverse
-from django.utils import timezone
 
 
 def media_url(value):
@@ -75,7 +74,6 @@ class Profile(models.Model):
 	slack_username = models.CharField(max_length=64, blank=True, default="")
 	slack_pfp_url = models.CharField(max_length=200, blank=True, default="")
 	layers = models.IntegerField(default=0)
-	print_reward_kg = models.IntegerField(default=0)
 	# Encrypted (Fernet) JSON blob of the user's HCA OAuth token. Addresses are
 	# never stored: this token is what buys us one from HCA on demand, on an
 	# explicit "View Address".
@@ -172,8 +170,6 @@ class Ship(models.Model):
 	class ShipStatus(models.TextChoices):
 		REJECTED = "R", "Rejected"
 		T1_QUEUE = "T1", "Under T1 Review"
-		PRINT_QUEUE = "PQ", "In print queue"
-		BEING_PRINTED = "BP", "Being printed"
 		T2_QUEUE = "T2", "Under T2 Review"
 		T3_QUEUE = "T3", "Under fraud review"
 		FINALIZED = "F", "Finalized"
@@ -203,41 +199,6 @@ class T1(models.Model):
 	feedback = models.CharField(max_length=100)
 	internal_notes = models.CharField(max_length=100)
 	approved = models.BooleanField()
-	print = models.BooleanField(default=True)
-
-class Print(models.Model):
-	ship = models.ForeignKey(
-		Ship,
-		on_delete=models.CASCADE,
-		related_name="prints"
-	)
-	printer = models.ForeignKey(
-		User,
-		on_delete=models.PROTECT,
-		related_name="prints"
-	)
-
-	class Decision(models.TextChoices):
-		RETURN_T1 = "T1", "Returned to T1 Review"
-		UNCLAIMED = "U", "Unclaimed, back in printing queue"
-		PRINTING = "P", "Being printed"
-		APPROVE = "A", "Approve"
-
-	weight = models.IntegerField(null=True, blank=True)
-	decision = models.CharField(
-		max_length=2,
-		choices=Decision.choices,
-		default=Decision.PRINTING
-	)
-
-	claimed_time = models.DateTimeField(default=timezone.now)
-	unclaimed_time = models.DateTimeField(null=True, blank=True)
-	finished_time = models.DateTimeField(null=True, blank=True)
-
-	image_url = models.CharField(max_length=2048, blank=True)
-
-	feedback = models.CharField(max_length=100, blank=True)
-	internal_notes = models.CharField(max_length=100, blank=True)
 
 class T2(models.Model):
 	ship = models.ForeignKey(
@@ -252,7 +213,6 @@ class T2(models.Model):
 	)
 	class Decision(models.TextChoices):
 		RETURN_T1 = "T1", "Returned to T1 Review"
-		RETURN_PRINT = "P", "Returned to Printers"
 		APPROVE = "A", "Approved"
 
 	reviewed_at = models.DateTimeField(auto_now_add=True)
@@ -280,7 +240,6 @@ class T3(models.Model):
 
 	class Decision(models.TextChoices):
 		RETURN_T1 = "T1", "Returned to T1 Review"
-		RETURN_PRINT = "P", "Returned to Printers"
 		RETURN_T2 = "T2", "Returned to T2 Review"
 		APPROVE = "A", "Approved"
 
@@ -455,7 +414,6 @@ class Item(models.Model):
 	deleted = models.BooleanField(default=False)
 	imageUrl = models.URLField(max_length=2048, default="https://example.com")
 	category = models.CharField(max_length=40, default="Other")
-	is_print_reward = models.BooleanField(default=False)
 	stock = models.IntegerField(
 		default=-1,
 		help_text="Units available to order. -1 means unlimited stock.",
@@ -556,7 +514,6 @@ class Permissions(models.Model):
 			("t1_review", "T1 Project Review"),
 			("t2_review", "T2 Project Review"),
 			("t3_review", "T3/Fraud Project Review"),
-			("printer", "Project Printer"),
 			("fulfillment", "Fulfill shop orders"),
 			("organizer", "Access to everything")
 		]

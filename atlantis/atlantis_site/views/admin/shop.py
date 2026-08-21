@@ -192,27 +192,20 @@ def create_item(request):
         messages.error(request, "Stock must be -1 (unlimited) or a non-negative number.")
         return redirect("shop_dash")
 
-    is_print_reward = request.POST.get("is_print_reward") == "on"
-
     item = Item.objects.create(
         name = name,
         description = description,
         cost = cost,
         imageUrl = imageUrl,
         category = category,
-        is_print_reward = is_print_reward,
         stock = stock,
     )
-
-    if is_print_reward:
-        Item.objects.exclude(id=item.id).update(is_print_reward=False)
 
     record_audit(request, "create_item", target=f"Item #{item.id} ({item.name})", metadata={
         "item_id": item.id,
         "name": item.name,
         "cost": item.cost,
         "category": item.category,
-        "is_print_reward": is_print_reward,
         "stock": item.stock,
     })
 
@@ -262,15 +255,12 @@ def edit_item(request, item_id):
         messages.error(request, "Stock must be -1 (unlimited) or a non-negative number.")
         return redirect("shop_dash")
 
-    is_print_reward = request.POST.get("is_print_reward") == "on"
-
     previous = {
         "name": item.name,
         "description": item.description,
         "cost": item.cost,
         "imageUrl": item.imageUrl,
         "category": item.category,
-        "is_print_reward": item.is_print_reward,
         "stock": item.stock,
     }
 
@@ -279,17 +269,13 @@ def edit_item(request, item_id):
     item.cost = cost
     item.imageUrl = imageUrl
     item.category = category
-    item.is_print_reward = is_print_reward
     item.stock = stock
     item.save()
-
-    if is_print_reward:
-        Item.objects.exclude(id=item.id).update(is_print_reward=False)
 
     record_audit(request, "edit_item", target=f"Item #{item.id} ({item.name})", metadata={
         "item_id": item.id,
         "previous": previous,
-        "new": {"name": name, "description": description, "cost": cost, "imageUrl": imageUrl, "category": category, "is_print_reward": is_print_reward, "stock": stock},
+        "new": {"name": name, "description": description, "cost": cost, "imageUrl": imageUrl, "category": category, "stock": stock},
     })
 
     return redirect("shop_dash")

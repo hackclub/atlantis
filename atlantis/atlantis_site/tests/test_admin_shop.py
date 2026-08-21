@@ -27,7 +27,7 @@ class ShopAdminAccessTests(BaseTestCase):
 			reverse("shop_dash"),
 			reverse("fulfillment_dash"),
 		]
-		for user in (make_user("pleb"), grant_perms(make_user("printer_only"), "printer")):
+		for user in (make_user("pleb"), grant_perms(make_user("t1_only"), "t1_review")):
 			self.client.force_login(user)
 			for url in urls:
 				with self.subTest(user=user.username, url=url):

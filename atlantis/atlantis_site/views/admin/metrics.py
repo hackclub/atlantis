@@ -15,7 +15,6 @@ from ...models import (
     T1,
     T2,
     T3,
-    Print,
     Item,
     Order,
 )
@@ -105,8 +104,6 @@ def metrics(request):
 
     backlog = {
         "t1": status_counts.get(Ship.ShipStatus.T1_QUEUE, 0),
-        "print_queue": status_counts.get(Ship.ShipStatus.PRINT_QUEUE, 0),
-        "being_printed": status_counts.get(Ship.ShipStatus.BEING_PRINTED, 0),
         "t2": status_counts.get(Ship.ShipStatus.T2_QUEUE, 0),
         "t3": status_counts.get(Ship.ShipStatus.T3_QUEUE, 0),
     }
@@ -114,8 +111,6 @@ def metrics(request):
 
     pipeline = _add_bars([
         {"label": "T1 review", "value": backlog["t1"]},
-        {"label": "Print queue", "value": backlog["print_queue"]},
-        {"label": "Being printed", "value": backlog["being_printed"]},
         {"label": "T2 review", "value": backlog["t2"]},
         {"label": "Fraud (T3)", "value": backlog["t3"]},
     ])
@@ -136,7 +131,6 @@ def metrics(request):
     t1_total = T1.objects.count()
     t1_approved = T1.objects.filter(approved=True).count()
     t1_denied = T1.objects.filter(approved=False).count()
-    t1_print_requested = T1.objects.filter(print=True).count()
 
     t2_total = T2.objects.count()
     t2_decisions = dict(
@@ -166,27 +160,12 @@ def metrics(request):
         total_payout_minutes += payout_time or 0
         total_layers_paid += layers_for_minutes(payout_time or 0)
 
-    print_total = Print.objects.count()
-    print_decisions = dict(
-        Print.objects.values_list("decision").annotate(n=Count("id")).values_list("decision", "n")
-    )
-    print_decision_labels = dict(Print.Decision.choices)
-    print_breakdown = _add_bars([
-        {"label": label, "value": print_decisions.get(code, 0)}
-        for code, label in print_decision_labels.items()
-    ])
-    print_weight_agg = Print.objects.filter(weight__isnull=False).aggregate(
-        total=Sum("weight"), avg=Avg("weight")
-    )
-    prints_completed = Print.objects.filter(finished_time__isnull=False).count()
-
     reviews_stats = {
         "t1_total": t1_total,
         "t1_approved": t1_approved,
         "t1_denied": t1_denied,
         "t1_approval_rate": _pct(t1_approved, t1_total),
         "t1_denied_rate": _pct(t1_denied, t1_total),
-        "t1_print_requested": t1_print_requested,
         "t2_total": t2_total,
         "t2_breakdown": t2_breakdown,
         "t2_total_deductions_display": _fmt_minutes(t2_total_deductions),
@@ -195,15 +174,9 @@ def metrics(request):
         "t3_payout_display": _fmt_minutes(total_payout_minutes),
         "t3_airtable_display": _fmt_minutes(t3_total_airtable_minutes),
         "total_layers_paid": total_layers_paid,
-        "print_total": print_total,
-        "print_breakdown": print_breakdown,
-        "prints_completed": prints_completed,
-        "print_total_weight": print_weight_agg["total"] or 0,
-        "print_avg_weight": round(print_weight_agg["avg"] or 0, 1),
         "top_t1": _reviewer_leaderboard("t1_reviews"),
         "top_t2": _reviewer_leaderboard("t2_reviews"),
         "top_t3": _reviewer_leaderboard("t3_reviews"),
-        "top_printers": _reviewer_leaderboard("prints"),
     }
 
     total_items = Item.objects.count()

@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.db import transaction
 
 from ...models import InternalComment, Profile, Project, Ship, T1, T2, T3
-from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, grant_print_rewards, tracked_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back
+from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, tracked_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back
 
 T1_PAY = 1
 T2_PAY = 2
@@ -20,7 +20,6 @@ COMMENT_PERMS = [
     "atlantis_site.t1_review",
     "atlantis_site.t2_review",
     "atlantis_site.t3_review",
-    "atlantis_site.printer",
     "atlantis_site.organizer",
 ]
 
@@ -72,7 +71,6 @@ def t1_decision(request, ship_id):
         messages.error(request, "Feedback or internal notes too long (max 100 char)")
         return redirect("review_project", ship_id=ship_id)
 
-    print_requested = "print" in request.POST
     approved_raw = request.POST.get("approved", "").strip()
 
     if approved_raw not in ("approved", "denied"):
@@ -89,7 +87,7 @@ def t1_decision(request, ship_id):
             return redirect("review_dash")
 
         if approved:
-            ship.status = Ship.ShipStatus.PRINT_QUEUE if print_requested else Ship.ShipStatus.T2_QUEUE
+            ship.status = Ship.ShipStatus.T2_QUEUE
         else:
             ship.status = Ship.ShipStatus.REJECTED
 
@@ -100,7 +98,6 @@ def t1_decision(request, ship_id):
             ship=ship,
             feedback=feedback,
             internal_notes=internal_notes,
-            print=print_requested,
             approved=approved
         )
 
@@ -113,14 +110,13 @@ def t1_decision(request, ship_id):
         "t1_id": t1.id,
         "project": ship.project.title,
         "approved": approved,
-        "print_requested": print_requested,
         "new_ship_status": ship.status,
     })
 
     reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + T1_PAY
     reviewer.hackclub_profile.save()
 
-    messages.success(request, f'Successfully reviewed project "{ship.project.title}" with approved = {approved} and print = {print_requested}!')
+    messages.success(request, f'Successfully reviewed project "{ship.project.title}" with approved = {approved}!')
     return redirect("review_dash")
 
 @staff_member_required
@@ -195,9 +191,6 @@ def t2_decision(request, ship_id):
             case T2.Decision.APPROVE:
                 ship.status = Ship.ShipStatus.T3_QUEUE
                 message = "approved"
-            case T2.Decision.RETURN_PRINT:
-                ship.status = Ship.ShipStatus.PRINT_QUEUE
-                message = "returned to the printers"
             case T2.Decision.RETURN_T1:
                 ship.status = Ship.ShipStatus.T1_QUEUE
                 message = "returned to T1 reviewers"
@@ -311,9 +304,6 @@ def t3_decision(request, ship_id):
             case T3.Decision.RETURN_T2:
                 ship.status = Ship.ShipStatus.T2_QUEUE
                 message = "returned to T2 reviewers"
-            case T3.Decision.RETURN_PRINT:
-                ship.status = Ship.ShipStatus.PRINT_QUEUE
-                message = "returned to printers"
             case T3.Decision.APPROVE:
                 ship.status = Ship.ShipStatus.FINALIZED
                 profile = Profile.objects.select_for_update().get(user=ship.project.owner)
@@ -348,23 +338,6 @@ def t3_decision(request, ship_id):
         "payout_layers": payout_layers,
         "new_ship_status": ship.status,
     })
-
-    if decision == T3.Decision.APPROVE:
-        printers = {p.printer for p in ship.prints.filter(weight__isnull=False).select_related("printer")}
-        reward_missing_item = False
-        for printer in printers:
-            result = grant_print_rewards(printer, request=request)
-            if result["no_item"]:
-                reward_missing_item = True
-            if result["created"]:
-                printer_slack_id = printer.hackclub_profile.slack_id
-                if printer_slack_id:
-                    send_slack_dm(
-                        f"You've hit {result['milestone']}kg printed! A reward order has been created for you \N{PARTY POPPER}",
-                        printer_slack_id,
-                    )
-        if reward_missing_item:
-            messages.warning(request, "A printer earned a reward but no reward item is set. Designate one in shop management, then grant it from print rewards.")
 
     reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + T3_PAY
     reviewer.hackclub_profile.save()

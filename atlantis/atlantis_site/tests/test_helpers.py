@@ -5,14 +5,12 @@ from unittest.mock import MagicMock, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory, TestCase
-from django.utils import timezone
 
 from slack_sdk.errors import SlackApiError
 
 from ..models import (
 	AuditLog,
 	InternalComment,
-	Print,
 	T1,
 	T2,
 	detect_editor,
@@ -234,26 +232,18 @@ class BuildReviewHistoryTests(TestCase):
 		comment = InternalComment.objects.create(
 			ship=self.ship, author=self.user, text="checking the remix claim"
 		)
-		printed = Print.objects.create(
-			ship=self.ship, printer=self.user, finished_time=timezone.now()
-		)
 		t2 = T2.objects.create(
 			ship=self.ship, reviewer=self.user, feedback="good", justification="solid"
 		)
 
 		events = build_review_history(self.ship)
 
-		self.assertEqual([e["type"] for e in events], ["t1", "comment", "print", "t2"])
+		self.assertEqual([e["type"] for e in events], ["t1", "comment", "t2"])
 		self.assertEqual([e["label"] for e in events],
-						 ["T1 Review", "Internal comment", "Print", "T2 Review"])
+						 ["T1 Review", "Internal comment", "T2 Review"])
 		self.assertEqual([e["at"] for e in events],
-						 [t1.reviewed_at, comment.created_at, printed.finished_time, t2.reviewed_at])
+						 [t1.reviewed_at, comment.created_at, t2.reviewed_at])
 		self.assertEqual({e["actor"] for e in events}, {"Historian"})
-
-	def test_unfinished_print_sorts_by_claim_time(self):
-		claimed = Print.objects.create(ship=self.ship, printer=self.user)
-		events = build_review_history(self.ship)
-		self.assertEqual(events[0]["at"], claimed.claimed_time)
 
 	def test_comments_from_other_ships_of_the_project_are_flagged(self):
 		earlier_ship = make_ship(self.project, journal_minutes=())

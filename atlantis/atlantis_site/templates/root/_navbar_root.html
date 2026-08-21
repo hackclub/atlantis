@@ -4,12 +4,6 @@
         <a href="/root/shop">shop management</a>
         <a href="/root/fulfillment">fulfillment</a>
     {% endif %}
-    {% if perms.atlantis_site.printer or perms.atlantis_site.organizer %}
-        <a href="/root/print">print</a>
-    {% endif %}
-    {% if perms.atlantis_site.organizer %}
-        <a href="/root/print/rewards">print rewards</a>
-    {% endif %}
     {% if perms.atlantis_site.t1_review or perms.atlantis_site.organizer or perms.atlantis_site.t2_review or perms.atlantis_site.t3_review %}
         <a href="/root/review">review</a>
     {% endif %}

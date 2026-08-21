@@ -22,17 +22,8 @@
                 <p class="review-event-byline">{{ event.actor }} &middot; {{ event.at|date:"M j, Y, g:i a" }}</p>
                 {% if event.type == "t1" %}
                     <p><strong>Approved:</strong> {{ event.review.approved }}</p>
-                    <p><strong>Print:</strong> {{ event.review.print }}</p>
                     <p><strong>Feedback:</strong> {{ event.review.feedback }}</p>
                     <p><strong>Internal:</strong> {{ event.review.internal_notes }}</p>
-                {% elif event.type == "print" %}
-                    <p><strong>Action:</strong> {{ event.print.get_decision_display }}</p>
-                    <p><strong>Weight:</strong> {{ event.print.weight }}</p>
-                    <p><strong>Feedback:</strong> {{ event.print.feedback }}</p>
-                    <p><strong>Internal:</strong> {{ event.print.internal_notes }}</p>
-                    {% if event.print.image_url %}
-                        <p><strong>Image:</strong> <a href="{{ event.print.image_url }}" target="_blank" rel="noreferrer">{{ event.print.image_url }}</a></p>
-                    {% endif %}
                 {% elif event.type == "t2" %}
                     <p><strong>Decision:</strong> {{ event.review.get_decision_display }}</p>
                     <p><strong>Deductions:</strong> {{ event.review.deductions }}</p>

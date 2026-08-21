@@ -2,14 +2,13 @@ from django.contrib.auth.decorators import user_passes_test
 from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
-from django.db import transaction
 from django.db.models import Count, Sum
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
-from ..models import AuditLog, InternalComment, LookoutSession, Print, Ship, Item, Order, Profile, detect_editor
+from ..models import AuditLog, InternalComment, LookoutSession, detect_editor
 
 from functools import wraps
 
@@ -98,7 +97,7 @@ def format_minutes(minutes):
     return f"{minutes // 60}h {minutes % 60}m"
 
 # Local-development escape hatch. Recording real Lookout footage to clear the
-# 3h/2h ship gates makes the ship -> review -> print -> payout chain untestable
+# 3h/2h ship gates makes the ship -> review -> payout chain untestable
 # by hand, so organizers running with DEBUG on may ship with no journals and no
 # tracked time. BOTH conditions are required: with DEBUG off this is dead code
 # no matter who is signed in, so an organizer in production gains nothing.
@@ -113,7 +112,7 @@ def internal_comments_for_project(project):
     )
 
 def build_review_history(ship):
-    """Everything reviewers did to a ship — decisions, prints, and internal
+    """Everything reviewers did to a ship — decisions and internal
     comments — as one oldest-first list. /root pages only: it carries internal
     notes the project owner must never see."""
     events = []
@@ -124,14 +123,6 @@ def build_review_history(ship):
             "review": t1,
             "actor": display_name(t1.reviewer),
             "at": t1.reviewed_at,
-        })
-    for print_action in ship.prints.all():
-        events.append({
-            "type": "print",
-            "label": "Print",
-            "print": print_action,
-            "actor": display_name(print_action.printer),
-            "at": print_action.finished_time or print_action.claimed_time,
         })
     for t2 in ship.t2_reviews.all():
         events.append({
@@ -491,62 +482,3 @@ def reviewer_leaderboard(relation, limit=10):
         .order_by("-n")[:limit]
     )
     return add_bars([{"label": display_name(u), "value": u.n} for u in rows])
-
-PRINT_REWARD_GRAMS = 1000
-
-def finalized_print_grams(printer):
-    return (
-        Print.objects.filter(
-            printer=printer,
-            weight__isnull=False,
-            ship__status=Ship.ShipStatus.FINALIZED,
-        ).aggregate(total=Sum("weight"))["total"]
-        or 0
-    )
-
-
-def get_print_reward_item():
-    return Item.objects.filter(is_print_reward=True, deleted=False).first()
-
-
-def grant_print_rewards(printer, request=None):
-    with transaction.atomic():
-        profile = Profile.objects.select_for_update().get(user=printer)
-        total_grams = finalized_print_grams(printer)
-        milestone = total_grams // PRINT_REWARD_GRAMS
-        owed = milestone - profile.print_reward_kg
-
-        if owed <= 0:
-            return {"created": 0, "owed": 0, "milestone": milestone, "no_item": False, "order": None}
-
-        reward_item = get_print_reward_item()
-        if reward_item is None:
-            return {"created": 0, "owed": owed, "milestone": milestone, "no_item": True, "order": None}
-
-        previous_kg = profile.print_reward_kg
-        order = Order.objects.create(
-            owner=printer,
-            item=reward_item,
-            quantity=owed,
-            cost=0,
-            status=Order.OrderStatus.PENDING,
-            admin_notes=f"Auto print reward: {milestone}kg printed"[:100],
-        )
-        if not reward_item.unlimited_stock:
-            reward_item.stock = max(0, reward_item.stock - owed)
-            reward_item.save(update_fields=["stock"])
-        profile.print_reward_kg = milestone
-        profile.save(update_fields=["print_reward_kg"])
-
-    if request is not None:
-        record_audit(request, "grant_print_reward", target=f"User #{printer.id} ({display_name(printer)})", metadata={
-            "printer": printer.username,
-            "order_id": order.id,
-            "reward_item": reward_item.name,
-            "quantity": owed,
-            "milestone_kg": milestone,
-            "previous_kg": previous_kg,
-            "total_grams": total_grams,
-        })
-
-    return {"created": owed, "owed": 0, "milestone": milestone, "no_item": False, "order": order}

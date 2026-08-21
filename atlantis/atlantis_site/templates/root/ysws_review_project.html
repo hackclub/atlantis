@@ -30,7 +30,6 @@
                     <select name="decision" id="decision_select" required>
                         <option value="" disabled selected>Decision</option>
                         <option value="A">Approve</option>
-                        <option value="P">Return to Printers</option>
                         <option value="T1">Return to T1</option>
                     </select>
                 </div>
@@ -64,7 +63,7 @@
             submitBtn.textContent = 'Approve';
         } else {
             justificationInput.placeholder = 'Internal Notes (400 characters, private)';
-            submitBtn.textContent = this.value === 'P' ? 'Return to Printers' : 'Return to T1';
+            submitBtn.textContent = 'Return to T1';
         }
     });
 </script>

@@ -27,7 +27,7 @@ VALID_EDITOR_LINK = "https://cad.onshape.com/documents/abc123"
 VALID_R2_URL = "https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/models/thing.f3d"
 PROJECT_IMAGE_KEY = "images/screenshot.png"
 
-ALL_SITE_PERMS = ["t1_review", "t2_review", "t3_review", "printer", "fulfillment", "organizer"]
+ALL_SITE_PERMS = ["t1_review", "t2_review", "t3_review", "fulfillment", "organizer"]
 
 
 def make_user(username="user", layers=0, slack_id="U0TEST", slack_username=None, hca_token=None, **user_kwargs):
@@ -141,7 +141,6 @@ def message_texts(response):
 class BaseTestCase(TestCase):
 	SLACK_DM_TARGETS = [
 		"atlantis_site.views.admin.review.send_slack_dm",
-		"atlantis_site.views.admin.print.send_slack_dm",
 		"atlantis_site.views.admin.shop.send_slack_dm",
 	]
 	MODEL_INFO_TARGETS = [
@@ -149,7 +148,6 @@ class BaseTestCase(TestCase):
 		"atlantis_site.views.admin.review.get_model_info",
 	]
 	IMAGE_URL_TARGETS = [
-		"atlantis_site.views.admin.print.is_valid_image_url",
 		"atlantis_site.views.admin.shop.is_valid_image_url",
 		"atlantis_site.views.admin.management.is_valid_image_url",
 	]

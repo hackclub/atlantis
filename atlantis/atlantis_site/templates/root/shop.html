@@ -33,13 +33,13 @@
                                     <img src="{{ item.imageUrl }}" alt="{{ item.name }}" loading="lazy" style="width: 40px; height: 40px; object-fit: cover;">
                                 {% endif %}
                             </td>
-                            <td><a href="{% url 'item_detail' item.id %}">{{ item.name }}</a>{% if item.is_print_reward %} <span class="reward-badge" title="Auto-ordered when a printer hits each 1kg milestone">(print reward)</span>{% endif %}</td>
+                            <td><a href="{% url 'item_detail' item.id %}">{{ item.name }}</a></td>
                             <td>{{ item.description|truncatechars:80 }}</td>
                             <td>{{ item.category }}</td>
                             <td>{{ item.cost }} pearls</td>
                             <td>{% if item.unlimited_stock %}Unlimited{% else %}{{ item.stock }}{% endif %}</td>
                             <td>
-                                <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}" data-category="{{ item.category }}" data-is-print-reward="{{ item.is_print_reward|yesno:'1,' }}" data-stock="{{ item.stock }}">Edit</button>
+                                <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}" data-category="{{ item.category }}" data-stock="{{ item.stock }}">Edit</button>
                                 <br>
                                 <form action="{% url 'delete_item' item.id %}" method="post" class="delete-form" style="display: inline;">
                                     {% csrf_token %}
@@ -94,11 +94,6 @@
                 <small>-1 means unlimited</small>
             </label>
 
-            <label class="checkbox-label">
-                <input type="checkbox" name="is_print_reward">
-                Use as the 1kg print reward (replaces any current reward item)
-            </label>
-
             <div class="modal-actions">
                 <button type="button" id="cancelCreateModal">Cancel</button>
                 <button type="submit">Create</button>
@@ -144,11 +139,6 @@
                 Stock
                 <input id="editStock" name="stock" type="number" min="-1" placeholder="-1">
                 <small>-1 means unlimited</small>
-            </label>
-
-            <label class="checkbox-label">
-                <input type="checkbox" id="editIsPrintReward" name="is_print_reward">
-                Use as the 1kg print reward (replaces any current reward item)
             </label>
 
             <div class="modal-actions">
@@ -237,7 +227,6 @@
         const editImageUrl = document.getElementById('editImageUrl');
         const editCategory = document.getElementById('editCategory');
         const editStock = document.getElementById('editStock');
-        const editIsPrintReward = document.getElementById('editIsPrintReward');
         const cancelEditBtn = document.getElementById('cancelEditModal');
 
         function openEditModal() {
@@ -266,7 +255,6 @@
             const imageUrl = openEditBtn.dataset.imageUrl || '';
             const category = openEditBtn.dataset.category || '';
             const stock = openEditBtn.dataset.stock || '-1';
-            const isPrintReward = openEditBtn.dataset.isPrintReward === '1';
 
             editForm.action = '/shop/' + id + '/edit/';
             editName.value = name;
@@ -275,7 +263,6 @@
             editImageUrl.value = imageUrl;
             editCategory.value = category;
             editStock.value = stock;
-            editIsPrintReward.checked = isPrintReward;
 
             openEditModal();
             closeAllMenus();

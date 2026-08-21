@@ -40,10 +40,6 @@
                     {% endif %}
                 </div>
                 <div class="form-row">
-                    <label for="print_required">Print Required?</label>
-                    <input type="checkbox" id="print_required" name="print" {% if not hasMake %}checked{% endif %}>
-                </div>
-                <div class="form-row">
                     <label for="approved_checkbox">Approved?</label>
                     <input type="checkbox" id="approved_checkbox">
                     <input type="hidden" id="approved_hidden" name="approved" value="denied">
@@ -60,24 +56,19 @@
 
 <script>
     const approvedCheckbox = document.getElementById('approved_checkbox');
-    const printRequiredCheckbox = document.getElementById('print_required');
     const approvedHidden = document.getElementById('approved_hidden');
     const submitButton = document.getElementById('review_button');
 
     function updateButtonText() {
-        if (!approvedCheckbox.checked) {
-            approvedHidden.value = 'denied';
-            submitButton.textContent = 'Reject';
-        } else if (approvedCheckbox.checked && printRequiredCheckbox.checked) {
+        if (approvedCheckbox.checked) {
             approvedHidden.value = 'approved';
             submitButton.textContent = 'Approve';
-        } else if (approvedCheckbox.checked && !printRequiredCheckbox.checked) {
-            approvedHidden.value = 'approved';
-            submitButton.textContent = 'Approve (no print)';
+        } else {
+            approvedHidden.value = 'denied';
+            submitButton.textContent = 'Reject';
         }
     }
 
     approvedCheckbox.addEventListener('change', updateButtonText);
-    printRequiredCheckbox.addEventListener('change', updateButtonText);
 </script>
 {% endblock %}

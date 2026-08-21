@@ -80,12 +80,12 @@
     </section>
 
     <section class="metrics-section">
-        <h2>Reviews &amp; printing</h2>
+        <h2>Reviews</h2>
         <div class="stat-grid">
             <div class="stat-card accent">
                 <div class="stat-value">{{ reviews.t1_total }}</div>
                 <div class="stat-label">T1 reviews</div>
-                <div class="stat-sub">{{ reviews.t1_print_requested }} print requested</div>
+                <div class="stat-sub">{{ reviews.t1_approved }} approved</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value">{{ reviews.t2_total }}</div>
@@ -101,16 +101,6 @@
                 <div class="stat-value">{{ reviews.total_layers_paid }}</div>
                 <div class="stat-label">Pearls paid out</div>
                 <div class="stat-sub">for {{ reviews.t3_payout_display }} approved</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ reviews.print_total }}</div>
-                <div class="stat-label">Print records</div>
-                <div class="stat-sub">{{ reviews.prints_completed }} completed</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ reviews.print_total_weight }}g</div>
-                <div class="stat-label">Filament used</div>
-                <div class="stat-sub">avg {{ reviews.print_avg_weight }}g / print</div>
             </div>
         </div>
 
@@ -132,11 +122,9 @@
             </div>
             {% include "root/_metric_chart.html" with title="T2 decisions" rows=reviews.t2_breakdown %}
             {% include "root/_metric_chart.html" with title="T3 decisions" rows=reviews.t3_breakdown %}
-            {% include "root/_metric_chart.html" with title="Print decisions" rows=reviews.print_breakdown %}
             {% include "root/_metric_chart.html" with title="Top T1 reviewers" rows=reviews.top_t1 empty="No reviews yet" %}
             {% include "root/_metric_chart.html" with title="Top T2 reviewers" rows=reviews.top_t2 empty="No reviews yet" %}
             {% include "root/_metric_chart.html" with title="Top T3 reviewers" rows=reviews.top_t3 empty="No reviews yet" %}
-            {% include "root/_metric_chart.html" with title="Top printers" rows=reviews.top_printers empty="No prints yet" %}
         </div>
     </section>
 

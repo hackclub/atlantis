@@ -166,8 +166,7 @@ class DeleteProjectTests(BaseTestCase):
 		self.assertFalse(self.project.deleted)
 
 	def test_cannot_delete_with_ship_in_flight(self):
-		for status in (Ship.ShipStatus.T1_QUEUE, Ship.ShipStatus.PRINT_QUEUE,
-					   Ship.ShipStatus.BEING_PRINTED, Ship.ShipStatus.T2_QUEUE,
+		for status in (Ship.ShipStatus.T1_QUEUE, Ship.ShipStatus.T2_QUEUE,
 					   Ship.ShipStatus.T3_QUEUE):
 			with self.subTest(status=status):
 				project = make_project(self.user)
