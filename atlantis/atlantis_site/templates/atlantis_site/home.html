@@ -104,11 +104,144 @@
 
         .landing {
             text-align: left;
+            box-sizing: border-box;
+            min-height: 100vh;
             padding-top: clamp(32px, 15vh, 135px);
             padding-left: clamp(22px, 11.1vw, 160px);
             padding-right: clamp(22px, 6vw, 80px);
             padding-bottom: clamp(24px, 6vh, 60px);
         }
+
+        /* ---- FAQ panel ---------------------------------------------------
+           transition.png is a starfish rock band that straddles the seam
+           between the landing hero and the FAQ panel; background_faq.png is
+           the panel's own artwork. Both are sized as a percentage of the
+           section width, so the whole composition scales as one piece and
+           the seam never drifts.
+           ------------------------------------------------------------------ */
+
+        #faq {
+            position: relative;
+            box-sizing: border-box;
+
+            /* One type scale for the whole panel. Every size below is in `em`
+               off this, so the panel's height stays a fixed fraction of its
+               width -- which is what keeps the content ending exactly at the
+               artwork's waterline instead of trailing off into flat blue. */
+            font-size: clamp(13px, 1.5vw, 38px);
+
+            /* Flat colour of the bottom strip of background_faq.png, so the
+               panel continues seamlessly if the FAQ list outgrows the art. */
+            background-color: #036890;
+            background-image: url("{% static 'atlantis_site/assets/img/landing/background_faq.png' %}");
+            background-repeat: no-repeat;
+            background-position: center top;
+            background-size: 100% auto;
+
+            /* Always reach the artwork's waterline so the scene is never cut
+               off mid-sky on very wide screens. */
+            min-height: 58.5vw;
+
+            /* Top padding clears the rock band, whose artwork reaches ~22% of
+               the width below the seam. */
+            padding: 22.5% clamp(22px, 6vw, 80px) 2%;
+        }
+
+        #faq-transition {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            aspect-ratio: 2500 / 1462;
+
+            /* The band is opaque edge to edge only between 27.7% and 50.3%
+               of its height. Sitting the seam at 29% keeps it hidden while
+               leaving as little of the rock as possible over the hero. */
+            transform: translateY(-29%);
+
+            background-image: url("{% static 'atlantis_site/assets/img/landing/transition.png' %}");
+            background-repeat: no-repeat;
+            background-position: center top;
+            background-size: 100% auto;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .faq-inner {
+            position: relative;
+            z-index: 2;
+            max-width: 38em;
+            margin: 0 auto;
+        }
+
+        #faq-title {
+            font-family: "Waterlily";
+            font-size: 2.9em;
+            font-weight: 300;
+            line-height: 1.1;
+            color: #00528c;
+            text-align: center;
+            margin: 0 0 0.34em;
+        }
+
+        /* ---- one dropdown: <details class="faq-item"> ---- */
+
+        .faq-item {
+            background-color: #E5F2FC;
+            border: 0.1em solid #00528c;
+            border-radius: 0.75em;
+            margin-bottom: 0.45em;
+        }
+
+        .faq-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .faq-item summary {
+            display: flex;
+            align-items: center;
+            gap: 0.6em;
+            padding: 0.36em 0.75em;
+            cursor: pointer;
+            list-style: none;
+            font-family: "Atlantis Hand";
+            font-size: 1.0em;
+            line-height: 1.2;
+            color: #00528c;
+        }
+
+        .faq-item summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .faq-item summary::after {
+            content: "";
+            flex: none;
+            margin-left: auto;
+            width: 0.4em;
+            height: 0.4em;
+            border-right: 0.1em solid currentColor;
+            border-bottom: 0.1em solid currentColor;
+            transform: translateY(-0.12em) rotate(45deg);
+            transition: transform 0.18s ease-out;
+        }
+
+        .faq-item[open] summary::after {
+            transform: translateY(0.06em) rotate(-135deg);
+        }
+
+        .faq-item > :not(summary) {
+            margin: 0 0 0.9em;
+            padding: 0 1.25em;
+            color: #063f66;
+            font-size: 0.6em;
+            line-height: 1.55;
+        }
+
+        .faq-item > :not(summary) a {
+            color: #00528c;
+        }
+
     </style>
 </head>
 <body>
@@ -125,6 +258,43 @@
             <a href="https://forms.hackclub.com/atlantis-rsvp" id="rsvp-button">RSVP</a>
         </div>
 
+        <section id="faq">
+            <div id="faq-transition" aria-hidden="true"></div>
+
+            <div class="faq-inner">
+                <h2 id="faq-title">FAQ</h2>
+
+                <details class="faq-item">
+                    <summary>Who can participate?</summary>
+                    <p>Any teenager, from anywhere in the world!</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>How much do I have to work?</summary>
+                    <p>Five hours of CAD work a week, 8 weeks. We track time using timelapses!</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Which 3D printer do I get?</summary>
+                    <p>Depends on how much work you do! 5 hours a week will get you a base printer - Bambu A1 Mini, Creality Ender 3 V3 SE, Elegoo Neptune 4, or a $250 grant to buy one yourself! More work = better printer!</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Do I need to know CAD already?</summary>
+                    <p>Nope! We're open to people of all skill levels, from beginners to experts!</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>Is this legit?</summary>
+                    <p>Yes! We're <a href="https://hackclub.com">Hack Club</a>, a 501(c)(3) nonprofit that encourages teens around the world to make real projects and rewards them for it!</p>
+                </details>
+
+                <details class="faq-item">
+                    <summary>I have another question!</summary>
+                    <p>Ask in the Hack Club Slack! We're in <strong><a href="https://hackclub.enterprise.slack.com/archives/C0ATSHVECBG">#atlantis</a></strong>.</p>
+                </details>
+            </div>
+        </section>
     </div>
 
     <script>
