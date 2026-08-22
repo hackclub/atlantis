@@ -1,0 +1,165 @@
+{% comment %}
+Turning the pages, the slips laid over the book, and a lapse close up:
+everything a reader needs, with none of the owner's editing.
+{% endcomment %}
+    <script>
+        // ---- the book: two pages showing, the rest waiting in the store ----
+        (function () {
+            const body = document.body;
+            const store = document.getElementById('page-store');
+            const pages = Array.from(store.querySelectorAll('.page'));
+            const slotLeft = document.getElementById('sheet-left');
+            const slotRight = document.getElementById('sheet-right');
+            const prevBtn = document.getElementById('turn-prev');
+            const nextBtn = document.getElementById('turn-next');
+            const spreads = Math.ceil(pages.length / 2);
+            const wideEnough = window.matchMedia('(min-width: 820px) and (min-aspect-ratio: 6/5)');
+
+            let spread = 0;
+
+            function park() {
+                // Re-append in order so the narrow-screen layout reads top to bottom.
+                pages.forEach((page) => store.appendChild(page));
+            }
+
+            function show(index) {
+                spread = Math.max(0, Math.min(index, spreads - 1));
+                park();
+                if (pages[spread * 2]) slotLeft.appendChild(pages[spread * 2]);
+                if (pages[spread * 2 + 1]) slotRight.appendChild(pages[spread * 2 + 1]);
+                prevBtn.hidden = spread === 0;
+                nextBtn.hidden = spread >= spreads - 1;
+            }
+
+            function turn(direction) {
+                const target = spread + direction;
+                if (target < 0 || target >= spreads) return;
+                show(target);
+            }
+
+            function layout() {
+                if (wideEnough.matches) {
+                    body.dataset.mode = 'book';
+                    show(spread);
+                } else {
+                    body.dataset.mode = 'flow';
+                    park();
+                }
+            }
+
+            nextBtn.addEventListener('click', () => turn(1));
+            prevBtn.addEventListener('click', () => turn(-1));
+
+            document.addEventListener('keydown', (e) => {
+                if (body.dataset.mode !== 'book') return;
+                if (document.querySelector('.slip-layer:not([hidden])')) return;
+                const tag = (e.target.tagName || '').toLowerCase();
+                if (tag === 'input' || tag === 'textarea') return;
+                if (e.key === 'ArrowRight') turn(1);
+                if (e.key === 'ArrowLeft') turn(-1);
+            });
+
+            wideEnough.addEventListener('change', layout);
+            layout();
+        })();
+
+        // ---- a note left on the desk is dismissed by touching it ----
+        (function () {
+            const note = document.querySelector('.messages');
+            if (note) note.addEventListener('click', () => note.remove());
+        })();
+
+        // ---- slips laid over the book ----
+        (function () {
+            const layer = document.getElementById('slip-layer');
+            const slips = Array.from(layer.querySelectorAll('.slip'));
+            let opener = null;
+
+            function open(id) {
+                slips.forEach((slip) => { slip.hidden = slip.id !== id; });
+                layer.hidden = false;
+                const focusable = layer.querySelector('.slip:not([hidden]) input, .slip:not([hidden]) button');
+                if (focusable) focusable.focus();
+            }
+
+            function close() {
+                layer.hidden = true;
+                slips.forEach((slip) => { slip.hidden = true; });
+                layer.dispatchEvent(new CustomEvent('slip:closed'));
+                if (opener) opener.focus();
+                opener = null;
+            }
+
+            document.addEventListener('click', (e) => {
+                const trigger = e.target.closest('[data-slip]');
+                if (trigger) {
+                    opener = trigger;
+                    open(trigger.dataset.slip);
+                    return;
+                }
+                if (e.target.closest('[data-close]')) close();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && !layer.hidden) close();
+            });
+
+            window.atlantisSlip = { open, close, layer, setOpener: (el) => { opener = el; } };
+        })();
+
+        // ---- a lapse, close up ----
+        (function () {
+            const media = document.getElementById('zoom-media');
+            const title = document.getElementById('zoom-title');
+            const meta = document.getElementById('zoom-meta');
+            const download = document.getElementById('zoom-download');
+            let viewer = null;
+
+            function mountViewer(container) {
+                if (window.AtlantisSTL) {
+                    viewer = window.AtlantisSTL.init(container);
+                } else {
+                    document.addEventListener('atlantis:stl-ready', () => {
+                        if (container.isConnected) viewer = window.AtlantisSTL.init(container);
+                    }, { once: true });
+                }
+            }
+
+            document.addEventListener('click', (e) => {
+                const snap = e.target.closest('.js-zoom');
+                if (!snap) return;
+
+                title.textContent = snap.dataset.title || 'Lapse';
+                meta.innerHTML = snap.dataset.meta || '';
+                meta.hidden = !snap.dataset.meta;
+                media.replaceChildren();
+
+                const image = document.createElement('img');
+                image.src = snap.dataset.image || '';
+                image.alt = snap.dataset.title || '';
+                media.appendChild(image);
+
+                const model = snap.dataset.model;
+                media.classList.toggle('zoom-media--single', !model);
+                download.hidden = !model;
+                if (model) {
+                    download.href = model;
+                    const stage = document.createElement('div');
+                    stage.className = 'stl-viewer';
+                    stage.dataset.stlUrl = model;
+                    media.appendChild(stage);
+                    mountViewer(stage);
+                }
+
+                window.atlantisSlip.setOpener(snap);
+                window.atlantisSlip.open('slip-zoom');
+            });
+
+            // A WebGL context per lapse would pile up, so it goes when the slip does.
+            window.atlantisSlip.layer.addEventListener('slip:closed', () => {
+                if (viewer && viewer.dispose) viewer.dispose();
+                viewer = null;
+                media.replaceChildren();
+            });
+        })();
+    </script>

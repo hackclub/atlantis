@@ -1,0 +1,192 @@
+{% comment %}
+Paging the shelf three books at a time. Reads --per-page back out of the
+stylesheet, so the grouping and the sizing can never disagree.
+{% endcomment %}
+    <script>
+        /* ---------- the deck ----------
+           The shelf holds one row of books at a time, centred in the window.
+           Nothing scrolls: a wheel notch, a swipe or an arrow key past a
+           threshold slides the next row up, and anything short of that
+           threshold leaves the current row where it is. */
+        (function () {
+            const deck = document.getElementById("deck");
+            const shelf = document.getElementById("shelf");
+            const dots = document.getElementById("deckDots");
+            if (!deck || !shelf) return;
+
+            const items = Array.from(shelf.children);
+            if (!items.length) return;
+
+            /* Beyond this many shelves the dot column gets a count instead. */
+            const MAX_DOTS = 12;
+
+            let pages = [];
+            let perPage = 0;
+            let page = 0;
+            let counter = null;
+            let counted = false;
+
+            function wantedPerPage() {
+                const n = parseInt(getComputedStyle(shelf).getPropertyValue("--per-page"), 10);
+                return n > 0 ? n : 3;
+            }
+
+            function build(anchorItem) {
+                perPage = wantedPerPage();
+                const frag = document.createDocumentFragment();
+                for (let i = 0; i < items.length; i += perPage) {
+                    const sheet = document.createElement("div");
+                    sheet.className = "shelf-page";
+                    sheet.style.setProperty("--i", String(i / perPage));
+                    sheet.append(...items.slice(i, i + perPage));
+                    frag.append(sheet);
+                }
+                shelf.replaceChildren(frag);
+                pages = Array.from(shelf.children);
+
+                dots.replaceChildren();
+                counter = null;
+                counted = pages.length > MAX_DOTS;
+                if (counted) {
+                    counter = document.createElement("p");
+                    counter.className = "deck-count";
+                    dots.append(counter);
+                } else if (pages.length > 1) {
+                    pages.forEach((_, i) => {
+                        const dot = document.createElement("button");
+                        dot.type = "button";
+                        dot.className = "deck-dot";
+                        dot.setAttribute("aria-label", "Shelf " + (i + 1) + " of " + pages.length);
+                        dot.addEventListener("click", () => go(i));
+                        dots.append(dot);
+                    });
+                }
+                document.body.classList.toggle("deck-paged", pages.length > 1);
+                document.body.classList.toggle("deck-counted", counted);
+
+                // Keep whichever books were on screen on screen.
+                show(Math.floor((anchorItem || 0) / perPage));
+            }
+
+            function show(n) {
+                page = Math.max(0, Math.min(pages.length - 1, n));
+                shelf.style.setProperty("--page", String(page));
+                pages.forEach((sheet, i) => {
+                    const on = i === page;
+                    sheet.toggleAttribute("inert", !on);
+                    sheet.setAttribute("aria-hidden", on ? "false" : "true");
+                });
+                if (counter) {
+                    counter.textContent = (page + 1) + " / " + pages.length;
+                } else {
+                    Array.from(dots.children).forEach((dot, i) => {
+                        dot.setAttribute("aria-current", i === page ? "true" : "false");
+                    });
+                }
+                document.body.classList.toggle("deck-end", page === pages.length - 1);
+            }
+
+            function go(n) {
+                const target = Math.max(0, Math.min(pages.length - 1, n));
+                if (target === page) return false;
+                show(target);
+                return true;
+            }
+
+            function busy() {
+                return !!document.querySelector(".modal:not(.hidden)");
+            }
+
+            /* One gesture moves one shelf. The lock swallows a trackpad's
+               momentum tail, which would otherwise read as a second gesture. */
+            const THRESHOLD = 80;
+            let travel = 0;
+            let locked = false;
+            let unlockTimer = 0;
+            let travelTimer = 0;
+
+            function relock() {
+                clearTimeout(unlockTimer);
+                unlockTimer = setTimeout(() => {
+                    locked = false;
+                    travel = 0;
+                }, 620);
+            }
+
+            function push(delta) {
+                if (pages.length < 2 || !delta) return;
+                if (locked) {
+                    relock();
+                    return;
+                }
+                if (travel && Math.sign(delta) !== Math.sign(travel)) travel = 0;
+                travel += delta;
+
+                // A slow drift that never reaches the threshold decays away.
+                clearTimeout(travelTimer);
+                travelTimer = setTimeout(() => { travel = 0; }, 260);
+
+                if (Math.abs(travel) < THRESHOLD) return;
+                const moved = go(page + (travel > 0 ? 1 : -1));
+                travel = 0;
+                if (moved) {
+                    locked = true;
+                    relock();
+                }
+            }
+
+            window.addEventListener("wheel", (e) => {
+                if (e.ctrlKey || busy()) return;
+                e.preventDefault();
+                let delta = e.deltaY;
+                if (e.deltaMode === 1) delta *= 16;
+                else if (e.deltaMode === 2) delta *= deck.clientHeight || 800;
+                push(delta);
+            }, { passive: false });
+
+            let touchY = null;
+            deck.addEventListener("touchstart", (e) => {
+                touchY = busy() || e.touches.length !== 1 ? null : e.touches[0].clientY;
+            }, { passive: true });
+
+            deck.addEventListener("touchmove", (e) => {
+                if (touchY === null) return;
+                const y = e.touches[0].clientY;
+                const delta = touchY - y;
+                if (Math.abs(delta) < 6) return;
+                touchY = y;
+                push(delta * 1.6);
+            }, { passive: true });
+
+            deck.addEventListener("touchend", () => { touchY = null; }, { passive: true });
+
+            const KEYS = {
+                ArrowDown: 1, PageDown: 1, " ": 1,
+                ArrowUp: -1, PageUp: -1
+            };
+
+            document.addEventListener("keydown", (e) => {
+                if (busy() || e.metaKey || e.ctrlKey || e.altKey) return;
+                const el = e.target instanceof Element ? e.target : null;
+                if (el && el.closest("input, textarea, select")) return;
+                if (e.key === "Home") { go(0); e.preventDefault(); return; }
+                if (e.key === "End") { go(pages.length - 1); e.preventDefault(); return; }
+                const step = KEYS[e.key];
+                if (!step) return;
+                e.preventDefault();
+                go(page + step);
+            });
+
+            let resizeTimer = 0;
+            window.addEventListener("resize", () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(() => {
+                    if (wantedPerPage() === perPage) return;
+                    build(page * perPage);
+                }, 120);
+            });
+
+            document.body.classList.add("deck-ready");
+            build(0);
+        })();
+    </script>

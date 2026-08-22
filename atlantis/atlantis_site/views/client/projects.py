@@ -25,7 +25,7 @@ from ... import lookout
 from .timelapse import _apply_session_payload
 from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
-    sniff_image_extension, random_storage_key, build_journal_timeline,
+    sniff_image_extension, random_storage_key,
     notify_followers, rate_limit, tracked_minutes_for_journals, format_minutes,
     can_bypass_ship_requirements,
 )
@@ -453,7 +453,8 @@ def project_detail_explore(request, project_id):
     user = request.user
     profile = user.hackclub_profile
     ships = project.ships.order_by("-created_at")
-    journals = project.journals.order_by("-id")
+    # Oldest first: the public page is the same book, and it reads front to back.
+    journals = project.journals.order_by("id")
 
     time_spent = format_minutes(tracked_minutes_for_journals(journals))
 
@@ -465,7 +466,8 @@ def project_detail_explore(request, project_id):
     else:
         printablesData = {"makesCount": 0}
 
-    timeline = build_journal_timeline(journals, ships)
+    # No writing space: a reader can turn the pages but not add to them.
+    pages = _book_pages(journals, allow_new=False)
 
     is_following = project.followers.filter(pk=user.pk).exists()
     follower_count = project.followers.count()
@@ -476,7 +478,7 @@ def project_detail_explore(request, project_id):
         "profile": profile,
         "ships": ships,
         "journals": journals,
-        "timeline": timeline,
+        "pages": pages,
         "time_spent": time_spent,
         "printablesData": printablesData,
         "is_following": is_following,
