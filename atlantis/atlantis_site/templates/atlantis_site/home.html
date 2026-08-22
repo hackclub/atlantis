@@ -54,8 +54,6 @@
             --scale: 1.20;
             background-image: url("{% static 'atlantis_site/assets/img/landing/foreground.png' %}");
 
-            /* Above #faq-transition (z-index 1), so the coral reads as being in
-               front of the starfish rocks rather than buried behind them. */
             z-index: 2;
         }
 
@@ -115,10 +113,6 @@
             text-align: left;
             box-sizing: border-box;
             min-height: 100vh;
-
-            /* Containing block for #layer-foreground; `overflow` clips the
-               bleed its scale transform leaves outside the hero, the way
-               #parallax does for the two fixed layers. */
             position: relative;
             overflow: hidden;
             padding-top: clamp(32px, 15vh, 135px);
@@ -127,44 +121,24 @@
             padding-bottom: clamp(24px, 6vh, 60px);
         }
 
-        /* ---- FAQ panel ---------------------------------------------------
-           transition.png is a starfish rock band that straddles the seam
-           between the landing hero and the FAQ panel; background_faq.png is
-           the panel's own artwork. Both are sized as a percentage of the
-           section width, so the whole composition scales as one piece and
-           the seam never drifts.
-           ------------------------------------------------------------------ */
 
         #faq {
             position: relative;
             box-sizing: border-box;
 
-            /* One type scale for the whole panel. Every size below is in `em`
-               off this, so the content block's height stays a fixed fraction
-               of the width -- which is what keeps the FAQ list clear of the
-               waterline at every screen size instead of only one. */
             font-size: clamp(13px, 1.5vw, 38px);
 
-            /* Same flat colour as the bottom strip of background_faq.png, so
-               the footer area extends seamlessly if the panel outgrows the
-               artwork (narrow screens, or an opened dropdown). */
             background-color: #036890;
             background-image: url("{% static 'atlantis_site/assets/img/landing/background_faq.png' %}");
             background-repeat: no-repeat;
             background-position: center top;
             background-size: 100% auto;
 
-            /* Always show the artwork in full (it is 73% of its width tall),
-               so the flat blue strip along its bottom is on screen. That strip
-               is the footer area. */
-            min-height: 73vw;
+            min-height: 73.1vw;
 
-            /* Top padding clears the rock band, whose artwork reaches ~22% of
-               the width below the seam. The 13.5% bottom padding is the footer
-               strip -- the flat blue runs from the waterline at 59.6% of the
-               width down to the artwork's bottom edge, and reserving it here
-               keeps the FAQ list from ever reaching into it. */
             padding: 22.5% clamp(22px, 6vw, 80px) 13.5%;
+
+            overflow: hidden;
         }
 
         #faq-transition {
@@ -173,29 +147,25 @@
             left: 0;
             right: 0;
             aspect-ratio: 2500 / 1462;
-
-            /* The band is opaque edge to edge only between 27.7% and 50.3%
-               of its height. Sitting the seam at 29% keeps it hidden while
-               leaving as little of the rock as possible over the hero. */
-            transform: translateY(-29%);
+            transform: translateY(-42%);
 
             background-image: url("{% static 'atlantis_site/assets/img/landing/transition.png' %}");
             background-repeat: no-repeat;
             background-position: center top;
             background-size: 100% auto;
             pointer-events: none;
-            z-index: 1;
+            z-index: 0;
         }
 
         .faq-inner {
             position: relative;
             z-index: 2;
-            max-width: 38em;
+            max-width: 25em;
             margin: 0 auto;
         }
 
         #faq-title {
-            font-family: "Waterlily";
+            font-family: "Atlantis Hand";
             font-size: 2.9em;
             font-weight: 300;
             line-height: 1.1;
@@ -204,7 +174,6 @@
             margin: 0 0 0.34em;
         }
 
-        /* ---- one dropdown: <details class="faq-item"> ---- */
 
         .faq-item {
             background-color: #E5F2FC;
@@ -221,7 +190,7 @@
             display: flex;
             align-items: center;
             gap: 0.6em;
-            padding: 0.36em 0.75em;
+            padding: 0.62em 0.9em;
             cursor: pointer;
             list-style: none;
             font-family: "Atlantis Hand";
