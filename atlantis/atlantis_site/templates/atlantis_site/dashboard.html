@@ -105,7 +105,6 @@
             background-repeat: no-repeat;
             background-size: 165.4534% 374.8718%;
             background-position: 90.1921% 60.3545%;
-            box-shadow: 0 0 1.6vw rgba(0, 30, 56, 0.22);
         }
 
         #item-scroll {
@@ -305,14 +304,14 @@
             <span class="item-label-frame"><span class="item-label">guides/faq</span></span>
         </a>
 
-        <span class="item" id="item-map" aria-disabled="true" aria-label="Printer selection is locked">
-            <img src="{% static 'atlantis_site/assets/img/dashboard/map.png' %}" alt="">
-        </span>
-
         <a class="item" id="item-book" href="{% url 'projects' %}" aria-label="Projects">
             <img src="{% static 'atlantis_site/assets/img/dashboard/book.png' %}" alt="">
             <span class="item-label-frame"><span class="item-label">projects</span></span>
         </a>
+
+        <span class="item" id="item-map" aria-disabled="true" aria-label="Printer selection is locked">
+            <img src="{% static 'atlantis_site/assets/img/dashboard/map.png' %}" alt="">
+        </span>
     </nav>
 
     <a class="hud" id="hud-profile" href="{% url 'user_profile' user.id %}">
