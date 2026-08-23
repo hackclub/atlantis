@@ -1,0 +1,190 @@
+{% extends 'root/_base_root.html' %}
+{% load static %}
+
+{% block page_id %}admin-timelapse-review-journal-page{% endblock %}
+{% block title %}Timelapse Review{% endblock %}
+
+{% block content %}
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+        }
+    }
+</script>
+<script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
+<div class="content">
+    {% include "root/_messages_admin.html" %}
+    <form action="{% url 'timelapse_decision' journal.id %}" method="POST" id="timelapse-review-form">
+        {% csrf_token %}
+        <div class="review-layout">
+            <div class="review-main">
+                <h1>Timelapse Review</h1>
+                <p class="internal-only-note">
+                    Internal only &mdash; @{{ project.owner.hackclub_profile.slack_username }}
+                    is never shown this page, this decision, or the reasons on it.
+                </p>
+                <div class="project-info">
+                    <div class="card-row">
+                        <div class="card-main">
+                            <h2>{{ journal.title }}</h2>
+                            <p class="project-byline">
+                                {{ project.title }} &middot; by {{ project.owner.hackclub_profile.slack_username }}
+                            </p>
+                            <p>
+                                <strong>Tracked:</strong> {{ journal.tracked_display }}
+                                {% if review %}
+                                    &middot; <strong>Removed:</strong> {{ journal.removed_display }}
+                                    &middot; <strong>Approved:</strong> {{ journal.approved_display }}
+                                {% endif %}
+                            </p>
+                            <p><strong>Submitted:</strong> {{ journal.created_at|date:"M j, Y, g:i a" }}</p>
+                            {% if journal.ship_id %}
+                                <p>
+                                    <strong>Ship:</strong> #{{ journal.ship_id }} ({{ journal.ship.get_status_display }})
+                                    {% if not review %}&middot; <span class="is-no">held out of T1 until this is reviewed</span>{% endif %}
+                                </p>
+                            {% else %}
+                                <p><strong>Ship:</strong> not shipped yet</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <h2>Lookouts</h2>
+                {% for session in sessions %}
+                    <div class="journal-card timelapse-review-card">
+                        <h3>{{ session.tracked_display }} tracked</h3>
+                        <p class="review-event-byline">
+                            {{ session.session_id }} &middot; {{ session.screenshot_count }} screenshots
+                            &middot; recorded {{ session.created_at|date:"M j, Y" }}
+                        </p>
+                        <video class="timelapse-video" src="{{ session.video_url }}" poster="{{ session.thumbnail_url }}" controls preload="none"></video>
+                        <p>
+                            <a href="{{ session.video_url }}" target="_blank" rel="noreferrer noopener" class="card-detail-link">Open video</a>
+                        </p>
+
+                        {% if review %}
+                            {% if session.review_removals %}
+                                <ul class="removal-record">
+                                    {% for removal in session.review_removals %}
+                                        <li>
+                                            <span class="is-no">&minus;{{ removal.duration_display }}</span>
+                                            &middot; {{ removal.range_display }}
+                                            &mdash; {{ removal.reason }}
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p>No time removed from this Lookout.</p>
+                            {% endif %}
+                        {% else %}
+                            <div class="removal-rows" data-session-id="{{ session.id }}"></div>
+                            <button type="button" class="add-removal" data-session-id="{{ session.id }}"
+                                    data-tracked="{{ session.tracked_display }}">
+                                Remove a range
+                            </button>
+                            <p class="removal-hint">
+                                Offsets into this Lookout's tracked time (m:ss or h:mm:ss),
+                                up to {{ session.tracked_display }}. Ranges can't overlap.
+                            </p>
+                        {% endif %}
+                    </div>
+                {% empty %}
+                    <p>No Lookouts attached &mdash; nothing to review, and no time to remove.</p>
+                {% endfor %}
+
+                <h2>Lapse</h2>
+                <div class="journal-card">
+                    <div class="journal-media">
+                        {% if journal.image_url %}
+                            <img src="{{ journal.image_display_url }}" alt="{{ journal.title }}" class="journal-image">
+                        {% endif %}
+                        {% if journal.model_url %}
+                            <div class="stl-viewer" data-stl-url="{{ journal.model_display_url }}"></div>
+                        {% endif %}
+                    </div>
+                    {% if journal.model_url %}
+                        <p><a href="{{ journal.model_display_url }}" target="_blank" rel="noreferrer noopener" class="card-detail-link">Download STL</a></p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <aside class="review-sidebar">
+                <h2>{% if review %}Decision{% else %}Approve{% endif %}</h2>
+                {% if review %}
+                    <p class="review-event-byline">
+                        {{ reviewer_name }} &middot; {{ review.reviewed_at|date:"M j, Y, g:i a" }}
+                    </p>
+                    <p><strong>Removed:</strong> {{ review.removed_display }}</p>
+                    {% if review.internal_notes %}
+                        <p><strong>Internal notes:</strong> {{ review.internal_notes|linebreaksbr }}</p>
+                    {% endif %}
+                    <p>Reviewed once and kept as the audit record &mdash; it can't be edited.</p>
+                {% else %}
+                    <div class="review-form">
+                        <div class="form-row">
+                            <textarea name="internal_notes" rows="3" maxlength="1000"
+                                      placeholder="Internal notes (optional, never shown to the shipper)"></textarea>
+                        </div>
+                        <p id="removal-summary">No time removed.</p>
+                        <button type="submit">Approve timelapse</button>
+                    </div>
+                {% endif %}
+            </aside>
+        </div>
+    </form>
+</div>
+
+{% if not review %}
+<template id="removal-row-template">
+    <div class="removal-row">
+        <input type="hidden" name="removal_session" value="">
+        <div class="removal-range">
+            <input type="text" name="removal_start" placeholder="0:05" inputmode="numeric" autocomplete="off" required>
+            <span>&ndash;</span>
+            <input type="text" name="removal_end" placeholder="0:30" inputmode="numeric" autocomplete="off" required>
+            <button type="button" class="drop-removal danger" aria-label="Drop this range">&times;</button>
+        </div>
+        <input type="text" name="removal_reason" maxlength="{{ reason_max_length }}"
+               placeholder="Why this time doesn't count (required)" required>
+    </div>
+</template>
+
+<script>
+    (function () {
+        const template = document.getElementById('removal-row-template');
+        const summary = document.getElementById('removal-summary');
+
+        function updateSummary() {
+            const rows = document.querySelectorAll('.removal-row').length;
+            if (!summary) return;
+            summary.textContent = rows
+                ? rows + (rows === 1 ? ' range' : ' ranges') + ' will be removed.'
+                : 'No time removed.';
+        }
+
+        document.querySelectorAll('.add-removal').forEach((button) => {
+            button.addEventListener('click', () => {
+                const rows = document.querySelector(
+                    '.removal-rows[data-session-id="' + button.dataset.sessionId + '"]'
+                );
+                const row = template.content.cloneNode(true);
+                row.querySelector('input[name="removal_session"]').value = button.dataset.sessionId;
+                rows.appendChild(row);
+                rows.lastElementChild.querySelector('input[name="removal_start"]').focus();
+                updateSummary();
+            });
+        });
+
+        document.addEventListener('click', (event) => {
+            const drop = event.target.closest('.drop-removal');
+            if (!drop) return;
+            drop.closest('.removal-row').remove();
+            updateSummary();
+        });
+    })();
+</script>
+{% endif %}
+{% endblock %}

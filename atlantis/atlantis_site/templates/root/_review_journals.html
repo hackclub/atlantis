@@ -7,12 +7,25 @@
         {% else %}
             <div class="journal-card">
                 <h3>{{ event.journal.title }}</h3>
-                <p>{{ event.journal.tracked_display }} tracked</p>
+                {# /root only, so the internal figures are safe to show: what the
+                   Lookouts tracked, and what's left after timelapse review. #}
+                <p>
+                    {{ event.journal.tracked_display }} tracked
+                    {% if event.journal.removed_seconds %}
+                        &middot; <span class="is-no">&minus;{{ event.journal.removed_display }} removed</span>
+                        &middot; <strong>{{ event.journal.approved_display }} approved</strong>
+                    {% elif not event.journal.timelapse_reviewed %}
+                        &middot; <span class="is-no">timelapse review pending</span>
+                    {% endif %}
+                </p>
                 <ul class="journal-timelapses">
                     {% for timelapse in event.journal.timelapses.all %}
                         <li>
                             {{ timelapse.tracked_display }} &middot;
                             <a href="{{ timelapse.video_url }}" target="_blank" rel="noreferrer noopener">timelapse</a>
+                            {% if timelapse.removed_seconds %}
+                                &middot; <span class="is-no">&minus;{{ timelapse.removed_display }} removed</span>
+                            {% endif %}
                         </li>
                     {% empty %}
                         <li>No timelapse attached &mdash; no verifiable time.</li>

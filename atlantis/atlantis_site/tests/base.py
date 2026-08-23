@@ -11,7 +11,10 @@ from django.test import TestCase, override_settings
 from cryptography.fernet import Fernet
 from PIL import Image
 
-from ..models import Journal, LookoutSession, Profile, Project, Ship
+from ..models import (
+	Journal, LookoutSession, Profile, Project, Ship, TimelapseRemoval,
+	TimelapseReview,
+)
 
 User = get_user_model()
 
@@ -27,7 +30,10 @@ VALID_EDITOR_LINK = "https://cad.onshape.com/documents/abc123"
 VALID_R2_URL = "https://pub-d9ac82fd80854a42ae2dde2757ff0a55.r2.dev/models/thing.f3d"
 PROJECT_IMAGE_KEY = "images/screenshot.png"
 
-ALL_SITE_PERMS = ["t1_review", "t2_review", "t3_review", "fulfillment", "organizer"]
+ALL_SITE_PERMS = [
+	"t1_review", "t2_review", "t3_review", "timelapse_review", "fulfillment",
+	"organizer",
+]
 
 
 def make_user(username="user", layers=0, slack_id="U0TEST", slack_username=None, hca_token=None, **user_kwargs):
@@ -111,11 +117,40 @@ def make_journal(project, ship=None, time_spent=60, **kwargs):
 	return journal
 
 
-def make_ship(project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(120, 120)):
-	"""Create a ship in the given status with journals attached to it."""
+def approve_timelapse(journal, reviewer=None, removals=()):
+	"""Sign a journal off in the internal timelapse review queue.
+
+	`removals` is (session, start_seconds, end_seconds[, reason]) tuples. Cutting
+	time here is how a journal's approved hours end up below its tracked ones.
+	"""
+	if reviewer is None:
+		reviewer = User.objects.filter(username="timelapse-reviewer").first() or make_user(
+			"timelapse-reviewer", slack_id="U0TLREV"
+		)
+	review = TimelapseReview.objects.create(journal=journal, reviewer=reviewer)
+	for removal in removals:
+		session, start, end, *rest = removal
+		TimelapseRemoval.objects.create(
+			review=review,
+			session=session,
+			start_seconds=start,
+			end_seconds=end,
+			reason=rest[0] if rest else "afk",
+		)
+	return review
+
+
+def make_ship(project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(120, 120), timelapse_approved=True):
+	"""Create a ship in the given status with journals attached to it.
+
+	Its journals are signed off in timelapse review by default: that's the state
+	a ship has to be in to show up in the regular review queues at all.
+	"""
 	ship = Ship.objects.create(project=project, status=status)
 	for minutes in journal_minutes:
-		make_journal(project, ship=ship, time_spent=minutes)
+		journal = make_journal(project, ship=ship, time_spent=minutes)
+		if timelapse_approved:
+			approve_timelapse(journal)
 	return ship
 
 

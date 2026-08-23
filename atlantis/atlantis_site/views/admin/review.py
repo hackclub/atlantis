@@ -6,13 +6,17 @@ from django.contrib import messages
 from django.db import transaction
 
 from ...models import InternalComment, Profile, Project, Ship, T1, T2, T3
-from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, tracked_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back
-
-T1_PAY = 1
-T2_PAY = 2
-T3_PAY = 1
+from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back, timelapse_cleared_ships
 
 INTERNAL_COMMENT_MAX_LENGTH = 1000
+
+# Shown to reviewers only. A ship waits out of sight here until every one of its
+# journals has cleared internal timelapse review, because the hours it would be
+# reviewed on aren't settled until then.
+TIMELAPSE_PENDING_MESSAGE = (
+    "That ship's timelapses haven't finished internal review yet. It'll appear "
+    "in the queue once they have."
+)
 
 # Every /root review page can leave one, so the perms are the union of the ones
 # guarding those pages.
@@ -27,13 +31,13 @@ COMMENT_PERMS = [
 @check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def review_dash(request):
     ships = (
-        Ship.objects.filter(status=Ship.ShipStatus.T1_QUEUE)
+        timelapse_cleared_ships(Ship.objects.filter(status=Ship.ShipStatus.T1_QUEUE))
         .select_related("project", "project__owner", "project__owner__hackclub_profile")
         .order_by("-created_at")
     )
     for ship in ships:
         ship.time_spent_display = format_minutes(
-            tracked_minutes_for_journals(ship.project.journals.all())
+            approved_minutes_for_journals(ship.project.journals.all())
         )
     return render(request, "root/review.html", {
         "ships": ships,
@@ -44,6 +48,9 @@ def review_dash(request):
 @check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
+    if not ship.timelapse_cleared:
+        messages.error(request, TIMELAPSE_PENDING_MESSAGE)
+        return redirect("review_dash")
     journals = ship.project.journals.order_by('-id')
     timeline = build_journal_timeline(journals, ship.project.ships.all())
     try:
@@ -86,6 +93,14 @@ def t1_decision(request, ship_id):
             messages.error(request, "ship not in T1 queue")
             return redirect("review_dash")
 
+        # The dash and the project page both hide these ships, so getting here
+        # means a stale tab or a hand-rolled POST — either way the timelapses
+        # haven't been signed off, and the hours in front of this reviewer
+        # aren't final yet.
+        if not ship.timelapse_cleared:
+            messages.error(request, TIMELAPSE_PENDING_MESSAGE)
+            return redirect("review_dash")
+
         if approved:
             ship.status = Ship.ShipStatus.T2_QUEUE
         else:
@@ -113,9 +128,6 @@ def t1_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + T1_PAY
-    reviewer.hackclub_profile.save()
-
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with approved = {approved}!')
     return redirect("review_dash")
 
@@ -129,7 +141,7 @@ def ysws_review_dash(request):
     )
     for ship in ships:
         ship.time_spent_display = format_minutes(
-            tracked_minutes_for_journals(ship.project.journals.all())
+            approved_minutes_for_journals(ship.project.journals.all())
         )
     return render(request, "root/ysws_review.html", {
         "ships": ships,
@@ -178,7 +190,7 @@ def t2_decision(request, ship_id):
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
         journals = ship.journals.order_by("-id")
 
-        total_time = tracked_minutes_for_journals(journals)
+        total_time = approved_minutes_for_journals(journals)
         if total_time <= deductions:
             messages.error(request, f"Deduction too large. (total_time: {total_time}, deductions: {deductions})")
             return redirect("ysws_review_dash")
@@ -221,9 +233,6 @@ def t2_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + T2_PAY
-    reviewer.hackclub_profile.save()
-
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision} and deduction of {deductions} minutes!')
     return redirect("ysws_review_dash")
 
@@ -237,7 +246,7 @@ def fraud_review_dash(request):
     )
     for ship in ships:
         ship.time_spent_display = format_minutes(
-            tracked_minutes_for_journals(ship.project.journals.all())
+            approved_minutes_for_journals(ship.project.journals.all())
         )
     return render(request, "root/fraud_review.html", {
         "ships": ships,
@@ -250,7 +259,7 @@ def fraud_review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
     journals = ship.project.journals.order_by('-id')
     timeline = build_journal_timeline(journals, ship.project.ships.all())
-    logged_time = tracked_minutes_for_journals(ship.journals.all())
+    logged_time = approved_minutes_for_journals(ship.journals.all())
 
     latest_t2 = ship.t2_reviews.order_by('-id').first()
     deductions = latest_t2.deductions if latest_t2 else 0
@@ -338,9 +347,6 @@ def t3_decision(request, ship_id):
         "payout_layers": payout_layers,
         "new_ship_status": ship.status,
     })
-
-    reviewer.hackclub_profile.layers = reviewer.hackclub_profile.layers + T3_PAY
-    reviewer.hackclub_profile.save()
 
     messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}")
     return redirect("fraud_review_dash")

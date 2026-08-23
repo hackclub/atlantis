@@ -2,13 +2,16 @@ from django.contrib.auth.decorators import user_passes_test
 from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
-from django.db.models import Count, Sum
+from django.db.models import Count, Exists, F, IntegerField, OuterRef, Sum
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
-from ..models import AuditLog, InternalComment, LookoutSession, detect_editor
+from ..models import (
+    AuditLog, InternalComment, Journal, LookoutSession, TimelapseRemoval,
+    detect_editor
+)
 
 from functools import wraps
 
@@ -93,6 +96,38 @@ def tracked_seconds_for_journals(journals):
 def tracked_minutes_for_journals(journals):
     return tracked_seconds_for_journals(journals) // 60
 
+# Time a timelapse reviewer cut out of those journals, and what's left after it.
+# The approved_* pair is the internal number — what a project actually gets paid
+# for — so it belongs on /root pages and in the T2/T3 maths, never on anything
+# the owner can load. Their side of the site keeps using tracked_*, which is why
+# a removal can't quietly move a ship gate under them.
+def removed_seconds_for_journals(journals):
+    return TimelapseRemoval.objects.filter(review__journal__in=journals).aggregate(
+        total=Sum(F("end_seconds") - F("start_seconds"), output_field=IntegerField())
+    )["total"] or 0
+
+def approved_seconds_for_journals(journals):
+    return max(
+        tracked_seconds_for_journals(journals) - removed_seconds_for_journals(journals),
+        0,
+    )
+
+def approved_minutes_for_journals(journals):
+    return approved_seconds_for_journals(journals) // 60
+
+def timelapse_cleared_ships(ships):
+    """Only the ships whose every journal has passed internal timelapse review.
+
+    Ships still waiting are held out of the regular review queues rather than
+    marked as held: their owner sees no change at all. Ships with no journals
+    (the DEBUG-only ship bypass) are left in — there's no footage to review,
+    which is why this asks whether an unreviewed journal exists rather than
+    joining, where a ship with no journals at all matches on the NULL side.
+    """
+    return ships.exclude(
+        Exists(Journal.objects.filter(ship=OuterRef("pk"), timelapse_review__isnull=True))
+    )
+
 def format_minutes(minutes):
     return f"{minutes // 60}h {minutes % 60}m"
 
@@ -147,6 +182,11 @@ def build_review_history(ship):
     return events
 
 def build_journal_timeline(journals, ships):
+    """A project's journals and ships as one newest-first list.
+
+    /root pages only, like build_review_history: the time on a ship here is the
+    approved figure, net of anything timelapse review took off it, which the
+    owner is never shown."""
     events = []
     for journal in journals:
         events.append({
@@ -155,7 +195,7 @@ def build_journal_timeline(journals, ships):
             "sort_key": journal.created_at,
         })
     for ship in ships:
-        total_time = tracked_minutes_for_journals(ship.journals.all())
+        total_time = approved_minutes_for_journals(ship.journals.all())
         events.append({
             "type": "ship",
             "ship": ship,

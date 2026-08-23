@@ -1,0 +1,97 @@
+{% extends 'root/_base_root.html' %}
+
+{% block page_id %}admin-timelapse-review-page{% endblock %}
+{% block title %}Timelapse Review{% endblock %}
+
+{% block content %}
+<div class="content">
+    {% include "root/_messages_admin.html" %}
+    <h1>Timelapse Review</h1>
+    <p class="internal-only-note">
+        Internal only. Shippers are never told a lapse was reviewed, how much time
+        came off it, or why. A project can't reach T1 until every one of its
+        lapses is signed off here &mdash; but it can still ship while it waits.
+    </p>
+    <section class="project-list">
+        <h2>Queue</h2>
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th>Lapse</th>
+                    <th>Project</th>
+                    <th>Owner</th>
+                    <th>Tracked</th>
+                    <th>Lookouts</th>
+                    <th>Submitted</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for journal in pending %}
+                    <tr>
+                        <td><a href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a></td>
+                        <td>{{ journal.project.title }}</td>
+                        <td>@{{ journal.project.owner.hackclub_profile.slack_username }}</td>
+                        <td>{{ journal.tracked_display }}</td>
+                        <td>{{ journal.timelapses.all|length }}</td>
+                        <td>{{ journal.created_at|date:"M j, Y" }}</td>
+                        <td>
+                            <a href="{% url 'timelapse_review_journal' journal.id %}">Review timelapse</a>
+                            {% if journal.ship_id %}
+                                <br><span class="is-no">Holding ship #{{ journal.ship_id }} out of T1</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7">Nothing awaiting timelapse review.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    <section class="project-list">
+        <h2>Recently reviewed</h2>
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th>Lapse</th>
+                    <th>Project</th>
+                    <th>Tracked</th>
+                    <th>Removed</th>
+                    <th>Approved</th>
+                    <th>Reviewer</th>
+                    <th>Reviewed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for journal in reviewed %}
+                    <tr>
+                        <td><a href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a></td>
+                        <td>{{ journal.project.title }}</td>
+                        <td>{{ journal.tracked_display }}</td>
+                        <td>
+                            {% if journal.timelapse_review.removed_seconds %}
+                                <span class="is-no">&minus;{{ journal.timelapse_review.removed_display }}</span>
+                            {% else %}
+                                &mdash;
+                            {% endif %}
+                        </td>
+                        <td>{{ journal.approved_display }}</td>
+                        <td>@{{ journal.timelapse_review.reviewer.hackclub_profile.slack_username }}</td>
+                        <td>{{ journal.timelapse_review.reviewed_at|date:"M j, Y, g:i a" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7">No timelapse reviews yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+    <section class="chart-grid">
+        {% include "root/_metric_chart.html" with title="Top timelapse reviewers" rows=leaderboard empty="No reviews yet" %}
+    </section>
+</div>
+<script>
+    document.querySelectorAll('[data-bar]').forEach((el) => {
+        el.style.width = el.dataset.bar + '%';
+    });
+</script>
+{% endblock %}

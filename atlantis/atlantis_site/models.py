@@ -66,6 +66,58 @@ def detect_editor(value):
 	return detect_editor_from_link(value)
 
 
+# Timecodes. Timelapse reviewers cut time out of a Lookout by naming a range of
+# it ("0:05-0:30"), so these are the two halves of that: what a reviewer types
+# and what we show back.
+def format_timecode(seconds):
+	"""Seconds as h:mm:ss, or m:ss when it's under an hour."""
+	seconds = int(seconds)
+	hours, remainder = divmod(seconds, 3600)
+	minutes, secs = divmod(remainder, 60)
+	if hours:
+		return f"{hours}:{minutes:02d}:{secs:02d}"
+	return f"{minutes}:{secs:02d}"
+
+
+def parse_timecode(value):
+	"""Parse "h:mm:ss", "m:ss", or a bare second count into seconds.
+
+	Returns None for anything else rather than a best guess: a misread range
+	silently removes the wrong stretch of somebody's time, so the caller has to
+	be told it couldn't be read.
+	"""
+	if value is None:
+		return None
+	parts = [part.strip() for part in str(value).strip().split(":")]
+	if not 1 <= len(parts) <= 3:
+		return None
+	if not all(part.isascii() and part.isdigit() for part in parts):
+		return None
+	numbers = [int(part) for part in parts]
+	# Only the leading field may run past its unit, so "90:00" is 90 minutes but
+	# "1:90" is not a time.
+	if any(number > 59 for number in numbers[1:]):
+		return None
+	total = 0
+	for number in numbers:
+		total = total * 60 + number
+	return total
+
+
+def first_overlap(ranges):
+	"""The first (start, end) in `ranges` that overlaps an earlier one, else None.
+
+	Ranges are half-open — one ending at 0:30 and the next starting at 0:30 are
+	adjacent, not overlapping.
+	"""
+	previous_end = None
+	for start, end in sorted(ranges):
+		if previous_end is not None and start < previous_end:
+			return (start, end)
+		previous_end = end
+	return None
+
+
 # auth model
 class Profile(models.Model):
 	user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="hackclub_profile")
@@ -182,6 +234,16 @@ class Ship(models.Model):
 
 	def __str__(self):
 		return f"Ship created at {self.created_at} with status {self.status}"
+
+	@property
+	def timelapse_cleared(self):
+		"""True once every journal on this ship has passed timelapse review.
+
+		A ship that hasn't is held out of the T1 queue, silently: shipping still
+		succeeds and the owner still sees "Under T1 Review", because timelapse
+		review is internal and never surfaces to them.
+		"""
+		return not self.journals.filter(timelapse_review__isnull=True).exists()
 
 class T1(models.Model):
 	ship = models.ForeignKey(
@@ -316,6 +378,43 @@ class Journal(models.Model):
 		minutes = self.tracked_minutes
 		return f"{minutes // 60}h {minutes % 60}m"
 
+	# Everything below is the internal view of this entry's time: what a
+	# timelapse reviewer took off it and what's left to pay for. None of it is
+	# rendered on a page the owner can reach — they only ever see tracked_*.
+	@property
+	def timelapse_review_or_none(self):
+		try:
+			return self.timelapse_review
+		except TimelapseReview.DoesNotExist:
+			return None
+
+	@property
+	def timelapse_reviewed(self):
+		return self.timelapse_review_or_none is not None
+
+	@property
+	def removed_seconds(self):
+		review = self.timelapse_review_or_none
+		return review.removed_seconds if review else 0
+
+	@property
+	def approved_seconds(self):
+		return max(self.tracked_seconds - self.removed_seconds, 0)
+
+	@property
+	def approved_minutes(self):
+		return self.approved_seconds // 60
+
+	@property
+	def approved_display(self):
+		minutes = self.approved_minutes
+		return f"{minutes // 60}h {minutes % 60}m"
+
+	@property
+	def removed_display(self):
+		minutes = self.removed_seconds // 60
+		return f"{minutes // 60}h {minutes % 60}m"
+
 # lookout timelapse recording sessions
 class LookoutSession(models.Model):
 	class Status(models.TextChoices):
@@ -404,6 +503,131 @@ class LookoutSession(models.Model):
 	def thumbnail_url(self):
 		base = settings.LOOKOUT_BASE_URL.rstrip("/")
 		return f"{base}/api/media/{self.session_id}/thumbnail.jpg"
+
+	@property
+	def removed_seconds(self):
+		return self.removals.aggregate(
+			total=models.Sum(
+				models.F("end_seconds") - models.F("start_seconds"),
+				output_field=models.IntegerField(),
+			)
+		)["total"] or 0
+
+	@property
+	def removed_display(self):
+		return format_timecode(self.removed_seconds)
+
+	@property
+	def approved_seconds(self):
+		return max(self.tracked_seconds - self.removed_seconds, 0)
+
+	@property
+	def approved_display(self):
+		total = self.approved_seconds
+		return f"{total // 3600}h {(total % 3600) // 60}m"
+
+
+# internal timelapse review
+class TimelapseReview(models.Model):
+	"""One reviewer's pass over the Lookout footage attached to a journal.
+
+	Strictly internal. Nothing here reaches the project owner: no notification
+	is sent, no page they can load renders it, and the time the reviewer cuts
+	comes off the journal quietly. There is one review per journal and it is
+	never edited — it is written in a single transaction with its removals, so
+	the row and its children are also the audit trail.
+	"""
+	journal = models.OneToOneField(
+		Journal,
+		on_delete=models.CASCADE,
+		related_name="timelapse_review"
+	)
+	reviewer = models.ForeignKey(
+		User,
+		on_delete=models.PROTECT,
+		related_name="timelapse_reviews"
+	)
+
+	reviewed_at = models.DateTimeField(auto_now_add=True)
+	internal_notes = models.CharField(max_length=1000, blank=True)
+
+	class Meta:
+		ordering = ["-reviewed_at"]
+
+	def __str__(self):
+		return f"Timelapse review of journal {self.journal_id} by {self.reviewer_id}"
+
+	@property
+	def removed_seconds(self):
+		return self.removals.aggregate(
+			total=models.Sum(
+				models.F("end_seconds") - models.F("start_seconds"),
+				output_field=models.IntegerField(),
+			)
+		)["total"] or 0
+
+	@property
+	def removed_minutes(self):
+		return self.removed_seconds // 60
+
+	@property
+	def removed_display(self):
+		minutes = self.removed_minutes
+		return f"{minutes // 60}h {minutes % 60}m"
+
+
+class TimelapseRemoval(models.Model):
+	"""A stretch of one Lookout session the reviewer refused to pay for.
+
+	Offsets are into the session's tracked timeline, not into the compiled
+	video: the video is sped up, so a range read off it wouldn't map back to
+	the seconds being deducted. Capping end_seconds at the session's
+	tracked_seconds (enforced by the view) is what keeps an adjusted duration
+	from going negative.
+	"""
+	review = models.ForeignKey(
+		TimelapseReview,
+		on_delete=models.CASCADE,
+		related_name="removals"
+	)
+	session = models.ForeignKey(
+		LookoutSession,
+		on_delete=models.CASCADE,
+		related_name="removals"
+	)
+
+	start_seconds = models.PositiveIntegerField()
+	end_seconds = models.PositiveIntegerField()
+	# Required, per range: a deduction nobody can explain later is indefensible.
+	reason = models.CharField(max_length=500)
+
+	class Meta:
+		ordering = ["session_id", "start_seconds"]
+		constraints = [
+			models.CheckConstraint(
+				condition=models.Q(end_seconds__gt=models.F("start_seconds")),
+				name="timelapse_removal_end_after_start",
+			),
+			models.CheckConstraint(
+				condition=~models.Q(reason=""),
+				name="timelapse_removal_reason_required",
+			),
+		]
+
+	def __str__(self):
+		return f"{self.range_display} removed from session {self.session_id}"
+
+	@property
+	def duration_seconds(self):
+		return max(self.end_seconds - self.start_seconds, 0)
+
+	@property
+	def duration_display(self):
+		return format_timecode(self.duration_seconds)
+
+	@property
+	def range_display(self):
+		return f"{format_timecode(self.start_seconds)}-{format_timecode(self.end_seconds)}"
 
 
 # shop models
@@ -514,6 +738,10 @@ class Permissions(models.Model):
 			("t1_review", "T1 Project Review"),
 			("t2_review", "T2 Project Review"),
 			("t3_review", "T3/Fraud Project Review"),
+			# Deliberately its own grant rather than something a T1/T2/T3
+			# reviewer picks up: timelapse review is a different job, and the
+			# people who do it are not the people who talk to the shipper.
+			("timelapse_review", "Timelapse Review (internal)"),
 			("fulfillment", "Fulfill shop orders"),
 			("organizer", "Access to everything")
 		]
