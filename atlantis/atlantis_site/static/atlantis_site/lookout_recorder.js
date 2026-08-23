@@ -48,7 +48,7 @@
 	function mountUi() {
 		[
 			["pill", "lookout-pill"], ["hint", "lookout-hint"], ["timer", "lookout-timer"],
-			["shots", "lookout-shots"], ["next", "lookout-next"], ["mode", "lookout-mode"],
+			["shots", "lookout-shots"], ["mode", "lookout-mode"],
 			["log", "lookout-log"], ["start", "lookout-start"], ["pause", "lookout-pause"],
 			["resume", "lookout-resume"], ["stop", "lookout-stop"], ["reshare", "lookout-reshare"],
 			["preview", "lookout-preview"], ["stageEmpty", "lookout-stage-empty"],
@@ -132,7 +132,6 @@
 	let lastSyncMs = nowMs();
 	let tickId = null;
 	let shotCount = 0;
-	let nextCaptureAtMs = 0;
 
 	function formatTime(total) {
 		total = Math.max(0, Math.floor(total));
@@ -155,18 +154,8 @@
 	function renderTimer() {
 		if (ui.timer) ui.timer.textContent = formatTime(getDisplaySeconds());
 	}
-	function renderCountdown() {
-		if (!ui.next) return;
-		if (!recording || !nextCaptureAtMs) {
-			ui.next.textContent = "Next one: —";
-			return;
-		}
-		const left = Math.max(0, Math.round((nextCaptureAtMs - nowMs()) / 1000));
-		ui.next.textContent = left > 0 ? `Next one in ${left}s` : "Taking one now…";
-	}
 	function renderTick() {
 		renderTimer();
-		renderCountdown();
 	}
 	function startTicking() {
 		if (tickId) return;
@@ -175,8 +164,6 @@
 	function stopTicking(snapToBase) {
 		if (tickId) { clearInterval(tickId); tickId = null; }
 		if (snapToBase && ui.timer) ui.timer.textContent = formatTime(baseSeconds);
-		nextCaptureAtMs = 0;
-		renderCountdown();
 	}
 
 	// --- screenshot counter (ratcheted like the timer) ----------------------
@@ -381,8 +368,6 @@
 			const parsed = Date.parse(nextExpectedAt);
 			if (!isNaN(parsed)) delay = Math.max(0, parsed - nowMs());
 		}
-		nextCaptureAtMs = nowMs() + delay;
-		renderCountdown();
 		loopTimer = setTimeout(loop, delay);
 	}
 
@@ -394,8 +379,6 @@
 	function stopLoop() {
 		recording = false;
 		if (loopTimer) { clearTimeout(loopTimer); loopTimer = null; }
-		nextCaptureAtMs = 0;
-		renderCountdown();
 	}
 
 	// --- backend sync -------------------------------------------------------
