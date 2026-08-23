@@ -52,9 +52,17 @@ belongs to the page including this.
         }
 
         .topbar {
+            box-sizing: border-box;
             display: flex;
             align-items: baseline;
             gap: clamp(10px, 1.2vw, 20px);
+            /* Breaks out of .sheet's centered max-width so the back link
+               hugs the viewport's real corner instead of drifting inward,
+               stranded over open wood, once the sheet is capped on wide
+               screens. */
+            width: 100vw;
+            margin-left: calc(50% - 50vw);
+            padding-left: var(--deck-pad);
         }
 
         /* Sits in the corner, which the background leaves as bare wood, so it

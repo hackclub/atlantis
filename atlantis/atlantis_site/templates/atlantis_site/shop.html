@@ -49,10 +49,19 @@
         }
 
         .topbar {
+            box-sizing: border-box;
             display: flex;
             flex-wrap: wrap;
             align-items: baseline;
             gap: clamp(10px, 1.2vw, 20px);
+            /* Breaks out of .sheet's centered max-width so the back link and
+               purse hug the viewport's real corners instead of drifting
+               inward, stranded over open wood, once the sheet is capped on
+               wide screens. */
+            width: 100vw;
+            margin-left: calc(50% - 50vw);
+            padding-left: var(--shop-pad);
+            padding-right: var(--shop-pad);
         }
 
         #back-link {
