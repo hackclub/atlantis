@@ -1,10 +1,22 @@
 import os
+from decimal import Decimal
 from urllib.parse import urlparse
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.urls import reverse
+
+
+# The T2 reviewer's pearl multiplier. Stored as a Decimal in tenths so the
+# slider's positions and the payout arithmetic are exact — pearls are half a
+# pearl per six-minute bucket, which is already tenths, and a binary float
+# would put both off by a hair.
+PAYOUT_MULTIPLIER_MIN = Decimal("0.5")
+PAYOUT_MULTIPLIER_MAX = Decimal("3.0")
+PAYOUT_MULTIPLIER_STEP = Decimal("0.1")
+PAYOUT_MULTIPLIER_DEFAULT = Decimal("1.0")
 
 
 def media_url(value):
@@ -276,6 +288,21 @@ class T2(models.Model):
 	)
 
 	deductions = models.IntegerField(default=0)
+
+	# Scales the pearls the owner is paid when T3 finalizes the ship. It is
+	# deliberately not applied to the minutes: deductions and airtable_time are
+	# the record of how long the work actually took, and that is what Airtable
+	# is told. This only moves the reward.
+	payout_multiplier = models.DecimalField(
+		max_digits=2,
+		decimal_places=1,
+		default=PAYOUT_MULTIPLIER_DEFAULT,
+		validators=[
+			MinValueValidator(PAYOUT_MULTIPLIER_MIN),
+			MaxValueValidator(PAYOUT_MULTIPLIER_MAX),
+		],
+	)
+
 	feedback = models.CharField(max_length=100)
 	justification = models.CharField(max_length=400)
 

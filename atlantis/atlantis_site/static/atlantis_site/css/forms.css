@@ -42,11 +42,36 @@
    window had — a percentage max-width can't claw that back. */
 .review-form input[type="text"],
 .review-form input[type="number"],
+.review-form input[type="range"],
 .review-form select {
     flex: 1 1 320px;
     min-width: 0;
     max-width: 320px;
     box-sizing: border-box;
+}
+
+/* The slider owns a full row: its label sits above it and the pearl preview
+   below, so neither wraps alongside the track and squeezes it. */
+.review-form .multiplier-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    width: 320px;
+    max-width: 100%;
+}
+
+.review-form .multiplier-row input[type="range"] {
+    flex: none;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+}
+
+.review-form .multiplier-preview {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    opacity: 0.75;
 }
 
 .internal-comment-form {

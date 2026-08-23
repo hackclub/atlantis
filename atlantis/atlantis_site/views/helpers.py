@@ -10,9 +10,10 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from ..models import (
     AuditLog, InternalComment, Journal, LookoutSession, TimelapseRemoval,
-    detect_editor
+    PAYOUT_MULTIPLIER_DEFAULT, detect_editor
 )
 
+from decimal import Decimal, ROUND_HALF_EVEN
 from functools import wraps
 
 from slack_sdk.errors import SlackApiError
@@ -82,9 +83,14 @@ def is_valid_printables_url(value):
         return False
     return (parsed.hostname or "").lower() in PRINTABLES_HOSTS
 
-def layers_for_minutes(minutes):
+def layers_for_minutes(minutes, multiplier=PAYOUT_MULTIPLIER_DEFAULT):
+    # Half a pearl per six-minute bucket, scaled by the T2 reviewer's
+    # multiplier. Decimal rather than float because both halves are exact in
+    # tenths and the ties land on .5 often enough to matter; ROUND_HALF_EVEN
+    # keeps the unmultiplied results identical to the round() this used to do.
     tenths_of_hour = minutes // 6
-    return round(tenths_of_hour * 0.5)
+    layers = (Decimal(tenths_of_hour) / 2) * Decimal(multiplier)
+    return int(layers.quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
 
 def tracked_seconds_for_journals(journals):
     return LookoutSession.objects.filter(journal__in=journals).aggregate(

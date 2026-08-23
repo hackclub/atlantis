@@ -40,7 +40,24 @@
                     <input type="text" name="justification" id="justification_input" placeholder="Airtable Justification (400 characters, private)" maxlength="400">
                 </div>
                 <div class="form-row">
-                    <input type="number" name="deductions" placeholder="Deductions (minutes)" min="0">
+                    {% comment %}
+                        No max attribute: Chrome sizes a number input from the
+                        digit count of its max, which shrinks this to a stub.
+                        t2_decision rejects an over-large deduction anyway.
+                    {% endcomment %}
+                    <input type="number" name="deductions" id="deductions_input" placeholder="Deductions (minutes)" min="0">
+                </div>
+                <div class="form-row multiplier-row">
+                    <label for="payout_multiplier">
+                        Pearl multiplier: <output id="multiplier_value" for="payout_multiplier">{{ multiplier_default }}&times;</output>
+                    </label>
+                    <input type="range" name="payout_multiplier" id="payout_multiplier"
+                           min="{{ multiplier_min }}" max="{{ multiplier_max }}"
+                           step="{{ multiplier_step }}" value="{{ multiplier_default }}">
+                    <p class="multiplier-preview">
+                        <span id="multiplier_preview">{{ logged_time }} min &rarr; {{ base_layers }} pearls</span><br>
+                        Scales the pearls only &mdash; the hours sent to Airtable are unchanged.
+                    </p>
                 </div>
                 {% if ship.project.locked %}
                     <button type="submit" disabled title="Can't review a locked project" id="submit_btn">Submit</button>
@@ -66,6 +83,46 @@
             submitBtn.textContent = 'Return to T1';
         }
     });
+
+    (function () {
+        const LOGGED_TIME = {{ logged_time }};
+        const slider = document.getElementById('payout_multiplier');
+        const readout = document.getElementById('multiplier_value');
+        const preview = document.getElementById('multiplier_preview');
+        const deductions = document.getElementById('deductions_input');
+
+        // Mirrors layers_for_minutes() in views/helpers.py, banker's rounding
+        // included, so the preview matches the pearls actually awarded.
+        function roundHalfEven(value) {
+            const nearest = Math.round(value);
+            const isTie = Math.abs(value % 1) === 0.5;
+            return isTie && nearest % 2 !== 0 ? nearest - 1 : nearest;
+        }
+
+        function layersFor(minutes, multiplier) {
+            return roundHalfEven(Math.floor(minutes / 6) * 0.5 * multiplier);
+        }
+
+        function render() {
+            const multiplier = parseFloat(slider.value);
+            const deducted = Math.min(
+                Math.max(parseInt(deductions.value, 10) || 0, 0),
+                LOGGED_TIME
+            );
+            const net = LOGGED_TIME - deducted;
+            const base = layersFor(net, 1);
+            const paid = layersFor(net, multiplier);
+
+            readout.textContent = multiplier.toFixed(1) + '×';
+            preview.textContent = base === paid
+                ? `${net} min → ${paid} pearls`
+                : `${net} min → ${base} pearls → ${paid} pearls`;
+        }
+
+        slider.addEventListener('input', render);
+        deductions.addEventListener('input', render);
+        render();
+    })();
 </script>
 {% endblock %}
 

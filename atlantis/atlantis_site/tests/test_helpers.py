@@ -1,6 +1,7 @@
 import io
 import ipaddress
 import time
+from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -160,6 +161,29 @@ class LayersForMinutesTests(TestCase):
 		for minutes, layers in cases.items():
 			with self.subTest(minutes=minutes):
 				self.assertEqual(layers_for_minutes(minutes), layers)
+
+	def test_multiplier_scales_the_payout(self):
+		cases = {
+			("0.5", 120): 5,
+			("1.0", 120): 10,
+			("1.5", 120): 15,
+			("2.0", 120): 20,
+			("3.0", 120): 30,
+			("2.0", 0): 0,
+			# 29 minutes is 4 buckets, i.e. 2 pearls flat; 1.5x lands on 3.
+			("1.5", 29): 3,
+		}
+		for (multiplier, minutes), layers in cases.items():
+			with self.subTest(multiplier=multiplier, minutes=minutes):
+				self.assertEqual(
+					layers_for_minutes(minutes, Decimal(multiplier)), layers
+				)
+
+	def test_ties_round_half_to_even(self):
+		# 6 minutes is one six-minute bucket: half a pearl exactly. Rounding
+		# every tie up would pay out for time nobody logged.
+		self.assertEqual(layers_for_minutes(6), 0)
+		self.assertEqual(layers_for_minutes(18), 2)
 
 
 class BuildJournalTimelineTests(TestCase):

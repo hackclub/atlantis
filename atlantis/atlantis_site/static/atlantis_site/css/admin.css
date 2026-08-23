@@ -481,6 +481,21 @@
     height: 15px;
 }
 
+.root-page input[type="range"] {
+    accent-color: var(--oc-tide);
+    height: 20px;
+}
+
+.root-page input[type="range"]:focus-visible {
+    outline: 2px solid var(--oc-tide);
+    outline-offset: 2px;
+}
+
+.root-page output {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
 .root-page label {
     font-size: 14px;
     color: var(--oc-ink);

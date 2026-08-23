@@ -64,6 +64,14 @@
             <p><strong>Logged time:</strong> {{ logged_time }} minutes</p>
             <p><strong>T2 deductions:</strong> {{ deductions }} minutes</p>
             <p><strong>Net time (payout default):</strong> {{ total_time }} minutes</p>
+            <p>
+                <strong>T2 pearl multiplier:</strong> {{ payout_multiplier }}&times;
+                {% if base_layers != payout_layers %}
+                    &mdash; {{ base_layers }} pearls &rarr; <strong>{{ payout_layers }} pearls</strong>
+                {% else %}
+                    &mdash; <strong>{{ payout_layers }} pearls</strong>
+                {% endif %}
+            </p>
             <form action="{% url 't3_decision' ship.id %}" method="POST" class="review-form">
                 {% csrf_token %}
                 <div class="form-row">

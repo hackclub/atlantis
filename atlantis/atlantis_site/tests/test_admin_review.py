@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
@@ -285,6 +287,55 @@ class T2DecisionTests(BaseTestCase):
 		self._decide(deductions="239")
 		self.assertEqual(T2.objects.count(), 1)
 
+	def test_multiplier_defaults_to_one_when_absent(self):
+		self._decide()
+		self.assertEqual(T2.objects.get().payout_multiplier, Decimal("1.0"))
+
+	def test_multiplier_recorded(self):
+		self._decide(payout_multiplier="2.5")
+		self.assertEqual(T2.objects.get().payout_multiplier, Decimal("2.5"))
+
+	def test_multiplier_accepts_range_bounds(self):
+		for raw in ("0.5", "3.0"):
+			with self.subTest(multiplier=raw):
+				# A fresh ship each time: approving one moves it out of the T2
+				# queue, so reusing it would be rejected on the second pass.
+				T2.objects.all().delete()
+				ship = make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE)
+				self._decide(ship=ship, payout_multiplier=raw)
+				self.assertEqual(T2.objects.get().payout_multiplier, Decimal(raw))
+
+	def test_multiplier_snapped_to_step(self):
+		# A value between two slider stops is rounded to one of them rather
+		# than stored at a precision the form can't produce.
+		self._decide(payout_multiplier="1.27")
+		self.assertEqual(T2.objects.get().payout_multiplier, Decimal("1.3"))
+
+	def test_multiplier_out_of_range_rejected(self):
+		for raw in ("0.4", "3.1", "-1", "0"):
+			with self.subTest(multiplier=raw):
+				response = self._decide(payout_multiplier=raw)
+				self.assertEqual(T2.objects.count(), 0)
+				self.assertTrue(
+					any("Pearl multiplier must be between" in m for m in message_texts(response))
+				)
+
+	def test_non_numeric_multiplier_rejected(self):
+		# "NaN" and "Infinity" are valid Decimal literals, so they get past the
+		# parse and have to be caught on their own.
+		for raw in ("lots", "NaN", "Infinity", "-Infinity"):
+			with self.subTest(multiplier=raw):
+				response = self._decide(payout_multiplier=raw)
+				self.assertEqual(T2.objects.count(), 0)
+				self.assertTrue(
+					any("pearl multiplier" in m for m in message_texts(response))
+				)
+
+	def test_audit_log_records_multiplier(self):
+		self._decide(payout_multiplier="1.5")
+		log = AuditLog.objects.get(action="t2_decision")
+		self.assertEqual(log.metadata["payout_multiplier"], "1.5")
+
 	def test_feedback_and_justification_length_limits(self):
 		for overrides in ({"feedback": "x" * 101}, {"justification": "x" * 401}):
 			with self.subTest(**overrides):
@@ -373,10 +424,60 @@ class T3DecisionTests(BaseTestCase):
 		self.assertEqual(ship.status, Ship.ShipStatus.T2_QUEUE)
 		self.assertIn("ship not in T3 queue", message_texts(response))
 
+	def _add_t2(self, ship, multiplier, decision=T2.Decision.APPROVE):
+		return T2.objects.create(
+			ship=ship,
+			reviewer=self.reviewer,
+			decision=decision,
+			deductions=0,
+			payout_multiplier=Decimal(multiplier),
+			feedback="ok",
+			justification="ok",
+		)
+
+	def test_payout_scaled_by_t2_multiplier(self):
+		# 120 minutes is 10 pearls flat; at 2.5x it is 25, on top of the 10 the
+		# author already had.
+		self._add_t2(self.ship, "2.5")
+		self._decide(payout_time="120")
+		self.assertEqual(self._author_layers(), 35)
+
+	def test_payout_can_be_scaled_down(self):
+		self._add_t2(self.ship, "0.5")
+		self._decide(payout_time="120")
+		self.assertEqual(self._author_layers(), 15)
+
+	def test_payout_uses_latest_t2_multiplier(self):
+		self._add_t2(self.ship, "3.0")
+		self._add_t2(self.ship, "2.0")
+		self._decide(payout_time="120")
+		self.assertEqual(self._author_layers(), 30)
+
+	def test_payout_unscaled_without_a_t2(self):
+		self._decide(payout_time="120")
+		self.assertEqual(self._author_layers(), 20)
+
+	def test_multiplier_does_not_change_recorded_times(self):
+		# The multiplier moves pearls only — Airtable is still told how long
+		# the work actually took.
+		self._add_t2(self.ship, "3.0")
+		self._decide(payout_time="120", airtable_time="120")
+		t3 = T3.objects.get()
+		self.assertEqual(t3.payout_time, 120)
+		self.assertEqual(t3.airtable_time, 120)
+
 	def test_audit_log_records_payout(self):
 		self._decide(payout_time="60")
 		log = AuditLog.objects.get(action="t3_decision")
 		self.assertEqual(log.metadata["payout_layers"], 5)
+		self.assertEqual(log.metadata["payout_multiplier"], "1.0")
+
+	def test_audit_log_records_multiplied_payout(self):
+		self._add_t2(self.ship, "2.0")
+		self._decide(payout_time="60")
+		log = AuditLog.objects.get(action="t3_decision")
+		self.assertEqual(log.metadata["payout_layers"], 10)
+		self.assertEqual(log.metadata["payout_multiplier"], "2.0")
 
 	def test_slack_dm_sent(self):
 		self._decide()
