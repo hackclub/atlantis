@@ -7,6 +7,15 @@
     <title>@{{ user_viewed.hackclub_profile.slack_username }}</title>
     <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
     {% include '_favicon.html' %}
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
 </head>
 <body id="user">
     <a id="back-link" href="{% url 'dashboard' %}">&larr; back</a>
@@ -84,6 +93,10 @@
                             {% if journal.image_url %}
                                 <img class="activity-entry-image" src="{{ journal.image_display_url }}" alt="{{ journal.title }}" loading="lazy">
                             {% endif %}
+                            {% if journal.model_url %}
+                                <button type="button" class="activity-entry-stl-toggle js-stl-toggle" data-model="{{ journal.model_display_url }}" aria-expanded="false">View STL</button>
+                                <div class="stl-viewer activity-entry-stl-stage" data-stl-url="" hidden></div>
+                            {% endif %}
                         </article>
                     {% endfor %}
                 </div>
@@ -92,5 +105,52 @@
             {% endif %}
         </section>
     </div>
+
+    <script>
+        // Mounted on demand, not at load: dozens of journals would each open
+        // their own WebGL context if the viewer auto-inited every .stl-viewer.
+        (function () {
+            const viewers = new WeakMap();
+
+            function mount(stage, url) {
+                stage.dataset.stlUrl = url;
+                if (window.AtlantisSTL) {
+                    viewers.set(stage, window.AtlantisSTL.init(stage));
+                } else {
+                    document.addEventListener('atlantis:stl-ready', () => {
+                        if (stage.isConnected) viewers.set(stage, window.AtlantisSTL.init(stage));
+                    }, { once: true });
+                }
+            }
+
+            function dispose(stage) {
+                const viewer = viewers.get(stage);
+                if (viewer && viewer.dispose) viewer.dispose();
+                viewers.delete(stage);
+                stage.replaceChildren();
+                stage.dataset.stlUrl = '';
+            }
+
+            document.addEventListener('click', (e) => {
+                const btn = e.target.closest('.js-stl-toggle');
+                if (!btn) return;
+                const stage = btn.nextElementSibling;
+                if (!stage) return;
+
+                const open = btn.getAttribute('aria-expanded') === 'true';
+                if (open) {
+                    dispose(stage);
+                    stage.hidden = true;
+                    btn.textContent = 'View STL';
+                    btn.setAttribute('aria-expanded', 'false');
+                } else {
+                    stage.hidden = false;
+                    mount(stage, btn.dataset.model);
+                    btn.textContent = 'Hide STL';
+                    btn.setAttribute('aria-expanded', 'true');
+                }
+            });
+        })();
+    </script>
 </body>
 </html>

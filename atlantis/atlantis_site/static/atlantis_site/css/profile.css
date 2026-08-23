@@ -11,22 +11,31 @@
 }
 
 #user {
+    position: relative;
     min-height: 100vh;
-    background-color: #f4e6cf;
+    background-color: #bfe4ea;
+}
+
+#user::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
     background-image: url('../assets/img/user/background.png');
     background-size: cover;
     background-position: top center;
     background-repeat: no-repeat;
-    background-attachment: fixed;
+    transform: scaleY(-1);
 }
 
 #back-link {
     display: inline-block;
     margin: 24px 0 0 24px;
-    color: #6B4A24;
+    color: #FBEFD6;
     text-decoration: none;
     font-weight: 600;
     font-size: 16px;
+    text-shadow: 0 1px 4px rgba(10, 40, 50, 0.55);
 }
 
 #back-link:hover,
@@ -159,19 +168,22 @@
     font-family: "Atlantis Hand", "Prompt", sans-serif;
     margin: 4px 0 16px;
     font-size: 26px;
-    color: #1D1D1F;
+    color: #FBEFD6;
+    text-shadow: 0 1px 4px rgba(10, 40, 50, 0.55);
 }
 
 .activity-feed {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
 }
 
 .activity-entry {
+    width: fit-content;
+    max-width: min(570px, 100%);
     border: 2px solid #E4D8BE;
-    border-radius: 16px;
-    padding: 18px 20px;
+    border-radius: 14px;
+    padding: 14px 16px;
     background-color: rgba(255, 253, 247, 0.92);
     box-shadow: 0 14px 34px rgba(40, 26, 10, 0.14);
 }
@@ -181,7 +193,7 @@
     flex-wrap: wrap;
     align-items: baseline;
     gap: 4px 10px;
-    margin: 0 0 6px;
+    margin: 0 0 4px;
     font-size: 14px;
 }
 
@@ -200,25 +212,50 @@
 }
 
 .activity-entry-title {
-    margin: 0 0 10px;
-    font-size: 18px;
+    margin: 0 0 8px;
+    font-size: 16px;
 }
 
 .activity-entry-image {
     display: block;
-    max-width: min(360px, 100%);
-    max-height: 320px;
+    max-width: min(787px, 100%);
+    max-height: 700px;
     height: auto;
-    border-radius: 10px;
+    border-radius: 8px;
     object-fit: contain;
 }
 
+.activity-entry-stl-toggle {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 6px 14px;
+    border: 1px solid #6B4A24;
+    border-radius: 999px;
+    background: none;
+    color: #6B4A24;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.activity-entry-stl-toggle:hover,
+.activity-entry-stl-toggle:focus-visible {
+    background-color: #6B4A24;
+    color: #FBEFD6;
+}
+
+.activity-entry-stl-stage {
+    width: min(540px, 100%);
+    margin-top: 10px;
+}
+
 @media (max-width: 900px) {
-    #user {
-        /* Fixed backgrounds repaint on every scroll tick on mobile Safari/Chrome,
-           which is janky on a long activity feed; scroll is cheap and looks the
-           same once the page is taller than one screen anyway. */
-        background-attachment: scroll;
+    #user::before {
+        /* A fixed, viewport-sized layer repaints on every scroll tick on
+           mobile Safari/Chrome, which is janky on a long activity feed.
+           Absolute lets it scroll with the (taller) page instead. */
+        position: absolute;
     }
 
     #back-link {
