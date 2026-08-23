@@ -109,6 +109,18 @@
             z-index: 3;
         }
 
+        #landing-sponsor {
+            position: absolute;
+            right: clamp(16px, 4vw, 48px);
+            bottom: clamp(14px, 3vh, 28px);
+            z-index: 3;
+            margin: 0;
+            font-family: "Atlantis Hand";
+            font-size: clamp(12px, 1.3vw, 20px);
+            color: rgba(229, 242, 252, 0.22);
+            pointer-events: none;
+        }
+
         .landing {
             text-align: left;
             box-sizing: border-box;
@@ -428,6 +440,8 @@
                 <p id="landing-text">ship 5 hours of CAD a week, <br> get a free 3D printer!</p>
                 <a href="https://forms.hackclub.com/atlantis-rsvp" id="rsvp-button">RSVP</a>
             </div>
+
+            <p id="landing-sponsor">sponsored by Mihir</p>
         </div>
 
         <div id="faq-transition" aria-hidden="true">
