@@ -163,11 +163,6 @@
         .faq-inner {
             position: relative;
             z-index: 2;
-
-            /* Explicit width, not the flex default: as a flex item of #faq its
-               `auto` margins suppress stretching, so it would otherwise shrink
-               to fit -- narrow while the dropdowns are closed, wider once one
-               is open. */
             width: 100%;
             max-width: 25em;
             margin: 0 auto;
@@ -185,8 +180,8 @@
 
 
         .faq-item {
-            background-color: #E5F2FC;
-            border: 0.1em solid #00528c;
+            background-color: #BDEAFF;
+            border: 0.25em solid #00528c;
             border-radius: 0.75em;
             margin-bottom: 0.45em;
         }
@@ -221,7 +216,7 @@
             border-right: 0.1em solid currentColor;
             border-bottom: 0.1em solid currentColor;
             transform: translateY(-0.12em) rotate(45deg);
-            transition: transform 0.18s ease-out;
+            transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
         }
 
         .faq-item[open] summary::after {
@@ -242,10 +237,6 @@
 
 
         .faq-inner {
-            /* Reaches down to the waterline: the 22.4% top padding plus this
-               is 67.6vw, where background_faq.png turns to flat blue. Keeps
-               the footer off the artwork, and leaves the opened dropdown room
-               to grow into. */
             min-height: 45.2vw;
         }
 
@@ -257,9 +248,6 @@
             flex-direction: column;
             justify-content: space-between;
             gap: 1.5em;
-
-            /* Its own scale: the panel's `font-size` runs up to 38px, which the
-               FAQ list needs and a wall of footer links does not. */
             font-size: clamp(12px, 0.95vw, 19px);
             padding: 2.2em 0 1.6em;
             color: #cfe8f5;
@@ -376,8 +364,6 @@
 
     <div class="content">
         <div class="landing">
-            <!-- Lives here rather than in #parallax so it can sit in front of
-                 the transition band, which the fixed layers cannot. -->
             <div class="parallax-layer" id="layer-foreground" data-depth="66" aria-hidden="true"></div>
 
             <div class="landing-copy">
@@ -399,13 +385,13 @@
                 </details>
 
                 <details class="faq-item" name="faq">
-                    <summary>How much do I have to work?</summary>
-                    <p>Five hours of CAD work a week, 8 weeks. We track time using timelapses!</p>
+                    <summary>How does this work?</summary>
+                    <p>You ship 5 hours of CAD a week for 8 weeks. We track time using <a href="https://lookout.hackclub.com">timelapses</a>!</p>
                 </details>
 
                 <details class="faq-item" name="faq">
                     <summary>Which 3D printer do I get?</summary>
-                    <p>Depends on how much work you do! 5 hours a week will get you a base printer - Bambu A1 Mini, Creality Ender 3 V3 SE, Elegoo Neptune 4, or a $250 grant to buy one yourself! More work = better printer!</p>
+                    <p>Depends on how much CAD you do! 5 hours a week will get you a base printer - Bambu A1 Mini, Creality Ender 3 V3 SE, Elegoo Neptune 4, or a $250 grant to buy one yourself! More work = better printer!</p>
                 </details>
 
                 <details class="faq-item" name="faq">
@@ -419,8 +405,8 @@
                 </details>
 
                 <details class="faq-item" name="faq">
-                    <summary>I have another question!</summary>
-                    <p>Ask in the Hack Club Slack! We're in <strong><a href="https://hackclub.enterprise.slack.com/archives/C0ATSHVECBG">#atlantis</a></strong>.</p>
+                    <summary>I have more questions!</summary>
+                    <p>Ask in <strong><a href="https://hackclub.enterprise.slack.com/archives/C0AUP8VUU6T">#atlantis-help</a></strong> on the Hack Club Slack!</p>
                 </details>
             </div>
 
@@ -577,6 +563,112 @@
                 if (event.matches) disable();
                 else enable();
             });
+        })();
+    </script>
+    <script>
+        (function () {
+            const items = Array.from(document.querySelectorAll(".faq-item"));
+            if (!items.length || typeof Element.prototype.animate !== "function") return;
+
+            const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+            const DURATION = 280;
+            const EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
+            const running = new WeakMap();
+            const wanted = new WeakMap();
+
+            for (const details of items) details.removeAttribute("name");
+
+            function contentOf(details) {
+                return Array.from(details.children).filter((el) => el.tagName !== "SUMMARY");
+            }
+
+            function height(details) {
+                return details.getBoundingClientRect().height;
+            }
+
+            function closedHeight(details) {
+                const styles = getComputedStyle(details);
+                return details.querySelector("summary").getBoundingClientRect().height +
+                    parseFloat(styles.borderTopWidth) + parseFloat(styles.borderBottomWidth) +
+                    parseFloat(styles.paddingTop) + parseFloat(styles.paddingBottom);
+            }
+
+            function stop(details) {
+                const animation = running.get(details);
+                if (animation) {
+                    running.delete(details);
+                    animation.cancel();
+                }
+                for (const el of contentOf(details)) {
+                    for (const fade of el.getAnimations()) fade.cancel();
+                }
+            }
+
+            function play(details, from, to, opening, onDone) {
+                details.style.overflow = "hidden";
+                const animation = details.animate(
+                    { height: [from + "px", to + "px"] },
+                    { duration: DURATION, easing: EASING }
+                );
+                running.set(details, animation);
+
+                for (const el of contentOf(details)) {
+                    el.animate(
+                        { opacity: opening ? [0, 1] : [1, 0] },
+                        {
+                            duration: DURATION * (opening ? 0.7 : 0.45),
+                            delay: opening ? DURATION * 0.25 : 0,
+                            easing: "ease-out",
+                            fill: "backwards",
+                        }
+                    );
+                }
+
+                animation.finished.then(function () {
+                    if (running.get(details) !== animation) return;
+                    running.delete(details);
+                    if (onDone) onDone();
+                    details.style.overflow = "";
+                }, function () { });
+            }
+
+            function expand(details) {
+                wanted.set(details, true);
+                const from = height(details);
+                stop(details);
+                details.open = true;
+                const to = height(details);
+                if (reduceMotion.matches) return;
+                play(details, from, to, true, null);
+            }
+
+            function collapse(details) {
+                wanted.set(details, false);
+                const from = height(details);
+                stop(details);
+                const to = closedHeight(details);
+                if (reduceMotion.matches || to >= from) {
+                    details.open = false;
+                    details.style.overflow = "";
+                    return;
+                }
+                play(details, from, to, false, function () { details.open = false; });
+            }
+
+            for (const details of items) {
+                wanted.set(details, details.open);
+                details.querySelector("summary").addEventListener("click", function (event) {
+                    event.preventDefault();
+                    if (wanted.get(details)) {
+                        collapse(details);
+                        return;
+                    }
+                    for (const other of items) {
+                        if (wanted.get(other)) collapse(other);
+                    }
+                    expand(details);
+                });
+            }
         })();
     </script>
 </body>
