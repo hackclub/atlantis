@@ -5,9 +5,11 @@ stylesheet, so the grouping and the sizing can never disagree.
     <script>
         /* ---------- the deck ----------
            The shelf holds one row of books at a time, centred in the window.
-           Nothing scrolls: a wheel notch, a swipe or an arrow key past a
-           threshold slides the next row up, and anything short of that
-           threshold leaves the current row where it is. */
+           The scrolling itself is the browser's: #shelf is a real scroll
+           container with mandatory snap points, so a flick carries its own
+           momentum and settles on a shelf. This script only groups the books
+           into shelves, keeps the dots in step with wherever the scroll ended
+           up, and lets the keys and the dots jump between shelves. */
         (function () {
             const deck = document.getElementById("deck");
             const shelf = document.getElementById("shelf");
@@ -20,9 +22,11 @@ stylesheet, so the grouping and the sizing can never disagree.
             /* Beyond this many shelves the dot column gets a count instead. */
             const MAX_DOTS = 12;
 
+            const stillness = window.matchMedia("(prefers-reduced-motion: reduce)");
+
             let pages = [];
             let perPage = 0;
-            let page = 0;
+            let page = -1;
             let counter = null;
             let counted = false;
 
@@ -37,7 +41,6 @@ stylesheet, so the grouping and the sizing can never disagree.
                 for (let i = 0; i < items.length; i += perPage) {
                     const sheet = document.createElement("div");
                     sheet.className = "shelf-page";
-                    sheet.style.setProperty("--i", String(i / perPage));
                     sheet.append(...items.slice(i, i + perPage));
                     frag.append(sheet);
                 }
@@ -65,12 +68,34 @@ stylesheet, so the grouping and the sizing can never disagree.
                 document.body.classList.toggle("deck-counted", counted);
 
                 // Keep whichever books were on screen on screen.
-                show(Math.floor((anchorItem || 0) / perPage));
+                page = -1;
+                go(Math.floor((anchorItem || 0) / perPage), true);
+                settle();
             }
 
-            function show(n) {
-                page = Math.max(0, Math.min(pages.length - 1, n));
-                shelf.style.setProperty("--page", String(page));
+            function pageHeight() {
+                return shelf.clientHeight || 1;
+            }
+
+            function clamp(n) {
+                return Math.max(0, Math.min(pages.length - 1, n));
+            }
+
+            /* A jump, for the dots and the keys. A gesture never comes through
+               here: the browser scrolls itself. */
+            function go(n, instant) {
+                shelf.scrollTo({
+                    top: clamp(n) * pageHeight(),
+                    behavior: instant || stillness.matches ? "auto" : "smooth"
+                });
+            }
+
+            /* Whatever shelf the scroll is nearest to is the one we are on. */
+            function settle() {
+                const n = clamp(Math.round(shelf.scrollTop / pageHeight()));
+                if (n === page) return;
+                page = n;
+
                 pages.forEach((sheet, i) => {
                     const on = i === page;
                     sheet.toggleAttribute("inert", !on);
@@ -86,79 +111,18 @@ stylesheet, so the grouping and the sizing can never disagree.
                 document.body.classList.toggle("deck-end", page === pages.length - 1);
             }
 
-            function go(n) {
-                const target = Math.max(0, Math.min(pages.length - 1, n));
-                if (target === page) return false;
-                show(target);
-                return true;
-            }
+            let frame = 0;
+            shelf.addEventListener("scroll", () => {
+                if (frame) return;
+                frame = requestAnimationFrame(() => {
+                    frame = 0;
+                    settle();
+                });
+            }, { passive: true });
 
             function busy() {
                 return !!document.querySelector(".modal:not(.hidden)");
             }
-
-            /* One gesture moves one shelf. The lock swallows a trackpad's
-               momentum tail, which would otherwise read as a second gesture. */
-            const THRESHOLD = 80;
-            let travel = 0;
-            let locked = false;
-            let unlockTimer = 0;
-            let travelTimer = 0;
-
-            function relock() {
-                clearTimeout(unlockTimer);
-                unlockTimer = setTimeout(() => {
-                    locked = false;
-                    travel = 0;
-                }, 620);
-            }
-
-            function push(delta) {
-                if (pages.length < 2 || !delta) return;
-                if (locked) {
-                    relock();
-                    return;
-                }
-                if (travel && Math.sign(delta) !== Math.sign(travel)) travel = 0;
-                travel += delta;
-
-                // A slow drift that never reaches the threshold decays away.
-                clearTimeout(travelTimer);
-                travelTimer = setTimeout(() => { travel = 0; }, 260);
-
-                if (Math.abs(travel) < THRESHOLD) return;
-                const moved = go(page + (travel > 0 ? 1 : -1));
-                travel = 0;
-                if (moved) {
-                    locked = true;
-                    relock();
-                }
-            }
-
-            window.addEventListener("wheel", (e) => {
-                if (e.ctrlKey || busy()) return;
-                e.preventDefault();
-                let delta = e.deltaY;
-                if (e.deltaMode === 1) delta *= 16;
-                else if (e.deltaMode === 2) delta *= deck.clientHeight || 800;
-                push(delta);
-            }, { passive: false });
-
-            let touchY = null;
-            deck.addEventListener("touchstart", (e) => {
-                touchY = busy() || e.touches.length !== 1 ? null : e.touches[0].clientY;
-            }, { passive: true });
-
-            deck.addEventListener("touchmove", (e) => {
-                if (touchY === null) return;
-                const y = e.touches[0].clientY;
-                const delta = touchY - y;
-                if (Math.abs(delta) < 6) return;
-                touchY = y;
-                push(delta * 1.6);
-            }, { passive: true });
-
-            deck.addEventListener("touchend", () => { touchY = null; }, { passive: true });
 
             const KEYS = {
                 ArrowDown: 1, PageDown: 1, " ": 1,
@@ -169,6 +133,8 @@ stylesheet, so the grouping and the sizing can never disagree.
                 if (busy() || e.metaKey || e.ctrlKey || e.altKey) return;
                 const el = e.target instanceof Element ? e.target : null;
                 if (el && el.closest("input, textarea, select")) return;
+                // Space belongs to whatever is focused before it belongs to us.
+                if (e.key === " " && el && el.closest("button, a, summary")) return;
                 if (e.key === "Home") { go(0); e.preventDefault(); return; }
                 if (e.key === "End") { go(pages.length - 1); e.preventDefault(); return; }
                 const step = KEYS[e.key];
@@ -181,7 +147,12 @@ stylesheet, so the grouping and the sizing can never disagree.
             window.addEventListener("resize", () => {
                 clearTimeout(resizeTimer);
                 resizeTimer = setTimeout(() => {
-                    if (wantedPerPage() === perPage) return;
+                    if (wantedPerPage() === perPage) {
+                        // A snapped scroller usually holds its place across a
+                        // resize on its own, but not every browser does.
+                        go(page, true);
+                        return;
+                    }
                     build(page * perPage);
                 }, 120);
             });

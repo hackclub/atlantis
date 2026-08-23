@@ -123,32 +123,44 @@ belongs to the page including this.
             position: relative;
             flex: 1 1 auto;
             min-height: 0;
-            overflow: hidden;
-            /* Vertical panning is the deck's to interpret, not the browser's. */
-            touch-action: none;
         }
 
-        /* The whole stack of shelves, slid up one deck-height at a time. Its
-           own height is the deck's, so a -100% translate is exactly one page. */
+        /* The stack of shelves is a real scroll container, so the flick, the
+           momentum and the rubber band at the ends are the platform's own.
+           Snapping is what keeps one row per screen: the scroll is free, the
+           resting places are not. */
         body.deck-ready #shelf {
             display: block;
-            position: relative;
             height: 100%;
             margin: 0;
-            translate: 0 calc(var(--page, 0) * -100%);
-            transition: translate 0.55s cubic-bezier(0.22, 0.61, 0.36, 1);
+            overflow-y: auto;
+            overflow-x: hidden;
+            scroll-snap-type: y mandatory;
+            /* The page behind cannot scroll, so a flick past the last shelf
+               should stop here rather than rubber-band the window. */
+            overscroll-behavior-y: contain;
+            /* The dots are the cue that there is more below; a scrollbar over
+               the paper would be a second, uglier one. */
+            scrollbar-width: none;
+        }
+
+        body.deck-ready #shelf::-webkit-scrollbar {
+            display: none;
         }
 
         .shelf-page {
-            position: absolute;
-            left: 0;
-            right: 0;
-            top: calc(var(--i) * 100%);
+            /* Both axes spelled out: a size container is laid out as if it
+               were empty, so an auto width would collapse to nothing. */
+            width: 100%;
             height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
             gap: var(--deck-gap);
+            /* Always land on a shelf, and never fly past one, however hard
+               the flick. */
+            scroll-snap-align: center;
+            scroll-snap-stop: always;
             /* A size container, so the books below can be measured against the
                deck itself rather than against a guess at the window. */
             container-type: size;
@@ -166,12 +178,6 @@ belongs to the page including this.
                 calc((100cqw - (var(--per-page) - 1) * var(--deck-gap)) / var(--per-page))
             );
             max-width: none;
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-            body.deck-ready #shelf {
-                transition-duration: 1ms;
-            }
         }
 
         /* One dot per shelf: the only remaining cue that there is more below,
