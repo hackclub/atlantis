@@ -5,7 +5,6 @@
 
 {% block content %}
 <div class="content">
-    {% include "root/_messages.html" %}
     <div class="profile-header">
         {% if viewed_profile.slack_pfp_url %}
             <img src="{{ viewed_profile.slack_pfp_url }}" alt="@{{ viewed_profile.slack_username }}" class="profile-header-pfp">

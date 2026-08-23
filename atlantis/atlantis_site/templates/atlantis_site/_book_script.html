@@ -63,12 +63,6 @@ everything a reader needs, with none of the owner's editing.
             layout();
         })();
 
-        // ---- a note left on the desk is dismissed by touching it ----
-        (function () {
-            const note = document.querySelector('.messages');
-            if (note) note.addEventListener('click', () => note.remove());
-        })();
-
         // ---- slips laid over the book ----
         (function () {
             const layer = document.getElementById('slip-layer');

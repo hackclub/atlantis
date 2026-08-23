@@ -112,35 +112,6 @@
             filter: drop-shadow(0 1px 1px rgba(24, 13, 4, 0.35));
         }
 
-        .messages {
-            margin: clamp(12px, 1.4vw, 20px) 0 0;
-            display: grid;
-            gap: 8px;
-        }
-
-        .message {
-            margin: 0;
-            padding: 10px 18px 11px;
-            border: 2px solid #E4D8BE;
-            border-left-width: 8px;
-            border-radius: 12px;
-            background-color: #FFFDF7;
-            box-shadow: 0 10px 24px rgba(24, 13, 4, 0.28);
-            font-size: clamp(17px, 1.4vw, 24px);
-            color: #4A4A4F;
-        }
-
-        .message.success {
-            border-left-color: #4B7F4B;
-            color: #2F5B2F;
-        }
-
-        .message.error,
-        .message.warning {
-            border-left-color: #C0392B;
-            color: #96281B;
-        }
-
         .shelf-section {
             margin-top: clamp(26px, 3.2vw, 54px);
         }
@@ -554,13 +525,7 @@
                 <span class="pearl" aria-hidden="true"></span>{{ profile.layers }} pearls
             </a>
         </div>
-        {% if messages %}
-            <div class="messages">
-                {% for message in messages %}
-                    <p class="message {{ message.tags }}">{{ message }}</p>
-                {% endfor %}
-            </div>
-        {% endif %}
+        {% include "atlantis_site/_banner.html" %}
 
         {% if items %}
             {% regroup items by category as category_groups %}
