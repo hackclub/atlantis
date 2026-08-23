@@ -29,12 +29,8 @@ def media_url(value):
 ALLOWED_EDITORS = [
 	"Fusion 360",
 	"Onshape",
-	"Shapr3D",
 	"Solidworks",
 	"FreeCAD",
-	"OpenSCAD",
-	"Blender",
-	"Solvespace",
 ]
 
 EDITOR_FILE_EXTENSIONS = {
@@ -44,18 +40,12 @@ EDITOR_FILE_EXTENSIONS = {
 	".sldasm": "Solidworks",
 	".slddrw": "Solidworks",
 	".fcstd": "FreeCAD",
-	".scad": "OpenSCAD",
-	".blend": "Blender",
-	".slvs": "Solvespace",
-	".shapr3d": "Shapr3D",
-	".shapr": "Shapr3D",
 }
 
 EDITOR_LINK_DOMAINS = {
 	"onshape.com": "Onshape",
 	"a360.co": "Fusion 360",
 	"autodesk360.com": "Fusion 360",
-	"shapr3d.com": "Shapr3D",
 }
 
 def detect_editor_from_filename(filename):

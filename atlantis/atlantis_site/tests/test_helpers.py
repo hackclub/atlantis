@@ -46,10 +46,6 @@ class EditorDetectionTests(TestCase):
 		self.assertEqual(detect_editor_from_filename("part.f3d"), "Fusion 360")
 		self.assertEqual(detect_editor_from_filename("assembly.sldasm"), "Solidworks")
 		self.assertEqual(detect_editor_from_filename("thing.FCStd"), "FreeCAD")
-		self.assertEqual(detect_editor_from_filename("box.scad"), "OpenSCAD")
-		self.assertEqual(detect_editor_from_filename("scene.blend"), "Blender")
-		self.assertEqual(detect_editor_from_filename("sketch.slvs"), "Solvespace")
-		self.assertEqual(detect_editor_from_filename("model.shapr"), "Shapr3D")
 
 	def test_detect_editor_from_filename_is_case_insensitive(self):
 		self.assertEqual(detect_editor_from_filename("PART.F3D"), "Fusion 360")
@@ -57,18 +53,24 @@ class EditorDetectionTests(TestCase):
 	def test_detect_editor_from_filename_unknown(self):
 		self.assertIsNone(detect_editor_from_filename("model.stl"))
 		self.assertIsNone(detect_editor_from_filename("no_extension"))
+		self.assertIsNone(detect_editor_from_filename("box.scad"))
+		self.assertIsNone(detect_editor_from_filename("scene.blend"))
+		self.assertIsNone(detect_editor_from_filename("sketch.slvs"))
+		self.assertIsNone(detect_editor_from_filename("model.shapr"))
 
 	def test_detect_editor_from_link_known_domains(self):
 		self.assertEqual(detect_editor_from_link("https://onshape.com/doc/1"), "Onshape")
 		self.assertEqual(detect_editor_from_link("https://cad.onshape.com/doc/1"), "Onshape")
 		self.assertEqual(detect_editor_from_link("https://a360.co/abc"), "Fusion 360")
 		self.assertEqual(detect_editor_from_link("https://myhub.autodesk360.com/x"), "Fusion 360")
-		self.assertEqual(detect_editor_from_link("https://collab.shapr3d.com/x"), "Shapr3D")
 
 	def test_detect_editor_from_link_rejects_lookalike_domains(self):
 		self.assertIsNone(detect_editor_from_link("https://notonshape.com/doc"))
 		self.assertIsNone(detect_editor_from_link("https://onshape.com.evil.com/doc"))
 		self.assertIsNone(detect_editor_from_link("https://example.com/onshape.com"))
+
+	def test_detect_editor_from_link_rejects_removed_editor(self):
+		self.assertIsNone(detect_editor_from_link("https://collab.shapr3d.com/x"))
 
 	def test_detect_editor_prefers_file_extension_in_url_path(self):
 		self.assertEqual(detect_editor("https://cdn.example.com/files/part.f3d"), "Fusion 360")
