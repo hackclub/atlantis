@@ -86,8 +86,6 @@ def layers_for_minutes(minutes):
     tenths_of_hour = minutes // 6
     return round(tenths_of_hour * 0.5)
 
-# All reported time comes from Lookout timelapses linked to journal entries.
-# Nothing is self-reported, so these are the only ways to total time up.
 def tracked_seconds_for_journals(journals):
     return LookoutSession.objects.filter(journal__in=journals).aggregate(
         total=Sum("tracked_seconds")
@@ -96,11 +94,6 @@ def tracked_seconds_for_journals(journals):
 def tracked_minutes_for_journals(journals):
     return tracked_seconds_for_journals(journals) // 60
 
-# Time a timelapse reviewer cut out of those journals, and what's left after it.
-# The approved_* pair is the internal number — what a project actually gets paid
-# for — so it belongs on /root pages and in the T2/T3 maths, never on anything
-# the owner can load. Their side of the site keeps using tracked_*, which is why
-# a removal can't quietly move a ship gate under them.
 def removed_seconds_for_journals(journals):
     return TimelapseRemoval.objects.filter(review__journal__in=journals).aggregate(
         total=Sum(F("end_seconds") - F("start_seconds"), output_field=IntegerField())
@@ -116,14 +109,6 @@ def approved_minutes_for_journals(journals):
     return approved_seconds_for_journals(journals) // 60
 
 def timelapse_cleared_ships(ships):
-    """Only the ships whose every journal has passed internal timelapse review.
-
-    Ships still waiting are held out of the regular review queues rather than
-    marked as held: their owner sees no change at all. Ships with no journals
-    (the DEBUG-only ship bypass) are left in — there's no footage to review,
-    which is why this asks whether an unreviewed journal exists rather than
-    joining, where a ship with no journals at all matches on the NULL side.
-    """
     return ships.exclude(
         Exists(Journal.objects.filter(ship=OuterRef("pk"), timelapse_review__isnull=True))
     )
@@ -131,11 +116,6 @@ def timelapse_cleared_ships(ships):
 def format_minutes(minutes):
     return f"{minutes // 60}h {minutes % 60}m"
 
-# Local-development escape hatch. Recording real Lookout footage to clear the
-# 3h/2h ship gates makes the ship -> review -> payout chain untestable
-# by hand, so organizers running with DEBUG on may ship with no journals and no
-# tracked time. BOTH conditions are required: with DEBUG off this is dead code
-# no matter who is signed in, so an organizer in production gains nothing.
 def can_bypass_ship_requirements(user):
     return bool(settings.DEBUG and user.has_perm("atlantis_site.organizer"))
 
@@ -167,8 +147,6 @@ def build_review_history(ship):
             "actor": display_name(t2.reviewer),
             "at": t2.reviewed_at,
         })
-    # Comments span the whole project: a note left on an earlier ship is still
-    # what a reviewer needs to see on a reship, so it's flagged, not hidden.
     for comment in internal_comments_for_project(ship.project):
         events.append({
             "type": "comment",
@@ -182,11 +160,6 @@ def build_review_history(ship):
     return events
 
 def build_journal_timeline(journals, ships):
-    """A project's journals and ships as one newest-first list.
-
-    /root pages only, like build_review_history: the time on a ship here is the
-    approved figure, net of anything timelapse review took off it, which the
-    owner is never shown."""
     events = []
     for journal in journals:
         events.append({

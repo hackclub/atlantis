@@ -10,16 +10,11 @@ from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, 
 
 INTERNAL_COMMENT_MAX_LENGTH = 1000
 
-# Shown to reviewers only. A ship waits out of sight here until every one of its
-# journals has cleared internal timelapse review, because the hours it would be
-# reviewed on aren't settled until then.
 TIMELAPSE_PENDING_MESSAGE = (
     "That ship's timelapses haven't finished internal review yet. It'll appear "
     "in the queue once they have."
 )
 
-# Every /root review page can leave one, so the perms are the union of the ones
-# guarding those pages.
 COMMENT_PERMS = [
     "atlantis_site.t1_review",
     "atlantis_site.t2_review",
@@ -93,10 +88,6 @@ def t1_decision(request, ship_id):
             messages.error(request, "ship not in T1 queue")
             return redirect("review_dash")
 
-        # The dash and the project page both hide these ships, so getting here
-        # means a stale tab or a hand-rolled POST — either way the timelapses
-        # haven't been signed off, and the hours in front of this reviewer
-        # aren't final yet.
         if not ship.timelapse_cleared:
             messages.error(request, TIMELAPSE_PENDING_MESSAGE)
             return redirect("review_dash")
