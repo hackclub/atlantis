@@ -75,7 +75,7 @@
             margin-bottom: clamp(14px, 3.3vh, 30px);
         }
 
-        #rsvp-button {
+        #login-button {
             --border-thin: 0.1em;
             --border-thick: 0.28em;
 
@@ -95,7 +95,7 @@
             transition: border-bottom-width 0.03s ease-out, transform 0.03s ease-out;
         }
 
-        #rsvp-button:active {
+        #login-button:active {
             border-bottom-width: var(--border-thin);
             transform: translateY(calc(var(--border-thick) - var(--border-thin)));
         }
@@ -438,7 +438,10 @@
             <div class="landing-copy">
                 <p id="landing-title">Atlantis</p>
                 <p id="landing-text">ship 5 hours of CAD a week, <br> get a free 3D printer!</p>
-                <a href="https://forms.hackclub.com/atlantis-rsvp" id="rsvp-button">RSVP</a>
+                <form action="{% url 'login' %}" method="post" id="loginForm">
+                    {% csrf_token %}
+                    <a href="javascript:void(0)" onclick="document.getElementById('loginForm').submit();" id="login-button">log in</a>
+                </form>
             </div>
 
             <p id="landing-sponsor">sponsored by Mihir</p>
