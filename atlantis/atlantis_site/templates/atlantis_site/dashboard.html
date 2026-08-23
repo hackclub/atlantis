@@ -200,6 +200,19 @@
             }
         }
 
+        #item-map[aria-disabled="true"] {
+            cursor: not-allowed;
+        }
+
+        #item-map[aria-disabled="true"] img {
+            filter: grayscale(1) brightness(0.75);
+        }
+
+        #item-map[aria-disabled="true"]:hover,
+        #item-map[aria-disabled="true"]:focus-visible {
+            scale: 1;
+        }
+
         .hud {
             position: fixed;
             top: clamp(12px, 2.2vh, 34px);
@@ -293,10 +306,9 @@
             <span class="item-label-frame"><span class="item-label">guides/faq</span></span>
         </a>
 
-        <a class="item" id="item-map" href="{% url 'printer_select' %}" aria-label="Pick your printer">
+        <span class="item" id="item-map" aria-disabled="true" aria-label="Printer selection is locked">
             <img src="{% static 'atlantis_site/assets/img/dashboard/map.png' %}" alt="">
-            <span class="item-label-frame"><span class="item-label">printer</span></span>
-        </a>
+        </span>
 
         <a class="item" id="item-book" href="{% url 'projects' %}" aria-label="Projects">
             <img src="{% static 'atlantis_site/assets/img/dashboard/book.png' %}" alt="">

@@ -1,4 +1,4 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404
@@ -14,9 +14,7 @@ def guides(request):
 
 @login_required
 def printer_select(request):
-    return render(request, "atlantis_site/printer_select.html", {
-        "profile": request.user.hackclub_profile,
-    })
+    return redirect("dashboard")
 
 @login_required
 def user_profile(request, user_id):
