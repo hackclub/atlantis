@@ -1,0 +1,232 @@
+@font-face {
+    font-family: "Atlantis Hand";
+    src: url('../assets/fonts/atlantishand.ttf') format("truetype");
+}
+
+#user,
+#user *,
+#user *::before,
+#user *::after {
+    box-sizing: border-box;
+}
+
+#user {
+    min-height: 100vh;
+    background-color: #f4e6cf;
+    background-image: url('../assets/img/user/background.png');
+    background-size: cover;
+    background-position: top center;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+}
+
+#back-link {
+    display: inline-block;
+    margin: 24px 0 0 24px;
+    color: #6B4A24;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 16px;
+}
+
+#back-link:hover,
+#back-link:focus-visible {
+    text-decoration: underline;
+}
+
+.profile-page {
+    display: grid;
+    grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+    align-items: start;
+    gap: 24px;
+    padding: 24px 24px 60px;
+}
+
+.profile-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.profile-card {
+    border: 2px solid #E4D8BE;
+    border-radius: 16px;
+    padding: 20px;
+    background-color: rgba(255, 253, 247, 0.92);
+    box-shadow: 0 14px 34px rgba(40, 26, 10, 0.14);
+}
+
+.profile-card-title {
+    margin: 0 0 12px;
+    font-size: 16px;
+    color: #6B4A24;
+}
+
+.profile-pfp {
+    display: block;
+    width: 88px;
+    height: 88px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 12px;
+}
+
+.profile-name {
+    font-family: "Atlantis Hand", "Prompt", sans-serif;
+    margin: 0 0 6px;
+    font-size: 28px;
+    color: #1D1D1F;
+}
+
+.profile-pearls,
+.profile-joined {
+    margin: 2px 0;
+    color: #6B6B63;
+    font-size: 14px;
+}
+
+.profile-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.stat-box {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    border-radius: 10px;
+    padding: 10px 12px;
+    background-color: rgba(228, 216, 190, 0.35);
+}
+
+.stat-box .stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: #1D1D1F;
+}
+
+.stat-box .stat-label {
+    font-size: 12px;
+    color: #6B6B63;
+}
+
+.profile-project-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.profile-project-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background-color: rgba(228, 216, 190, 0.35);
+}
+
+.profile-project-item a {
+    color: #1D1D1F;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+}
+
+.profile-project-item a:hover {
+    text-decoration: underline;
+}
+
+.profile-project-locked {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: #a33;
+}
+
+.profile-empty {
+    color: #6B6B63;
+    margin: 0;
+}
+
+.profile-activity {
+    min-width: 0;
+}
+
+.profile-activity > h2 {
+    font-family: "Atlantis Hand", "Prompt", sans-serif;
+    margin: 4px 0 16px;
+    font-size: 26px;
+    color: #1D1D1F;
+}
+
+.activity-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.activity-entry {
+    border: 2px solid #E4D8BE;
+    border-radius: 16px;
+    padding: 18px 20px;
+    background-color: rgba(255, 253, 247, 0.92);
+    box-shadow: 0 14px 34px rgba(40, 26, 10, 0.14);
+}
+
+.activity-entry-byline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    margin: 0 0 6px;
+    font-size: 14px;
+}
+
+.activity-entry-byline a {
+    color: #6B4A24;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.activity-entry-byline a:hover {
+    text-decoration: underline;
+}
+
+.activity-entry-meta {
+    color: #6B6B63;
+}
+
+.activity-entry-title {
+    margin: 0 0 10px;
+    font-size: 18px;
+}
+
+.activity-entry-image {
+    display: block;
+    max-width: min(360px, 100%);
+    max-height: 320px;
+    height: auto;
+    border-radius: 10px;
+    object-fit: contain;
+}
+
+@media (max-width: 900px) {
+    #user {
+        /* Fixed backgrounds repaint on every scroll tick on mobile Safari/Chrome,
+           which is janky on a long activity feed; scroll is cheap and looks the
+           same once the page is taller than one screen anyway. */
+        background-attachment: scroll;
+    }
+
+    #back-link {
+        margin: 18px 0 0 18px;
+    }
+
+    .profile-page {
+        grid-template-columns: minmax(0, 1fr);
+        padding: 18px 18px 40px;
+    }
+}

@@ -1,51 +1,96 @@
-{% extends "atlantis_site/_base.html" %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>@{{ user_viewed.hackclub_profile.slack_username }}</title>
+    <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
+    {% include '_favicon.html' %}
+</head>
+<body id="user">
+    <a id="back-link" href="{% url 'dashboard' %}">&larr; back</a>
+    {% include "atlantis_site/_banner.html" %}
 
-{% block page_id %}user{% endblock %}
-{% block title %}@{{ user_viewed.hackclub_profile.slack_username }}{% endblock %}
-
-{% block content %}
-<div class="content">
-    <div class="profile-header">
-        {% if viewed_profile.slack_pfp_url %}
-            <img src="{{ viewed_profile.slack_pfp_url }}" alt="@{{ viewed_profile.slack_username }}" class="profile-header-pfp">
-        {% endif %}
-        <div class="profile-header-main">
-            <h1>@{{ viewed_profile.slack_username }}</h1>
-            <p>{{ viewed_profile.layers }} pearls</p>
-            <p>Joined {{ user_viewed.date_joined|date:"F j, Y" }}</p>
-        </div>
-    </div>
-
-    <section class="project-list">
-        <h2>{% if is_self %}Your projects{% else %}Projects{% endif %}</h2>
-        {% if projects %}
-            <div class="card-grid">
-                {% for project in projects %}
-                    <div class="project-card" data-project-id="{{ project.id }}">
-                        <div class="card-row">
-                            <div class="card-main">
-                                {% if is_self %}
-                                    <strong><a href="{% url 'project_detail' project.id %}">{{ project.title }}</a></strong>
-                                {% else %}
-                                    <strong><a href="{% url 'project_detail_explore' project.id %}">{{ project.title }}</a></strong>
-                                {% endif %}
-                                <p>{{ project.description }}</p>
-                                {% if project.locked %}
-                                    <p class="project-locked"><strong>Locked</strong></p>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% if is_self %}
-                            <a href="{% url 'project_detail' project.id %}" class="card-detail-link">View project</a>
-                        {% else %}
-                            <a href="{% url 'project_detail_explore' project.id %}" class="card-detail-link">View project</a>
-                        {% endif %}
-                    </div>
-                {% endfor %}
+    <div class="profile-page">
+        <aside class="profile-sidebar">
+            <div class="profile-card">
+                {% if viewed_profile.slack_pfp_url %}
+                    <img src="{{ viewed_profile.slack_pfp_url }}" alt="@{{ viewed_profile.slack_username }}" class="profile-pfp">
+                {% endif %}
+                <h1 class="profile-name">@{{ viewed_profile.slack_username }}</h1>
+                <p class="profile-pearls">{{ viewed_profile.layers }} pearls</p>
+                <p class="profile-joined">Joined {{ user_viewed.date_joined|date:"F j, Y" }}</p>
             </div>
-        {% else %}
-            <p>No projects yet.</p>
-        {% endif %}
-    </section>
-</div>
-{% endblock %}
+
+            <div class="profile-card">
+                <h2 class="profile-card-title">Stats</h2>
+                <div class="profile-stats">
+                    <div class="stat-box">
+                        <span class="stat-value">{{ projects|length }}</span>
+                        <span class="stat-label">Projects</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">{{ journal_count }}</span>
+                        <span class="stat-label">Devlogs</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">{{ ship_count }}</span>
+                        <span class="stat-label">Ships</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-value">{{ tracked_hours }}h {{ tracked_minutes }}m</span>
+                        <span class="stat-label">Coding Time</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="profile-card">
+                <h2 class="profile-card-title">{% if is_self %}Your projects{% else %}Projects{% endif %}</h2>
+                {% if projects %}
+                    <ul class="profile-project-list">
+                        {% for project in projects %}
+                            <li class="profile-project-item">
+                                {% if is_self %}
+                                    <a href="{% url 'project_detail' project.id %}">{{ project.title }}</a>
+                                {% else %}
+                                    <a href="{% url 'project_detail_explore' project.id %}">{{ project.title }}</a>
+                                {% endif %}
+                                {% if project.locked %}<span class="profile-project-locked">locked</span>{% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="profile-empty">No projects yet.</p>
+                {% endif %}
+            </div>
+        </aside>
+
+        <section class="profile-activity">
+            <h2>Activity</h2>
+            {% if journals %}
+                <div class="activity-feed">
+                    {% for journal in journals %}
+                        <article class="activity-entry">
+                            <p class="activity-entry-byline">
+                                {% if is_self %}
+                                    <a href="{% url 'project_detail' journal.project.id %}">{{ journal.project.title }}</a>
+                                {% else %}
+                                    <a href="{% url 'project_detail_explore' journal.project.id %}">{{ journal.project.title }}</a>
+                                {% endif %}
+                                <span class="activity-entry-meta">{{ journal.tracked_display }} &middot; {{ journal.created_at|date:"M j, Y" }}</span>
+                            </p>
+                            <h3 class="activity-entry-title">{{ journal.title }}</h3>
+                            {% if journal.image_url %}
+                                <img class="activity-entry-image" src="{{ journal.image_display_url }}" alt="{{ journal.title }}" loading="lazy">
+                            {% endif %}
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="profile-empty">No devlogs yet.</p>
+            {% endif %}
+        </section>
+    </div>
+</body>
+</html>
