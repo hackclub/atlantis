@@ -16,6 +16,7 @@
     </script>
     <script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
     {% include "atlantis_site/_book_style.html" %}
+    {% include "atlantis_site/_lookout_style.html" %}
 </head>
 <body data-mode="book">
     <div class="desk">
@@ -121,7 +122,7 @@
                             </span>
                         {% endif %}
                         {% if not project.locked %}
-                            <form action="{% url 'start_timelapse' project.id %}" method="post">
+                            <form action="{% url 'start_timelapse' project.id %}" method="post" id="start-lookout">
                                 {% csrf_token %}
                                 <button type="submit" class="ink-btn">record a lookout</button>
                             </form>
@@ -169,7 +170,7 @@
                                             </button>
                                             {% if lookout_status %}
                                                 {% if lookout_status.url %}
-                                                    <a class="chip chip--busy" href="{{ lookout_status.url }}" title="pick it back up">{{ lookout_status.label }}&hellip;</a>
+                                                    <a class="chip chip--busy" href="{{ lookout_status.url }}" data-record title="pick it back up">{{ lookout_status.label }}&hellip;</a>
                                                 {% else %}
                                                     <span class="chip chip--dead" title="this one couldn't be turned into a video">{{ lookout_status.label }}</span>
                                                 {% endif %}
@@ -327,9 +328,9 @@
                                 <span class="dim">started {{ timelapse.created_at|date:"M j, g:i A" }}</span>
                             </span>
                             {% if timelapse.is_recordable %}
-                                <a href="{% url 'record_timelapse' timelapse.pk %}">pick it back up</a>
+                                <a href="{% url 'record_timelapse' timelapse.pk %}" data-record>pick it back up</a>
                             {% elif timelapse.is_processing %}
-                                <a href="{% url 'record_timelapse' timelapse.pk %}">building&hellip;</a>
+                                <a href="{% url 'record_timelapse' timelapse.pk %}" data-record>building&hellip;</a>
                             {% else %}
                                 <span class="warn">failed</span>
                             {% endif %}
@@ -341,6 +342,8 @@
                 <button type="button" data-close>Done</button>
             </div>
         </div>
+
+        {% include "atlantis_site/_lookout_slip.html" %}
 
         <div class="slip slip--wide" id="slip-zoom" hidden>
             <h2 id="zoom-title">Lapse</h2>
@@ -465,6 +468,76 @@
                     ? 'pick a lookout first'
                     : 'record a lookout first';
             });
+        })();
+    </script>
+
+    <script src="{% static 'atlantis_site/lookout_recorder.js' %}"></script>
+    <script>
+        // ---- the recorder, laid over the book instead of a page of its own ----
+        (function () {
+            const root = document.getElementById('lookout-recorder');
+            const startForm = document.getElementById('start-lookout');
+            if (!root || !window.AtlantisLookout) return;
+            const csrf = root.dataset.csrf;
+
+            function show(opener) {
+                if (opener) window.atlantisSlip.setOpener(opener);
+                window.atlantisSlip.open('slip-record');
+            }
+
+            // One trip for the session's config, then the recorder takes the
+            // slip over. It opens first, on a clean slate, so the click lands
+            // somewhere while the server answers.
+            async function mount(url, method, opener) {
+                window.AtlantisLookout.standby();
+                show(opener);
+                let payload = null;
+                let res;
+                try {
+                    res = await fetch(url, {
+                        method: method || 'GET',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf },
+                    });
+                    payload = await res.json().catch(() => null);
+                } catch (e) {
+                    window.AtlantisLookout.fail("Couldn't reach the server: " + e.message);
+                    return;
+                }
+                if (!res.ok || !payload || !payload.ok) {
+                    window.AtlantisLookout.fail(
+                        (payload && payload.error) || 'Could not open that recording (HTTP ' + res.status + ').'
+                    );
+                    return;
+                }
+                payload.csrfToken = csrf;
+                window.AtlantisLookout.boot(payload);
+            }
+
+            if (startForm) {
+                startForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const button = startForm.querySelector('button');
+                    // A recording already going gets reopened — starting a second
+                    // session on top of it would strand the first one.
+                    if (window.AtlantisLookout.liveSessionPk()) {
+                        show(button);
+                        return;
+                    }
+                    mount(startForm.action, 'POST', button);
+                });
+            }
+
+            // Every link to a session — the chip, the list of unfinished ones —
+            // opens it here rather than navigating.
+            document.addEventListener('click', (e) => {
+                const link = e.target.closest('a[data-record]');
+                if (!link) return;
+                e.preventDefault();
+                mount(link.href, 'GET', link);
+            });
+
+            // Sent here by an old recorder link, or by a no-JS start.
+            if (root.dataset.open) mount(root.dataset.open, 'GET', null);
         })();
     </script>
 </body>

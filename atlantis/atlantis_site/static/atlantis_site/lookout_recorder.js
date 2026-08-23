@@ -15,18 +15,22 @@
  *   - clientInfo telemetry on every upload-url request.
  *   - never fails silently; never logs the session token in full.
  *
- * Config is provided by the template via window.LOOKOUT_CONFIG.
+ * The recorder is a popup on the project page, so it is mounted on demand:
+ * window.AtlantisLookout.boot(config) points it at a session and takes over
+ * the markup, and can be called again for the next session in the same page
+ * load. Config comes from the server (see the record_timelapse view).
  */
 (function () {
 	"use strict";
 
-	const cfg = window.LOOKOUT_CONFIG || {};
-	const BASE = (cfg.baseUrl || "").replace(/\/+$/, "");
-	const TOKEN = cfg.token;
-	const SESSION_ID = cfg.sessionId;
-	const APP_NAME = cfg.appName || "Atlantis";
-	const SYNC_URL = cfg.syncUrl;
-	const CSRF = cfg.csrfToken;
+	// All set by boot(); nothing here talks to Lookout until it is called.
+	let BASE = "";
+	let TOKEN = null;
+	let SESSION_ID = null;
+	let APP_NAME = "Atlantis";
+	let SYNC_URL = null;
+	let CSRF = null;
+	let SESSION_PK = null;
 
 	const INTERVAL_S = 60; // capture interval / interpolation cap
 	const BACKOFF_MS = [2000, 4000, 8000];
@@ -35,30 +39,26 @@
 	const RECOVERY_TIMEOUT_MS = 10000; // cap on the initial session-status lookup
 
 	// --- DOM ----------------------------------------------------------------
+	// Looked up at boot rather than at load: the markup lives in a popup on the
+	// project page, so the script can be anywhere on it.
 	const el = (id) => document.getElementById(id);
-	const ui = {
-		pill: el("lookout-pill"),
-		hint: el("lookout-hint"),
-		timer: el("lookout-timer"),
-		shots: el("lookout-shots"),
-		next: el("lookout-next"),
-		mode: el("lookout-mode"),
-		log: el("lookout-log"),
-		start: el("lookout-start"),
-		pause: el("lookout-pause"),
-		resume: el("lookout-resume"),
-		stop: el("lookout-stop"),
-		reshare: el("lookout-reshare"),
-		preview: el("lookout-preview"),
-		stageEmpty: el("lookout-stage-empty"),
-		badge: el("lookout-badge"),
-		flash: el("lookout-flash"),
-		result: el("lookout-result"),
-		video: el("lookout-video"),
-		alert: el("lookout-alert"),
-		alertText: el("lookout-alert-text"),
-		alertDismiss: el("lookout-alert-dismiss"),
-	};
+	const ui = {};
+	let DEFAULT_STAGE_TEXT = "";
+
+	function mountUi() {
+		[
+			["pill", "lookout-pill"], ["hint", "lookout-hint"], ["timer", "lookout-timer"],
+			["shots", "lookout-shots"], ["next", "lookout-next"], ["mode", "lookout-mode"],
+			["log", "lookout-log"], ["start", "lookout-start"], ["pause", "lookout-pause"],
+			["resume", "lookout-resume"], ["stop", "lookout-stop"], ["reshare", "lookout-reshare"],
+			["preview", "lookout-preview"], ["stageEmpty", "lookout-stage-empty"],
+			["badge", "lookout-badge"], ["flash", "lookout-flash"], ["result", "lookout-result"],
+			["video", "lookout-video"], ["alert", "lookout-alert"],
+			["alertText", "lookout-alert-text"], ["alertDismiss", "lookout-alert-dismiss"],
+		].forEach(([key, id]) => { ui[key] = el(id); });
+		DEFAULT_STAGE_TEXT = ui.stageEmpty ? ui.stageEmpty.textContent : "";
+	}
+
 	const PAGE_TITLE = document.title;
 
 	// --- logging (visible + console; NEVER the token) -----------------------
@@ -117,7 +117,8 @@
 		const osPart = browser ? `${os}; ${browser}` : os;
 		return `Lookout Web (${APP_NAME})/1.0 (${osPart})`;
 	}
-	const CLIENT_INFO = buildClientInfo();
+	// Built per boot — the app name only arrives with the session config.
+	let CLIENT_INFO = "";
 
 	// --- recording state ----------------------------------------------------
 	let stream = null;
@@ -463,8 +464,8 @@
 		},
 		done: {
 			label: "Ready", tone: "done",
-			hint: "All done. Your tracked time only counts once you attach this timelapse to a "
-				+ "journal entry.",
+			hint: "All done. Your tracked time only counts once you tape this recording into "
+				+ "a lapse.",
 			buttons: {},
 			stage: "This recording is finished — the video is below.",
 		},
@@ -475,9 +476,19 @@
 			buttons: {},
 			stage: "This recording couldn't be turned into a video.",
 		},
+		unavailable: {
+			label: "Not started", tone: "error",
+			hint: "Nothing is recording — the error above happened before a session could be "
+				+ "opened. Close this and try again.",
+			buttons: {},
+			stage: "Nothing to show — this recording never got going.",
+		},
 	};
 
-	const DEFAULT_STAGE_TEXT = ui.stageEmpty ? ui.stageEmpty.textContent : "";
+	// Terminal states: the popup can be reopened on them, but the project page
+	// should hand out a fresh session rather than this one.
+	const OVER = { done: true, failed: true, unavailable: true };
+	let finished = false;
 
 	function setButtons(buttons) {
 		const set = (btn, on) => { if (btn) btn.hidden = !on; };
@@ -490,6 +501,7 @@
 
 	function setState(name) {
 		const state = STATES[name] || STATES.idle;
+		finished = Boolean(OVER[name]);
 		if (ui.pill) {
 			ui.pill.className = "tl-pill" + (state.tone ? ` tl-pill--${state.tone}` : "");
 			ui.pill.textContent = "";
@@ -703,12 +715,13 @@
 		pollCompilation();
 	}
 
-	// --- init ---------------------------------------------------------------
-	function init() {
-		if (!BASE || !TOKEN || !SESSION_ID) {
-			error("Recorder is misconfigured (missing Lookout config).");
-			return;
-		}
+	// --- mount / boot -------------------------------------------------------
+	let wired = false;
+
+	function wire() {
+		mountUi();
+		if (wired) return;
+		wired = true;
 		if (ui.start) ui.start.addEventListener("click", onStart);
 		if (ui.pause) ui.pause.addEventListener("click", onPause);
 		if (ui.resume) ui.resume.addEventListener("click", onResume);
@@ -717,21 +730,79 @@
 		if (ui.alertDismiss) ui.alertDismiss.addEventListener("click", hideAlert);
 
 		// Closing the tab mid-recording silently stops the clock — warn first.
+		// Closing the popup is harmless by comparison: the recorder keeps going.
 		window.addEventListener("beforeunload", (e) => {
 			if (!recording) return;
 			e.preventDefault();
 			e.returnValue = "";
 		});
+	}
 
+	// Wipe the previous session out of the markup and the module, so a second
+	// recording in the same page load can't inherit its clock, shots or log.
+	function clearSession() {
+		stopLoop();
+		stopTicking(false);
+		if (statusPollTimer) { clearTimeout(statusPollTimer); statusPollTimer = null; }
+		stopShare();
+		BASE = "";
+		TOKEN = null;
+		SESSION_ID = null;
+		SYNC_URL = null;
+		SESSION_PK = null;
+		baseSeconds = 0;
+		lastSyncMs = nowMs();
+		shotCount = 0;
+		lastCapturedAtMs = 0;
+		if (ui.timer) ui.timer.textContent = formatTime(0);
+		if (ui.shots) ui.shots.textContent = "0";
+		if (ui.mode) { ui.mode.textContent = ""; ui.mode.hidden = true; }
+		if (ui.log) ui.log.replaceChildren();
+		if (ui.result) ui.result.hidden = true;
+		if (ui.video) ui.video.replaceChildren();
+		hideAlert();
+	}
+
+	// Point the recorder at a session and pick up wherever it left off.
+	function boot(config) {
+		wire();
+		clearSession();
+		BASE = (config.baseUrl || "").replace(/\/+$/, "");
+		TOKEN = config.token || null;
+		SESSION_ID = config.sessionId || null;
+		APP_NAME = config.appName || "Atlantis";
+		SYNC_URL = config.syncUrl || null;
+		CSRF = config.csrfToken || null;
+		SESSION_PK = config.sessionPk != null ? String(config.sessionPk) : null;
+		CLIENT_INFO = buildClientInfo();
+
+		if (!BASE || !TOKEN || !SESSION_ID) {
+			setState("unavailable");
+			error("Recorder is misconfigured (missing Lookout config).");
+			return;
+		}
 		setState("loading");
 		info(`Client: ${CLIENT_INFO}`);
-		// Recover current session state (handles page refresh).
+		// Recover current session state (handles a reopened popup or a refresh).
 		recoverFromServer();
 	}
 
-	if (document.readyState === "loading") {
-		document.addEventListener("DOMContentLoaded", init);
-	} else {
-		init();
+	// The session couldn't be fetched at all — say so in the recorder itself,
+	// which is where the user is looking.
+	function fail(msg) {
+		wire();
+		clearSession();
+		setState("unavailable");
+		error(msg);
 	}
+
+	window.AtlantisLookout = {
+		boot,
+		fail,
+		// A clean slate to open the popup on while the page fetches a session.
+		standby: () => { wire(); clearSession(); setState("loading"); },
+		// The session still worth reopening, if there is one. The project page
+		// asks before starting a second recording on top of a live one.
+		liveSessionPk: () => (TOKEN && !finished ? SESSION_PK : null),
+	};
 })();

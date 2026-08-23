@@ -415,6 +415,13 @@ def project_detail(request, project_id):
             "url": "",
         }
 
+    # Arriving from an old recorder link (or straight off starting one without
+    # JS) names the session the book should pop the recorder open on.
+    record_session_url = ""
+    requested = request.GET.get("record", "")
+    if requested.isdigit() and any(str(t.pk) == requested for t in timelapses):
+        record_session_url = reverse("record_timelapse", args=[int(requested)])
+
     pages = _book_pages(journals, allow_new=not project.locked)
 
     return render(request, "atlantis_site/project_detail.html", {
@@ -433,6 +440,7 @@ def project_detail(request, project_id):
         "pickable_timelapses": attachable_timelapses,
         "unfinished_timelapses": unfinished_timelapses,
         "lookout_status": lookout_status,
+        "record_session_url": record_session_url,
     })
 
 @login_required
