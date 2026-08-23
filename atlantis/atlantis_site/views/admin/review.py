@@ -24,7 +24,7 @@ COMMENT_PERMS = [
 ]
 
 def project_link(project):
-    return f"<https://atlantis.hacklub.com/projects/{project.id}|{project.title}>"
+    return f"<https://atlantis.hackclub.com/projects/{project.id}|{project.title}>"
 
 def feedback_line(feedback):
     if not feedback:
@@ -357,7 +357,7 @@ def t3_decision(request, ship_id):
         )
 
     owner_slack_id = ship.project.owner.hackclub_profile.slack_id
-    send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized and you've received {payout_layers} pearls for it!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
+    send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized and you've received {payout_layers} pearls for it!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
 
     record_audit(request, "t3_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
@@ -417,7 +417,7 @@ def lock_project(request, project_id):
 
     owner_slack_id = project.owner.hackclub_profile.slack_id
     if owner_slack_id:
-        send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{project_id}|{project.title}> has been locked.", owner_slack_id)
+        send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{project_id}|{project.title}> has been locked.", owner_slack_id)
 
     return safe_redirect_back(request)
 
@@ -438,6 +438,6 @@ def unlock_project(request, project_id):
 
     owner_slack_id = project.owner.hackclub_profile.slack_id
     if owner_slack_id:
-        send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{project_id}|{project.title}> has been unlocked.", owner_slack_id)
+        send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{project_id}|{project.title}> has been unlocked.", owner_slack_id)
 
     return safe_redirect_back(request)
