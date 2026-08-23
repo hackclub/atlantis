@@ -37,6 +37,12 @@ R2_ENDPOINT = https://YOUR_ACCOUNT_ID.r2.cloudflarestorage.com
 R2_BUCKET_NAME = R2_BUCKET_NAME_GOES_HERE
 
 PRINTABLES_GRAPHQL_URL = https://api.printables.com/graphql/                     
+
+AIRTABLE_PAT = AIRTABLE_PERSONAL_ACCESS_TOKEN_GOES_HERE
+AIRTABLE_BASE_ID = appXXXXXXXXXXXXXX
+AIRTABLE_TABLE_ID = tblXXXXXXXXXXXXXX
+
+LOOKOUT_TOKEN = LOOKOUT_API_KEY_GOES_HERE
 ```
 
 ### hack club auth
@@ -46,6 +52,11 @@ this is for the `HCA_CLIENT_ID`, `HCA_CLIENT_SECRET`, and `HCA_CALLBACK_URI` fie
 - create a new app, call it whatever you want, and grab the client id and client secret
 - change the redirect uri to `http://localhost:8000/oauth/callback`
 ...and that's it for auth!
+
+one gotcha: the app asks for the `birthdate` scope (it's a scope of its own on HCA, not
+part of `profile`), because the Airtable submission needs a birthday. tokens issued before
+that scope was added don't carry the claim, so those users submit without a birthday until
+the next time they log in.
 
 ### second section
 i didn't know what to call this one, but all these values are fine. i'll still explain what they do because i'm kind.
@@ -77,6 +88,41 @@ while the R2 bucket that's used for object storage is free, to obtain one you **
 - also get your bucket name and paste that in
 
 the bucket stays **private** — you do **not** need to enable a public development URL. uploaded files are served back to the browser through the app's `serve_media` proxy view, which streams them from R2 using your S3 credentials.
+
+### airtable
+when a T3 reviewer approves a ship, the project is submitted to the **YSWS Project
+Submission** table as one record — that record is what pays the shipper, so this is the
+last step of the pipeline.
+
+- make a [personal access token](https://airtable.com/create/tokens) with the
+  `data.records:write` scope on the base, and paste it in as `AIRTABLE_PAT`
+- `AIRTABLE_BASE_ID` is the `app...` in the base's URL, `AIRTABLE_TABLE_ID` the `tbl...`
+- optional: `AIRTABLE_API_BASE_URL` (default `https://api.airtable.com/v0`) and
+  `AIRTABLE_URL_EXPIRE_SECONDS` (default 7 days — how long the presigned R2 links for the
+  screenshot and the editor model stay valid)
+
+leave the credentials blank and finalization still works: the ship is finalized, the payout
+happens, and the submission is recorded as failed with the missing settings named. nothing
+is ever sent to the browser — the token only leaves the server in an `Authorization` header.
+
+`Optional - Override Hours Spent Justification` is the field HQ reads as the unified
+justification, so it carries the whole audit trail: the T2 reviewer's justification
+verbatim, then every Lookout on the ship, the ranges timelapse review cut out of each one,
+and the reason given for each cut. T3 reviewers see exactly that text on the fraud review
+page before they approve.
+
+submissions are once-per-ship — the `AirtableSubmission` row is claimed in the database
+before the request goes out, so a retried finalization cannot make a second record. one
+that failed (Airtable down, token not yet granted write access) is picked up again by:
+
+```
+python manage.py submit_airtable          # --dry-run to see what it would send
+```
+
+a submission whose request went out but never came back is *not* retried automatically —
+that's the one case where retrying would duplicate a record. the command names those so
+somebody can check the table by hand, and `/admin` lets an organizer resolve one by pasting
+the record id in or setting the status back to failed.
 
 ### launching server/docker
 - run `python -m venv .venv`

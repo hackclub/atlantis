@@ -1,10 +1,11 @@
 import os
+from datetime import date
 
 from authlib.integrations.django_client import OAuth
 from authlib.integrations.requests_client import OAuth2Session
 
 HCA_METADATA_URL = "https://auth.hackclub.com/.well-known/openid-configuration"
-HCA_SCOPE = "openid email name profile verification_status slack_id address"
+HCA_SCOPE = "openid email name profile verification_status slack_id address birthdate"
 USERINFO_TIMEOUT = 5
 
 STORED_TOKEN_FIELDS = ("access_token", "refresh_token", "token_type", "expires_at", "scope")
@@ -20,9 +21,14 @@ oauth.register(
 )
 
 
-class AddressUnavailable(Exception):
-    """HCA could not be asked for an address: no usable token on file, or the
+class IdentityUnavailable(Exception):
+    """HCA could not be asked about a user: no usable token on file, or the
     identity service refused or failed the request."""
+
+
+class AddressUnavailable(IdentityUnavailable):
+    """The address-shaped IdentityUnavailable. Kept as its own name because
+    every caller that wants an address catches this one specifically."""
 
 def storable_token(token):
     if not token or not token.get("access_token"):
@@ -51,10 +57,52 @@ def extract_addresses(userinfo):
     ]
 
 
-def fetch_addresses(profile):
+def extract_birthdate(userinfo):
+    """The `birthdate` claim as an ISO date string, or "" if it isn't usable.
+
+    Anything that isn't a real YYYY-MM-DD date is dropped rather than passed on:
+    the only consumer is Airtable's Birthday column, which would reject a
+    partial date (OIDC allows a bare year) and take an ambiguous one at face
+    value.
+    """
+    if not isinstance(userinfo, dict):
+        return ""
+
+    identity = userinfo.get("identity")
+    source = identity if isinstance(identity, dict) else userinfo
+
+    raw = source.get("birthdate") or ""
+    if not isinstance(raw, str):
+        return ""
+    try:
+        return date.fromisoformat(raw.strip()).isoformat()
+    except ValueError:
+        return ""
+
+
+def select_address(addresses, address_id=None):
+    """The address matching address_id, else the primary, else the first."""
+    if not addresses:
+        return None
+    if address_id:
+        for address in addresses:
+            if address.get("id") == address_id:
+                return address
+    for address in addresses:
+        if address.get("primary"):
+            return address
+    return addresses[0]
+
+
+def fetch_userinfo(profile):
+    """Everything HCA will tell us about this user, in one request.
+
+    Raises IdentityUnavailable if there is no usable token on file or the
+    identity service can't be reached.
+    """
     token = profile.get_hca_token()
     if not token:
-        raise AddressUnavailable("No Hack Club identity token on file")
+        raise IdentityUnavailable("No Hack Club identity token on file")
 
     metadata = oauth.hackclub.load_server_metadata()
     token_endpoint = metadata["token_endpoint"]
@@ -76,8 +124,15 @@ def fetch_addresses(profile):
         response.raise_for_status()
         userinfo = response.json()
     except Exception as e:
-        raise AddressUnavailable(f"Address fetch failed: {e}") from e
+        raise IdentityUnavailable(f"Identity fetch failed: {e}") from e
     finally:
         session.close()
 
-    return extract_addresses(userinfo)
+    return userinfo
+
+
+def fetch_addresses(profile):
+    try:
+        return extract_addresses(fetch_userinfo(profile))
+    except IdentityUnavailable as e:
+        raise AddressUnavailable(str(e)) from e

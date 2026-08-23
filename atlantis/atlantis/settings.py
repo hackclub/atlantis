@@ -45,6 +45,17 @@ SLACK_TOKEN = os.environ["SLACK_TOKEN"]
 # can talk it over instead of the shipper getting a DM they can't reply to.
 REVIEW_CHECKPOINT_ID = os.environ.get("REVIEW_CHECKPOINT_ID", "")
 
+AIRTABLE_PAT = os.environ.get("AIRTABLE_PAT", "")
+AIRTABLE_BASE_ID = os.environ.get("AIRTABLE_BASE_ID", "")
+AIRTABLE_TABLE_ID = os.environ.get("AIRTABLE_TABLE_ID", "")
+AIRTABLE_API_BASE_URL = os.environ.get("AIRTABLE_API_BASE_URL", "https://api.airtable.com/v0")
+
+# How long the presigned R2 links handed to Airtable stay usable. The screenshot
+# only needs to outlive Airtable's own fetch (it copies the file into an
+# attachment), but the editor model link is stored as text and clicked by a
+# human later, so this is the SigV4 maximum of 7 days.
+AIRTABLE_URL_EXPIRE_SECONDS = int(os.environ.get("AIRTABLE_URL_EXPIRE_SECONDS", 7 * 24 * 60 * 60))
+
 LOOKOUT_TOKEN = os.environ["LOOKOUT_TOKEN"]
 LOOKOUT_BASE_URL = os.environ.get("LOOKOUT_BASE_URL", "https://lookout.hackclub.com")
 LOOKOUT_APP_NAME = os.environ.get("LOOKOUT_APP_NAME", "Atlantis")

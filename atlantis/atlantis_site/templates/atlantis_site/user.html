@@ -30,6 +30,12 @@
                 <h1 class="profile-name">@{{ viewed_profile.slack_username }}</h1>
                 <p class="profile-pearls">{{ viewed_profile.layers }} pearls</p>
                 <p class="profile-joined">Joined {{ user_viewed.date_joined|date:"F j, Y" }}</p>
+                {% if is_self %}
+                    <form class="profile-logout" action="{% url 'logout' %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit" class="profile-logout-button">log out</button>
+                    </form>
+                {% endif %}
             </div>
 
             <div class="profile-card">

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import AuditLog, LookoutSession, TimelapseRemoval, TimelapseReview
+from .models import AirtableSubmission, AuditLog, LookoutSession, TimelapseRemoval, TimelapseReview
 
 
 @admin.register(LookoutSession)
@@ -55,6 +55,25 @@ class TimelapseReviewAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(AirtableSubmission)
+class AirtableSubmissionAdmin(admin.ModelAdmin):
+    """Mostly read-only. `status` and `record_id` stay editable because they are
+    the only way to resolve a submission stuck in `sending`: somebody looks the
+    project up in Airtable, then either pastes the record id in (it landed) or
+    sets the status back to failed so the retry command picks it up again."""
+    list_display = ("ship", "status", "record_id", "attempts", "submitted_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("ship__project__title", "record_id", "ship__id")
+    readonly_fields = ("ship", "error", "notes", "attempts", "created_at", "updated_at", "submitted_at")
+    date_hierarchy = "created_at"
+
+    def has_add_permission(self, request):
         return False
 
     def has_delete_permission(self, request, obj=None):

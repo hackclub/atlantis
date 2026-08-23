@@ -69,6 +69,11 @@ class UserProfileTests(BaseTestCase):
 		titles = [p.title for p in self._profile(self.owner).context["projects"]]
 		self.assertNotIn("Deleted", titles)
 
+	def test_logout_button_only_on_own_profile(self):
+		self.client.force_login(self.owner)
+		self.assertContains(self._profile(self.owner), reverse("logout"))
+		self.assertNotContains(self._profile(self.visitor), reverse("logout"))
+
 
 class LookoutSyncErrorTests(BaseTestCase):
 	"""sync_timelapse must not relay Lookout's own error text to the client.

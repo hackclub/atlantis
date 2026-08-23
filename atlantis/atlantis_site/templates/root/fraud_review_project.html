@@ -20,6 +20,43 @@
         <div class="review-main">
             {% include "root/_review_project_header.html" with heading="Fraud Review Project" show_lock=True %}
             {% include "root/_review_journals.html" with journal_empty="No journal entries. Go punish the people that reviewed this before u gng" %}
+
+            {% comment %}
+            The exact text that goes to Airtable's override-hours justification,
+            which HQ reads as the unified justification. The T2 reviewer's own
+            words come first, then every Lookout on the ship with the ranges cut
+            out of it and the reason each was cut. Shown verbatim rather than
+            prettified: this is the only place a T3 reviewer can read the whole
+            thing before approving it.
+            {% endcomment %}
+            <h2>Airtable Justification</h2>
+            <div class="review-card airtable-panel">
+                {% if airtable_submission %}
+                    <p class="airtable-state">
+                        <strong>Submission:</strong> {{ airtable_submission.get_status_display }}
+                        {% if airtable_submission.record_id %}
+                            &middot; <a href="{{ airtable_submission.record_url }}" target="_blank" rel="noreferrer noopener">{{ airtable_submission.record_id }}</a>
+                        {% endif %}
+                        {% if airtable_submission.attempts %}
+                            &middot; {{ airtable_submission.attempts }} attempt{{ airtable_submission.attempts|pluralize }}
+                        {% endif %}
+                    </p>
+                    {% if airtable_submission.error %}
+                        <p class="airtable-state is-no">{{ airtable_submission.error }}</p>
+                    {% endif %}
+                    {% if airtable_submission.notes %}
+                        <p class="airtable-state">{{ airtable_submission.notes|linebreaksbr }}</p>
+                    {% endif %}
+                {% else %}
+                    <p class="airtable-state">Not submitted yet &mdash; this is what will be sent on approval.</p>
+                {% endif %}
+                {% if override_justification %}
+                    <pre class="airtable-justification">{{ override_justification }}</pre>
+                {% else %}
+                    <p>Nothing to justify: no T2 justification and no timelapses on this ship.</p>
+                {% endif %}
+            </div>
+
             {% include "root/_review_history.html" %}
         </div>
         <aside class="review-sidebar">

@@ -674,6 +674,39 @@
     font-size: 14px;
 }
 
+/* The justification that goes to Airtable, shown to T3 reviewers exactly as it
+   will be sent — hence the monospace block and the preserved line breaks. */
+.root-page .airtable-panel {
+    /* Wider than the 450px ceiling review cards get in the shared cards.css:
+       this one holds Lookout URLs, and at that width every one of them wraps
+       mid-path. Matched to .project-info instead. */
+    width: min(750px, 100%);
+    padding: 16px 18px;
+    margin-bottom: 28px;
+}
+
+.root-page .airtable-state {
+    margin: 0 0 8px;
+    font-size: 14px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .airtable-justification {
+    margin: 0;
+    padding: 12px 14px;
+    max-height: 420px;
+    overflow: auto;
+    background: var(--oc-shallow);
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+    color: var(--oc-ink-2);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
 /* ---------- audit log ---------- */
 
 .root-page .audit-filters {

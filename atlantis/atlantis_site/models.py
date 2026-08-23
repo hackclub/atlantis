@@ -158,17 +158,8 @@ class Profile(models.Model):
 	def get_address(self, address_id=None):
 		"""Return the address matching address_id, else the primary, else the
 		first available address (or None)."""
-		addresses = self.get_addresses()
-		if not addresses:
-			return None
-		if address_id:
-			for address in addresses:
-				if address.get("id") == address_id:
-					return address
-		for address in addresses:
-			if address.get("primary"):
-				return address
-		return addresses[0]
+		from .hca import select_address
+		return select_address(self.get_addresses(), address_id)
 
 	@property
 	def primary_address_id(self):
@@ -316,6 +307,78 @@ class T3(models.Model):
 	airtable_time = models.IntegerField()
 
 	internal_notes = models.CharField(blank=True)
+
+class AirtableSubmission(models.Model):
+	"""The one Airtable record a finalized ship gets, and how it went.
+
+	The row exists so a retried finalization cannot create a second record in
+	HQ's table: it is claimed (by the OneToOne, in the database) before the POST
+	goes out, and a ship that already has a record_id is never submitted again.
+
+	Nothing the shipper gave HCA is kept here. Their address and birthday are
+	fetched at submission time, forwarded, and dropped — same rule as everywhere
+	else. `notes` is for what was *missing* ("no address on file"), never for
+	what was found.
+	"""
+	class Status(models.TextChoices):
+		PENDING = "pending", "Not yet submitted"
+		SENDING = "sending", "Submission in flight"
+		SUBMITTED = "submitted", "Submitted"
+		FAILED = "failed", "Failed"
+
+	ship = models.OneToOneField(
+		Ship,
+		on_delete=models.CASCADE,
+		related_name="airtable_submission"
+	)
+
+	status = models.CharField(
+		max_length=16,
+		choices=Status.choices,
+		default=Status.PENDING,
+	)
+	# Airtable's id for the row we created ("rec..."). Its presence, not the
+	# status, is the authoritative "this ship has been submitted".
+	record_id = models.CharField(max_length=64, blank=True, default="")
+	error = models.TextField(blank=True, default="")
+	notes = models.TextField(blank=True, default="")
+	attempts = models.PositiveIntegerField(default=0)
+
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+	submitted_at = models.DateTimeField(null=True, blank=True)
+
+	class Meta:
+		ordering = ["-created_at"]
+
+	def __str__(self):
+		return f"Airtable {self.get_status_display().lower()} for ship {self.ship_id}"
+
+	@property
+	def is_submitted(self):
+		return bool(self.record_id)
+
+	@property
+	def needs_retry(self):
+		"""Whether another attempt is safe.
+
+		SENDING is deliberately excluded: a row stuck there means a POST went out
+		and we never learned its fate, so retrying it is exactly how a duplicate
+		record gets created. Those want a human to look in Airtable.
+		"""
+		return not self.record_id and self.status in (
+			self.Status.PENDING, self.Status.FAILED
+		)
+
+	@property
+	def record_url(self):
+		if not self.record_id:
+			return ""
+		base = getattr(settings, "AIRTABLE_BASE_ID", "")
+		table = getattr(settings, "AIRTABLE_TABLE_ID", "")
+		if not (base and table):
+			return ""
+		return f"https://airtable.com/{base}/{table}/{self.record_id}"
 
 class InternalComment(models.Model):
 	ship = models.ForeignKey(

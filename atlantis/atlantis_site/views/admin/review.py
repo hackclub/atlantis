@@ -6,7 +6,8 @@ from django.contrib import messages
 from django.conf import settings
 from django.db import transaction
 
-from ...models import InternalComment, Profile, Project, Ship, T1, T2, T3
+from ...models import AirtableSubmission, InternalComment, Profile, Project, Ship, T1, T2, T3
+from ...submissions import build_override_justification, submit_ship
 from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back, timelapse_cleared_ships
 
 INTERNAL_COMMENT_MAX_LENGTH = 1000
@@ -45,6 +46,31 @@ def ping_review_checkpoint(ship, reviewer, tier, outcome, feedback):
         f"{tier} reviewed by {slack_mention(reviewer)} and {outcome}. {feedback_line(feedback)}",
         settings.REVIEW_CHECKPOINT_ID,
     )
+
+def report_submission(request, submission):
+    """Tell the reviewer what became of the Airtable record.
+
+    Finalization has already happened by the time this runs, so none of these
+    are errors that undo anything — they say whether HQ has the project yet and
+    what to do if not.
+    """
+    Status = AirtableSubmission.Status
+    if submission.status == Status.SUBMITTED:
+        note = f" Note: {submission.notes}" if submission.notes else ""
+        messages.success(request, f"Submitted to Airtable as {submission.record_id}.{note}")
+    elif submission.status == Status.SENDING:
+        messages.warning(
+            request,
+            "Airtable never answered, so it's unclear whether the record was "
+            f"created ({submission.error}). Check the table before resubmitting — "
+            "this one will not retry on its own.",
+        )
+    else:
+        messages.error(
+            request,
+            f"The project was finalized but its Airtable record was not created: "
+            f"{submission.error} The submit_airtable command will retry it.",
+        )
 
 @staff_member_required
 @check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
@@ -209,7 +235,7 @@ def t2_decision(request, ship_id):
         journals = ship.journals.order_by("-id")
 
         total_time = approved_minutes_for_journals(journals)
-        if total_time <= deductions:
+        if total_time < deductions:
             messages.error(request, f"Deduction too large. (total_time: {total_time}, deductions: {deductions})")
             return redirect("ysws_review_dash")
 
@@ -294,7 +320,13 @@ def fraud_review_project(request, ship_id):
         "review_history": build_review_history(ship),
         "logged_time": logged_time,
         "deductions": deductions,
-        "total_time": total_time
+        "total_time": total_time,
+        # What will land in Airtable's override-hours justification: the T2
+        # reviewer's words, then every Lookout on the ship with the ranges that
+        # were cut from it and why. Nothing else shows a T3 reviewer the
+        # timelapse review in full.
+        "override_justification": build_override_justification(ship),
+        "airtable_submission": AirtableSubmission.objects.filter(ship=ship).first(),
     })
 
 @require_POST
@@ -356,6 +388,12 @@ def t3_decision(request, ship_id):
             airtable_time=airtable_time
         )
 
+    # Outside the transaction on purpose: the ship is committed as finalized
+    # before anything is sent to Airtable, so a submission that fails leaves a
+    # finalized ship and a retryable row rather than rolling the finalization
+    # back. submit_ship is safe to call again and refuses to send twice.
+    submission = submit_ship(ship) if decision == T3.Decision.APPROVE else None
+
     owner_slack_id = ship.project.owner.hackclub_profile.slack_id
     send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized and you've received {payout_layers} pearls for it!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
 
@@ -368,9 +406,14 @@ def t3_decision(request, ship_id):
         "airtable_time": airtable_time,
         "payout_layers": payout_layers,
         "new_ship_status": ship.status,
+        "airtable_status": submission.status if submission else "",
+        "airtable_record_id": submission.record_id if submission else "",
+        "airtable_error": submission.error if submission else "",
     })
 
     messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}")
+    if submission:
+        report_submission(request, submission)
     return redirect("fraud_review_dash")
 
 @staff_member_required
