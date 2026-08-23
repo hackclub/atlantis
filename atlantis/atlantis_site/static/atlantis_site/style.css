@@ -10,6 +10,7 @@
 @import url('css/metrics.css');
 @import url('css/timelapse.css');
 @import url('css/profile.css');
+@import url('css/guides.css');
 /* Admin-only (/root) theme. Last so it can override the shared rules
    above; every selector inside is scoped to .root-page. */
 @import url('css/admin.css');

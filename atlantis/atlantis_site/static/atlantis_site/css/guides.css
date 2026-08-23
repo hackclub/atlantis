@@ -1,0 +1,409 @@
+/* ---------- /guides/ ----------
+   A wooden desk with a hanging scroll pinned to the left edge. The scroll is
+   the page's nav; every guide renders in the pane to its right. */
+
+@font-face {
+    font-family: "Atlantis Hand";
+    src: url('../assets/fonts/atlantishand.ttf') format("truetype");
+}
+
+#guides,
+#guides *,
+#guides *::before,
+#guides *::after {
+    box-sizing: border-box;
+}
+
+#guides {
+    /* scroll.png is a 2500x1462 canvas on which the scroll itself only
+       occupies (61, 36) to (878, 1436) — 817x1400 of mostly-empty frame.
+       Every measurement below is derived from those six numbers, so the art
+       (not its transparent margin) is what fills --rail-h. Re-exporting the
+       scroll means re-measuring these and nothing else. */
+    --art-w: 2500;
+    --art-h: 1462;
+    --roll-x: 61;
+    --roll-y: 36;
+    --roll-w: 817;
+    --roll-h: 1400;
+
+    /* Full height is the point of the rail, but the width follows from it, and
+       past ~16:9 a viewport tall enough would hand the scroll half the screen.
+       Cap the width and let the scroll come up short of the top and bottom
+       instead — it stays aspect-correct either way. Capped at 92vh rather than
+       100vh so the scroll always shows a sliver of wood above and below it. */
+    --rail-h: min(92vh, calc(33vw * var(--roll-h) / var(--roll-w)));
+    --rail-w: calc(var(--rail-h) * var(--roll-w) / var(--roll-h));
+
+    --parchment: #D6C59B;
+    --parchment-lit: #E0D1AB;
+    --parchment-edge: #CDB986;
+    --ink: #4A3117;
+    --ink-soft: #6B4A24;
+    --cream: rgba(255, 253, 247, 0.92);
+    --cream-edge: #E4D8BE;
+
+    position: relative;
+    min-height: 100vh;
+    background-color: #603F24;
+    font-family: "Prompt", sans-serif;
+}
+
+@supports (height: 100dvh) {
+    #guides {
+        --rail-h: min(92dvh, calc(33vw * var(--roll-h) / var(--roll-w)));
+    }
+}
+
+#guides::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image: url('../assets/img/guides/background.png');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+/* ---------- the scroll ---------- */
+
+.guides-rail {
+    position: fixed;
+    left: 0;
+    top: 50%;
+    translate: 0 -50%;
+    z-index: 10;
+    width: var(--rail-w);
+    height: var(--rail-h);
+    /* Canvas scaled so its 1400px-tall scroll matches the box, then slid up
+       and left so the box frames the scroll and nothing else. */
+    background-image: url('../assets/img/guides/scroll.png');
+    background-repeat: no-repeat;
+    background-size:
+        calc(var(--rail-h) * var(--art-w) / var(--roll-h))
+        calc(var(--rail-h) * var(--art-h) / var(--roll-h));
+    background-position:
+        calc(-1 * var(--rail-h) * var(--roll-x) / var(--roll-h))
+        calc(-1 * var(--rail-h) * var(--roll-y) / var(--roll-h));
+    filter: drop-shadow(6px 0 22px rgba(26, 14, 4, 0.45));
+}
+
+/* Padding in percentages of the box, which is the scroll: it keeps the links
+   clear of the rolled ends and the torn side edges at every rail size. */
+.guides-rail-inner {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(10px, 1.1vh, 20px);
+    height: 100%;
+    padding: 11% 13% 12%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.guides-rail-title {
+    margin: 0;
+    font-family: "Atlantis Hand", "Prompt", sans-serif;
+    font-size: clamp(26px, 3.4vh, 48px);
+    line-height: 1.1;
+    color: var(--ink);
+    text-align: center;
+}
+
+.guides-rail-rule {
+    height: 2px;
+    margin: 0;
+    border: 0;
+    background: linear-gradient(
+        to right,
+        transparent,
+        rgba(74, 49, 23, 0.4) 18%,
+        rgba(74, 49, 23, 0.4) 82%,
+        transparent
+    );
+}
+
+.guides-nav {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(4px, 0.7vh, 12px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.guides-nav-link {
+    display: block;
+    padding: 0.4em 0.6em;
+    border-radius: 8px;
+    color: var(--ink-soft);
+    font-size: clamp(14px, 1.9vh, 22px);
+    font-weight: 600;
+    line-height: 1.25;
+    text-decoration: none;
+    /* The art has no straight edge to align to, so the hover plate is what
+       gives each link a hit area you can see. */
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.guides-nav-link:hover,
+.guides-nav-link:focus-visible {
+    background-color: rgba(122, 88, 44, 0.16);
+    color: var(--ink);
+}
+
+.guides-nav-link.is-active {
+    background-color: rgba(122, 88, 44, 0.26);
+    color: var(--ink);
+}
+
+.guides-rail-back {
+    margin-top: auto;
+    margin-bottom: clamp(8px, 3vh, 28px);
+    padding-top: 0.6em;
+    color: var(--ink-soft);
+    font-size: clamp(12px, 1.5vh, 18px);
+    font-weight: 600;
+    text-align: center;
+    text-decoration: none;
+}
+
+.guides-rail-back:hover,
+.guides-rail-back:focus-visible {
+    text-decoration: underline;
+}
+
+/* ---------- the pane ---------- */
+
+.guides-content {
+    margin-left: var(--rail-w);
+    padding: clamp(24px, 4vh, 64px) clamp(20px, 3.5vw, 64px) 72px;
+}
+
+.guide-article {
+    max-width: 78ch;
+    border: 2px solid var(--cream-edge);
+    border-radius: 16px;
+    padding: clamp(22px, 3vw, 44px);
+    background-color: var(--cream);
+    box-shadow: 0 14px 34px rgba(40, 26, 10, 0.24);
+    color: #1D1D1F;
+    font-size: clamp(15px, 1.05vw, 17px);
+    line-height: 1.65;
+}
+
+.guide-article > :first-child {
+    margin-top: 0;
+}
+
+.guide-article > :last-child {
+    margin-bottom: 0;
+}
+
+.guide-article h1 {
+    margin: 0 0 0.5em;
+    font-family: "Atlantis Hand", "Prompt", sans-serif;
+    font-size: clamp(30px, 3.4vw, 44px);
+    font-weight: 400;
+    line-height: 1.1;
+    color: var(--ink);
+}
+
+.guide-article h2 {
+    margin: 1.7em 0 0.5em;
+    padding-bottom: 0.25em;
+    border-bottom: 1px solid rgba(107, 74, 36, 0.22);
+    font-size: clamp(20px, 2vw, 26px);
+    color: var(--ink);
+}
+
+.guide-article h3 {
+    margin: 1.5em 0 0.4em;
+    font-size: clamp(17px, 1.5vw, 20px);
+    color: var(--ink-soft);
+}
+
+.guide-article p,
+.guide-article ul,
+.guide-article ol {
+    margin: 0 0 1em;
+}
+
+.guide-article ul,
+.guide-article ol {
+    padding-left: 1.4em;
+}
+
+.guide-article li {
+    margin-bottom: 0.35em;
+}
+
+.guide-article li > ul,
+.guide-article li > ol {
+    margin: 0.35em 0 0;
+}
+
+.guide-article a {
+    color: #8A4B12;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    overflow-wrap: break-word;
+}
+
+.guide-article a:hover,
+.guide-article a:focus-visible {
+    color: var(--ink);
+}
+
+.guide-article strong {
+    color: var(--ink);
+}
+
+.guide-article :where(h1, h2, h3, p, li) {
+    overflow-wrap: break-word;
+}
+
+/* A pulled-aside note — the "you may use", "AI CAD is prohibited" lines that
+   the source guides set apart in bold. */
+.guide-callout {
+    margin: 0 0 1.2em;
+    padding: 0.85em 1.1em;
+    border-left: 4px solid #A8443C;
+    border-radius: 0 10px 10px 0;
+    background-color: rgba(168, 68, 60, 0.09);
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.guide-callout > p {
+    margin: 0;
+}
+
+.guide-callout > p + p {
+    margin-top: 0.4em;
+}
+
+.guide-lead {
+    font-size: 1.06em;
+    color: #4C4C48;
+}
+
+/* The guides index: one plate per guide. */
+.guide-index {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+    gap: clamp(14px, 1.6vw, 22px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    max-width: 78ch;
+}
+
+.guide-index-card {
+    display: block;
+    height: 100%;
+    border: 2px solid var(--cream-edge);
+    border-radius: 14px;
+    padding: 18px 20px;
+    background-color: var(--cream);
+    box-shadow: 0 14px 34px rgba(40, 26, 10, 0.24);
+    color: #1D1D1F;
+    text-decoration: none;
+    transition: translate 0.15s ease, box-shadow 0.15s ease;
+}
+
+.guide-index-card:hover,
+.guide-index-card:focus-visible {
+    translate: 0 -3px;
+    box-shadow: 0 18px 40px rgba(40, 26, 10, 0.3);
+}
+
+.guide-index-card h2 {
+    margin: 0 0 0.3em;
+    font-family: "Atlantis Hand", "Prompt", sans-serif;
+    font-size: 24px;
+    font-weight: 400;
+    color: var(--ink);
+}
+
+.guide-index-card p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #6B6B63;
+}
+
+.guides-heading {
+    margin: 0 0 0.6em;
+    font-family: "Atlantis Hand", "Prompt", sans-serif;
+    font-size: clamp(32px, 4vw, 52px);
+    font-weight: 400;
+    line-height: 1.05;
+    color: #FBEFD6;
+    text-shadow: 0 2px 6px rgba(10, 40, 50, 0.6);
+}
+
+.guides-subheading {
+    max-width: 60ch;
+    margin: 0 0 clamp(20px, 3vh, 34px);
+    color: #F1E3C4;
+    font-size: clamp(15px, 1.2vw, 18px);
+    text-shadow: 0 1px 4px rgba(10, 40, 50, 0.55);
+}
+
+/* ---------- narrow screens ----------
+   Same 900px fold as the app shell and the /root theme. A rail whose width is
+   a function of viewport height would take well over half a phone's screen, so
+   below the fold the nav becomes a parchment strip across the top — colours
+   sampled from the art, which itself does not survive being laid on its side. */
+@media (max-width: 900px) {
+    .guides-rail {
+        position: static;
+        translate: none;
+        width: 100%;
+        height: auto;
+        background-image: none;
+        background-color: var(--parchment);
+        border-bottom: 3px solid var(--parchment-edge);
+        filter: none;
+    }
+
+    .guides-rail-inner {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px 14px;
+        height: auto;
+        padding: 12px 18px;
+        overflow-y: visible;
+    }
+
+    .guides-rail-title {
+        font-size: 24px;
+    }
+
+    .guides-rail-rule {
+        display: none;
+    }
+
+    .guides-nav {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+    }
+
+    .guides-nav-link {
+        font-size: 15px;
+    }
+
+    .guides-rail-back {
+        margin-top: 0;
+        padding-top: 0;
+        font-size: 14px;
+    }
+
+    .guides-content {
+        margin-left: 0;
+        padding: 22px 18px 48px;
+    }
+}

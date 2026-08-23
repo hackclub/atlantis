@@ -1,7 +1,22 @@
-{% extends "atlantis_site/_base.html" %}
+{% extends "atlantis_site/_guides_base.html" %}
 
-{% block page_id %}guides{% endblock %}
 {% block title %}Guides{% endblock %}
 
-{% block content %}
+{% block guide %}
+    <h1 class="guides-heading">Guides</h1>
+    <p class="guides-subheading">
+        Everything you need to get through the voyage. Still stuck after reading?
+        Ask in <strong>#atlantis-help</strong> on Slack and we'll get back to you.
+    </p>
+
+    <ul class="guide-index">
+        {% for guide in guides_nav %}
+            <li>
+                <a class="guide-index-card" href="{% url 'guide_detail' guide.slug %}">
+                    <h2>{{ guide.title }}</h2>
+                    <p>{{ guide.blurb }}</p>
+                </a>
+            </li>
+        {% endfor %}
+    </ul>
 {% endblock %}

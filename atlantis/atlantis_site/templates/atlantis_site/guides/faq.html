@@ -1,0 +1,91 @@
+{% extends "atlantis_site/_guides_base.html" %}
+
+{% block title %}FAQ &mdash; Guides{% endblock %}
+
+{% block guide %}
+<article class="guide-article">
+    <h1>FAQ</h1>
+
+    <h3>What is Atlantis?</h3>
+    <p>
+        Atlantis is a Hack Club CAD YSWS, where you ship 5 hours of CAD a week for 8
+        weeks and we ship you a free 3D printer!
+    </p>
+
+    <h3>Who can participate?</h3>
+    <p>Anyone 13&ndash;18 (inclusive!) from anywhere in the world.</p>
+
+    <h3>Who are we?</h3>
+    <p>
+        We are Hack Club, a 501(c)(3) nonprofit whose mission is to encourage teens to
+        build and ship real projects.
+    </p>
+
+    <h3>What counts as CAD work for Atlantis?</h3>
+    <p>
+        Any 3D modeling work that uses printed parts. Printed parts must be the primary
+        focus, but other non-electronic hardware is also allowed.
+    </p>
+
+    <h3>What CAD software can I use?</h3>
+    <p>
+        You are allowed to use Fusion 360, Onshape, Solidworks, or FreeCAD. See the
+        <a href="{% url 'guide_detail' 'cad-software' %}">CAD Software</a> guide for a
+        breakdown of the differences.
+    </p>
+
+    <h3>Do I need to work on one project for all 8 weeks?</h3>
+    <p>Nope, you can work on as many or as few projects as you need.</p>
+
+    <h3>How do I submit and verify my CAD hours?</h3>
+    <p>
+        Create a project on the site and record timelapses of yourself doing CAD using
+        our very own Lookout to track time.
+    </p>
+
+    <h3>What happens if I miss my 5-hour goal for a week?</h3>
+    <p>
+        If you miss your goal, you lose your streak and must purchase a streak freeze to
+        get back in the program to get a 3D printer. Alternatively, you can buy a smaller
+        prize from our shop.
+    </p>
+
+    <h3>Can I work more than 5 hours in a week?</h3>
+    <p>Yes! The more CAD you do, the better printer you get.</p>
+
+    <h3>What 3D printer do I get for completing Atlantis?</h3>
+    <p>For the base printer, you will receive your choice of the following:</p>
+    <ul>
+        <li>Bambu Lab A1 Mini</li>
+        <li>Creality Ender 3 V3 SE</li>
+        <li>Elegoo Neptune 4</li>
+        <li>A $250 grant to purchase any other printer</li>
+    </ul>
+    <p>You can get better printers by doing more CAD!</p>
+
+    <h3>Do I have to pay anything to participate or receive the printer?</h3>
+    <p>Nope, it is 100% free.</p>
+
+    <h3>Can I use CAD work I started before Atlantis?</h3>
+    <p>No, all work must be done during the duration of the program.</p>
+
+    <h3>Can I collaborate with other people on my CAD projects?</h3>
+    <p>Nope, it must be independent.</p>
+
+    <h3>What happens after I complete all 8 weeks?</h3>
+    <p>We'll get in touch with you on Slack to fulfill your printer.</p>
+
+    <h3>How do I get pearls?</h3>
+    <p>
+        You get pearls by shipping your project, based on the amount of time spent.
+        Higher quality projects get a higher pearl multiplier.
+    </p>
+
+    <h3>Who owns my design?</h3>
+    <p>
+        It is yours and yours only &mdash; Hack Club doesn't have any stake in it.
+        However, it <strong>must</strong> be open source (the strictest license we can
+        accept is CC-BY-SA) for us to accept it.
+    </p>
+</article>
+{% endblock %}

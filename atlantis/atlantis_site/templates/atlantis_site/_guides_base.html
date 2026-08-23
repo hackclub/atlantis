@@ -1,0 +1,48 @@
+{% comment %}
+The desk-and-scroll shell every guide page shares. The scroll on the left is
+the nav; `guides_nav` and `active_guide` come from the one registry in
+views/client/misc.py, so adding a guide there is enough to list it here.
+
+Not built on atlantis_site/_base.html on purpose: that shell puts its own 220px
+rail and a fixed profile card in the bottom-left corner, both of which the
+scroll wants for itself. Same reasoning as the /users page.
+{% endcomment %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Guides{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
+    {% include '_favicon.html' %}
+</head>
+<body id="guides">
+    {% include "atlantis_site/_banner.html" %}
+
+    <nav class="guides-rail" aria-label="Guides">
+        <div class="guides-rail-inner">
+            <p class="guides-rail-title">Guides</p>
+            <hr class="guides-rail-rule">
+
+            <ul class="guides-nav">
+                {% for guide in guides_nav %}
+                    <li>
+                        <a class="guides-nav-link{% if guide.slug == active_guide %} is-active{% endif %}"
+                           href="{% url 'guide_detail' guide.slug %}"
+                           {% if guide.slug == active_guide %}aria-current="page"{% endif %}>
+                            {{ guide.title }}
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+
+            <a class="guides-rail-back" href="{% url 'dashboard' %}">&larr; back to deck</a>
+        </div>
+    </nav>
+
+    <main class="guides-content">
+        {% block guide %}{% endblock %}
+    </main>
+</body>
+</html>

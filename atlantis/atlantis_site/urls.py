@@ -11,6 +11,7 @@ urlpatterns = [
     path("oauth/callback/", auth_callback, name="auth_callback"),
     path("dashboard/", dashboard, name="dashboard"),
     path("guides/", guides, name="guides"),
+    path("guides/<slug:slug>/", guide_detail, name="guide_detail"),
     path("printer-select/", printer_select, name="printer_select"),
     path("projects/", projects, name="projects"),
     path("projects/<int:project_id>/", project_detail, name="project_detail"),
