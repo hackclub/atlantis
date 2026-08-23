@@ -178,6 +178,9 @@ class BaseTestCase(TestCase):
 		"atlantis_site.views.admin.review.send_slack_dm",
 		"atlantis_site.views.admin.shop.send_slack_dm",
 	]
+	SLACK_MESSAGE_TARGETS = [
+		"atlantis_site.views.admin.review.send_slack_message",
+	]
 	MODEL_INFO_TARGETS = [
 		"atlantis_site.views.client.projects.get_model_info",
 		"atlantis_site.views.admin.review.get_model_info",
@@ -193,6 +196,12 @@ class BaseTestCase(TestCase):
 		for target in self.SLACK_DM_TARGETS:
 			patcher = patch(target, return_value=True)
 			self.slack_dm_mocks[target.rsplit(".", 2)[-2]] = patcher.start()
+			self.addCleanup(patcher.stop)
+
+		self.slack_message_mocks = {}
+		for target in self.SLACK_MESSAGE_TARGETS:
+			patcher = patch(target, return_value=True)
+			self.slack_message_mocks[target.rsplit(".", 2)[-2]] = patcher.start()
 			self.addCleanup(patcher.stop)
 
 		self.model_info_mocks = []

@@ -426,15 +426,23 @@ def get_model_info(model_id: str) -> dict:
     
     return data["data"]["print"]
 
-def send_slack_dm(content, user):
+def send_slack_message(content, channel):
     try:
-        response = slack_client.chat_postMessage(
-            channel=user,
+        slack_client.chat_postMessage(
+            channel=channel,
             text=content
         )
         return True
     except SlackApiError:
         return False
+
+def send_slack_dm(content, user):
+    return send_slack_message(content, user)
+
+def slack_mention(user):
+    profile = getattr(user, "hackclub_profile", None)
+    slack_id = profile.slack_id if profile else ""
+    return f"<@{slack_id}>" if slack_id else display_name(user)
 
 def notify_followers(request, project, message):
     url = request.build_absolute_uri(reverse("project_detail_explore", args=[project.id]))

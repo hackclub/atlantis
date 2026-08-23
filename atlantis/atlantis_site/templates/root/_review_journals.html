@@ -7,8 +7,6 @@
         {% else %}
             <div class="journal-card">
                 <h3>{{ event.journal.title }}</h3>
-                {# /root only, so the internal figures are safe to show: what the
-                   Lookouts tracked, and what's left after timelapse review. #}
                 <p>
                     {{ event.journal.tracked_display }} tracked
                     {% if event.journal.removed_seconds %}

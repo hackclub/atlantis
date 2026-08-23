@@ -3,10 +3,11 @@ from django.views.decorators.http import require_POST
 from django.shortcuts import get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
+from django.conf import settings
 from django.db import transaction
 
 from ...models import InternalComment, Profile, Project, Ship, T1, T2, T3
-from ..helpers import check_perms, send_slack_dm, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back, timelapse_cleared_ships
+from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back, timelapse_cleared_ships
 
 INTERNAL_COMMENT_MAX_LENGTH = 1000
 
@@ -21,6 +22,29 @@ COMMENT_PERMS = [
     "atlantis_site.t3_review",
     "atlantis_site.organizer",
 ]
+
+def project_link(project):
+    return f"<https://atlantis.hacklub.com/projects/{project.id}|{project.title}>"
+
+def feedback_line(feedback):
+    if not feedback:
+        return "They didn't leave any feedback."
+    return f"Here's what they said about it: _{feedback}_"
+
+def ping_review_checkpoint(ship, reviewer, tier, outcome, feedback):
+    """
+    Rejections are posted in the review checkpoint channel with the shipper and
+    the reviewer both pinged, instead of DM'd, so the two can talk it over.
+    """
+    if not settings.REVIEW_CHECKPOINT_ID:
+        return False
+
+    project = ship.project
+    return send_slack_message(
+        f"{slack_mention(project.owner)} your project {project_link(project)} has been "
+        f"{tier} reviewed by {slack_mention(reviewer)} and {outcome}. {feedback_line(feedback)}",
+        settings.REVIEW_CHECKPOINT_ID,
+    )
 
 @staff_member_required
 @check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
@@ -107,9 +131,12 @@ def t1_decision(request, ship_id):
             approved=approved
         )
 
-    owner_slack_id = ship.project.owner.hackclub_profile.slack_id
-    if owner_slack_id:
-        send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been T1 reviewed and {"approved" if approved else "rejected"}! Here's what they said about it: _{feedback}_", owner_slack_id)
+    if approved:
+        owner_slack_id = ship.project.owner.hackclub_profile.slack_id
+        if owner_slack_id:
+            send_slack_dm(f"Your project {project_link(ship.project)} has been T1 reviewed and approved! {feedback_line(feedback)}", owner_slack_id)
+    else:
+        ping_review_checkpoint(ship, reviewer, "T1", "rejected", feedback)
 
     record_audit(request, "t1_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
@@ -212,8 +239,12 @@ def t2_decision(request, ship_id):
             justification=justification
         )
 
-    owner_slack_id = ship.project.owner.hackclub_profile.slack_id
-    send_slack_dm(f"Your project <https://atlantis.hacklub.com/projects/{ship.project.id}|{ship.project.title}> has been T2 reviewed and {message}! Here's what they said about it: _{feedback}_", owner_slack_id)
+    if decision == T2.Decision.APPROVE:
+        owner_slack_id = ship.project.owner.hackclub_profile.slack_id
+        if owner_slack_id:
+            send_slack_dm(f"Your project {project_link(ship.project)} has been T2 reviewed and {message}! {feedback_line(feedback)}", owner_slack_id)
+    else:
+        ping_review_checkpoint(ship, reviewer, "T2", message, feedback)
 
     record_audit(request, "t2_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,

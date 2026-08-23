@@ -28,6 +28,7 @@ POSTGRES_PORT = 5432
 
 SLACK_TOKEN = SLACK_TOKEN_GOES_HERE
 DEFAULT_PFP = https://cdn.hackclub.com/019ee160-b8f6-7920-aca0-6e35fffc2b6a/slack_hash_256.png
+REVIEW_CHECKPOINT_ID = REVIEW_CHECKPOINT_CHANNEL_ID_GOES_HERE
 
 CLOUDFLARE_TOKEN = CLOUDFLARE_TOKEN_GOES_HERE
 R2_ACCESS_KEY_ID = R2_ACCESS_KEY_ID_GOES_HERE
@@ -63,6 +64,8 @@ leave `DEFAULT_PFP` the same. to get your `SLACK_TOKEN`:
 - go to bot token scopes and allow `users.profile:read` and `users.read`
 - install the app to hack club
 - get your `xoxb-` token!
+
+`REVIEW_CHECKPOINT_ID` is the channel id (the `C...` one, from the channel's "view details" pane) that rejected T1/T2 reviews get posted in. the shipper and the reviewer are both pinged there with the reviewer's feedback, instead of the shipper getting a DM they can't reply to. approvals and finalizations are still DM'd. the bot needs `chat:write` and has to be in that channel; leave it blank and rejections just don't get announced.
 
 ### cloudflare stuff
 while the R2 bucket that's used for object storage is free, to obtain one you **need** to provide them with a valid credit/debit card!

@@ -1,4 +1,5 @@
 from django.core.cache import cache
+from django.test import override_settings
 from django.urls import reverse
 
 from ..models import AuditLog, InternalComment, Ship, T1, T2, T3
@@ -166,6 +167,29 @@ class T1DecisionTests(BaseTestCase):
 		self._decide()
 		self.slack_dm_mocks["review"].assert_not_called()
 
+	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
+	def test_rejection_pings_checkpoint_channel_instead_of_dm(self):
+		self._decide(approved="denied", feedback="needs more detail")
+		self.slack_dm_mocks["review"].assert_not_called()
+		content, channel = self.slack_message_mocks["review"].call_args.args
+		self.assertEqual(channel, "C0CHECK")
+		self.assertIn("<@U0AUTHOR>", content)
+		self.assertIn(f"<@{self.reviewer.hackclub_profile.slack_id}>", content)
+		self.assertIn("rejected", content)
+		self.assertIn("needs more detail", content)
+
+	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
+	def test_approval_still_dms_owner(self):
+		self._decide()
+		self.slack_message_mocks["review"].assert_not_called()
+		self.slack_dm_mocks["review"].assert_called_once()
+
+	@override_settings(REVIEW_CHECKPOINT_ID="")
+	def test_rejection_without_checkpoint_channel_notifies_nobody(self):
+		self._decide(approved="denied")
+		self.slack_dm_mocks["review"].assert_not_called()
+		self.slack_message_mocks["review"].assert_not_called()
+
 	def test_audit_log_recorded(self):
 		self._decide()
 		log = AuditLog.objects.get(action="t1_decision")
@@ -214,6 +238,23 @@ class T2DecisionTests(BaseTestCase):
 		self._decide(decision=T2.Decision.RETURN_T1)
 		self.ship.refresh_from_db()
 		self.assertEqual(self.ship.status, Ship.ShipStatus.T1_QUEUE)
+
+	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
+	def test_return_to_t1_pings_checkpoint_channel_instead_of_dm(self):
+		self._decide(decision=T2.Decision.RETURN_T1, feedback="fix the seams")
+		self.slack_dm_mocks["review"].assert_not_called()
+		content, channel = self.slack_message_mocks["review"].call_args.args
+		self.assertEqual(channel, "C0CHECK")
+		self.assertIn("<@U0AUTHOR>", content)
+		self.assertIn(f"<@{self.reviewer.hackclub_profile.slack_id}>", content)
+		self.assertIn("returned to T1 reviewers", content)
+		self.assertIn("fix the seams", content)
+
+	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
+	def test_approval_dms_owner(self):
+		self._decide()
+		self.slack_message_mocks["review"].assert_not_called()
+		self.slack_dm_mocks["review"].assert_called_once()
 
 	def test_invalid_decision_rejected(self):
 		self._decide(decision="X")

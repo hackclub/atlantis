@@ -41,6 +41,10 @@ AWS_S3_FILE_OVERWRITE = True
 
 SLACK_TOKEN = os.environ["SLACK_TOKEN"]
 
+# Channel rejected reviews are posted in, so the shipper and the reviewer
+# can talk it over instead of the shipper getting a DM they can't reply to.
+REVIEW_CHECKPOINT_ID = os.environ.get("REVIEW_CHECKPOINT_ID", "")
+
 LOOKOUT_TOKEN = os.environ["LOOKOUT_TOKEN"]
 LOOKOUT_BASE_URL = os.environ.get("LOOKOUT_BASE_URL", "https://lookout.hackclub.com")
 LOOKOUT_APP_NAME = os.environ.get("LOOKOUT_APP_NAME", "Atlantis")
