@@ -12,45 +12,47 @@
     <section class="item-list">
         <h3>Items</h3>
         {% if items %}
-            <table class="users-table">
-                <thead>
-                    <tr>
-                        <th>Image</th>
-                        <th>Name</th>
-                        <th>Description</th>
-                        <th>Category</th>
-                        <th>Cost</th>
-                        <th>Stock</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in items %}
-                        {% if not item.deleted %}
-                        <tr data-item-id="{{ item.id }}">
-                            <td>
-                                {% if item.imageUrl %}
-                                    <img src="{{ item.imageUrl }}" alt="{{ item.name }}" loading="lazy" style="width: 40px; height: 40px; object-fit: cover;">
-                                {% endif %}
-                            </td>
-                            <td><a href="{% url 'item_detail' item.id %}">{{ item.name }}</a></td>
-                            <td>{{ item.description|truncatechars:80 }}</td>
-                            <td>{{ item.category }}</td>
-                            <td>{{ item.cost }} pearls</td>
-                            <td>{% if item.unlimited_stock %}Unlimited{% else %}{{ item.stock }}{% endif %}</td>
-                            <td>
-                                <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}" data-category="{{ item.category }}" data-stock="{{ item.stock }}">Edit</button>
-                                <br>
-                                <form action="{% url 'delete_item' item.id %}" method="post" class="delete-form" style="display: inline;">
-                                    {% csrf_token %}
-                                    <button type="submit" class="delete-button link-button">Delete</button>
-                                </form>
-                            </td>
+            <div class="table-scroll">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>Image</th>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th>Cost</th>
+                            <th>Stock</th>
+                            <th>Actions</th>
                         </tr>
-                        {% endif %}
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                            {% if not item.deleted %}
+                            <tr data-item-id="{{ item.id }}">
+                                <td>
+                                    {% if item.imageUrl %}
+                                        <img src="{{ item.imageUrl }}" alt="{{ item.name }}" loading="lazy" style="width: 40px; height: 40px; object-fit: cover;">
+                                    {% endif %}
+                                </td>
+                                <td><a href="{% url 'item_detail' item.id %}">{{ item.name }}</a></td>
+                                <td>{{ item.description|truncatechars:80 }}</td>
+                                <td>{{ item.category }}</td>
+                                <td>{{ item.cost }} pearls</td>
+                                <td>{% if item.unlimited_stock %}Unlimited{% else %}{{ item.stock }}{% endif %}</td>
+                                <td>
+                                    <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}" data-category="{{ item.category }}" data-stock="{{ item.stock }}">Edit</button>
+                                    <br>
+                                    <form action="{% url 'delete_item' item.id %}" method="post" class="delete-form" style="display: inline;">
+                                        {% csrf_token %}
+                                        <button type="submit" class="delete-button link-button">Delete</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
         {% else %}
             <p>No items in the shop yet! Create one you filthy admin!!!!!</p>
         {% endif %}

@@ -38,68 +38,70 @@
     <p>{{ page.paginator.count }} total entr{{ page.paginator.count|pluralize:"y,ies" }}</p>
 
     {% if logs %}
-        <table class="users-table">
-            <thead>
-                <tr>
-                    <th>Time</th>
-                    <th>Action</th>
-                    <th>Actor</th>
-                    <th>Target</th>
-                    <th>Request</th>
-                    <th>Details</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for log in logs %}
-                <tr>
-                    <td>{{ log.created_at }}</td>
-                    <td><strong>{{ log.action }}</strong></td>
-                    <td>
-                        {% if log.actor %}
-                            @{{ log.actor.hackclub_profile.slack_username|default:log.actor.username }} ({{ log.actor.username }})
-                        {% else %}
-                            <em>deleted user</em>
-                        {% endif %}
-                    </td>
-                    <td>{{ log.target|default:"—" }}</td>
-                    <td>
-                        {{ log.method }} {{ log.path }}
-                        {% if log.ip_address %}<br><small>{{ log.ip_address }}</small>{% endif %}
-                    </td>
-                    <td>
-                        <details>
-                            <summary>Form values ({{ log.form_data|length }})</summary>
-                            {% if log.form_data %}
-                                <table class="audit-data">
-                                    {% for key, value in log.form_data.items %}
-                                        <tr>
-                                            <th>{{ key }}</th>
-                                            <td>{{ value }}</td>
-                                        </tr>
-                                    {% endfor %}
-                                </table>
+        <div class="table-scroll">
+            <table class="users-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Action</th>
+                        <th>Actor</th>
+                        <th>Target</th>
+                        <th>Request</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td>{{ log.created_at }}</td>
+                        <td><strong>{{ log.action }}</strong></td>
+                        <td>
+                            {% if log.actor %}
+                                @{{ log.actor.hackclub_profile.slack_username|default:log.actor.username }} ({{ log.actor.username }})
                             {% else %}
-                                <p><em>No form values submitted.</em></p>
+                                <em>deleted user</em>
                             {% endif %}
-                        </details>
-                        {% if log.metadata %}
+                        </td>
+                        <td>{{ log.target|default:"—" }}</td>
+                        <td>
+                            {{ log.method }} {{ log.path }}
+                            {% if log.ip_address %}<br><small>{{ log.ip_address }}</small>{% endif %}
+                        </td>
+                        <td>
                             <details>
-                                <summary>Resulting state / context</summary>
-                                <table class="audit-data">
-                                    {% for key, value in log.metadata.items %}
-                                        <tr>
-                                            <th>{{ key }}</th>
-                                            <td>{{ value }}</td>
-                                        </tr>
-                                    {% endfor %}
-                                </table>
+                                <summary>Form values ({{ log.form_data|length }})</summary>
+                                {% if log.form_data %}
+                                    <table class="audit-data">
+                                        {% for key, value in log.form_data.items %}
+                                            <tr>
+                                                <th>{{ key }}</th>
+                                                <td>{{ value }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </table>
+                                {% else %}
+                                    <p><em>No form values submitted.</em></p>
+                                {% endif %}
                             </details>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                            {% if log.metadata %}
+                                <details>
+                                    <summary>Resulting state / context</summary>
+                                    <table class="audit-data">
+                                        {% for key, value in log.metadata.items %}
+                                            <tr>
+                                                <th>{{ key }}</th>
+                                                <td>{{ value }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    </table>
+                                </details>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
 
         {% if page.has_other_pages %}
             <div class="pagination">

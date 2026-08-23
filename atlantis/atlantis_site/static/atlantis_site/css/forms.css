@@ -23,21 +23,29 @@
     flex-direction: column;
     gap: 12px;
     align-items: flex-start;
+    max-width: 100%;
     margin-top: 12px;
 }
 
 .review-form .form-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
+    max-width: 100%;
     margin: 0;
 }
 
+/* Grown to 320px rather than fixed at it. A specified width counts towards
+   the row's min-content, and align-items: flex-start sizes the row to that,
+   so `width: 320px` made the sidebar 320px wide no matter how little room the
+   window had — a percentage max-width can't claw that back. */
 .review-form input[type="text"],
 .review-form input[type="number"],
 .review-form select {
-    width: 320px;
-    max-width: 100%;
+    flex: 1 1 320px;
+    min-width: 0;
+    max-width: 320px;
     box-sizing: border-box;
 }
 

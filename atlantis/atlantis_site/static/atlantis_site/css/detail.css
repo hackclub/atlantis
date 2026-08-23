@@ -6,6 +6,11 @@
     margin-top: 16px;
 }
 
+.item-detail-media {
+    flex: 1 1 260px;
+    max-width: 100%;
+}
+
 .item-detail-media img {
     width: 320px;
     max-width: 100%;
@@ -13,8 +18,11 @@
     border-radius: 12px;
 }
 
+/* min-width:0 or the flex basis becomes a floor and the column keeps its
+   280px while the row has less than that to give. */
 .item-detail-info {
     flex: 1 1 280px;
+    min-width: 0;
 }
 
 .item-detail-info h1 {
@@ -52,16 +60,20 @@
     gap: 16px;
 }
 
+/* Square by aspect-ratio rather than by a matching pixel height, so the box
+   keeps its shape as it narrows instead of overflowing the card. The ratio
+   still gives the STL canvas a height to measure before the model lands. */
 .journal-image {
-    width: 400px;
-    height: 400px;
+    width: min(400px, 100%);
+    aspect-ratio: 1;
+    height: auto;
     object-fit: contain;
     border-radius: 5px;
 }
 
 .stl-viewer {
-    width: 400px;
-    height: 400px;
+    width: min(400px, 100%);
+    aspect-ratio: 1;
     border-radius: 5px;
     background-color: #f0f0f0;
     overflow: hidden;
@@ -74,7 +86,7 @@
 
 .review-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 360px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
     gap: 24px;
     align-items: start;
 }
@@ -101,8 +113,11 @@
 }
 
 @media (max-width: 900px) {
+    /* minmax(0, 1fr), not 1fr: a bare 1fr floors the track at the column's
+       min-content, and the review form's 320px fields make that wider than a
+       small phone. With a 0 minimum their max-width: 100% can do its job. */
     .review-layout {
-        grid-template-columns: 1fr;
+        grid-template-columns: minmax(0, 1fr);
     }
 
     .review-sidebar {

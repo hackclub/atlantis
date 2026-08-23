@@ -33,21 +33,21 @@
 
 .item-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr));
     gap: 16px;
     margin-top: 16px;
 }
 
 .order-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
     gap: 16px;
     margin-top: 16px;
 }
 
 .card-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
     gap: 16px;
     margin: 16px 0 24px;
 }
@@ -72,16 +72,19 @@
     color: black;
 }
 
-.journal-card { width: fit-content; }
-.review-card { width: 450px; }
-.ship-card { width: 400px; }
-.ship-event { width: 400px; }
-.project-info { width: 750px; }
+/* Widths are ceilings, not fixed sizes: these cards sit in a review column
+   that is itself fluid, and at a fixed width they both overflowed a phone and
+   left the stack ragged next to the full-width .project-info above them. */
+.journal-card { width: fit-content; max-width: 100%; }
+.review-card { width: min(450px, 100%); }
+.ship-card { width: min(400px, 100%); }
+.ship-event { width: min(400px, 100%); }
+.project-info { width: min(750px, 100%); }
 
 /* Tinted so a reviewer can't mistake an internal note for something the
    project owner can see. */
 .internal-comment {
-    width: 450px;
+    width: min(450px, 100%);
     background: #fffbea;
     border-color: #e6d8a8;
 }
@@ -109,7 +112,8 @@
 
 .user-card-main {
     display: flex;
-    gap: 50px;
+    flex-wrap: wrap;
+    gap: 20px 50px;
 }
 
 .item-card-image,

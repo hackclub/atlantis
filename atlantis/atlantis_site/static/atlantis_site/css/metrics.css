@@ -27,7 +27,7 @@
 
 .stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(180px, 100%), 1fr));
     gap: 12px;
     margin: 16px 0 24px;
 }
@@ -66,7 +66,7 @@
 
 .chart-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
     gap: 16px 24px;
     margin: 16px 0;
     align-items: start;
@@ -95,7 +95,7 @@
 
 .chart-row {
     display: grid;
-    grid-template-columns: minmax(90px, 34%) 1fr max-content;
+    grid-template-columns: minmax(0, 34%) minmax(40px, 1fr) max-content;
     align-items: center;
     gap: 10px;
 }

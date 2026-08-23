@@ -23,59 +23,61 @@
         <a href="{% url 'users' %}" class="link-button">Clear</a>
         {% endif %}
     </form>
-    <table class="users-table">
-        <thead>
-            <tr>
-                <th></th>
-                <th>User ID</th>
-                <th>Slack Username</th>
-                <th>Slack ID</th>
-                <th>Pearls</th>
-                <th>Groups</th>
-                <th>Staff Member</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for user in users %}
-            <tr data-user-id="{{ user.id }}" data-slack-username="{{ user.hackclub_profile.slack_username|default:''|lower }}">
-                <td>
-                    {% if user.hackclub_profile.slack_pfp_url %}
-                    <img src="{{ user.hackclub_profile.slack_pfp_url }}" class="user-pfp">
+    <div class="table-scroll">
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>User ID</th>
+                    <th>Slack Username</th>
+                    <th>Slack ID</th>
+                    <th>Pearls</th>
+                    <th>Groups</th>
+                    <th>Staff Member</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr data-user-id="{{ user.id }}" data-slack-username="{{ user.hackclub_profile.slack_username|default:''|lower }}">
+                    <td>
+                        {% if user.hackclub_profile.slack_pfp_url %}
+                        <img src="{{ user.hackclub_profile.slack_pfp_url }}" class="user-pfp">
+                        {% else %}
+                        <img src="{{ default_pfp_url }}" class="user-pfp">
+                        {% endif %}
+                    </td>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.hackclub_profile.slack_username|default:"not found" }}</td>
+                    <td>{{ user.hackclub_profile.slack_id|default:"not found" }}</td>
+                    <td>{{ user.hackclub_profile.layers|default:"0" }}</td>
+                    <td>{{ user.groups.all|join:", "|default:"no groups found" }}</td>
+                    {% if user.is_staff %}
+                    <td class="is-yes">true</td>
                     {% else %}
-                    <img src="{{ default_pfp_url }}" class="user-pfp">
+                    <td class="is-no">false</td>
                     {% endif %}
-                </td>
-                <td>{{ user.id }}</td>
-                <td>{{ user.hackclub_profile.slack_username|default:"not found" }}</td>
-                <td>{{ user.hackclub_profile.slack_id|default:"not found" }}</td>
-                <td>{{ user.hackclub_profile.layers|default:"0" }}</td>
-                <td>{{ user.groups.all|join:", "|default:"no groups found" }}</td>
-                {% if user.is_staff %}
-                <td class="is-yes">true</td>
-                {% else %}
-                <td class="is-no">false</td>
-                {% endif %}
-                <td>
-                    <button
-                        type="button"
-                        class="open-edit-user link-button"
-                        data-user-id="{{ user.id }}"
-                        data-sub="{{ user.username|default:'' }}"
-                        data-email="{{ user.email|default:'' }}"
-                        data-first-name="{{ user.first_name|default:'' }}"
-                        data-last-name="{{ user.last_name|default:'' }}"
-                        data-username="{{ user.hackclub_profile.slack_username|default:'' }}"
-                        data-slack-id="{{ user.hackclub_profile.slack_id|default:'' }}"
-                        data-layers="{{ user.hackclub_profile.layers|default:'0' }}"
-                        data-slack-pfp-url="{{ user.hackclub_profile.slack_pfp_url|default:'' }}"
-                        data-group-ids="{% for group in user.groups.all %}{{ group.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
-                    >edit user</button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    <td>
+                        <button
+                            type="button"
+                            class="open-edit-user link-button"
+                            data-user-id="{{ user.id }}"
+                            data-sub="{{ user.username|default:'' }}"
+                            data-email="{{ user.email|default:'' }}"
+                            data-first-name="{{ user.first_name|default:'' }}"
+                            data-last-name="{{ user.last_name|default:'' }}"
+                            data-username="{{ user.hackclub_profile.slack_username|default:'' }}"
+                            data-slack-id="{{ user.hackclub_profile.slack_id|default:'' }}"
+                            data-layers="{{ user.hackclub_profile.layers|default:'0' }}"
+                            data-slack-pfp-url="{{ user.hackclub_profile.slack_pfp_url|default:'' }}"
+                            data-group-ids="{% for group in user.groups.all %}{{ group.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
+                        >edit user</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     <p id="userSearchEmpty" hidden>No users match that Slack username.</p>
 
     <dialog id="editUserPopup">

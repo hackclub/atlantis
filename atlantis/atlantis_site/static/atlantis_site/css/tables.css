@@ -1,3 +1,21 @@
+/* Wide tables (fulfillment runs 11 columns) scroll inside the content column
+   instead of dragging the whole document sideways, which is what happened
+   before: on a 1280px laptop the Actions column of the fulfillment table sat
+   off-screen and the only way to reach it was to pan the entire page. */
+.table-scroll {
+    max-width: 100%;
+    margin: 24px 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* The table owned the vertical rhythm before it gained a wrapper; move it to
+   the wrapper so the scroll box, not the table, carries the gap. */
+.table-scroll > .users-table {
+    margin: 0;
+}
+
 .users-table {
     width: 100%;
     border-collapse: collapse;

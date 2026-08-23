@@ -9,46 +9,48 @@
     <h1>Review Dash</h1>
     <section class="project-list">
         <h2>Ships</h2>
-            <table class="users-table">
-                <thead>
-                    <tr>
-                        <th>Project Title</th>
-                        <th>Owner</th>
-                        <th>Type</th>
-                        <th>Time Spent</th>
-                        <th>Shipped</th>
-                        <th>Description</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for ship in ships %}
-                        {% if not ship.project.deleted %}
-                        <tr data-project-id="{{ ship.project.id }}">
-                            <td><a href="{% url 'review_project' ship.id %}">{{ ship.project.title }}</a></td>
-                            <td>@{{ ship.project.owner.hackclub_profile.slack_username }}</td>
-                            <td>
-                                {{ ship.project.editor_name }}
-                            </td>
-                            <td>{{ ship.time_spent_display }}</td>
-                            <td>{{ ship.created_at|date:"M j, Y" }}</td>
-                            <td>{{ ship.project.description|truncatechars:80 }}</td>
-                            <td>
-                                <a href="{% url 'review_project' ship.id %}">Review project</a>
-                                <br>
-                                {% if ship.project.printablesUrl %}
-                                    <a href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
-                                {% else %}
-                                    <span aria-disabled="true">No printables link</span>
-                                {% endif %}
-                            </td>
+            <div class="table-scroll">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>Project Title</th>
+                            <th>Owner</th>
+                            <th>Type</th>
+                            <th>Time Spent</th>
+                            <th>Shipped</th>
+                            <th>Description</th>
+                            <th>Actions</th>
                         </tr>
-                        {% endif %}
-                    {% empty %}
-                        <tr><td colspan="7">No projects awaiting T1 review.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {% for ship in ships %}
+                            {% if not ship.project.deleted %}
+                            <tr data-project-id="{{ ship.project.id }}">
+                                <td><a href="{% url 'review_project' ship.id %}">{{ ship.project.title }}</a></td>
+                                <td>@{{ ship.project.owner.hackclub_profile.slack_username }}</td>
+                                <td>
+                                    {{ ship.project.editor_name }}
+                                </td>
+                                <td>{{ ship.time_spent_display }}</td>
+                                <td>{{ ship.created_at|date:"M j, Y" }}</td>
+                                <td>{{ ship.project.description|truncatechars:80 }}</td>
+                                <td>
+                                    <a href="{% url 'review_project' ship.id %}">Review project</a>
+                                    <br>
+                                    {% if ship.project.printablesUrl %}
+                                        <a href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
+                                    {% else %}
+                                        <span aria-disabled="true">No printables link</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endif %}
+                        {% empty %}
+                            <tr><td colspan="7">No projects awaiting T1 review.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
     </section>
     <section class="chart-grid">
         {% include "root/_metric_chart.html" with title="Top T1 reviewers" rows=leaderboard empty="No reviews yet" %}

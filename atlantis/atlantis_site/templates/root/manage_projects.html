@@ -34,64 +34,66 @@
         <button type="submit" id="bulkDeleteButton" class="danger" disabled>db delete selected</button>
     </form>
 
-    <table class="users-table">
-        <thead>
-            <tr>
-                <th></th>
-                <th>Project ID</th>
-                <th>Owner</th>
-                <th>Project Title</th>
-                <th>Description</th>
-                <th>Time Spent</th>
-                <th>Journals</th>
-                <th>Status</th>
-                <th>Deleted</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for project in projects %}
-            <tr data-project-id="{{ project.id }}" data-title="{{ project.title|default:''|lower }}" data-owner="{{ project.owner.hackclub_profile.slack_username|default:''|lower }}">
-                <td>
-                    <input
-                        type="checkbox"
-                        class="select-project"
-                        value="{{ project.id }}"
-                        data-title="{{ project.title|default:'' }}"
-                        aria-label="Select project {{ project.id }}"
-                    >
-                </td>
-                <td>{{ project.id }}</td>
-                <td>{{ project.owner.hackclub_profile.slack_username }}</td>
-                <td>{{ project.title }}</td>
-                <td>{{ project.description|truncatechars:80 }}</td>
-                <td>{{ project.time_spent_display }}</td>
-                <td>{{ project.journal_count }}</td>
-                <td>{{ project.status_display }}</td>
-                <td>{{ project.deleted|yesno:"Yes,No" }}</td>
-                <td>
-                    <button
-                        type="button"
-                        class="open-edit-project link-button"
-                        data-project-id="{{ project.id }}"
-                        data-title="{{ project.title|default:'' }}"
-                        data-description="{{ project.description|default:'' }}"
-                        data-printables-url="{{ project.printablesUrl|default:'' }}"
-                        data-editor-model-url="{{ project.editor_model_url|default:'' }}"
-                        data-deleted="{{ project.deleted|yesno:'1,0' }}"
-                    >edit project</button>
-                    <br>
-                    <a href="{% url 'project_detail_explore' project.id %}" class="link-button" target="_blank" rel="noopener">view on explore</a>
-                    <br>
-                    <form method="POST" action="{% url 'db_delete_project' project.id %}" class="db-delete-project-form" data-title="{{ project.title|default:'' }}" style="display:inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="link-button danger">db delete</button>
-                    </form>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-scroll">
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Project ID</th>
+                    <th>Owner</th>
+                    <th>Project Title</th>
+                    <th>Description</th>
+                    <th>Time Spent</th>
+                    <th>Journals</th>
+                    <th>Status</th>
+                    <th>Deleted</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for project in projects %}
+                <tr data-project-id="{{ project.id }}" data-title="{{ project.title|default:''|lower }}" data-owner="{{ project.owner.hackclub_profile.slack_username|default:''|lower }}">
+                    <td>
+                        <input
+                            type="checkbox"
+                            class="select-project"
+                            value="{{ project.id }}"
+                            data-title="{{ project.title|default:'' }}"
+                            aria-label="Select project {{ project.id }}"
+                        >
+                    </td>
+                    <td>{{ project.id }}</td>
+                    <td>{{ project.owner.hackclub_profile.slack_username }}</td>
+                    <td>{{ project.title }}</td>
+                    <td>{{ project.description|truncatechars:80 }}</td>
+                    <td>{{ project.time_spent_display }}</td>
+                    <td>{{ project.journal_count }}</td>
+                    <td>{{ project.status_display }}</td>
+                    <td>{{ project.deleted|yesno:"Yes,No" }}</td>
+                    <td>
+                        <button
+                            type="button"
+                            class="open-edit-project link-button"
+                            data-project-id="{{ project.id }}"
+                            data-title="{{ project.title|default:'' }}"
+                            data-description="{{ project.description|default:'' }}"
+                            data-printables-url="{{ project.printablesUrl|default:'' }}"
+                            data-editor-model-url="{{ project.editor_model_url|default:'' }}"
+                            data-deleted="{{ project.deleted|yesno:'1,0' }}"
+                        >edit project</button>
+                        <br>
+                        <a href="{% url 'project_detail_explore' project.id %}" class="link-button" target="_blank" rel="noopener">view on explore</a>
+                        <br>
+                        <form method="POST" action="{% url 'db_delete_project' project.id %}" class="db-delete-project-form" data-title="{{ project.title|default:'' }}" style="display:inline;">
+                            {% csrf_token %}
+                            <button type="submit" class="link-button danger">db delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
     <p id="projectSearchEmpty" hidden>No projects match that search.</p>
 
     <dialog id="editProjectPopup">
