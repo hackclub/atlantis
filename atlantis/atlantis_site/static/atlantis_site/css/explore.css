@@ -1,0 +1,17 @@
+/* Everyone else's shelf. Loaded after shelf.css. */
+
+#shelf-title {
+    margin: 0;
+    font-weight: 400;
+    font-size: clamp(20px, 1.8vw, 32px);
+    color: #F3E5C7;
+    text-shadow: 0 1px 3px rgba(24, 13, 4, 0.55);
+}
+
+/* A name is one line, however long it is; the title beside it keeps its room. */
+.book-owner {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

@@ -1,0 +1,11 @@
+/* The hand-lettered faces the art-directed pages are set in. */
+
+@font-face {
+    font-family: "Atlantis Hand";
+    src: url('../assets/fonts/atlantishand.ttf') format("truetype");
+}
+
+@font-face {
+    font-family: "Waterlily";
+    src: url('../assets/fonts/waterlily.ttf') format("truetype");
+}

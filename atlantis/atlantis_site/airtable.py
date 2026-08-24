@@ -111,10 +111,9 @@ def create_record(fields):
 
 	if not response.ok:
 		# The body is logged but never put in the exception: Airtable quotes the
-		# offending value back at you on a validation error, which for this table
-		# means somebody's address or birthday. The exception text is stored on
-		# the submission row and shown to a reviewer, so it gets the error type
-		# and nothing else.
+		# offending value back on a validation error, which here means somebody's
+		# address or birthday, and that text is stored on the submission row for
+		# a reviewer to read.
 		logger.error(
 			"Airtable create_record -> %s: %s", response.status_code, response.text[:500]
 		)

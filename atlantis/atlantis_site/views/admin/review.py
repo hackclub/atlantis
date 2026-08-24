@@ -1,6 +1,5 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
-from django.shortcuts import get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.conf import settings
@@ -377,10 +376,9 @@ def fraud_review_project(request, ship_id):
         "payout_multiplier": multiplier,
         "base_layers": layers_for_minutes(total_time),
         "payout_layers": layers_for_minutes(total_time, multiplier),
-        # What will land in Airtable's override-hours justification: the T2
-        # reviewer's words, then every Lookout on the ship with the ranges that
-        # were cut from it and why. Nothing else shows a T3 reviewer the
-        # timelapse review in full.
+        # Airtable's override-hours justification: the T2 reviewer's words,
+        # then every Lookout on the ship with the ranges cut from it and why.
+        # Nothing else shows a T3 reviewer the timelapse review in full.
         "override_justification": build_override_justification(ship),
         "airtable_submission": AirtableSubmission.objects.filter(ship=ship).first(),
     })

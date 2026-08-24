@@ -1,0 +1,41 @@
+/* The desk the shop, the shelves and the book are laid on, and the ink they
+   are written in. Needs fonts-hand.css, and each page names its --desk-art. */
+
+:root {
+    --ink: #35270F;
+    --ink-soft: #7B6640;
+    --ink-faint: #A08A6A;
+    --ink-link: #2B5A78;
+    --ink-danger: #A33C2B;
+    --paper: #F3E5C7;
+    --paper-edge: #DCC79C;
+
+    --desk-pad: clamp(18px, 3vw, 52px);
+}
+
+body {
+    margin: 0;
+    /* The fallback colour is the wood, so the ragged paper edge never opens
+       onto white on aspect ratios the art does not cover. */
+    background-color: #4A2E17;
+    background-image: var(--desk-art);
+    background-position: center;
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    font-family: "Atlantis Hand", sans-serif;
+}
+
+/* Sits in the corner, which the background leaves as bare wood, so it is
+   cream with a shadow rather than the paper's brown ink. */
+#back-link {
+    color: #E9D8B4;
+    text-decoration: none;
+    font-size: clamp(18px, 1.6vw, 28px);
+    text-shadow: 0 1px 3px rgba(24, 13, 4, 0.55);
+}
+
+#back-link:hover,
+#back-link:focus-visible {
+    color: #FFF6E2;
+}

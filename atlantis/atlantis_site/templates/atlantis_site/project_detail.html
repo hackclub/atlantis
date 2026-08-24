@@ -15,8 +15,11 @@
         }
     </script>
     <script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
-    {% include "atlantis_site/_book_style.html" %}
-    {% include "atlantis_site/_lookout_style.html" %}
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/desk.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/book.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/lookout.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
 </head>
 <body data-mode="book">
     <div class="desk">
@@ -27,8 +30,8 @@
         <div class="book" id="book">
             <img class="book-art" src="{% static 'atlantis_site/assets/img/projects/book_open.png' %}" alt="">
 
-            <div class="sheet sheet--left" id="sheet-left"></div>
-            <div class="sheet sheet--right" id="sheet-right"></div>
+            <div class="leaf leaf--left" id="leaf-left"></div>
+            <div class="leaf leaf--right" id="leaf-right"></div>
 
             <button type="button" class="turn turn--prev" id="turn-prev" aria-label="Previous page" hidden>&larr;</button>
             <button type="button" class="turn turn--next" id="turn-next" aria-label="Next page">&rarr;</button>

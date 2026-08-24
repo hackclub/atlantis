@@ -51,21 +51,14 @@ ALLOWED_URL_PORTS = {"http": 80, "https": 443}
 slack_client = WebClient(token=settings.SLACK_TOKEN, timeout=5)
 
 def check_perms(perms):
-    def check_perms_internal(user):
-        for perm in perms:
-            if user.has_perm(perm):
-                return True
-        return False
-    return user_passes_test(check_perms_internal)
+    return user_passes_test(lambda user: any(user.has_perm(p) for p in perms))
 
 def is_valid_printables_url(value):
     """True when value is an https URL whose host really is printables.com.
 
-    Compares the parsed host against an allowlist rather than matching the URL
-    with a regex: a pattern ending in `.*$` backtracks over the whole string on
-    input it can't match, and reading the host out of urlparse is both linear
-    and harder to get wrong. It also drops `https://printables.com@evil.com`,
-    where the lookalike is only the userinfo and the real host is evil.com.
+    An allowlist on the parsed host rather than a regex on the URL: linear on
+    input it can't match, and it drops `https://printables.com@evil.com`,
+    where the lookalike is only the userinfo.
     """
     if not value or len(value) > MAX_URL_LENGTH:
         return False
@@ -85,9 +78,8 @@ def is_valid_printables_url(value):
 
 def layers_for_minutes(minutes, multiplier=PAYOUT_MULTIPLIER_DEFAULT):
     # Half a pearl per six-minute bucket, scaled by the T2 reviewer's
-    # multiplier. Decimal rather than float because both halves are exact in
-    # tenths and the ties land on .5 often enough to matter; ROUND_HALF_EVEN
-    # keeps the unmultiplied results identical to the round() this used to do.
+    # multiplier. Decimal because both halves are exact in tenths and the ties
+    # land on .5 often enough to matter.
     tenths_of_hour = minutes // 6
     layers = (Decimal(tenths_of_hour) / 2) * Decimal(multiplier)
     return int(layers.quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
@@ -120,6 +112,7 @@ def timelapse_cleared_ships(ships):
     )
 
 def format_minutes(minutes):
+    minutes = int(minutes or 0)
     return f"{minutes // 60}h {minutes % 60}m"
 
 def can_bypass_ship_requirements(user):
@@ -133,9 +126,10 @@ def internal_comments_for_project(project):
     )
 
 def build_review_history(ship):
-    """Everything reviewers did to a ship — decisions and internal
-    comments — as one oldest-first list. /root pages only: it carries internal
-    notes the project owner must never see."""
+    """Everything reviewers did to a ship, oldest first.
+
+    /root pages only: it carries internal notes the owner must never see.
+    """
     events = []
     for t1 in ship.t1_reviews.all():
         events.append({
@@ -330,11 +324,10 @@ def _pinned_head(url, dest_ip, timeout=5):
 def _safe_head(url, max_redirects=5):
     """HEAD a caller-supplied URL without letting it reach anything internal.
 
-    The guard is per hop, because a redirect is just as attacker-controlled as
-    the original URL: reject non-http(s) schemes and off-default ports, resolve
-    the host and refuse it unless every address is public, then hand
-    _pinned_head the address we vetted so the connection cannot be re-resolved
-    to something else in between (DNS rebinding).
+    Guarded per hop, because a redirect is as attacker-controlled as the
+    original URL: reject non-http(s) schemes and off-default ports, refuse the
+    host unless every address it resolves to is public, then pin _pinned_head
+    to the address we vetted so it cannot be re-resolved (DNS rebinding).
     """
     for _ in range(max_redirects + 1):
         if not url or len(url) > MAX_URL_LENGTH:
@@ -443,6 +436,7 @@ def send_slack_message(content, channel):
         return False
 
 def send_slack_dm(content, user):
+    # A DM is the same API call as a channel post, addressed to a Slack ID.
     return send_slack_message(content, user)
 
 def slack_mention(user):
@@ -464,10 +458,7 @@ def is_valid_editor_model_url(value):
     return detect_editor(value) is not None
 
 def validate_file_size(file, max_mb):
-    max_b = max_mb * 1024 * 1024
-    if file.size > max_b:
-        return False
-    return True
+    return file.size <= max_mb * 1024 * 1024
 
 def sniff_image_extension(file):
     try:

@@ -9,10 +9,9 @@ from django.conf import settings
 from django.urls import reverse
 
 
-# The T2 reviewer's pearl multiplier. Stored as a Decimal in tenths so the
-# slider's positions and the payout arithmetic are exact — pearls are half a
-# pearl per six-minute bucket, which is already tenths, and a binary float
-# would put both off by a hair.
+# The T2 reviewer's pearl multiplier, a Decimal in tenths so the slider's
+# positions and the payout arithmetic stay exact — payouts are already in
+# tenths, and a binary float would put both off by a hair.
 PAYOUT_MULTIPLIER_MIN = Decimal("0.5")
 PAYOUT_MULTIPLIER_MAX = Decimal("3.0")
 PAYOUT_MULTIPLIER_STEP = Decimal("0.1")
@@ -279,10 +278,9 @@ class T2(models.Model):
 
 	deductions = models.IntegerField(default=0)
 
-	# Scales the pearls the owner is paid when T3 finalizes the ship. It is
-	# deliberately not applied to the minutes: deductions and airtable_time are
-	# the record of how long the work actually took, and that is what Airtable
-	# is told. This only moves the reward.
+	# Scales the pearls paid when T3 finalizes the ship, and nothing else:
+	# deductions and airtable_time record how long the work actually took,
+	# and that is what Airtable is told.
 	payout_multiplier = models.DecimalField(
 		max_digits=2,
 		decimal_places=1,

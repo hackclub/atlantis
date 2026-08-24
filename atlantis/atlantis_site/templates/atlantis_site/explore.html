@@ -6,24 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Explore</title>
     {% include '_favicon.html' %}
-    {% include "atlantis_site/_shelf_style.html" %}
-
-    <style>
-        #shelf-title {
-            margin: 0;
-            font-weight: 400;
-            font-size: clamp(20px, 1.8vw, 32px);
-            color: #F3E5C7;
-            text-shadow: 0 1px 3px rgba(24, 13, 4, 0.55);
-        }
-
-        .book-owner {
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-    </style>
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/desk.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/paper.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/shelf.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/explore.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
 </head>
 <body>
     <div class="sheet">
@@ -32,9 +20,6 @@
         </div>
 
         {% include "atlantis_site/_banner.html" %}
-
-        {% if not projects %}
-        {% endif %}
 
         <div id="deck">
         <main id="shelf">

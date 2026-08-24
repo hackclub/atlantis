@@ -1,0 +1,138 @@
+/* The sheet of paper the shop and the shelves are printed on, and the panels
+   that open over it. Loaded after desk.css; a page overrides what it needs. */
+
+.sheet {
+    box-sizing: border-box;
+    max-width: 1560px;
+    margin: 0 auto;
+    padding: clamp(16px, 2.2vw, 34px) var(--desk-pad) var(--sheet-foot, clamp(40px, 6vw, 96px));
+}
+
+/* Breaks out of .sheet's centred max-width so the back link and whatever
+   sits opposite it hug the viewport's real corners instead of drifting
+   inward, stranded over open wood, once the sheet is capped on wide screens. */
+.topbar {
+    box-sizing: border-box;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: clamp(10px, 1.2vw, 20px);
+    width: 100vw;
+    margin-left: calc(50% - 50vw);
+    padding-left: var(--desk-pad);
+    padding-right: var(--desk-pad);
+}
+
+/* ---------- panels ---------- */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    z-index: 20;
+    padding: clamp(12px, 2vw, 28px);
+    /* The body no longer scrolls, so a panel taller than a short window has
+       to scroll on its own. */
+    overflow-y: auto;
+}
+
+.modal.hidden {
+    display: none;
+}
+
+[hidden] {
+    display: none !important;
+}
+
+.modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background-color: rgba(24, 15, 5, 0.5);
+}
+
+.modal-panel {
+    position: relative;
+    z-index: 1;
+    box-sizing: border-box;
+    width: min(92vw, 520px);
+    padding: 24px 26px;
+    border: 2px solid #E4D8BE;
+    border-radius: 18px;
+    background-color: #FFFDF7;
+    box-shadow: 0 24px 60px rgba(40, 26, 10, 0.3);
+}
+
+.modal-panel h3 {
+    margin: 0 0 16px;
+    font-weight: 400;
+    font-size: 30px;
+}
+
+.modal-panel form {
+    display: grid;
+    gap: 14px;
+}
+
+.modal-panel label {
+    display: grid;
+    gap: 6px;
+    font-size: 20px;
+    color: #4A4A4F;
+}
+
+.modal-panel input,
+.modal-panel textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px 10px;
+    border: 2px solid #E0D3B6;
+    border-radius: 10px;
+    background-color: #FFFFFF;
+    font: inherit;
+    font-size: 19px;
+    color: #1D1D1F;
+}
+
+.modal-panel textarea {
+    min-height: 104px;
+    resize: vertical;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.modal-actions button {
+    padding: 8px 20px;
+    border: 2px solid #DCCDAC;
+    border-radius: 999px;
+    background-color: #FFFFFF;
+    font: inherit;
+    font-size: 19px;
+    color: #1D1D1F;
+    cursor: pointer;
+}
+
+.modal-actions button:hover {
+    background-color: #F2EDE1;
+}
+
+.modal-actions button[type="submit"] {
+    border-color: #6B4A24;
+    background-color: #6B4A24;
+    color: #FBEFD6;
+}
+
+.modal-actions button[type="submit"]:hover {
+    background-color: #583C1C;
+}
+
+.modal-actions button[type="submit"]:disabled {
+    border-color: #CFC3A8;
+    background-color: #CFC3A8;
+    color: #FBF6EA;
+    cursor: not-allowed;
+}

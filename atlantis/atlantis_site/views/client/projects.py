@@ -1,6 +1,5 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
-from django.shortcuts import get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.files.storage import default_storage
@@ -45,10 +44,9 @@ def _attachable_timelapses(project, user, ids=None):
     return qs
 
 
-# Our copy of a Lookout only ever got refreshed by the recorder page, so
-# recording and then closing the tab left the session stuck mid-flight with its
-# time unattachable. The project page now asks Lookout itself, throttled so a
-# reload storm can't hammer the API.
+# The recorder page is not the only way a session ends — closing the tab
+# mid-flight used to leave its time unattachable — so the project page asks
+# Lookout itself, throttled so a reload storm can't hammer the API.
 LOOKOUT_REFRESH_AFTER = timedelta(seconds=20)
 LOOKOUT_REFRESH_LIMIT = 3
 
@@ -436,7 +434,7 @@ def project_detail(request, project_id):
         "ship_disabled_reason": ship_disabled_reason,
         "printablesData": printablesData,
         "allowed_editors": ALLOWED_EDITORS,
-        "allowed_editor_extensions": ",".join(EDITOR_FILE_EXTENSIONS.keys()),
+        "allowed_editor_extensions": ",".join(EDITOR_FILE_EXTENSIONS),
         "pickable_timelapses": attachable_timelapses,
         "unfinished_timelapses": unfinished_timelapses,
         "lookout_status": lookout_status,

@@ -1,0 +1,39 @@
+/* The one note the site leaves for the reader: a brown slip that hangs from
+   the top of the window and takes itself away after a couple of seconds. The
+   level is deliberately not styled — a message says for itself whether
+   something worked, and one look for all of them keeps the pages from each
+   inventing their own. */
+
+.messages {
+    position: fixed;
+    cursor: pointer;
+    left: 50%;
+    top: clamp(10px, 1.4vw, 22px);
+    /* Above the sidebar and the slips, so a note is never half-covered by
+       whatever the page happens to have open. */
+    z-index: 1100;
+    translate: -50% 0;
+    width: min(92vw, 620px);
+    padding: 0.35em 1em 0.5em;
+    border-radius: 12px;
+    background-color: rgba(53, 39, 15, 0.9);
+    color: #FBEFD6;
+    text-align: center;
+    box-shadow: 0 14px 34px rgba(40, 26, 10, 0.3);
+    transition: opacity 0.45s ease-out, translate 0.45s ease-out;
+}
+
+.messages.leaving {
+    opacity: 0;
+    translate: -50% -14px;
+    pointer-events: none;
+}
+
+.message {
+    margin: 0.1em 0;
+    font-size: clamp(16px, 1.35vw, 24px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .messages { transition: none; }
+}

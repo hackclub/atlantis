@@ -2,11 +2,6 @@
    A wooden desk with a hanging scroll pinned to the left edge. The scroll is
    the page's nav; every guide renders in the pane to its right. */
 
-@font-face {
-    font-family: "Atlantis Hand";
-    src: url('../assets/fonts/atlantishand.ttf') format("truetype");
-}
-
 #guides,
 #guides *,
 #guides *::before,

@@ -8,9 +8,8 @@ project still ships normally while its journals sit in the queue. What waiting
 does hold up is the regular (T1) review queue — see timelapse_cleared_ships.
 """
 
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
-from django.shortcuts import get_object_or_404
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.db import transaction

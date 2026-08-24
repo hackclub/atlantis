@@ -1,5 +1,7 @@
 @import url('css/fonts.css');
+@import url('css/fonts-hand.css');
 @import url('css/base.css');
+@import url('css/banner.css');
 @import url('css/modals.css');
 @import url('css/cards.css');
 @import url('css/forms.css');
@@ -11,6 +13,6 @@
 @import url('css/timelapse.css');
 @import url('css/profile.css');
 @import url('css/guides.css');
-/* Admin-only (/root) theme. Last so it can override the shared rules
-   above; every selector inside is scoped to .root-page. */
+/* Admin-only (/root) theme. Last so it can override the shared rules above;
+   every selector inside is scoped to .root-page. */
 @import url('css/admin.css');

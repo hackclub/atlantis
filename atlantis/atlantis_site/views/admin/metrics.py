@@ -18,21 +18,17 @@ from ...models import (
     Item,
     Order,
     PAYOUT_MULTIPLIER_DEFAULT,
+    detect_editor,
 )
-
-from ...models import detect_editor
 from ..helpers import (
+    add_bars,
     check_perms,
+    display_name,
+    format_minutes,
     layers_for_minutes,
+    reviewer_leaderboard,
     tracked_minutes_for_journals,
-    add_bars as _add_bars,
-    display_name as _display_name,
-    reviewer_leaderboard as _reviewer_leaderboard,
 )
-
-def _fmt_minutes(minutes):
-    minutes = int(minutes or 0)
-    return f"{minutes // 60}h {minutes % 60}m"
 
 
 def _pct(part, whole):
@@ -65,7 +61,7 @@ def metrics(request):
     for url in Project.objects.filter(deleted=False).values_list("editor_model_url", flat=True):
         editor = detect_editor(url) or "Unknown / other"
         editor_counts[editor] = editor_counts.get(editor, 0) + 1
-    editor_breakdown = _add_bars([
+    editor_breakdown = add_bars([
         {"label": name, "value": count}
         for name, count in sorted(editor_counts.items(), key=lambda kv: kv[1], reverse=True)
     ])
@@ -86,10 +82,10 @@ def metrics(request):
         "no_ship": projects_no_ship,
         "editor_breakdown": editor_breakdown,
         "total_journals": total_journals,
-        "total_time_display": _fmt_minutes(total_time_minutes),
+        "total_time_display": format_minutes(total_time_minutes),
         "total_time_hours": round(total_time_minutes / 60, 1),
-        "avg_journal_display": _fmt_minutes(avg_journal_minutes),
-        "avg_project_display": _fmt_minutes(avg_project_minutes),
+        "avg_journal_display": format_minutes(avg_journal_minutes),
+        "avg_project_display": format_minutes(avg_project_minutes),
     }
 
     total_ships = Ship.objects.count()
@@ -98,7 +94,7 @@ def metrics(request):
         Ship.objects.values_list("status").annotate(n=Count("id")).values_list("status", "n")
     )
     status_labels = dict(Ship.ShipStatus.choices)
-    ship_by_status = _add_bars([
+    ship_by_status = add_bars([
         {"label": label, "value": status_counts.get(code, 0)}
         for code, label in status_labels.items()
     ])
@@ -110,7 +106,7 @@ def metrics(request):
     }
     backlog_total = sum(backlog.values())
 
-    pipeline = _add_bars([
+    pipeline = add_bars([
         {"label": "T1 review", "value": backlog["t1"]},
         {"label": "T2 review", "value": backlog["t2"]},
         {"label": "Fraud (T3)", "value": backlog["t3"]},
@@ -138,7 +134,7 @@ def metrics(request):
         T2.objects.values_list("decision").annotate(n=Count("id")).values_list("decision", "n")
     )
     t2_decision_labels = dict(T2.Decision.choices)
-    t2_breakdown = _add_bars([
+    t2_breakdown = add_bars([
         {"label": label, "value": t2_decisions.get(code, 0)}
         for code, label in t2_decision_labels.items()
     ])
@@ -149,7 +145,7 @@ def metrics(request):
         T3.objects.values_list("decision").annotate(n=Count("id")).values_list("decision", "n")
     )
     t3_decision_labels = dict(T3.Decision.choices)
-    t3_breakdown = _add_bars([
+    t3_breakdown = add_bars([
         {"label": label, "value": t3_decisions.get(code, 0)}
         for code, label in t3_decision_labels.items()
     ])
@@ -178,15 +174,15 @@ def metrics(request):
         "t1_denied_rate": _pct(t1_denied, t1_total),
         "t2_total": t2_total,
         "t2_breakdown": t2_breakdown,
-        "t2_total_deductions_display": _fmt_minutes(t2_total_deductions),
+        "t2_total_deductions_display": format_minutes(t2_total_deductions),
         "t3_total": t3_total,
         "t3_breakdown": t3_breakdown,
-        "t3_payout_display": _fmt_minutes(total_payout_minutes),
-        "t3_airtable_display": _fmt_minutes(t3_total_airtable_minutes),
+        "t3_payout_display": format_minutes(total_payout_minutes),
+        "t3_airtable_display": format_minutes(t3_total_airtable_minutes),
         "total_layers_paid": total_layers_paid,
-        "top_t1": _reviewer_leaderboard("t1_reviews"),
-        "top_t2": _reviewer_leaderboard("t2_reviews"),
-        "top_t3": _reviewer_leaderboard("t3_reviews"),
+        "top_t1": reviewer_leaderboard("t1_reviews"),
+        "top_t2": reviewer_leaderboard("t2_reviews"),
+        "top_t3": reviewer_leaderboard("t3_reviews"),
     }
 
     total_items = Item.objects.count()
@@ -198,7 +194,7 @@ def metrics(request):
         Order.objects.values_list("status").annotate(n=Count("id")).values_list("status", "n")
     )
     order_status_labels = dict(Order.OrderStatus.choices)
-    order_breakdown = _add_bars([
+    order_breakdown = add_bars([
         {"label": label, "value": order_counts.get(code, 0)}
         for code, label in order_status_labels.items()
     ])
@@ -214,7 +210,7 @@ def metrics(request):
         Order.objects.filter(status=Order.OrderStatus.REFUNDED).aggregate(t=Sum("cost"))["t"] or 0
     )
 
-    top_items = _add_bars([
+    top_items = add_bars([
         {"label": row["item__name"], "value": row["n"], "sub": f'{row["q"] or 0} qty'}
         for row in (
             Order.objects.exclude(status=Order.OrderStatus.DENIED)
@@ -230,7 +226,7 @@ def metrics(request):
         .select_related("hackclub_profile")
         .order_by("-n")[:10]
     )
-    top_fulfillers = _add_bars([{"label": _display_name(u), "value": u.n} for u in fulfillers])
+    top_fulfillers = add_bars([{"label": display_name(u), "value": u.n} for u in fulfillers])
 
     shop_stats = {
         "total_items": total_items,
@@ -253,8 +249,8 @@ def metrics(request):
     avg_layers = Profile.objects.aggregate(a=Avg("layers"))["a"] or 0
     users_last_7 = User.objects.filter(date_joined__gte=last_7).count()
 
-    top_holders = _add_bars([
-        {"label": _display_name(p.user), "value": p.layers}
+    top_holders = add_bars([
+        {"label": display_name(p.user), "value": p.layers}
         for p in Profile.objects.select_related("user", "user__hackclub_profile")
         .order_by("-layers")[:10]
     ])
@@ -271,7 +267,7 @@ def metrics(request):
 
     total_audit = AuditLog.objects.count()
     audit_last_24h = AuditLog.objects.filter(created_at__gte=last_24h).count()
-    audit_actions = _add_bars([
+    audit_actions = add_bars([
         {"label": row["action"], "value": row["n"]}
         for row in AuditLog.objects.values("action").annotate(n=Count("id")).order_by("-n")[:15]
     ])
