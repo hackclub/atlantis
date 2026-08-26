@@ -52,7 +52,8 @@
 
 /* The slider owns a full row: its label sits above it and the pearl preview
    below, so neither wraps alongside the track and squeezes it. */
-.review-form .multiplier-row {
+.review-form .multiplier-row,
+.review-form .payout-preview-row {
     flex-direction: column;
     align-items: stretch;
     gap: 6px;
@@ -67,7 +68,8 @@
     margin: 0;
 }
 
-.review-form .multiplier-preview {
+.review-form .multiplier-preview,
+.review-form .payout-preview {
     margin: 0;
     font-size: 13px;
     line-height: 1.45;

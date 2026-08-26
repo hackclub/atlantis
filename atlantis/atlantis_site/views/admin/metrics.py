@@ -151,20 +151,12 @@ def metrics(request):
     ])
     t3_total_airtable_minutes = T3.objects.aggregate(t=Sum("airtable_time"))["t"] or 0
 
-    # Ascending id, so the last write per ship is that ship's latest T2 — the
-    # one t3_decision pays out against. One query rather than one per T3.
-    multiplier_by_ship = dict(
-        T2.objects.order_by("ship_id", "id").values_list("ship_id", "payout_multiplier")
-    )
-
     total_payout_minutes = 0
     total_layers_paid = 0
-    for ship_id, payout_time in T3.objects.filter(decision=T3.Decision.APPROVE).values_list("ship_id", "payout_time"):
+    for payout_time, multiplier in T3.objects.filter(decision=T3.Decision.APPROVE).values_list("payout_time", "payout_multiplier"):
         minutes = payout_time or 0
         total_payout_minutes += minutes
-        total_layers_paid += layers_for_minutes(
-            minutes, multiplier_by_ship.get(ship_id, PAYOUT_MULTIPLIER_DEFAULT)
-        )
+        total_layers_paid += layers_for_minutes(minutes, multiplier or PAYOUT_MULTIPLIER_DEFAULT)
 
     reviews_stats = {
         "t1_total": t1_total,

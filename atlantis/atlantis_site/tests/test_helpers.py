@@ -148,17 +148,18 @@ class UrlValidatorTests(TestCase):
 
 class LayersForMinutesTests(TestCase):
 	def test_conversion_table(self):
+		# Eight pearls an hour, prorated over six-minute buckets: 0.8 a bucket.
 		cases = {
 			0: 0,
 			5: 0,
-			6: 0,  
-			12: 1,
-			29: 2,
-			30: 2,
-			36: 3,
-			60: 5,
-			120: 10,
-			240: 20,
+			6: 1,
+			12: 2,
+			29: 3,
+			30: 4,
+			36: 5,
+			60: 8,
+			120: 16,
+			240: 32,
 		}
 		for minutes, layers in cases.items():
 			with self.subTest(minutes=minutes):
@@ -166,14 +167,14 @@ class LayersForMinutesTests(TestCase):
 
 	def test_multiplier_scales_the_payout(self):
 		cases = {
-			("0.5", 120): 5,
-			("1.0", 120): 10,
-			("1.5", 120): 15,
-			("2.0", 120): 20,
-			("3.0", 120): 30,
+			("0.5", 120): 8,
+			("1.0", 120): 16,
+			("1.5", 120): 24,
+			("2.0", 120): 32,
+			("3.0", 120): 48,
 			("2.0", 0): 0,
-			# 29 minutes is 4 buckets, i.e. 2 pearls flat; 1.5x lands on 3.
-			("1.5", 29): 3,
+			# 29 minutes is 4 buckets, i.e. 3.2 pearls flat; 1.5x lands on 4.8.
+			("1.5", 29): 5,
 		}
 		for (multiplier, minutes), layers in cases.items():
 			with self.subTest(multiplier=multiplier, minutes=minutes):
@@ -181,10 +182,11 @@ class LayersForMinutesTests(TestCase):
 					layers_for_minutes(minutes, Decimal(multiplier)), layers
 				)
 
-	def test_ties_round_half_to_even(self):
-		# 6 minutes is one six-minute bucket: half a pearl exactly. Rounding
-		# every tie up would pay out for time nobody logged.
-		self.assertEqual(layers_for_minutes(6), 0)
+	def test_part_buckets_round_to_nearest(self):
+		# Time is only ever worth whole pearls, and a fraction of a bucket is
+		# worth nothing: five minutes buys no bucket at all.
+		self.assertEqual(layers_for_minutes(5), 0)
+		self.assertEqual(layers_for_minutes(11), 1)
 		self.assertEqual(layers_for_minutes(18), 2)
 
 

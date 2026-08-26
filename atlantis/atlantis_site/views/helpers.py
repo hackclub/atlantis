@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from ..models import (
     AuditLog, InternalComment, Journal, LookoutSession, TimelapseRemoval,
-    PAYOUT_MULTIPLIER_DEFAULT, detect_editor
+    PAYOUT_MULTIPLIER_DEFAULT, PEARLS_PER_HOUR, detect_editor
 )
 
 from decimal import Decimal, ROUND_HALF_EVEN
@@ -77,11 +77,11 @@ def is_valid_printables_url(value):
     return (parsed.hostname or "").lower() in PRINTABLES_HOSTS
 
 def layers_for_minutes(minutes, multiplier=PAYOUT_MULTIPLIER_DEFAULT):
-    # Half a pearl per six-minute bucket, scaled by the T2 reviewer's
-    # multiplier. Decimal because both halves are exact in tenths and the ties
-    # land on .5 often enough to matter.
+    # PEARLS_PER_HOUR prorated over six-minute buckets, scaled by the T3
+    # reviewer's multiplier. Decimal because every part of the rate is exact in
+    # tenths, and half a bucket short of a pearl must not round its way up.
     tenths_of_hour = minutes // 6
-    layers = (Decimal(tenths_of_hour) / 2) * Decimal(multiplier)
+    layers = (Decimal(tenths_of_hour) * PEARLS_PER_HOUR / 10) * Decimal(multiplier)
     return int(layers.quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
 
 def tracked_seconds_for_journals(journals):

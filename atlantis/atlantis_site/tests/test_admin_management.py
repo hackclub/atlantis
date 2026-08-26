@@ -513,7 +513,7 @@ class MetricsViewTests(BaseTestCase):
 		self.assertEqual(context["ships"]["finalized"], 1)
 		self.assertEqual(context["reviews"]["t1_total"], 1)
 		self.assertEqual(context["reviews"]["t1_approval_rate"], 100.0)
-		self.assertEqual(context["reviews"]["total_layers_paid"], 10)
+		self.assertEqual(context["reviews"]["total_layers_paid"], 16)
 		self.assertEqual(context["shop"]["total_orders"], 1)
 		self.assertEqual(context["shop"]["layers_spent"], 5)
 		self.assertEqual(context["users"]["layers_in_circulation"], 30)

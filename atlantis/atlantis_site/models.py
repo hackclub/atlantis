@@ -9,7 +9,12 @@ from django.conf import settings
 from django.urls import reverse
 
 
-# The T2 reviewer's pearl multiplier, a Decimal in tenths so the slider's
+# What an hour of approved work is worth before the T3 reviewer's multiplier.
+# Decimal, like everything else in the payout arithmetic: the rate is exact in
+# tenths and a binary float would put the rounding off by a hair.
+PEARLS_PER_HOUR = Decimal("8")
+
+# The T3 reviewer's pearl multiplier, a Decimal in tenths so the slider's
 # positions and the payout arithmetic stay exact — payouts are already in
 # tenths, and a binary float would put both off by a hair.
 PAYOUT_MULTIPLIER_MIN = Decimal("0.5")
@@ -278,19 +283,6 @@ class T2(models.Model):
 
 	deductions = models.IntegerField(default=0)
 
-	# Scales the pearls paid when T3 finalizes the ship, and nothing else:
-	# deductions and airtable_time record how long the work actually took,
-	# and that is what Airtable is told.
-	payout_multiplier = models.DecimalField(
-		max_digits=2,
-		decimal_places=1,
-		default=PAYOUT_MULTIPLIER_DEFAULT,
-		validators=[
-			MinValueValidator(PAYOUT_MULTIPLIER_MIN),
-			MaxValueValidator(PAYOUT_MULTIPLIER_MAX),
-		],
-	)
-
 	feedback = models.CharField(max_length=100)
 	justification = models.CharField(max_length=400)
 
@@ -320,6 +312,19 @@ class T3(models.Model):
 
 	payout_time = models.IntegerField()
 	airtable_time = models.IntegerField()
+
+	# Scales the pearls paid when the ship is finalized, and nothing else:
+	# payout_time and airtable_time record how long the work actually took,
+	# and airtable_time is what Airtable is told.
+	payout_multiplier = models.DecimalField(
+		max_digits=2,
+		decimal_places=1,
+		default=PAYOUT_MULTIPLIER_DEFAULT,
+		validators=[
+			MinValueValidator(PAYOUT_MULTIPLIER_MIN),
+			MaxValueValidator(PAYOUT_MULTIPLIER_MAX),
+		],
+	)
 
 	internal_notes = models.CharField(blank=True)
 

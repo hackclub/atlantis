@@ -509,7 +509,7 @@ class T3FinalizationSubmitsTests(BaseTestCase):
 		self.ship.refresh_from_db()
 		self.assertEqual(self.ship.status, Ship.ShipStatus.FINALIZED)
 		self.author.hackclub_profile.refresh_from_db()
-		self.assertEqual(self.author.hackclub_profile.layers, 20)
+		self.assertEqual(self.author.hackclub_profile.layers, 32)
 		self.assertTrue(
 			any("Airtable record was not created" in text for text in message_texts(response))
 		)

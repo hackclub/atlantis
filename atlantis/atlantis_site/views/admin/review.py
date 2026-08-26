@@ -10,7 +10,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 from ...models import (
     AirtableSubmission, InternalComment, Profile, Project, Ship, T1, T2, T3,
     PAYOUT_MULTIPLIER_DEFAULT, PAYOUT_MULTIPLIER_MAX, PAYOUT_MULTIPLIER_MIN,
-    PAYOUT_MULTIPLIER_STEP,
+    PAYOUT_MULTIPLIER_STEP, PEARLS_PER_HOUR,
 )
 from ...submissions import build_override_justification, submit_ship
 from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back, timelapse_cleared_ships
@@ -31,7 +31,7 @@ COMMENT_PERMS = [
 
 def parse_payout_multiplier(raw):
     """
-    Read the T2 pearl-multiplier slider. Returns (multiplier, error); the
+    Read the T3 pearl-multiplier slider. Returns (multiplier, error); the
     multiplier is snapped to the slider's step so a hand-crafted POST can't
     store a value the form could never produce.
     """
@@ -242,10 +242,7 @@ def ysws_review_project(request, ship_id):
         "review_history": build_review_history(ship),
         "logged_time": logged_time,
         "base_layers": layers_for_minutes(logged_time),
-        "multiplier_min": PAYOUT_MULTIPLIER_MIN,
-        "multiplier_max": PAYOUT_MULTIPLIER_MAX,
-        "multiplier_step": PAYOUT_MULTIPLIER_STEP,
-        "multiplier_default": PAYOUT_MULTIPLIER_DEFAULT,
+        "pearls_per_hour": PEARLS_PER_HOUR,
     })
 
 @require_POST
@@ -264,11 +261,6 @@ def t2_decision(request, ship_id):
 
     if deductions < 0:
         messages.error(request, f"Deductions can't be negative. (deductions: {deductions})")
-        return redirect("ysws_review_dash")
-
-    multiplier, multiplier_error = parse_payout_multiplier(request.POST.get("payout_multiplier"))
-    if multiplier_error:
-        messages.error(request, multiplier_error)
         return redirect("ysws_review_dash")
 
     feedback = request.POST.get("feedback", "").strip()
@@ -309,7 +301,6 @@ def t2_decision(request, ship_id):
             reviewer=reviewer,
             decision=decision,
             deductions=deductions,
-            payout_multiplier=multiplier,
             feedback=feedback,
             justification=justification
         )
@@ -327,12 +318,10 @@ def t2_decision(request, ship_id):
         "project": ship.project.title,
         "decision": decision,
         "deductions": deductions,
-        # str: metadata is a plain JSONField and Decimal isn't serialisable.
-        "payout_multiplier": str(multiplier),
         "new_ship_status": ship.status,
     })
 
-    messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision}, a deduction of {deductions} minutes and a {multiplier}x pearl multiplier!')
+    messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision} and a deduction of {deductions} minutes!')
     return redirect("ysws_review_dash")
 
 @staff_member_required
@@ -362,7 +351,6 @@ def fraud_review_project(request, ship_id):
 
     latest_t2 = ship.t2_reviews.order_by('-id').first()
     deductions = latest_t2.deductions if latest_t2 else 0
-    multiplier = latest_t2.payout_multiplier if latest_t2 else PAYOUT_MULTIPLIER_DEFAULT
     total_time = max(logged_time - deductions, 0)
 
     return render(request, "root/fraud_review_project.html", {
@@ -373,9 +361,12 @@ def fraud_review_project(request, ship_id):
         "logged_time": logged_time,
         "deductions": deductions,
         "total_time": total_time,
-        "payout_multiplier": multiplier,
         "base_layers": layers_for_minutes(total_time),
-        "payout_layers": layers_for_minutes(total_time, multiplier),
+        "pearls_per_hour": PEARLS_PER_HOUR,
+        "multiplier_min": PAYOUT_MULTIPLIER_MIN,
+        "multiplier_max": PAYOUT_MULTIPLIER_MAX,
+        "multiplier_step": PAYOUT_MULTIPLIER_STEP,
+        "multiplier_default": PAYOUT_MULTIPLIER_DEFAULT,
         # Airtable's override-hours justification: the T2 reviewer's words,
         # then every Lookout on the ship with the ranges cut from it and why.
         # Nothing else shows a T3 reviewer the timelapse review in full.
@@ -406,18 +397,17 @@ def t3_decision(request, ship_id):
         messages.error(request, f"Expected integer, receieved {airtable_time_raw}")
         return redirect("fraud_review_project", ship_id=ship_id)
 
+    payout_multiplier, multiplier_error = parse_payout_multiplier(request.POST.get("payout_multiplier"))
+    if multiplier_error:
+        messages.error(request, multiplier_error)
+        return redirect("fraud_review_project", ship_id=ship_id)
+
     with transaction.atomic():
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
 
         if not ship.status == Ship.ShipStatus.T3_QUEUE:
             messages.error(request, "ship not in T3 queue")
             return redirect("fraud_review_dash")
-
-        # The multiplier is the T2 reviewer's call, read back here rather than
-        # posted with the T3 form: it is not the fraud reviewer's to re-set,
-        # and a value in the POST could be tampered with.
-        latest_t2 = ship.t2_reviews.order_by("-id").first()
-        payout_multiplier = latest_t2.payout_multiplier if latest_t2 else PAYOUT_MULTIPLIER_DEFAULT
 
         payout_layers = 0
         match decision:
@@ -445,7 +435,8 @@ def t3_decision(request, ship_id):
             decision=decision,
             internal_notes=internal_notes,
             payout_time=payout_time,
-            airtable_time=airtable_time
+            airtable_time=airtable_time,
+            payout_multiplier=payout_multiplier,
         )
 
     # Outside the transaction on purpose: the ship is committed as finalized
@@ -464,6 +455,7 @@ def t3_decision(request, ship_id):
         "decision": decision,
         "payout_time": payout_time,
         "airtable_time": airtable_time,
+        # str: metadata is a plain JSONField and Decimal isn't serialisable.
         "payout_multiplier": str(payout_multiplier),
         "payout_layers": payout_layers,
         "new_ship_status": ship.status,
@@ -472,7 +464,11 @@ def t3_decision(request, ship_id):
         "airtable_error": submission.error if submission else "",
     })
 
-    messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}")
+    outcome = (
+        f" — {payout_layers} pearls at a {payout_multiplier}x multiplier"
+        if decision == T3.Decision.APPROVE else ""
+    )
+    messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}{outcome}")
     if submission:
         report_submission(request, submission)
     return redirect("fraud_review_dash")
