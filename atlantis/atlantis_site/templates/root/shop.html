@@ -9,6 +9,30 @@
 
     <h1>Manage Shop Items</h1>
     <button type="button" id="openCreateItemModal">Create item</button>
+    {% if categories %}
+    <section class="category-order">
+        <h3>Category order</h3>
+        <p class="category-order-hint">Shelves appear in the shop in this order. Drag a row, or use the arrows, then save.</p>
+        <form action="{% url 'reorder_categories' %}" method="post">
+            {% csrf_token %}
+            <ol class="category-order-list" id="categoryOrderList">
+                {% for category in categories %}
+                    <li class="category-order-row" draggable="true">
+                        <span class="drag-handle" aria-hidden="true">&#8942;&#8942;</span>
+                        <span class="category-order-name">{{ category.name }}</span>
+                        {% if not category.in_use %}<span class="category-order-unused">unused</span>{% endif %}
+                        <input type="hidden" name="category" value="{{ category.name }}">
+                        <span class="category-order-moves">
+                            <button type="button" class="move-category link-button" data-move="up" aria-label="Move {{ category.name }} up">&uarr;</button>
+                            <button type="button" class="move-category link-button" data-move="down" aria-label="Move {{ category.name }} down">&darr;</button>
+                        </span>
+                    </li>
+                {% endfor %}
+            </ol>
+            <button type="submit">Save order</button>
+        </form>
+    </section>
+    {% endif %}
     <section class="item-list">
         <h3>Items</h3>
         {% if items %}
@@ -153,7 +177,7 @@
 
 <datalist id="categoryOptions">
     {% for category in categories %}
-        <option value="{{ category }}"></option>
+        <option value="{{ category.name }}"></option>
     {% endfor %}
 </datalist>
 
@@ -277,6 +301,61 @@
             if (e.key === 'Escape' && !editModal.classList.contains('hidden')) {
                 closeEditModal();
             }
+        });
+    })();
+
+    (function () {
+        // The hidden inputs submit in document order, so reordering rows here is
+        // all the reorder view ever sees. The arrows are the accessible path to
+        // the same move — dragging is a mouse-only affordance.
+        const list = document.getElementById("categoryOrderList");
+        if (!list) return;
+
+        let dragged = null;
+
+        list.addEventListener("click", (e) => {
+            const button = e.target.closest(".move-category");
+            if (!button) return;
+
+            const row = button.closest(".category-order-row");
+            if (button.dataset.move === "up") {
+                const previous = row.previousElementSibling;
+                if (previous) previous.before(row);
+            } else {
+                const next = row.nextElementSibling;
+                if (next) next.after(row);
+            }
+            button.focus();
+        });
+
+        list.addEventListener("dragstart", (e) => {
+            dragged = e.target.closest(".category-order-row");
+            if (!dragged) return;
+            dragged.classList.add("dragging");
+            e.dataTransfer.effectAllowed = "move";
+            // Firefox refuses to start a drag without payload on the transfer.
+            e.dataTransfer.setData("text/plain", "");
+        });
+
+        list.addEventListener("dragover", (e) => {
+            if (!dragged) return;
+            e.preventDefault();
+
+            const over = e.target.closest(".category-order-row");
+            if (!over || over === dragged) return;
+
+            const box = over.getBoundingClientRect();
+            const above = e.clientY < box.top + box.height / 2;
+            if (above) {
+                over.before(dragged);
+            } else {
+                over.after(dragged);
+            }
+        });
+
+        list.addEventListener("dragend", () => {
+            if (dragged) dragged.classList.remove("dragging");
+            dragged = null;
         });
     })();
 </script>

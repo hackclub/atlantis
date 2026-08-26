@@ -4,7 +4,7 @@ from django.urls import reverse
 
 from .. import hca
 from ..hca import AddressUnavailable
-from ..models import AuditLog, Item, Order
+from ..models import AuditLog, Item, Order, ShopCategory
 from .base import BaseTestCase, grant_perms, make_user, message_texts
 
 ADDRESS = {
@@ -54,11 +54,69 @@ class ShopDashTests(BaseTestCase):
 		response = self.client.get(reverse("shop_dash"))
 		self.assertEqual(list(response.context["items"]), [active, deleted])
 
-	def test_categories_only_from_active_items(self):
+	def test_lists_categories_in_saved_order(self):
+		ShopCategory.objects.create(name="Tools", sort_order=2)
+		ShopCategory.objects.create(name="Filament", sort_order=1)
+		response = self.client.get(reverse("shop_dash"))
+		self.assertEqual(
+			[c.name for c in response.context["categories"]], ["Filament", "Tools"]
+		)
+
+	def test_categories_flag_whether_an_active_item_uses_them(self):
 		Item.objects.create(name="A", description="x", cost=1, category="Tools")
 		Item.objects.create(name="B", description="x", cost=1, category="Gone", deleted=True)
+		ShopCategory.objects.create(name="Tools", sort_order=1)
+		ShopCategory.objects.create(name="Gone", sort_order=2)
 		response = self.client.get(reverse("shop_dash"))
-		self.assertEqual(list(response.context["categories"]), ["Tools"])
+		self.assertEqual(
+			{c.name: c.in_use for c in response.context["categories"]},
+			{"Tools": True, "Gone": False},
+		)
+
+
+class ReorderCategoriesTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.admin = grant_perms(make_user("shopadmin"), "fulfillment")
+		self.client.force_login(self.admin)
+		for position, name in enumerate(("Filament", "Prints", "Tools"), start=1):
+			ShopCategory.objects.create(name=name, sort_order=position)
+
+	def _order(self):
+		return [c.name for c in ShopCategory.objects.all()]
+
+	def _reorder(self, names):
+		return self.client.post(reverse("reorder_categories"), {"category": names})
+
+	def test_saves_new_order(self):
+		self._reorder(["Tools", "Filament", "Prints"])
+		self.assertEqual(self._order(), ["Tools", "Filament", "Prints"])
+		self.assertEqual(
+			list(ShopCategory.objects.values_list("sort_order", flat=True).order_by("sort_order")),
+			[1, 2, 3],
+		)
+		self.assertTrue(AuditLog.objects.filter(action="reorder_shop_categories").exists())
+
+	def test_partial_list_rejected(self):
+		response = self._reorder(["Tools", "Filament"])
+		self.assertEqual(self._order(), ["Filament", "Prints", "Tools"])
+		self.assertTrue(message_texts(response))
+
+	def test_unknown_category_rejected(self):
+		self._reorder(["Tools", "Filament", "Prints", "Ghost"])
+		self.assertEqual(self._order(), ["Filament", "Prints", "Tools"])
+
+	def test_duplicate_category_rejected(self):
+		self._reorder(["Tools", "Tools", "Filament"])
+		self.assertEqual(self._order(), ["Filament", "Prints", "Tools"])
+
+	def test_get_not_allowed(self):
+		self.assertEqual(self.client.get(reverse("reorder_categories")).status_code, 405)
+
+	def test_perm_required(self):
+		self.client.force_login(make_user("pleb"))
+		self._reorder(["Tools", "Filament", "Prints"])
+		self.assertEqual(self._order(), ["Filament", "Prints", "Tools"])
 
 
 class CreateItemTests(BaseTestCase):
@@ -89,6 +147,23 @@ class CreateItemTests(BaseTestCase):
 	def test_blank_category_defaults_to_other(self):
 		self._create(category="")
 		self.assertEqual(Item.objects.get().category, "Other")
+
+	def test_new_category_gets_a_slot_at_the_end(self):
+		ShopCategory.objects.create(name="Tools", sort_order=4)
+		self._create(category="Materials")
+		self.assertEqual(
+			[(c.name, c.sort_order) for c in ShopCategory.objects.all()],
+			[("Tools", 4), ("Materials", 5)],
+		)
+
+	def test_existing_category_keeps_its_slot(self):
+		ShopCategory.objects.create(name="Materials", sort_order=2)
+		self._create()
+		self.assertEqual(ShopCategory.objects.get(name="Materials").sort_order, 2)
+
+	def test_rejected_item_registers_no_category(self):
+		self._create(cost="cheap", category="Materials")
+		self.assertFalse(ShopCategory.objects.exists())
 
 	def test_required_fields(self):
 		for field in ("name", "description", "cost", "imageUrl"):

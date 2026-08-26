@@ -4,7 +4,7 @@ from django.urls import reverse
 
 from .. import hca
 from ..hca import AddressUnavailable
-from ..models import Item, Order
+from ..models import Item, Order, ShopCategory
 from .base import BaseTestCase, make_user, message_texts
 
 ADDRESS = {
@@ -44,6 +44,23 @@ class ShopListTests(BaseTestCase):
 
 		response = self.client.get(reverse("shop"))
 		self.assertEqual(list(response.context["items"]), [a, b, c])
+
+	def test_items_follow_the_saved_category_order(self):
+		tools = Item.objects.create(name="B", description="x", cost=1, category="Tools")
+		filament = Item.objects.create(name="A", description="x", cost=1, category="Filament")
+		ShopCategory.objects.create(name="Tools", sort_order=1)
+		ShopCategory.objects.create(name="Filament", sort_order=2)
+
+		response = self.client.get(reverse("shop"))
+		self.assertEqual(list(response.context["items"]), [tools, filament])
+
+	def test_unordered_categories_fall_to_the_bottom(self):
+		stray = Item.objects.create(name="A", description="x", cost=1, category="Aprons")
+		ordered = Item.objects.create(name="B", description="x", cost=1, category="Tools")
+		ShopCategory.objects.create(name="Tools", sort_order=1)
+
+		response = self.client.get(reverse("shop"))
+		self.assertEqual(list(response.context["items"]), [ordered, stray])
 
 
 class ItemDetailTests(BaseTestCase):

@@ -5,8 +5,9 @@ from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
 from django.http import JsonResponse
+from django.db.models import Exists, OuterRef
 
-from ...models import Profile, Item, Order
+from ...models import Profile, Item, Order, ShopCategory
 from ...crypto import format_address
 from ...hca import AddressUnavailable
 from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_url
@@ -15,11 +16,10 @@ from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_u
 @check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])
 def shop_dash(request):
     items = Item.objects.order_by("id")
-    categories = (
-        Item.objects.filter(deleted=False)
-        .order_by("category")
-        .values_list("category", flat=True)
-        .distinct()
+    # Categories a rename or a delete left behind are still listed, flagged as
+    # unused: they hold their slot for whenever an item lands back in them.
+    categories = ShopCategory.objects.annotate(
+        in_use=Exists(Item.objects.filter(category=OuterRef("name"), deleted=False))
     )
     return render(request, "root/shop.html", {"items": items, "categories": categories})
 
@@ -191,6 +191,8 @@ def create_item(request):
         messages.error(request, "Stock must be -1 (unlimited) or a non-negative number.")
         return redirect("shop_dash")
 
+    ShopCategory.ensure(category)
+
     item = Item.objects.create(
         name = name,
         description = description,
@@ -263,6 +265,8 @@ def edit_item(request, item_id):
         "stock": item.stock,
     }
 
+    ShopCategory.ensure(category)
+
     item.name = name
     item.description = description
     item.cost = cost
@@ -277,6 +281,30 @@ def edit_item(request, item_id):
         "new": {"name": name, "description": description, "cost": cost, "imageUrl": imageUrl, "category": category, "stock": stock},
     })
 
+    return redirect("shop_dash")
+
+@staff_member_required
+@require_POST
+@check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])
+def reorder_categories(request):
+    names = [name.strip() for name in request.POST.getlist("category") if name.strip()]
+    categories = list(ShopCategory.objects.all())
+
+    # The whole list has to come back, or the categories left out would keep
+    # slots that now collide with the ones being saved.
+    if sorted(names) != sorted(category.name for category in categories):
+        messages.error(request, "Category order didn't match the categories on file. Reload and try again.")
+        return redirect("shop_dash")
+
+    position_of = {name: position for position, name in enumerate(names, start=1)}
+    moved = [c for c in categories if c.sort_order != position_of[c.name]]
+    for category in moved:
+        category.sort_order = position_of[category.name]
+    if moved:
+        ShopCategory.objects.bulk_update(moved, ["sort_order"])
+        record_audit(request, "reorder_shop_categories", metadata={"order": names})
+
+    messages.success(request, "Category order saved.")
     return redirect("shop_dash")
 
 @staff_member_required

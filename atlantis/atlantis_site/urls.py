@@ -37,6 +37,7 @@ urlpatterns = [
     path("shop/<int:item_id>/delete/", delete_item, name="delete_item"),
     path("shop/<int:item_id>/edit/", edit_item, name="edit_item"),
     path("root/shop/create/", create_item, name="create_item"),
+    path("root/shop/categories/order/", reorder_categories, name="reorder_categories"),
     path("projects/create/", create_project, name="create_project"),
     path("root/", admin_dash, name="admin_dash"),
     path("root/fulfillment/", fulfillment_dash, name="fulfillment_dash"),

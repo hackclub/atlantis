@@ -709,6 +709,44 @@ class TimelapseRemoval(models.Model):
 
 
 # shop models
+class ShopCategory(models.Model):
+	"""Where a category's shelf sits on the shop page.
+
+	Item.category stays free text, so a row here is only ever about ordering:
+	one is created the first time an admin uses a category name, and admins drag
+	them into the order shoppers see. A category with no row (an item edited
+	straight through the Django admin, say) falls to the bottom of the shop.
+	"""
+
+	name = models.CharField(max_length=40, unique=True)
+	sort_order = models.PositiveIntegerField(default=0)
+
+	class Meta:
+		ordering = ["sort_order", "name"]
+		verbose_name_plural = "shop categories"
+
+	def __str__(self):
+		return f"{self.name} (#{self.sort_order})"
+
+	@classmethod
+	def ensure(cls, name):
+		"""Give a category name a place in the order the first time it is used."""
+		category = cls.objects.filter(name=name).first()
+		if category:
+			return category
+		last = cls.objects.aggregate(last=models.Max("sort_order"))["last"] or 0
+		category, _ = cls.objects.get_or_create(name=name, defaults={"sort_order": last + 1})
+		return category
+
+	@classmethod
+	def order_items(cls, queryset):
+		"""Sort items so the shelves come out in the admin-set category order."""
+		sort_order = cls.objects.filter(name=models.OuterRef("category")).values("sort_order")[:1]
+		return queryset.annotate(category_order=models.Subquery(sort_order)).order_by(
+			models.F("category_order").asc(nulls_last=True), "category", "id"
+		)
+
+
 class Item(models.Model):
 	name = models.CharField(max_length=60)
 	description = models.CharField(max_length=100)

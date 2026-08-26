@@ -6,7 +6,7 @@ from ...views.admin.review import ysws_review_dash, ysws_review_project, t2_deci
 from ...views.admin.review import fraud_review_dash, fraud_review_project, t3_decision
 from ...views.admin.review import lock_project, unlock_project, add_internal_comment
 from ...views.admin.timelapse_review import timelapse_review_dash, timelapse_review_journal, timelapse_decision
-from ...views.admin.shop import shop_dash, create_item, edit_item, delete_item, fulfillment_dash, update_order_status, view_order_address
+from ...views.admin.shop import shop_dash, create_item, edit_item, delete_item, reorder_categories, fulfillment_dash, update_order_status, view_order_address
 from ...views.admin.management import users, edit_user, manage_projects, admin_edit_project, db_delete_project, db_delete_projects
 
 __all__ = [
@@ -17,6 +17,6 @@ __all__ = [
     "fraud_review_dash", "fraud_review_project", "t3_decision",
     "lock_project", "unlock_project", "add_internal_comment",
     "timelapse_review_dash", "timelapse_review_journal", "timelapse_decision",
-    "shop_dash", "create_item", "edit_item", "delete_item", "fulfillment_dash", "update_order_status", "view_order_address",
+    "shop_dash", "create_item", "edit_item", "delete_item", "reorder_categories", "fulfillment_dash", "update_order_status", "view_order_address",
     "users", "edit_user", "manage_projects", "admin_edit_project", "db_delete_project", "db_delete_projects",
 ]

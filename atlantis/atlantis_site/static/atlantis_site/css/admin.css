@@ -794,6 +794,88 @@
     color: var(--oc-on-accent);
 }
 
+/* ---------- shop category order ---------- */
+
+.root-page .category-order {
+    max-width: 460px;
+    padding: 14px 16px;
+    margin: 18px 0 8px;
+    background: var(--oc-surface);
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+}
+
+.root-page .category-order h3 {
+    margin: 0;
+}
+
+.root-page .category-order-hint {
+    margin: 4px 0 12px;
+    color: var(--oc-ink-2);
+    font-size: 13px;
+}
+
+.root-page .category-order-list {
+    margin: 0 0 12px;
+    padding: 0;
+    list-style: none;
+    counter-reset: category;
+}
+
+.root-page .category-order-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    margin-bottom: 6px;
+    background: var(--oc-field);
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    counter-increment: category;
+    cursor: grab;
+}
+
+/* The number comes from the list itself, so a drag renumbers the rows without
+   the script having to touch anything but their order. */
+.root-page .category-order-row::before {
+    content: counter(category);
+    min-width: 16px;
+    color: var(--oc-ink-3);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+}
+
+.root-page .category-order-row.dragging {
+    opacity: 0.45;
+    border-color: var(--oc-tide);
+}
+
+.root-page .drag-handle {
+    color: var(--oc-ink-3);
+    letter-spacing: -3px;
+}
+
+.root-page .category-order-name {
+    flex: 1;
+}
+
+.root-page .category-order-unused {
+    padding: 1px 7px;
+    background: var(--oc-sand);
+    border: 1px solid var(--oc-sand-line);
+    border-radius: 999px;
+    color: var(--oc-sand-ink);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.root-page .category-order-moves {
+    display: flex;
+    gap: 4px;
+}
+
 /* ---------- modals ---------- */
 
 .root-page .modal-panel,

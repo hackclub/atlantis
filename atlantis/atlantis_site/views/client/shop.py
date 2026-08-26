@@ -5,7 +5,7 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 
-from ...models import Profile, Item, Order
+from ...models import Profile, Item, Order, ShopCategory
 from ...crypto import format_address
 from ...hca import AddressUnavailable
 from ..helpers import rate_limit
@@ -13,7 +13,7 @@ from ..helpers import rate_limit
 @login_required
 def shop(request):
     profile = request.user.hackclub_profile
-    items = Item.objects.filter(deleted=False).order_by("category", "id")
+    items = ShopCategory.order_items(Item.objects.filter(deleted=False))
     return render(request, "atlantis_site/shop.html", {"items": items, 'profile': profile})
 
 
