@@ -142,7 +142,7 @@ class T1DecisionTests(BaseTestCase):
 		self.assertEqual(T1.objects.count(), 0)
 
 	def test_feedback_and_notes_length_limits(self):
-		for overrides in ({"feedback": "x" * 101}, {"internal_notes": "x" * 101}):
+		for overrides in ({"feedback": "x" * 1001}, {"internal_notes": "x" * 1001}):
 			with self.subTest(**overrides):
 				self._decide(**overrides)
 				self.assertEqual(T1.objects.count(), 0)
@@ -288,7 +288,7 @@ class T2DecisionTests(BaseTestCase):
 		self.assertEqual(T2.objects.count(), 1)
 
 	def test_feedback_and_justification_length_limits(self):
-		for overrides in ({"feedback": "x" * 101}, {"justification": "x" * 401}):
+		for overrides in ({"feedback": "x" * 1001}, {"justification": "x" * 1001}):
 			with self.subTest(**overrides):
 				self._decide(**overrides)
 				self.assertEqual(T2.objects.count(), 0)

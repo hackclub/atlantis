@@ -255,8 +255,8 @@ class T1(models.Model):
 	)
 
 	reviewed_at = models.DateTimeField(auto_now_add=True)
-	feedback = models.CharField(max_length=100)
-	internal_notes = models.CharField(max_length=100)
+	feedback = models.CharField(max_length=1000)
+	internal_notes = models.CharField(max_length=1000)
 	approved = models.BooleanField()
 
 class T2(models.Model):
@@ -283,8 +283,8 @@ class T2(models.Model):
 
 	deductions = models.IntegerField(default=0)
 
-	feedback = models.CharField(max_length=100)
-	justification = models.CharField(max_length=400)
+	feedback = models.CharField(max_length=1000)
+	justification = models.CharField(max_length=1000)
 
 class T3(models.Model):
 	ship = models.ForeignKey(
@@ -682,7 +682,7 @@ class TimelapseRemoval(models.Model):
 	start_seconds = models.PositiveIntegerField()
 	end_seconds = models.PositiveIntegerField()
 	# Required, per range: a deduction nobody can explain later is indefensible.
-	reason = models.CharField(max_length=500)
+	reason = models.CharField(max_length=1000)
 
 	class Meta:
 		ordering = ["session_id", "start_seconds"]

@@ -27,10 +27,10 @@
             <form action="{% url 't1_decision' ship.id %}" method="POST" class="review-form">
                 {% csrf_token %}
                 <div class="form-row">
-                    <input type="text" name="feedback" placeholder="Feedback (100 characters, public)" maxlength=100 required>
+                    <input type="text" name="feedback" placeholder="Feedback (1000 characters, public)" maxlength=1000 required>
                 </div>
                 <div class="form-row">
-                    <input type="text" name="internal_notes" placeholder="Internal Notes (100 characters, private)" maxlength=100 required>
+                    <input type="text" name="internal_notes" placeholder="Internal Notes (1000 characters, private)" maxlength=1000 required>
                 </div>
                 <div class="form-row">
                     {% if hasMake %}

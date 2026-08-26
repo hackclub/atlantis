@@ -368,7 +368,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 		self._assert_rejected(response, "didn't come through cleanly")
 
 	def test_over_long_reason_rejected(self):
-		response = self._post([(self.session, "0:05", "0:30", "x" * 501)])
+		response = self._post([(self.session, "0:05", "0:30", "x" * 1001)])
 		self._assert_rejected(response, "justification is too long")
 
 	def test_over_long_internal_notes_rejected(self):

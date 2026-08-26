@@ -16,6 +16,8 @@ from ...submissions import build_override_justification, submit_ship
 from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back, timelapse_cleared_ships
 
 INTERNAL_COMMENT_MAX_LENGTH = 1000
+T1_FIELD_MAX_LENGTH = 1000
+T2_FIELD_MAX_LENGTH = 1000
 
 TIMELAPSE_PENDING_MESSAGE = (
     "That ship's timelapses haven't finished internal review yet. It'll appear "
@@ -152,8 +154,8 @@ def t1_decision(request, ship_id):
     feedback = request.POST.get("feedback", "").strip()
     internal_notes = request.POST.get("internal_notes", "").strip()
 
-    if len(feedback) > 100 or len(internal_notes) > 100:
-        messages.error(request, "Feedback or internal notes too long (max 100 char)")
+    if len(feedback) > T1_FIELD_MAX_LENGTH or len(internal_notes) > T1_FIELD_MAX_LENGTH:
+        messages.error(request, f"Feedback or internal notes too long (max {T1_FIELD_MAX_LENGTH} char)")
         return redirect("review_project", ship_id=ship_id)
 
     approved_raw = request.POST.get("approved", "").strip()
@@ -266,8 +268,8 @@ def t2_decision(request, ship_id):
     feedback = request.POST.get("feedback", "").strip()
     justification = request.POST.get("justification", "").strip()
 
-    if len(feedback) > 100 or len(justification) > 400:
-        messages.error(request, "Feedback or justification length too long (feedback max 100, justification max 400)")
+    if len(feedback) > T2_FIELD_MAX_LENGTH or len(justification) > T2_FIELD_MAX_LENGTH:
+        messages.error(request, f"Feedback or justification length too long (max {T2_FIELD_MAX_LENGTH} char)")
         return redirect("ysws_review_dash")
 
     with transaction.atomic():

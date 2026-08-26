@@ -34,10 +34,10 @@
                     </select>
                 </div>
                 <div class="form-row">
-                    <input type="text" name="feedback" placeholder="Feedback (100 characters, public)" maxlength="100" required>
+                    <input type="text" name="feedback" placeholder="Feedback (1000 characters, public)" maxlength="1000" required>
                 </div>
                 <div class="form-row">
-                    <input type="text" name="justification" id="justification_input" placeholder="Airtable Justification (400 characters, private)" maxlength="400">
+                    <input type="text" name="justification" id="justification_input" placeholder="Airtable Justification (1000 characters, private)" maxlength="1000">
                 </div>
                 <div class="form-row">
                     {% comment %}
@@ -70,10 +70,10 @@
 
     decisionSelect.addEventListener('change', function () {
         if (this.value === 'A') {
-            justificationInput.placeholder = 'Airtable Justification (400 characters, private)';
+            justificationInput.placeholder = 'Airtable Justification (1000 characters, private)';
             submitBtn.textContent = 'Approve';
         } else {
-            justificationInput.placeholder = 'Internal Notes (400 characters, private)';
+            justificationInput.placeholder = 'Internal Notes (1000 characters, private)';
             submitBtn.textContent = 'Return to T1';
         }
     });

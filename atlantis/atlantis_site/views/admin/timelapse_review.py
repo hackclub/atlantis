@@ -27,7 +27,7 @@ TIMELAPSE_REVIEW_PERMS = [
     "atlantis_site.organizer",
 ]
 
-REASON_MAX_LENGTH = 500
+REASON_MAX_LENGTH = 1000
 INTERNAL_NOTES_MAX_LENGTH = 1000
 # Well past anything a real review needs, and it keeps a crafted POST from
 # turning one form submission into thousands of rows.
