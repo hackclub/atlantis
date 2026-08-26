@@ -117,7 +117,7 @@ def make_journal(project, ship=None, time_spent=60, **kwargs):
 	return journal
 
 
-def approve_timelapse(journal, reviewer=None, removals=()):
+def approve_timelapse(journal, reviewer=None, removals=(), internal_notes="looks legit"):
 	"""Sign a journal off in the internal timelapse review queue.
 
 	`removals` is (session, start_seconds, end_seconds[, reason]) tuples. Cutting
@@ -127,7 +127,9 @@ def approve_timelapse(journal, reviewer=None, removals=()):
 		reviewer = User.objects.filter(username="timelapse-reviewer").first() or make_user(
 			"timelapse-reviewer", slack_id="U0TLREV"
 		)
-	review = TimelapseReview.objects.create(journal=journal, reviewer=reviewer)
+	review = TimelapseReview.objects.create(
+		journal=journal, reviewer=reviewer, internal_notes=internal_notes
+	)
 	for removal in removals:
 		session, start, end, *rest = removal
 		TimelapseRemoval.objects.create(

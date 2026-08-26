@@ -188,6 +188,7 @@ class JustificationTests(BaseTestCase):
 		approve_timelapse(
 			self.journal,
 			removals=[(self.session, 300, 1800, "idle, nothing on screen")],
+			internal_notes="footage checks out, cut the idle stretch",
 		)
 		T2.objects.create(
 			ship=self.ship, reviewer=make_user("t2rev"), decision=T2.Decision.APPROVE,
@@ -205,6 +206,10 @@ class JustificationTests(BaseTestCase):
 		self.assertIn("5:00-30:00", text)
 		self.assertIn("idle, nothing on screen", text)
 		self.assertIn(self.journal.title, text)
+
+	def test_timelapse_reviewer_justification_is_appended(self):
+		text = build_override_justification(self.ship)
+		self.assertIn("footage checks out, cut the idle stretch", text)
 
 	def test_deductions_and_removals_are_both_accounted_for(self):
 		T3.objects.create(

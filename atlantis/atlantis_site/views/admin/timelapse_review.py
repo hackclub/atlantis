@@ -183,6 +183,9 @@ def timelapse_decision(request, journal_id):
     sessions = {session.id: session for session in journal.timelapses.all()}
 
     internal_notes = request.POST.get("internal_notes", "").strip()
+    if not internal_notes:
+        messages.error(request, "This lapse needs a justification before it can be approved.")
+        return redirect("timelapse_review_journal", journal_id=journal_id)
     if len(internal_notes) > INTERNAL_NOTES_MAX_LENGTH:
         messages.error(
             request,

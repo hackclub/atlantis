@@ -174,6 +174,7 @@ class TimelapseDecisionTests(BaseTestCase):
 		"""POST a decision. `ranges` is (session, start, end, reason) tuples."""
 		journal = journal or self.journal
 		data = {
+			"internal_notes": "reviewed",
 			"removal_session": [str(getattr(r[0], "id", r[0])) for r in ranges],
 			"removal_start": [r[1] for r in ranges],
 			"removal_end": [r[2] for r in ranges],
@@ -245,6 +246,7 @@ class TimelapseDecisionTests(BaseTestCase):
 
 	def test_blank_rows_are_ignored(self):
 		self.client.post(reverse("timelapse_decision", args=[self.journal.id]), {
+			"internal_notes": "reviewed",
 			"removal_session": [str(self.session.id)],
 			"removal_start": [""],
 			"removal_end": [""],
@@ -262,6 +264,11 @@ class TimelapseDecisionTests(BaseTestCase):
 		self.assertIn(
 			"already been reviewed", " ".join(message_texts(response))
 		)
+
+	def test_justification_is_required(self):
+		response = self._decide(internal_notes="")
+		self.assertIn("needs a justification", " ".join(message_texts(response)))
+		self.assertFalse(TimelapseReview.objects.exists())
 
 	def test_nothing_is_sent_to_the_shipper(self):
 		with patch("atlantis_site.views.helpers.send_slack_dm") as dm:
@@ -283,6 +290,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 	def _post(self, ranges, journal=None):
 		journal = journal or self.journal
 		return self.client.post(reverse("timelapse_decision", args=[journal.id]), {
+			"internal_notes": "reviewed",
 			"removal_session": [str(getattr(r[0], "id", r[0])) for r in ranges],
 			"removal_start": [r[1] for r in ranges],
 			"removal_end": [r[2] for r in ranges],
@@ -351,6 +359,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 
 	def test_mismatched_row_lengths_rejected(self):
 		response = self.client.post(reverse("timelapse_decision", args=[self.journal.id]), {
+			"internal_notes": "reviewed",
 			"removal_session": [str(self.session.id), str(self.session.id)],
 			"removal_start": ["0:05"],
 			"removal_end": ["0:30"],

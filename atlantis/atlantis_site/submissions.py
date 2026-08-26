@@ -12,8 +12,8 @@ The override-hours justification is the whole audit trail. HQ reads Airtable's
 justification whenever we set one — so if the internal timelapse review cut time
 out of somebody's hours, the only place that ever becomes visible outside
 Atlantis is this field. The T2 reviewer's own words open it, verbatim; the
-Lookout links, the removed ranges, and the reason each range was removed are
-appended below them.
+timelapse reviewer's justification, the Lookout links, the removed ranges,
+and the reason each range was removed are appended below them.
 
 None of the shipper's personal data is stored. Their address and birthday come
 from HCA at submission time, go straight into the request, and are not written
@@ -108,13 +108,14 @@ def download_url(value):
 def build_lookout_audit(ship):
 	"""The internal timelapse review of this ship, written out for HQ.
 
-	One block per journal: every Lookout attached to it, and under each Lookout
-	the ranges a timelapse reviewer refused to pay for, with the reason they
-	gave. Lookouts with nothing removed are listed too — the links are part of
-	the evidence for the hours whether or not anything was cut from them.
+	One block per journal: the reviewer's own justification for the journal's
+	decision, then every Lookout attached to it, and under each Lookout the
+	ranges a timelapse reviewer refused to pay for, with the reason they gave.
+	Lookouts with nothing removed are listed too — the links are part of the
+	evidence for the hours whether or not anything was cut from them.
 	"""
 	journals = list(
-		ship.journals.order_by("created_at").prefetch_related(
+		ship.journals.order_by("created_at").select_related("timelapse_review").prefetch_related(
 			"timelapses", "timelapses__removals"
 		)
 	)
@@ -125,6 +126,9 @@ def build_lookout_audit(ship):
 	for journal in journals:
 		sessions = list(journal.timelapses.all())
 		lines = [f'"{journal.title}" — {journal.tracked_display} tracked']
+		review = journal.timelapse_review_or_none
+		if review and review.internal_notes:
+			lines.append(f"  reviewer's justification: {review.internal_notes}")
 		if not sessions:
 			lines.append("  no Lookout attached")
 		for session in sessions:

@@ -632,7 +632,7 @@ class TimelapseReview(models.Model):
 	)
 
 	reviewed_at = models.DateTimeField(auto_now_add=True)
-	internal_notes = models.CharField(max_length=1000, blank=True)
+	internal_notes = models.CharField(max_length=1000)
 
 	class Meta:
 		ordering = ["-reviewed_at"]
