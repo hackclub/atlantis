@@ -157,17 +157,22 @@ class T1DecisionTests(BaseTestCase):
 				self.assertEqual(ship.status, status)
 				self.assertIn("ship not in T1 queue", message_texts(response))
 
-	def test_slack_dm_sent_to_owner(self):
-		self._decide()
-		self.slack_dm_mocks["review"].assert_called_once()
-		self.assertEqual(self.slack_dm_mocks["review"].call_args.args[1], "U0AUTHOR")
+	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
+	def test_owner_is_never_dmed(self):
+		for approved in ("approved", "denied"):
+			with self.subTest(approved=approved):
+				ship = make_ship(self.project)
+				self._decide(ship=ship, approved=approved)
+				self.slack_dm_mocks["review"].assert_not_called()
 
-	def test_no_slack_dm_when_owner_has_no_slack_id(self):
+	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
+	def test_owner_falls_back_to_a_name_when_they_have_no_slack_id(self):
 		profile = self.author.hackclub_profile
 		profile.slack_id = ""
 		profile.save()
 		self._decide()
-		self.slack_dm_mocks["review"].assert_not_called()
+		content, _ = self.slack_message_mocks["review"].call_args.args
+		self.assertNotIn("<@>", content)
 
 	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
 	def test_rejection_pings_checkpoint_channel_instead_of_dm(self):
@@ -181,16 +186,24 @@ class T1DecisionTests(BaseTestCase):
 		self.assertIn("needs more detail", content)
 
 	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
-	def test_approval_still_dms_owner(self):
-		self._decide()
-		self.slack_message_mocks["review"].assert_not_called()
-		self.slack_dm_mocks["review"].assert_called_once()
+	def test_approval_pings_checkpoint_channel_too(self):
+		self._decide(feedback="clean prints")
+		self.slack_dm_mocks["review"].assert_not_called()
+		content, channel = self.slack_message_mocks["review"].call_args.args
+		self.assertEqual(channel, "C0CHECK")
+		self.assertIn("<@U0AUTHOR>", content)
+		self.assertIn(f"<@{self.reviewer.hackclub_profile.slack_id}>", content)
+		self.assertIn("approved", content)
+		self.assertIn("clean prints", content)
 
 	@override_settings(REVIEW_CHECKPOINT_ID="")
-	def test_rejection_without_checkpoint_channel_notifies_nobody(self):
-		self._decide(approved="denied")
-		self.slack_dm_mocks["review"].assert_not_called()
-		self.slack_message_mocks["review"].assert_not_called()
+	def test_without_checkpoint_channel_nobody_is_notified(self):
+		for approved in ("approved", "denied"):
+			with self.subTest(approved=approved):
+				ship = make_ship(self.project)
+				self._decide(ship=ship, approved=approved)
+				self.slack_dm_mocks["review"].assert_not_called()
+				self.slack_message_mocks["review"].assert_not_called()
 
 	def test_audit_log_recorded(self):
 		self._decide()
@@ -253,10 +266,15 @@ class T2DecisionTests(BaseTestCase):
 		self.assertIn("fix the seams", content)
 
 	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
-	def test_approval_dms_owner(self):
-		self._decide()
-		self.slack_message_mocks["review"].assert_not_called()
-		self.slack_dm_mocks["review"].assert_called_once()
+	def test_approval_pings_checkpoint_channel_too(self):
+		self._decide(feedback="great fit")
+		self.slack_dm_mocks["review"].assert_not_called()
+		content, channel = self.slack_message_mocks["review"].call_args.args
+		self.assertEqual(channel, "C0CHECK")
+		self.assertIn("<@U0AUTHOR>", content)
+		self.assertIn(f"<@{self.reviewer.hackclub_profile.slack_id}>", content)
+		self.assertIn("approved", content)
+		self.assertIn("great fit", content)
 
 	def test_invalid_decision_rejected(self):
 		self._decide(decision="X")

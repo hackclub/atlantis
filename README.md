@@ -84,7 +84,7 @@ leave `DEFAULT_PFP` the same. to get your `SLACK_TOKEN`:
 - install the app to hack club
 - get your `xoxb-` token!
 
-`REVIEW_CHECKPOINT_ID` is the channel id (the `C...` one, from the channel's "view details" pane) that rejected T1/T2 reviews get posted in. the shipper and the reviewer are both pinged there with the reviewer's feedback, instead of the shipper getting a DM they can't reply to. approvals and finalizations are still DM'd. the bot needs `chat:write` and has to be in that channel; leave it blank and rejections just don't get announced.
+`REVIEW_CHECKPOINT_ID` is the channel id (the `C...` one, from the channel's "view details" pane) that every T1/T2 review gets posted in. the shipper and the reviewer are both pinged there with the reviewer's feedback, so a decision the shipper wants to argue with always lands somewhere they can reply — no T1/T2 outcome is DM'd. T3 is the exception: a finalization or a return from fraud review is DM'd to the shipper and posted nowhere. the bot needs `chat:write` and has to be in that channel; leave it blank and T1/T2 reviews just don't get announced at all.
 
 ### cloudflare stuff
 while the R2 bucket that's used for object storage is free, to obtain one you **need** to provide them with a valid credit/debit card!

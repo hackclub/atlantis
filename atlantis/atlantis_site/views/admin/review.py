@@ -69,8 +69,11 @@ def feedback_line(feedback):
 
 def ping_review_checkpoint(ship, reviewer, tier, outcome, feedback):
     """
-    Rejections are posted in the review checkpoint channel with the shipper and
-    the reviewer both pinged, instead of DM'd, so the two can talk it over.
+    Every T1/T2 decision is posted in the review checkpoint channel with the
+    shipper and the reviewer both pinged, so the two can talk it over. This is
+    the only notification a review sends — nothing about T1 or T2 is DM'd, so
+    a decision the shipper wants to argue with always lands somewhere they can
+    reply. Only T3, which ends the ship's journey, DMs them.
     """
     if not settings.REVIEW_CHECKPOINT_ID:
         return False
@@ -192,12 +195,7 @@ def t1_decision(request, ship_id):
             approved=approved
         )
 
-    if approved:
-        owner_slack_id = ship.project.owner.hackclub_profile.slack_id
-        if owner_slack_id:
-            send_slack_dm(f"Your project {project_link(ship.project)} has been T1 reviewed and approved! {feedback_line(feedback)}", owner_slack_id)
-    else:
-        ping_review_checkpoint(ship, reviewer, "T1", "rejected", feedback)
+    ping_review_checkpoint(ship, reviewer, "T1", "approved" if approved else "rejected", feedback)
 
     record_audit(request, "t1_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
@@ -307,12 +305,7 @@ def t2_decision(request, ship_id):
             justification=justification
         )
 
-    if decision == T2.Decision.APPROVE:
-        owner_slack_id = ship.project.owner.hackclub_profile.slack_id
-        if owner_slack_id:
-            send_slack_dm(f"Your project {project_link(ship.project)} has been T2 reviewed and {message}! {feedback_line(feedback)}", owner_slack_id)
-    else:
-        ping_review_checkpoint(ship, reviewer, "T2", message, feedback)
+    ping_review_checkpoint(ship, reviewer, "T2", message, feedback)
 
     record_audit(request, "t2_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
