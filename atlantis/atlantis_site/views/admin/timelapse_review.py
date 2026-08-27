@@ -137,15 +137,17 @@ def timelapse_review_dash(request):
         .select_related("project", "project__owner", "project__owner__hackclub_profile")
         .prefetch_related("timelapses")
     )
-    # Oldest first: it's a queue, and a journal sitting here is holding its
-    # project out of T1.
-    pending = base.filter(timelapse_review__isnull=True).order_by("created_at")
-    reviewed = (
+    # Grouped by project, oldest first within each project: a journal sitting
+    # here is holding its project out of T1.
+    pending = base.filter(timelapse_review__isnull=True).order_by("project__title", "created_at")
+    reviewed = list(
         base.filter(timelapse_review__isnull=False)
         .select_related("timelapse_review", "timelapse_review__reviewer")
         .prefetch_related("timelapse_review__removals")
         .order_by("-timelapse_review__reviewed_at")[:RECENT_REVIEWS]
     )
+    # Grouped by project for display, most-recently-reviewed first within each group.
+    reviewed.sort(key=lambda journal: journal.project.title)
 
     return render(request, "root/timelapse_review.html", {
         "pending": pending,

@@ -320,6 +320,19 @@
     background: var(--oc-surface-2);
 }
 
+.root-page .users-table > tbody > tr.group-header > td {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--oc-ink-2);
+    background: var(--oc-shallow);
+}
+
+.root-page .users-table > tbody > tr.group-header:hover > td {
+    background: var(--oc-shallow);
+}
+
 /* Action cells stack short links ("edit project", "view on explore"); left to
    wrap they break mid-label and inflate every row. The prose columns have
    slack to give up instead. */

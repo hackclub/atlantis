@@ -19,8 +19,6 @@
                 <thead>
                     <tr>
                         <th>Lapse</th>
-                        <th>Project</th>
-                        <th>Owner</th>
                         <th>Tracked</th>
                         <th>Lookouts</th>
                         <th>Submitted</th>
@@ -28,23 +26,30 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for journal in pending %}
-                        <tr>
-                            <td><a href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a></td>
-                            <td>{{ journal.project.title }}</td>
-                            <td>@{{ journal.project.owner.hackclub_profile.slack_username }}</td>
-                            <td>{{ journal.tracked_display }}</td>
-                            <td>{{ journal.timelapses.all|length }}</td>
-                            <td>{{ journal.created_at|date:"M j, Y" }}</td>
-                            <td>
-                                <a href="{% url 'timelapse_review_journal' journal.id %}">Review timelapse</a>
-                                {% if journal.ship_id %}
-                                    <br><span class="is-no">Holding ship #{{ journal.ship_id }} out of T1</span>
-                                {% endif %}
+                    {% regroup pending by project as pending_groups %}
+                    {% for group in pending_groups %}
+                        <tr class="group-header">
+                            <td colspan="5">
+                                {{ group.grouper.title }}
+                                &middot; @{{ group.grouper.owner.hackclub_profile.slack_username }}
                             </td>
                         </tr>
+                        {% for journal in group.list %}
+                            <tr>
+                                <td><a href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a></td>
+                                <td>{{ journal.tracked_display }}</td>
+                                <td>{{ journal.timelapses.all|length }}</td>
+                                <td>{{ journal.created_at|date:"M j, Y" }}</td>
+                                <td>
+                                    <a href="{% url 'timelapse_review_journal' journal.id %}">Review timelapse</a>
+                                    {% if journal.ship_id %}
+                                        <br><span class="is-no">Holding ship #{{ journal.ship_id }} out of T1</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
                     {% empty %}
-                        <tr><td colspan="7">Nothing awaiting timelapse review.</td></tr>
+                        <tr><td colspan="5">Nothing awaiting timelapse review.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -57,7 +62,6 @@
                 <thead>
                     <tr>
                         <th>Lapse</th>
-                        <th>Project</th>
                         <th>Tracked</th>
                         <th>Removed</th>
                         <th>Approved</th>
@@ -66,24 +70,29 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for journal in reviewed %}
-                        <tr>
-                            <td><a href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a></td>
-                            <td>{{ journal.project.title }}</td>
-                            <td>{{ journal.tracked_display }}</td>
-                            <td>
-                                {% if journal.timelapse_review.removed_seconds %}
-                                    <span class="is-no">&minus;{{ journal.timelapse_review.removed_display }}</span>
-                                {% else %}
-                                    &mdash;
-                                {% endif %}
-                            </td>
-                            <td>{{ journal.approved_display }}</td>
-                            <td>@{{ journal.timelapse_review.reviewer.hackclub_profile.slack_username }}</td>
-                            <td>{{ journal.timelapse_review.reviewed_at|date:"M j, Y, g:i a" }}</td>
+                    {% regroup reviewed by project as reviewed_groups %}
+                    {% for group in reviewed_groups %}
+                        <tr class="group-header">
+                            <td colspan="6">{{ group.grouper.title }}</td>
                         </tr>
+                        {% for journal in group.list %}
+                            <tr>
+                                <td><a href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a></td>
+                                <td>{{ journal.tracked_display }}</td>
+                                <td>
+                                    {% if journal.timelapse_review.removed_seconds %}
+                                        <span class="is-no">&minus;{{ journal.timelapse_review.removed_display }}</span>
+                                    {% else %}
+                                        &mdash;
+                                    {% endif %}
+                                </td>
+                                <td>{{ journal.approved_display }}</td>
+                                <td>@{{ journal.timelapse_review.reviewer.hackclub_profile.slack_username }}</td>
+                                <td>{{ journal.timelapse_review.reviewed_at|date:"M j, Y, g:i a" }}</td>
+                            </tr>
+                        {% endfor %}
                     {% empty %}
-                        <tr><td colspan="7">No timelapse reviews yet.</td></tr>
+                        <tr><td colspan="6">No timelapse reviews yet.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
