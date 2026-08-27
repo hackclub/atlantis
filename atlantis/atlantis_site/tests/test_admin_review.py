@@ -620,10 +620,10 @@ class InternalCommentTests(BaseTestCase):
 		self.assertNotContains(owner_view, "printables listing looks like a remix")
 
 		self.client.force_login(make_user("explorer"))
-		explore_view = self.client.get(
-			reverse("project_detail_explore", args=[self.project.id])
+		visitor_view = self.client.get(
+			reverse("project_detail", args=[self.project.id])
 		)
-		self.assertNotContains(explore_view, "printables listing looks like a remix")
+		self.assertNotContains(visitor_view, "printables listing looks like a remix")
 
 	def test_t3_reviewer_can_comment(self):
 		self.client.force_login(grant_perms(make_user("fraudguy"), "t3_review"))

@@ -333,7 +333,7 @@
     background: var(--oc-shallow);
 }
 
-/* Action cells stack short links ("edit project", "view on explore"); left to
+/* Action cells stack short links ("edit project", "view project"); left to
    wrap they break mid-label and inflate every row. The prose columns have
    slack to give up instead. */
 .root-page .users-table > tbody > tr > td > a,

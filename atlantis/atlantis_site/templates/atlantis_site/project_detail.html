@@ -18,12 +18,16 @@
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/desk.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/book.css' %}">
-    <link rel="stylesheet" href="{% static 'atlantis_site/css/lookout.css' %}">
+    {% if is_owner %}<link rel="stylesheet" href="{% static 'atlantis_site/css/lookout.css' %}">{% endif %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
 </head>
 <body data-mode="book">
     <div class="desk">
-        <a id="back-link" href="{% url 'projects' %}">&larr; back</a>
+        {% if is_owner %}
+            <a id="back-link" href="{% url 'projects' %}">&larr; back</a>
+        {% else %}
+            <a id="back-link" href="{% url 'explore' %}">&larr; explore</a>
+        {% endif %}
 
         {% include "atlantis_site/_banner.html" %}
 
@@ -44,14 +48,16 @@
                 <section class="page page--project" data-page="{{ forloop.counter0 }}">
                     <h1 class="page-title">{{ project.title }}</h1>
                     <p class="page-line">
+                        <span>by <a href="{% url 'user_profile' project.owner.id %}">@{{ project.owner.hackclub_profile.slack_username }}</a></span>
                         <span>{{ time_spent }} logged</span>
                         {% if project.editor_name %}<span class="editor-{{ project.editor_name|slugify }}">{{ project.editor_name|lower }}</span>{% endif %}
+                        <span class="dim">{{ follower_count }} follower{{ follower_count|pluralize }}</span>
                         {% if project.locked %}<span class="warn">locked</span>{% endif %}
                     </p>
 
                     {# the screenshot is taped into the blurb and the text sets around it #}
                     <div class="page-flow">
-                        {% if project.locked %}
+                        {% if not is_owner or project.locked %}
                             {% if project.image_url %}
                                 <span class="page-photo snap-frame"><img src="{{ project.image_display_url }}" alt="Screenshot of {{ project.title }}"></span>
                             {% endif %}
@@ -89,7 +95,7 @@
                             {% endif %}
                         </p>
 
-                        {% if not project.locked %}
+                        {% if is_owner and not project.locked %}
                             <div class="page-actions--minor">
                                 <button type="button" class="ink-link js-slip" data-slip="slip-model">upload editor file</button>
                             </div>
@@ -113,6 +119,19 @@
                     </div>
 
                     <div class="page-actions page-actions--bottom">
+                        {% if not is_owner %}
+                            {% if is_following %}
+                                <form action="{% url 'unfollow_project' project.id %}" method="post">
+                                    {% csrf_token %}
+                                    <button type="submit" class="ink-btn" title="stop getting a Slack DM for every lapse and ship">unfollow</button>
+                                </form>
+                            {% else %}
+                                <form action="{% url 'follow_project' project.id %}" method="post">
+                                    {% csrf_token %}
+                                    <button type="submit" class="ink-btn ink-btn--strong" title="get a Slack DM for every new lapse and ship">follow</button>
+                                </form>
+                            {% endif %}
+                        {% else %}
                         {% if can_ship %}
                             <form action="{% url 'ship_project' project.id %}" method="post">
                                 {% csrf_token %}
@@ -149,6 +168,7 @@
                                 </svg>
                             </button>
                             </span>
+                        {% endif %}
                         {% endif %}
                     </div>
                 </section>
@@ -210,7 +230,11 @@
                                 </li>
                             {% endif %}
                         {% empty %}
-                            <p class="page-empty">this project is locked &mdash; nothing more goes in it.</p>
+                            {% if project.locked %}
+                                <p class="page-empty">this project is locked &mdash; nothing more goes in it.</p>
+                            {% else %}
+                                <p class="page-empty">nothing written in here yet.</p>
+                            {% endif %}
                         {% endfor %}
                     </ul>
                 </section>
@@ -221,14 +245,17 @@
         {% endfor %}
     </div>
 
+    {% if is_owner %}
     {# Lives outside the pages so its fields can sit across both of them. #}
     <form id="new-lapse" action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data" hidden>
         {% csrf_token %}
     </form>
+    {% endif %}
 
     <div class="slip-layer" id="slip-layer" hidden>
         <div class="slip-backdrop" data-close></div>
 
+        {% if is_owner %}
         <div class="slip" id="slip-edit" hidden>
             <h2>Edit project</h2>
             <form action="{% url 'edit_project' project.id %}" method="post">
@@ -347,6 +374,7 @@
         </div>
 
         {% include "atlantis_site/_lookout_slip.html" %}
+        {% endif %}
 
         <div class="slip slip--wide" id="slip-zoom" hidden>
             <h2 id="zoom-title">Lapse</h2>
@@ -362,6 +390,7 @@
 
     {% include "atlantis_site/_book_script.html" %}
 
+    {% if is_owner %}
     <script>
         // ---- the dashed boxes take a dropped image ----
         (function () {
@@ -543,5 +572,6 @@
             if (root.dataset.open) mount(root.dataset.open, 'GET', null);
         })();
     </script>
+    {% endif %}
 </body>
 </html>

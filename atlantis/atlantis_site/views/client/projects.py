@@ -326,9 +326,20 @@ def delete_project(request, project_id):
 
 @login_required
 def project_detail(request, project_id):
-    project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
+    """The project's book — one page for everyone who opens it.
+
+    The owner gets the writing tools taped in among the pages; anyone else
+    reads the same book with nothing to write with.
+    """
+    project = get_object_or_404(Project, id=project_id, deleted=False)
     user = request.user
-    profile = request.user.hackclub_profile
+    is_owner = project.owner_id == user.id
+    # A locked project is the owner's to look back on and an organizer's to
+    # audit — it is off the shelf for everybody else.
+    if project.locked and not is_owner and not user.has_perm("atlantis_site.organizer"):
+        raise PermissionDenied
+
+    profile = user.hackclub_profile
     ships = list(project.ships.order_by('-created_at'))
     # Oldest first: the book reads front to back, and the empty space for the
     # next lapse is at the end of the run.
@@ -339,28 +350,26 @@ def project_detail(request, project_id):
     latest_ship = ships[0] if ships else None
     ship_pending = latest_ship is not None and latest_ship.status not in (Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED)
 
-    if project.locked:
-        can_ship = False
-        ship_disabled_reason = "This project is locked and cannot be shipped."
-    elif not is_valid_printables_url(project.printablesUrl):
-        can_ship = False
-        ship_disabled_reason = "You need a valid Printables URL before you can ship."
-    elif not project.editor_model_url:
-        can_ship = False
-        ship_disabled_reason = "You need to upload or link your editor model before you can ship."
-    elif not project.image_url:
-        can_ship = False
-        ship_disabled_reason = "You need to upload a screenshot of your project before you can ship."
-    elif ship_pending:
-        can_ship = False
-        ship_disabled_reason = "Your most recent ship must be finalized or rejected before you can reship."
-    elif not project.journals.exists() and not can_bypass_ship_requirements(request.user):
-        can_ship = False
-        ship_disabled_reason = "You need at least one lapse before you can ship."
-    else:
-        can_ship = True
-        ship_disabled_reason = ""
-    
+    # Only the owner is ever offered the button, so only the owner's copy has
+    # to work out whether it is live.
+    can_ship = False
+    ship_disabled_reason = ""
+    if is_owner:
+        if project.locked:
+            ship_disabled_reason = "This project is locked and cannot be shipped."
+        elif not is_valid_printables_url(project.printablesUrl):
+            ship_disabled_reason = "You need a valid Printables URL before you can ship."
+        elif not project.editor_model_url:
+            ship_disabled_reason = "You need to upload or link your editor model before you can ship."
+        elif not project.image_url:
+            ship_disabled_reason = "You need to upload a screenshot of your project before you can ship."
+        elif ship_pending:
+            ship_disabled_reason = "Your most recent ship must be finalized or rejected before you can reship."
+        elif not project.journals.exists() and not can_bypass_ship_requirements(user):
+            ship_disabled_reason = "You need at least one lapse before you can ship."
+        else:
+            can_ship = True
+
     if project.printablesUrl:
         try:
             printablesData = get_model_info(project.printablesUrl.split('/model/')[1].split('-')[0])
@@ -379,53 +388,62 @@ def project_detail(request, project_id):
             candidates.append((t2.reviewed_at, t2.feedback))
         return max(candidates, key=lambda x: x[0])[1] if candidates else ""
 
+    # What a reviewer wrote is for the person who shipped it — a visitor's
+    # copy of the book carries the status and nothing else.
     for ship in ships:
-        ship.latest_feedback = get_latest_feedback(ship)
+        ship.latest_feedback = get_latest_feedback(ship) if is_owner else ""
 
-    timelapses = list(project.timelapses.filter(owner=request.user).select_related("journal"))
-    _refresh_lookouts(timelapses)
-    # Re-read after the refresh: one of them may have just finished.
-    attachable_timelapses = list(_attachable_timelapses(project, request.user))
-    # Recordings that aren't ready to attach yet still need somewhere to be
-    # picked back up from, so the book lists them alongside the picker.
-    unfinished_timelapses = [
-        timelapse for timelapse in timelapses if not timelapse.is_complete
-    ]
-    # However many are mid-flight, they are worth one line between them: which
-    # one to pick back up. Listing each is the same sentence over and over.
+    # Likewise the Lookouts: they are the owner's recordings, and nobody else
+    # has anything to attach them to.
+    attachable_timelapses = []
+    unfinished_timelapses = []
     lookout_status = None
-    recordable = [t for t in unfinished_timelapses if t.is_recordable]
-    processing = [t for t in unfinished_timelapses if t.is_processing]
-    failed = [t for t in unfinished_timelapses if t not in recordable and t not in processing]
-    if recordable:
-        lookout_status = {
-            "label": "recording" if len(recordable) == 1 else f"{len(recordable)} recording",
-            "url": reverse("record_timelapse", args=[recordable[0].pk]),
-        }
-    elif processing:
-        lookout_status = {
-            "label": "building" if len(processing) == 1 else f"{len(processing)} building",
-            "url": reverse("record_timelapse", args=[processing[0].pk]),
-        }
-    elif failed:
-        lookout_status = {
-            "label": "failed" if len(failed) == 1 else f"{len(failed)} failed",
-            "url": "",
-        }
-
-    # Arriving from an old recorder link (or straight off starting one without
-    # JS) names the session the book should pop the recorder open on.
     record_session_url = ""
-    requested = request.GET.get("record", "")
-    if requested.isdigit() and any(str(t.pk) == requested for t in timelapses):
-        record_session_url = reverse("record_timelapse", args=[int(requested)])
 
-    pages = _book_pages(journals, allow_new=not project.locked)
+    if is_owner:
+        timelapses = list(project.timelapses.filter(owner=user).select_related("journal"))
+        _refresh_lookouts(timelapses)
+        # Re-read after the refresh: one of them may have just finished.
+        attachable_timelapses = list(_attachable_timelapses(project, user))
+        # Recordings that aren't ready to attach yet still need somewhere to be
+        # picked back up from, so the book lists them alongside the picker.
+        unfinished_timelapses = [
+            timelapse for timelapse in timelapses if not timelapse.is_complete
+        ]
+        # However many are mid-flight, they are worth one line between them: which
+        # one to pick back up. Listing each is the same sentence over and over.
+        recordable = [t for t in unfinished_timelapses if t.is_recordable]
+        processing = [t for t in unfinished_timelapses if t.is_processing]
+        failed = [t for t in unfinished_timelapses if t not in recordable and t not in processing]
+        if recordable:
+            lookout_status = {
+                "label": "recording" if len(recordable) == 1 else f"{len(recordable)} recording",
+                "url": reverse("record_timelapse", args=[recordable[0].pk]),
+            }
+        elif processing:
+            lookout_status = {
+                "label": "building" if len(processing) == 1 else f"{len(processing)} building",
+                "url": reverse("record_timelapse", args=[processing[0].pk]),
+            }
+        elif failed:
+            lookout_status = {
+                "label": "failed" if len(failed) == 1 else f"{len(failed)} failed",
+                "url": "",
+            }
+
+        # Arriving from an old recorder link (or straight off starting one without
+        # JS) names the session the book should pop the recorder open on.
+        requested = request.GET.get("record", "")
+        if requested.isdigit() and any(str(t.pk) == requested for t in timelapses):
+            record_session_url = reverse("record_timelapse", args=[int(requested)])
+
+    pages = _book_pages(journals, allow_new=is_owner and not project.locked)
 
     return render(request, "atlantis_site/project_detail.html", {
         "project": project,
         "user": user,
         "profile": profile,
+        "is_owner": is_owner,
         "ships": ships,
         "journals": journals,
         "pages": pages,
@@ -439,6 +457,8 @@ def project_detail(request, project_id):
         "unfinished_timelapses": unfinished_timelapses,
         "lookout_status": lookout_status,
         "record_session_url": record_session_url,
+        "is_following": project.followers.filter(pk=user.pk).exists(),
+        "follower_count": project.followers.count(),
     })
 
 @login_required
@@ -451,48 +471,6 @@ def explore(request):
     return render(request, "atlantis_site/explore.html", {'profile': profile, 'projects': projects})
 
 @login_required
-def project_detail_explore(request, project_id):
-    project = get_object_or_404(Project, id=project_id, deleted=False)
-    if project.locked and not request.user.has_perm("atlantis_site.organizer"):
-        raise PermissionDenied
-
-    user = request.user
-    profile = user.hackclub_profile
-    ships = project.ships.order_by("-created_at")
-    # Oldest first: the public page is the same book, and it reads front to back.
-    journals = project.journals.order_by("id")
-
-    time_spent = format_minutes(tracked_minutes_for_journals(journals))
-
-    if project.printablesUrl:
-        try:
-            printablesData = get_model_info(project.printablesUrl.split('/model/')[1].split('-')[0])
-        except:
-            printablesData = {"makesCount": 0}
-    else:
-        printablesData = {"makesCount": 0}
-
-    # No writing space: a reader can turn the pages but not add to them.
-    pages = _book_pages(journals, allow_new=False)
-
-    is_following = project.followers.filter(pk=user.pk).exists()
-    follower_count = project.followers.count()
-
-    return render(request, "atlantis_site/project_detail_explore.html", {
-        "project": project,
-        "user": user,
-        "profile": profile,
-        "ships": ships,
-        "journals": journals,
-        "pages": pages,
-        "time_spent": time_spent,
-        "printablesData": printablesData,
-        "is_following": is_following,
-        "follower_count": follower_count,
-    })
-
-
-@login_required
 @require_POST
 @rate_limit("follow_project", 1)
 def follow_project(request, project_id):
@@ -501,11 +479,11 @@ def follow_project(request, project_id):
         raise PermissionDenied
     if project.owner == request.user:
         messages.error(request, "You can't follow your own project.")
-        return redirect("project_detail_explore", project_id=project_id)
+        return redirect("project_detail", project_id=project_id)
 
     project.followers.add(request.user)
     messages.success(request, f'You are now following "{project.title}". You\'ll be notified of new journal entries and ships.')
-    return redirect("project_detail_explore", project_id=project_id)
+    return redirect("project_detail", project_id=project_id)
 
 
 @login_required
@@ -515,7 +493,7 @@ def unfollow_project(request, project_id):
     project = get_object_or_404(Project, id=project_id, deleted=False)
     project.followers.remove(request.user)
     messages.success(request, f'You have unfollowed "{project.title}".')
-    return redirect("project_detail_explore", project_id=project_id)
+    return redirect("project_detail", project_id=project_id)
 
 @login_required
 @rate_limit("create_journal", 3)

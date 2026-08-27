@@ -445,7 +445,7 @@ def slack_mention(user):
     return f"<@{slack_id}>" if slack_id else display_name(user)
 
 def notify_followers(request, project, message):
-    url = request.build_absolute_uri(reverse("project_detail_explore", args=[project.id]))
+    url = request.build_absolute_uri(reverse("project_detail", args=[project.id]))
     content = f"{message} {url}"
     for follower in project.followers.all():
         if follower == project.owner:

@@ -82,7 +82,7 @@
                             data-deleted="{{ project.deleted|yesno:'1,0' }}"
                         >edit project</button>
                         <br>
-                        <a href="{% url 'project_detail_explore' project.id %}" class="link-button" target="_blank" rel="noopener">view on explore</a>
+                        <a href="{% url 'project_detail' project.id %}" class="link-button" target="_blank" rel="noopener">view project</a>
                         <br>
                         <form method="POST" action="{% url 'db_delete_project' project.id %}" class="db-delete-project-form" data-title="{{ project.title|default:'' }}" style="display:inline;">
                             {% csrf_token %}

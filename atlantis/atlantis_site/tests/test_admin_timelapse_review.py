@@ -502,9 +502,9 @@ class InternalOnlyTests(BaseTestCase):
 		self.assertNotIn("clearly afk here", body)
 		self.assertNotIn("timelapse review", body.lower())
 
-	def test_explore_page_shows_nothing_either(self):
+	def test_a_visitors_copy_shows_nothing_either(self):
 		self.client.force_login(make_user("onlooker"))
-		response = self.client.get(reverse("project_detail_explore", args=[self.project.id]))
+		response = self.client.get(reverse("project_detail", args=[self.project.id]))
 		body = response.content.decode()
 
 		self.assertEqual(response.context["time_spent"], "1h 0m")

@@ -66,11 +66,7 @@
                     <ul class="profile-project-list">
                         {% for project in projects %}
                             <li class="profile-project-item">
-                                {% if is_self %}
-                                    <a href="{% url 'project_detail' project.id %}">{{ project.title }}</a>
-                                {% else %}
-                                    <a href="{% url 'project_detail_explore' project.id %}">{{ project.title }}</a>
-                                {% endif %}
+                                <a href="{% url 'project_detail' project.id %}">{{ project.title }}</a>
                                 {% if project.locked %}<span class="profile-project-locked">locked</span>{% endif %}
                             </li>
                         {% endfor %}
@@ -88,11 +84,7 @@
                     {% for journal in journals %}
                         <article class="activity-entry">
                             <p class="activity-entry-byline">
-                                {% if is_self %}
-                                    <a href="{% url 'project_detail' journal.project.id %}">{{ journal.project.title }}</a>
-                                {% else %}
-                                    <a href="{% url 'project_detail_explore' journal.project.id %}">{{ journal.project.title }}</a>
-                                {% endif %}
+                                <a href="{% url 'project_detail' journal.project.id %}">{{ journal.project.title }}</a>
                                 <span class="activity-entry-meta">{{ journal.tracked_display }} &middot; {{ journal.created_at|date:"M j, Y" }}</span>
                             </p>
                             <h3 class="activity-entry-title">{{ journal.title }}</h3>

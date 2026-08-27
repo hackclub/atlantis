@@ -202,9 +202,14 @@ class ProjectDetailTests(BaseTestCase):
 		project = make_project(self.user)
 		self.assertEqual(self._detail(project).status_code, 200)
 
-	def test_non_owner_gets_404(self):
-		project = make_project(make_user("other"))
-		self.assertEqual(self._detail(project).status_code, 404)
+	def test_owner_gets_the_writing_tools(self):
+		project = make_project(self.user, shippable=True)
+		make_journal(project, time_spent=200)
+		response = self._detail(project)
+		self.assertTrue(response.context["is_owner"])
+		body = response.content.decode()
+		for name in ("ship_project", "edit_project", "delete_project", "create_journal", "start_timelapse"):
+			self.assertIn(reverse(name, args=[project.id]), body)
 
 	def test_can_ship_when_all_requirements_met(self):
 		project = make_project(self.user, shippable=True)
@@ -294,7 +299,7 @@ class ExploreTests(BaseTestCase):
 		self.assertEqual(list(response.context["projects"]), [visible])
 
 
-class ProjectDetailExploreTests(BaseTestCase):
+class ProjectDetailVisitorTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()
 		self.user = make_user("visitor")
@@ -302,7 +307,7 @@ class ProjectDetailExploreTests(BaseTestCase):
 		self.client.force_login(self.user)
 
 	def _detail(self, project):
-		return self.client.get(reverse("project_detail_explore", args=[project.id]))
+		return self.client.get(reverse("project_detail", args=[project.id]))
 
 	def test_anyone_logged_in_can_view_unlocked_project(self):
 		project = make_project(self.owner)
@@ -321,6 +326,42 @@ class ProjectDetailExploreTests(BaseTestCase):
 	def test_deleted_project_404(self):
 		project = make_project(self.owner, deleted=True)
 		self.assertEqual(self._detail(project).status_code, 404)
+
+	def test_visitor_gets_no_writing_tools(self):
+		project = make_project(self.owner, shippable=True)
+		response = self._detail(project)
+		self.assertFalse(response.context["is_owner"])
+		body = response.content.decode()
+		for name in ("ship_project", "edit_project", "delete_project", "update_project_image",
+					 "update_editor_model", "create_journal", "start_timelapse"):
+			self.assertNotIn(reverse(name, args=[project.id]), body)
+
+	def test_visitor_is_offered_the_follow_button(self):
+		project = make_project(self.owner)
+		self.assertIn(reverse("follow_project", args=[project.id]), self._detail(project).content.decode())
+
+	def test_visitor_never_sees_reviewer_feedback(self):
+		from ..models import T1
+		project = make_project(self.owner, shippable=True)
+		ship = make_ship(project)
+		T1.objects.create(
+			ship=ship, reviewer=make_user("reviewer"),
+			feedback="thin walls, reprint it", internal_notes="", approved=False,
+		)
+
+		response = self._detail(project)
+		self.assertEqual(response.context["ships"][0].latest_feedback, "")
+		self.assertNotIn("thin walls, reprint it", response.content.decode())
+
+		self.client.force_login(self.owner)
+		self.assertContains(self._detail(project), "thin walls, reprint it")
+
+	def test_visitor_sees_no_lookouts_of_their_own_or_the_owners(self):
+		project = make_project(self.owner)
+		make_timelapse(project, minutes=60)
+		response = self._detail(project)
+		self.assertEqual(list(response.context["pickable_timelapses"]), [])
+		self.assertEqual(list(response.context["unfinished_timelapses"]), [])
 
 
 @override_settings(ALLOW_JOURNALING=True)
@@ -893,17 +934,17 @@ class FollowProjectTests(BaseTestCase):
 		self.assertEqual(self.client.get(reverse("follow_project", args=[self.project.id])).status_code, 405)
 
 	def test_detail_reports_follow_state(self):
-		response = self.client.get(reverse("project_detail_explore", args=[self.project.id]))
+		response = self.client.get(reverse("project_detail", args=[self.project.id]))
 		self.assertFalse(response.context["is_following"])
 		self.project.followers.add(self.user)
-		response = self.client.get(reverse("project_detail_explore", args=[self.project.id]))
+		response = self.client.get(reverse("project_detail", args=[self.project.id]))
 		self.assertTrue(response.context["is_following"])
 
 	def test_detail_reports_follower_count(self):
-		response = self.client.get(reverse("project_detail_explore", args=[self.project.id]))
+		response = self.client.get(reverse("project_detail", args=[self.project.id]))
 		self.assertEqual(response.context["follower_count"], 0)
 		self.project.followers.add(self.user, make_user("other_follower"))
-		response = self.client.get(reverse("project_detail_explore", args=[self.project.id]))
+		response = self.client.get(reverse("project_detail", args=[self.project.id]))
 		self.assertEqual(response.context["follower_count"], 2)
 
 
@@ -955,7 +996,7 @@ class FollowerNotificationTests(BaseTestCase):
 		notify_followers(request, self.project, "hello")
 
 		expected_url = request.build_absolute_uri(
-			reverse("project_detail_explore", args=[self.project.id])
+			reverse("project_detail", args=[self.project.id])
 		)
 		mock_dm.assert_called_once_with(f"hello {expected_url}", self.follower.hackclub_profile.slack_id)
 
