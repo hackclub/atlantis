@@ -61,13 +61,26 @@
                 </article>
             {% endfor %}
 
-            <button type="button" class="add-project" id="openCreateModal" aria-label="Add project">
-                <svg viewBox="0 0 100 100" aria-hidden="true">
-                    <rect x="37" y="7" width="26" height="86" rx="11"></rect>
-                    <rect x="7" y="37" width="86" height="26" rx="11"></rect>
-                </svg>
-                <span>add project</span>
-            </button>
+            {% if create_blocked_reason %}
+                {# a disabled button gets no pointer events, so the reason hangs on a wrapper #}
+                <span class="add-gate" title="{{ create_blocked_reason }}">
+                    <button type="button" class="add-project" disabled aria-label="Add project">
+                        <svg viewBox="0 0 100 100" aria-hidden="true">
+                            <rect x="37" y="7" width="26" height="86" rx="11"></rect>
+                            <rect x="7" y="37" width="86" height="26" rx="11"></rect>
+                        </svg>
+                        <span>verify to add</span>
+                    </button>
+                </span>
+            {% else %}
+                <button type="button" class="add-project" id="openCreateModal" aria-label="Add project">
+                    <svg viewBox="0 0 100 100" aria-hidden="true">
+                        <rect x="37" y="7" width="26" height="86" rx="11"></rect>
+                        <rect x="7" y="37" width="86" height="26" rx="11"></rect>
+                    </svg>
+                    <span>add project</span>
+                </button>
+            {% endif %}
         </main>
 
         <div class="deck-hint" aria-hidden="true">&#9662;</div>
@@ -76,6 +89,7 @@
         <nav class="deck-dots" id="deckDots" aria-label="Shelves"></nav>
     </div>
 
+    {% if not create_blocked_reason %}
     <div id="createProjectModal" class="modal hidden" aria-hidden="true" hidden>
         <div class="modal-backdrop" id="modalBackdrop"></div>
 
@@ -106,6 +120,7 @@
             </form>
         </div>
     </div>
+    {% endif %}
 
     <div id="editProjectModal" class="modal hidden" aria-hidden="true" hidden>
         <div class="modal-backdrop" id="editModalBackdrop"></div>
@@ -183,6 +198,9 @@
             const openBtn = document.getElementById("openCreateModal");
             const cancelBtn = document.getElementById("cancelCreateModal");
             const backdrop = document.getElementById("modalBackdrop");
+
+            // Neither is on the page when the reader isn't allowed to create.
+            if (!modal || !openBtn) return;
 
             function openModal() {
                 modal.classList.remove("hidden");

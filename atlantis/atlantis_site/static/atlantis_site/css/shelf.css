@@ -52,9 +52,20 @@ body.deck-ready .sheet {
 }
 
 .book,
-.add-project {
+.add-project,
+.add-gate {
     width: 100%;
     max-width: 470px;
+}
+
+/* The gate stands in the grid exactly where the plus would; the button inside
+   fills it. */
+.add-gate {
+    display: flex;
+}
+
+.add-gate .add-project {
+    max-width: none;
 }
 
 /* ---------- the deck: three books at a time ---------- */

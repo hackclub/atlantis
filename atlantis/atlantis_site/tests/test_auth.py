@@ -25,6 +25,7 @@ USERINFO = {
 	"family_name": "Person",
 	"slack_id": "U0SLACK",
 	"verification_status": "verified",
+	"ysws_eligible": True,
 }
 
 SLACK_USER_RESPONSE = {
@@ -102,6 +103,7 @@ class AuthCallbackTests(TestCase):
 		self.assertEqual(profile.slack_username, "slack-tester")
 		self.assertEqual(profile.slack_pfp_url, "https://cdn.slack.example/pfp.png")
 		self.assertEqual(profile.verification_status, "verified")
+		self.assertTrue(profile.ysws_eligible)
 
 	def test_logs_user_in(self, mock_token, mock_slack):
 		mock_slack.return_value = SLACK_USER_RESPONSE
@@ -121,6 +123,33 @@ class AuthCallbackTests(TestCase):
 		self.assertEqual(profile.layers, 42)
 		user.refresh_from_db()
 		self.assertEqual(user.email, "old@example.com")
+
+	def test_stores_a_refusal_from_hca(self, mock_token, mock_slack):
+		"""Whatever HCA says goes on the profile — the create/ship gate reads it
+		back from there."""
+		mock_slack.return_value = SLACK_USER_RESPONSE
+		self._callback(
+			mock_token,
+			userinfo={**USERINFO, "verification_status": "ineligible", "ysws_eligible": False},
+		)
+
+		profile = User.objects.get(username="user_abc123").hackclub_profile
+		self.assertEqual(profile.verification_status, "ineligible")
+		self.assertFalse(profile.ysws_eligible)
+		self.assertFalse(profile.is_ysws_eligible)
+
+	def test_missing_verification_claims_store_no_verdict(self, mock_token, mock_slack):
+		"""A token issued before the claim scope carries neither claim, which is
+		not the same as a no — but it is not a yes either, so the gate holds."""
+		mock_slack.return_value = SLACK_USER_RESPONSE
+		userinfo = {k: v for k, v in USERINFO.items()
+					if k not in ("verification_status", "ysws_eligible")}
+		self._callback(mock_token, userinfo=userinfo)
+
+		profile = User.objects.get(username="user_abc123").hackclub_profile
+		self.assertEqual(profile.verification_status, "")
+		self.assertIsNone(profile.ysws_eligible)
+		self.assertFalse(profile.is_ysws_eligible)
 
 	def test_slack_fetch_failure_falls_back_to_oidc_name_and_default_pfp(self, mock_token, mock_slack):
 		mock_slack.side_effect = Exception("slack down")

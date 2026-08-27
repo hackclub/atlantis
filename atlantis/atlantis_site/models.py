@@ -128,6 +128,10 @@ def first_overlap(ranges):
 class Profile(models.Model):
 	user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="hackclub_profile")
 	verification_status = models.CharField(max_length=64, blank=True, default="")
+	# HCA's YSWS-eligibility verdict, which arrives alongside verification_status
+	# on the same claim scope. Null while HCA has no verdict to give: an identity
+	# with nothing submitted is neither eligible nor ineligible yet.
+	ysws_eligible = models.BooleanField(null=True, default=None)
 	slack_id = models.CharField(max_length=64, blank=True, default="")
 	slack_username = models.CharField(max_length=64, blank=True, default="")
 	slack_pfp_url = models.CharField(max_length=200, blank=True, default="")
@@ -153,6 +157,32 @@ class Profile(models.Model):
 		if self.pk:
 			Profile.objects.filter(pk=self.pk).update(
 				encrypted_hca_token=self.encrypted_hca_token
+			)
+
+	@property
+	def is_ysws_eligible(self):
+		"""True when HCA last said this user is verified and YSWS-eligible.
+
+		A verified identity with no verdict on file is let through: HCA fills the
+		flag in whenever it decides one way or the other, and only a definite "no"
+		should close the door. An unverified identity — including one we were
+		never told about — is not eligible.
+		"""
+		from .hca import VERIFICATION_VERIFIED
+		return (
+			self.verification_status == VERIFICATION_VERIFIED
+			and self.ysws_eligible is not False
+		)
+
+	def save_verification(self, status, eligible):
+		"""Persist what HCA said about verification, keeping the write to those
+		two columns alone so a refresh mid-request cannot clobber unrelated
+		in-memory changes."""
+		self.verification_status = status
+		self.ysws_eligible = eligible
+		if self.pk:
+			Profile.objects.filter(pk=self.pk).update(
+				verification_status=status, ysws_eligible=eligible
 			)
 
 	def get_addresses(self):

@@ -36,15 +36,24 @@ ALL_SITE_PERMS = [
 ]
 
 
-def make_user(username="user", layers=0, slack_id="U0TEST", slack_username=None, hca_token=None, **user_kwargs):
+def make_user(
+	username="user", layers=0, slack_id="U0TEST", slack_username=None, hca_token=None,
+	verification_status="verified", ysws_eligible=True, **user_kwargs
+):
 	"""Create a user with an attached hackclub Profile (as auth_callback would).
 
 	Pass hca_token to give the profile stored HCA credentials — needed by
 	anything that fetches the user's address.
+
+	The default profile is verified and YSWS-eligible, which is what an ordinary
+	user is; pass verification_status/ysws_eligible to make one HCA has turned
+	down (or not yet ruled on).
 	"""
 	user = User.objects.create_user(username=username, password="pw", **user_kwargs)
 	profile = Profile.objects.create(
 		user=user,
+		verification_status=verification_status,
+		ysws_eligible=ysws_eligible,
 		slack_id=slack_id,
 		slack_username=slack_username if slack_username is not None else username,
 		slack_pfp_url="https://example.com/pfp.png",

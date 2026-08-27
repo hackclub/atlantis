@@ -12,6 +12,10 @@ from ..models import (
     AuditLog, InternalComment, Journal, LookoutSession, TimelapseRemoval,
     PAYOUT_MULTIPLIER_DEFAULT, PEARLS_PER_HOUR, detect_editor
 )
+from ..hca import (
+    IdentityUnavailable, VERIFICATION_INELIGIBLE, VERIFICATION_PENDING,
+    VERIFICATION_VERIFIED, refresh_verification
+)
 
 from decimal import Decimal, ROUND_HALF_EVEN
 from functools import wraps
@@ -117,6 +121,70 @@ def format_minutes(minutes):
 
 def can_bypass_ship_requirements(user):
     return bool(settings.DEBUG and user.has_perm("atlantis_site.organizer"))
+
+
+# The two doors HCA keeps for this: one to start (or redo) a verification, one
+# to watch a submitted one.
+HCA_VERIFY_URL = "https://auth.hackclub.com/verifications/new"
+HCA_VERIFY_STATUS_URL = "https://auth.hackclub.com/verifications/status"
+
+# How long a "not eligible" answer stands before we ask HCA again. Verification
+# is approved asynchronously, so the answer stored at login goes stale while the
+# user is still on the site — but only the blocked pay for the re-ask, and only
+# this often.
+VERIFICATION_REFRESH_AFTER = 60
+
+
+def _ineligible_message(status, eligible):
+    """The sentence a user who can't create or ship is owed, and where to go."""
+    if status == VERIFICATION_VERIFIED and eligible is False:
+        return (
+            "Your Hack Club identity is verified, but it isn't eligible for YSWS "
+            "programs, so you can't create projects or ship. If that looks wrong, "
+            f"check {HCA_VERIFY_STATUS_URL}"
+        )
+    if status == VERIFICATION_PENDING:
+        return (
+            "Hack Club is still reviewing your identity. You can create projects "
+            f"and ship once it's approved — track it at {HCA_VERIFY_STATUS_URL}"
+        )
+    if status == VERIFICATION_INELIGIBLE:
+        return (
+            "Hack Club couldn't verify your identity, so you can't create projects "
+            f"or ship. Take another run at it at {HCA_VERIFY_URL}"
+        )
+    # Nothing submitted, or HCA never told us anything at all.
+    return (
+        "Verify your identity with Hack Club before you create projects or ship: "
+        f"{HCA_VERIFY_URL}"
+    )
+
+
+def ysws_block_reason(user):
+    """Why this user may not create projects or ship, or "" if they may.
+
+    The answer HCA gave at login is the starting point, but it is only as fresh
+    as that login — someone approved an hour ago should not have to log out and
+    back in to get moving. So when the stored answer is no, HCA is asked again
+    (at most once a minute per user) before the user is turned away. If HCA
+    can't be reached, the stored answer is the only one there is and it stands.
+    """
+    profile = getattr(user, "hackclub_profile", None)
+    if profile is None:
+        return _ineligible_message("", None)
+
+    if profile.is_ysws_eligible:
+        return ""
+
+    if cache.add(f"idv-refresh:{user.id}", 1, timeout=VERIFICATION_REFRESH_AFTER):
+        try:
+            refresh_verification(profile)
+        except IdentityUnavailable:
+            pass  # HCA is unreachable; the stored answer is the only one there is.
+        if profile.is_ysws_eligible:
+            return ""
+
+    return _ineligible_message(profile.verification_status, profile.ysws_eligible)
 
 def internal_comments_for_project(project):
     """Reviewer-only comments on every ship of a project, newest first."""

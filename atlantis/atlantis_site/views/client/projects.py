@@ -26,7 +26,7 @@ from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
     sniff_image_extension, random_storage_key,
     notify_followers, rate_limit, tracked_minutes_for_journals, format_minutes,
-    can_bypass_ship_requirements,
+    can_bypass_ship_requirements, ysws_block_reason,
 )
 
 import os
@@ -124,12 +124,23 @@ def projects(request):
     for project in projects:
         project.tracked_hours = f"{tracked_seconds.get(project.id, 0) / 3600:.1f}h"
 
-    return render(request, "atlantis_site/projects.html", {"projects": projects, "profile": profile})
+    return render(request, "atlantis_site/projects.html", {
+        "projects": projects,
+        "profile": profile,
+        "create_blocked_reason": ysws_block_reason(request.user),
+    })
 
 @login_required
 @require_POST
 @rate_limit("create_project", 2)
 def create_project(request):
+    # A YSWS project is a claim on YSWS prizes, so who may start one is HCA's
+    # call, not ours.
+    blocked = ysws_block_reason(request.user)
+    if blocked:
+        messages.error(request, blocked)
+        return redirect("projects")
+
     title = request.POST.get("title", "").strip()
     description = request.POST.get("description", "").strip()
     printables_url = request.POST.get("printables_url", "").strip()
@@ -355,7 +366,10 @@ def project_detail(request, project_id):
     can_ship = False
     ship_disabled_reason = ""
     if is_owner:
-        if project.locked:
+        ysws_blocked = ysws_block_reason(user)
+        if ysws_blocked:
+            ship_disabled_reason = ysws_blocked
+        elif project.locked:
             ship_disabled_reason = "This project is locked and cannot be shipped."
         elif not is_valid_printables_url(project.printablesUrl):
             ship_disabled_reason = "You need a valid Printables URL before you can ship."
@@ -597,6 +611,12 @@ def ship_project(request, project_id):
         return redirect("project_detail", project_id=project_id)
     
     project = get_object_or_404(Project, id=project_id, owner=request.user, deleted=False)
+    # Shipping is a claim on YSWS prizes, so whether it may happen at all is
+    # HCA's call, not ours.
+    blocked = ysws_block_reason(request.user)
+    if blocked:
+        messages.error(request, blocked)
+        return redirect("projects")
     if project.locked:
         messages.error(request, "This project is locked. You cannot ship a locked project.")
         return redirect("projects")

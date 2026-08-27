@@ -58,6 +58,14 @@ part of `profile`), because the Airtable submission needs a birthday. tokens iss
 that scope was added don't carry the claim, so those users submit without a birthday until
 the next time they log in.
 
+the `verification_status` scope carries two claims, not one: `verification_status`
+(`needs_submission` / `pending` / `verified` / `ineligible`) and `ysws_eligible` (a
+boolean, or absent while HCA has no verdict). both are stored on the profile at login,
+and creating a project or shipping is gated on them — HCA decides who is eligible for
+YSWS prizes, not us. without that scope nobody can create or ship, since a missing claim
+is not a yes. a blocked user's state is re-fetched from HCA at most once a minute, so an
+approval that lands mid-session takes effect without a fresh login.
+
 ### second section
 i didn't know what to call this one, but all these values are fine. i'll still explain what they do because i'm kind.
 - `SECRET_KEY`: something django needs to work, in prod it has to be generated with a terminal command but in dev this is fine

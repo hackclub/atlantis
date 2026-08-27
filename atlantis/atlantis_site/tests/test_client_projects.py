@@ -4,6 +4,7 @@ from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 
+from ..hca import IdentityUnavailable
 from ..models import Journal, LookoutSession, Project, Ship
 from .base import (
 	VALID_EDITOR_LINK,
@@ -738,6 +739,122 @@ class DebugOrganizerShipBypassTests(BaseTestCase):
 	def test_ship_button_disabled_without_debug(self):
 		response = self.client.get(reverse("project_detail", args=[self.project.id]))
 		self.assertFalse(response.context["can_ship"])
+
+
+class YswsEligibilityGateTests(BaseTestCase):
+	"""Creating and shipping are claims on YSWS prizes, so HCA's answer decides.
+
+	Anyone HCA has not verified — or has verified but ruled ineligible — is kept
+	out of both, and told which of HCA's two doors to go through.
+	"""
+
+	INELIGIBLE = [
+		("nothing submitted", "needs_submission", None, "Verify your identity"),
+		("under review", "pending", None, "still reviewing your identity"),
+		("turned down", "ineligible", False, "couldn't verify your identity"),
+		("never told", "", None, "Verify your identity"),
+		("verified but not eligible", "verified", False, "isn't eligible for YSWS"),
+	]
+
+	def _login(self, status, eligible, username="gated"):
+		user = make_user(username, verification_status=status, ysws_eligible=eligible)
+		self.client.force_login(user)
+		return user
+
+	def _create(self):
+		return self.client.post(
+			reverse("create_project"),
+			{"title": "New Project", "description": "Something cool.", "printables_url": ""},
+		)
+
+	def test_ineligible_cannot_create_project(self):
+		for label, status, eligible, fragment in self.INELIGIBLE:
+			with self.subTest(label=label):
+				Project.objects.all().delete()
+				cache.clear()
+				self._login(status, eligible, username=f"gated-create-{status}")
+				response = self._create()
+				self.assertEqual(Project.objects.count(), 0)
+				self.assertTrue(
+					any(fragment in text for text in message_texts(response)),
+					message_texts(response),
+				)
+
+	def test_ineligible_cannot_ship(self):
+		for label, status, eligible, fragment in self.INELIGIBLE:
+			with self.subTest(label=label):
+				cache.clear()
+				user = self._login(status, eligible, username=f"gated-ship-{status}")
+				project = make_project(user, shippable=True)
+				make_journal(project, time_spent=200)
+				response = self.client.post(reverse("ship_project", args=[project.id]))
+				self.assertEqual(Ship.objects.count(), 0)
+				self.assertTrue(
+					any(fragment in text for text in message_texts(response)),
+					message_texts(response),
+				)
+
+	def test_ineligible_owner_gets_the_reason_on_the_ship_button(self):
+		user = self._login("pending", None)
+		project = make_project(user, shippable=True)
+		make_journal(project, time_spent=200)
+		response = self.client.get(reverse("project_detail", args=[project.id]))
+		self.assertFalse(response.context["can_ship"])
+		self.assertIn("still reviewing your identity", response.context["ship_disabled_reason"])
+
+	def test_ineligible_shelf_offers_no_create_form(self):
+		self._login("needs_submission", None)
+		response = self.client.get(reverse("projects"))
+		self.assertIn("Verify your identity", response.context["create_blocked_reason"])
+		self.assertNotIn(reverse("create_project"), response.content.decode())
+
+	def test_eligible_shelf_offers_the_create_form(self):
+		self.client.force_login(make_user("eligible"))
+		response = self.client.get(reverse("projects"))
+		self.assertEqual(response.context["create_blocked_reason"], "")
+		self.assertIn(reverse("create_project"), response.content.decode())
+
+	def test_verified_with_no_verdict_yet_is_let_through(self):
+		"""HCA fills ysws_eligible in when it decides; only a definite no shuts
+		the door."""
+		self._login("verified", None)
+		self.assertEqual(self._create().status_code, 302)
+		self.assertEqual(Project.objects.count(), 1)
+
+	def test_stale_no_is_rechecked_against_hca(self):
+		"""A verification approved since login must not need a fresh login."""
+		user = self._login("pending", None)
+
+		def approve(profile):
+			profile.save_verification("verified", True)
+
+		with patch("atlantis_site.views.helpers.refresh_verification", side_effect=approve) as refresh:
+			response = self._create()
+
+		refresh.assert_called_once()
+		self.assertEqual(Project.objects.count(), 1)
+		user.hackclub_profile.refresh_from_db()
+		self.assertTrue(user.hackclub_profile.is_ysws_eligible)
+
+	def test_recheck_is_throttled_per_user(self):
+		self._login("pending", None)
+		with patch("atlantis_site.views.helpers.refresh_verification") as refresh:
+			self.client.get(reverse("projects"))
+			self.client.get(reverse("projects"))
+		self.assertEqual(refresh.call_count, 1)
+
+	def test_unreachable_hca_leaves_the_stored_answer_standing(self):
+		self._login("pending", None)
+		with patch(
+			"atlantis_site.views.helpers.refresh_verification",
+			side_effect=IdentityUnavailable("hca down"),
+		):
+			response = self._create()
+		self.assertEqual(Project.objects.count(), 0)
+		self.assertTrue(
+			any("still reviewing" in text for text in message_texts(response)),
+			message_texts(response),
+		)
 
 
 class UpdateEditorModelTests(BaseTestCase):

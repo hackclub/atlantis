@@ -4,7 +4,7 @@ from django.views.decorators.http import require_POST
 
 from ...models import Profile
 from ...crypto import encrypt_token
-from ...hca import oauth, storable_token
+from ...hca import extract_verification, oauth, storable_token
 from ..helpers import slack_client, rate_limit
 
 import os
@@ -40,7 +40,7 @@ def auth_callback(request):
     sub = userinfo.get("sub")
     clean_sub = sub.replace("!", "_")
     slack_id = userinfo.get("slack_id", "")
-    verification_status = userinfo.get("verification_status", "")
+    verification_status, ysws_eligible = extract_verification(userinfo)
 
     user_model = get_user_model()
     user, created = user_model.objects.get_or_create(
@@ -70,6 +70,7 @@ def auth_callback(request):
 
     defaults = {
         "verification_status": verification_status,
+        "ysws_eligible": ysws_eligible,
         "slack_id": slack_id,
         "slack_username": display_name,
         "slack_pfp_url": avatar_url,

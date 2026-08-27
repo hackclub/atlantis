@@ -10,6 +10,15 @@ USERINFO_TIMEOUT = 5
 
 STORED_TOKEN_FIELDS = ("access_token", "refresh_token", "token_type", "expires_at", "scope")
 
+# Every value HCA's `verification_status` claim can take (its Identity model
+# computes it from the verifications on file). Only "verified" means the
+# identity itself is signed off — "pending" is mid-review, "needs_submission"
+# has nothing to review, and "ineligible" is a fatal rejection or a permaban.
+VERIFICATION_VERIFIED = "verified"
+VERIFICATION_PENDING = "pending"
+VERIFICATION_NEEDS_SUBMISSION = "needs_submission"
+VERIFICATION_INELIGIBLE = "ineligible"
+
 oauth = OAuth()
 
 oauth.register(
@@ -80,6 +89,35 @@ def extract_birthdate(userinfo):
         return ""
 
 
+def extract_verification(userinfo):
+    """The (verification_status, ysws_eligible) pair HCA reports for a user.
+
+    Both claims ride on the one `verification_status` scope, and they answer
+    different questions: whether the identity is verified at all, and whether
+    it is eligible for YSWS prizes (a verified alum who has aged out is not).
+
+    ysws_eligible comes back tri-state — True or False once HCA has a verdict,
+    None while it has none, which is where an identity with nothing submitted
+    sits. Anything that isn't a real boolean is read as None rather than
+    coerced, so a missing claim can't pass for a "no".
+    """
+    if not isinstance(userinfo, dict):
+        return "", None
+
+    identity = userinfo.get("identity")
+    source = identity if isinstance(identity, dict) else userinfo
+
+    status = source.get("verification_status")
+    if not isinstance(status, str):
+        status = ""
+
+    eligible = source.get("ysws_eligible")
+    if not isinstance(eligible, bool):
+        eligible = None
+
+    return status, eligible
+
+
 def select_address(addresses, address_id=None):
     """The address matching address_id, else the primary, else the first."""
     if not addresses:
@@ -129,6 +167,17 @@ def fetch_userinfo(profile):
         session.close()
 
     return userinfo
+
+
+def refresh_verification(profile):
+    """Re-ask HCA where this user stands and store the answer.
+
+    Raises IdentityUnavailable if there is no usable token or HCA can't be
+    reached, in which case the stored answer is left exactly as it was.
+    """
+    status, eligible = extract_verification(fetch_userinfo(profile))
+    profile.save_verification(status, eligible)
+    return status, eligible
 
 
 def fetch_addresses(profile):
