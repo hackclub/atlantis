@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from ..models import (
 	AuditLog, Journal, Ship, TimelapseRemoval, TimelapseReview, first_overlap,
-	format_timecode, parse_timecode,
+	format_timecode, parse_timecode, tracked_to_video, video_to_tracked,
 )
 from .base import (
 	BaseTestCase,
@@ -44,6 +44,21 @@ class TimecodeTests(BaseTestCase):
 		self.assertEqual(format_timecode(5), "0:05")
 		self.assertEqual(format_timecode(65), "1:05")
 		self.assertEqual(format_timecode(5400), "1:30:00")
+
+	def test_video_offsets_convert_to_the_minutes_they_stand_for(self):
+		# One second of compiled video is one recorded minute, so the range a
+		# reviewer reads off the player is sixty times shorter than its cost.
+		self.assertEqual(video_to_tracked(1), 60)
+		self.assertEqual(video_to_tracked(parse_timecode("1:11")) - video_to_tracked(
+			parse_timecode("0:56")
+		), 15 * 60)
+
+	def test_tracked_seconds_convert_back_rounding_up(self):
+		self.assertEqual(tracked_to_video(3600), 60)
+		# A part-minute still occupies a whole second of footage.
+		self.assertEqual(tracked_to_video(3540 + 1), 60)
+		self.assertEqual(tracked_to_video(0), 0)
+		self.assertEqual(tracked_to_video(-5), 0)
 
 	def test_first_overlap_ignores_adjacent_ranges(self):
 		self.assertIsNone(first_overlap([(0, 30), (30, 60)]))
@@ -194,7 +209,8 @@ class TimelapseDecisionTests(BaseTestCase):
 		self.assertEqual(self.journal.approved_seconds, self.journal.tracked_seconds)
 
 	def test_removing_a_range_reduces_approved_time(self):
-		self._decide(ranges=[(self.session, "5:00", "30:00", "idle, no model changes")])
+		# 0:05-0:30 on the player is 25 minutes of the hour it was stitched from.
+		self._decide(ranges=[(self.session, "0:05", "0:30", "idle, no model changes")])
 
 		removal = TimelapseRemoval.objects.get()
 		self.assertEqual(removal.start_seconds, 300)
@@ -205,24 +221,38 @@ class TimelapseDecisionTests(BaseTestCase):
 		self.assertEqual(self.journal.approved_seconds, 2100)
 		self.assertEqual(self.journal.approved_display, "0h 35m")
 
+	def test_a_range_costs_the_time_it_covers_in_the_video(self):
+		"""15 seconds of footage is 15 minutes of somebody's afternoon."""
+		journal = make_journal(self.project, time_spent=120)
+		session = journal.timelapses.get()
+		self.assertEqual(session.video_seconds, 120)
+
+		self._decide(journal=journal, ranges=[(session, "0:56", "1:11", "afk")])
+
+		removal = TimelapseRemoval.objects.get()
+		self.assertEqual(removal.duration_seconds, 15 * 60)
+		self.assertEqual(removal.duration_display, "15:00")
+		self.assertEqual(journal.removed_seconds, 15 * 60)
+		self.assertEqual(journal.approved_seconds, (120 - 15) * 60)
+
 	def test_multiple_ranges_across_multiple_lookouts(self):
 		second = make_timelapse(self.project, journal=self.journal, minutes=30)
 		self._decide(ranges=[
 			(self.session, "0:05", "0:30", "afk"),
-			(self.session, "10:00", "12:00", "watching a video"),
-			(second, "1:00", "2:00", "unrelated tab"),
+			(self.session, "0:40", "0:42", "watching a video"),
+			(second, "0:01", "0:02", "unrelated tab"),
 		])
 
 		self.assertEqual(TimelapseRemoval.objects.count(), 3)
-		self.assertEqual(self.journal.removed_seconds, 25 + 120 + 60)
-		self.assertEqual(self.journal.approved_seconds, 5400 - 205)
-		self.assertEqual(self.session.removed_seconds, 145)
+		self.assertEqual(self.journal.removed_seconds, (25 + 2 + 1) * 60)
+		self.assertEqual(self.journal.approved_seconds, 5400 - 28 * 60)
+		self.assertEqual(self.session.removed_seconds, 27 * 60)
 		self.assertEqual(second.removed_seconds, 60)
 
 	def test_each_removed_range_keeps_its_own_reason(self):
 		self._decide(ranges=[
 			(self.session, "0:05", "0:30", "afk"),
-			(self.session, "10:00", "12:00", "watching a video"),
+			(self.session, "0:40", "0:42", "watching a video"),
 		])
 		self.assertEqual(
 			[r.reason for r in TimelapseRemoval.objects.order_by("start_seconds")],
@@ -236,12 +266,15 @@ class TimelapseDecisionTests(BaseTestCase):
 		removal = review.removals.get()
 		self.assertEqual(review.reviewer, self.reviewer)
 		self.assertIsNotNone(review.reviewed_at)
-		self.assertEqual(removal.range_display, "0:05-0:30")
+		# Stored as the tracked time it cost, shown back as the range on the
+		# player the reviewer typed.
+		self.assertEqual(removal.range_display, "5:00-30:00")
+		self.assertEqual(removal.video_range_display, "0:05-0:30")
 		self.assertEqual(removal.reason, "afk")
 
 		log = AuditLog.objects.get(action="timelapse_review")
 		self.assertEqual(log.actor, self.reviewer)
-		self.assertEqual(log.metadata["removed_seconds"], 25)
+		self.assertEqual(log.metadata["removed_seconds"], 1500)
 		self.assertEqual(log.metadata["removals"][0]["reason"], "afk")
 
 	def test_blank_rows_are_ignored(self):
@@ -305,40 +338,70 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 	def test_reason_is_required_for_every_range(self):
 		response = self._post([
 			(self.session, "0:05", "0:30", "afk"),
-			(self.session, "10:00", "12:00", "   "),
+			(self.session, "0:40", "0:42", "   "),
 		])
 		self._assert_rejected(response, "needs a justification")
 
 	def test_overlapping_ranges_rejected(self):
 		response = self._post([
-			(self.session, "0:00", "10:00", "afk"),
-			(self.session, "5:00", "12:00", "still afk"),
+			(self.session, "0:00", "0:10", "afk"),
+			(self.session, "0:05", "0:12", "still afk"),
 		])
 		self._assert_rejected(response, "overlaps another removed range")
 
+	def test_overlap_is_reported_in_the_typed_timecodes(self):
+		response = self._post([
+			(self.session, "0:00", "0:10", "afk"),
+			(self.session, "0:05", "0:12", "still afk"),
+		])
+		self.assertIn("0:05-0:12 overlaps", " ".join(message_texts(response)))
+
 	def test_ranges_touching_at_the_edge_are_allowed(self):
 		self._post([
-			(self.session, "0:00", "10:00", "afk"),
-			(self.session, "10:00", "12:00", "still afk"),
+			(self.session, "0:00", "0:10", "afk"),
+			(self.session, "0:10", "0:12", "still afk"),
 		])
 		self.assertEqual(TimelapseRemoval.objects.count(), 2)
 
 	def test_same_range_on_different_lookouts_is_not_an_overlap(self):
 		second = make_timelapse(self.project, journal=self.journal, minutes=30)
 		self._post([
-			(self.session, "0:00", "10:00", "afk"),
-			(second, "0:00", "10:00", "afk"),
+			(self.session, "0:00", "0:10", "afk"),
+			(second, "0:00", "0:10", "afk"),
 		])
 		self.assertEqual(TimelapseRemoval.objects.count(), 2)
 
-	def test_range_longer_than_the_lookout_rejected(self):
-		"""The guard against a negative adjusted duration."""
-		response = self._post([(self.session, "0:00", "90:00", "everything")])
-		self._assert_rejected(response, "runs past the end of that Lookout")
+	def test_range_past_the_end_of_the_video_rejected(self):
+		"""The guard against a negative adjusted duration.
+
+		An hour of tracking compiles to a minute of video, so 1:30 on the
+		player is footage this Lookout doesn't have.
+		"""
+		response = self._post([(self.session, "0:00", "1:30", "everything")])
+		self._assert_rejected(response, "runs past the end of that Lookout's video")
 
 	def test_whole_lookout_may_be_removed(self):
-		self._post([(self.session, "0:00", "60:00", "screen recording of someone else")])
+		self._post([(self.session, "0:00", "1:00", "screen recording of someone else")])
 		self.assertEqual(self.journal.approved_seconds, 0)
+
+	def test_the_last_second_of_video_cannot_remove_untracked_time(self):
+		"""A session's tracked time is whole minutes minus its first bucket.
+
+		9 minutes of tracking still fills 9 seconds of video, so cutting all
+		of it must clamp to the 9 minutes rather than claim 10.
+		"""
+		journal = make_journal(self.project, time_spent=0)
+		session = make_timelapse(self.project, journal=journal, minutes=0)
+		session.tracked_seconds = 9 * 60
+		session.save(update_fields=["tracked_seconds"])
+
+		self.assertEqual(session.video_seconds, 9)
+		self._post([(session, "0:00", "0:09", "nothing on screen")], journal=journal)
+
+		removal = TimelapseRemoval.objects.get()
+		self.assertEqual(removal.end_seconds, 9 * 60)
+		self.assertEqual(journal.removed_seconds, 9 * 60)
+		self.assertEqual(journal.approved_seconds, 0)
 
 	def test_backwards_range_rejected(self):
 		response = self._post([(self.session, "30:00", "5:00", "afk")])

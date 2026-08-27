@@ -16,7 +16,7 @@ from django.db import transaction
 
 from ...models import (
     Journal, TimelapseRemoval, TimelapseReview, first_overlap, format_timecode,
-    parse_timecode,
+    parse_timecode, video_to_tracked,
 )
 from ..helpers import check_perms, display_name, record_audit, reviewer_leaderboard
 
@@ -45,6 +45,13 @@ def _parse_removals(request, sessions):
 
     `sessions` maps id -> LookoutSession for the journal being reviewed. The
     rows arrive as four parallel lists, one entry per range the reviewer added.
+
+    Every offset posted here is read off the compiled video, the only timeline
+    the reviewer can see, and the video runs sixty times faster than the
+    session it was stitched from. So the ranges are validated against the
+    video's length and stored as the tracked seconds they stand for: cutting
+    0:56-1:11 out of the player takes fifteen minutes off the lapse, not
+    fifteen seconds.
     """
     session_ids = request.POST.getlist("removal_session")
     starts = request.POST.getlist("removal_start")
@@ -58,6 +65,9 @@ def _parse_removals(request, sessions):
         raise RemovalError(f"At most {MAX_REMOVALS} removed ranges per journal.")
 
     removals = []
+    # (session id, start, end) on the video timeline, for the overlap check and
+    # the messages about it: the reviewer recognises what they typed.
+    video_ranges = []
     for position, row in enumerate(zip(session_ids, starts, ends, reasons), start=1):
         raw_session, raw_start, raw_end, raw_reason = (value.strip() for value in row)
 
@@ -79,11 +89,12 @@ def _parse_removals(request, sessions):
         if end <= start:
             raise RemovalError(f"Range {position} has to end after it starts.")
         # The one guard that keeps an adjusted duration from going negative:
-        # you cannot remove time the Lookout never tracked.
-        if end > session.tracked_seconds:
+        # you cannot remove footage the video doesn't have.
+        if end > session.video_seconds:
             raise RemovalError(
-                f"Range {position} runs past the end of that Lookout "
-                f"({format_timecode(session.tracked_seconds)} tracked)."
+                f"Range {position} runs past the end of that Lookout's video "
+                f"({session.video_duration_display} long, "
+                f"{format_timecode(session.tracked_seconds)} tracked)."
             )
         if not raw_reason:
             raise RemovalError(f"Range {position} needs a justification.")
@@ -95,19 +106,24 @@ def _parse_removals(request, sessions):
 
         removals.append(TimelapseRemoval(
             session=session,
-            start_seconds=start,
-            end_seconds=end,
+            start_seconds=video_to_tracked(start),
+            # The last second of video can stand for a part-minute of tracking
+            # (a session's tracked time is whole minutes minus its first
+            # bucket), so the end is clamped rather than trusted to convert
+            # inside the session.
+            end_seconds=min(video_to_tracked(end), session.tracked_seconds),
             reason=raw_reason,
         ))
+        video_ranges.append((session.id, start, end))
 
     # Overlapping ranges would double-count the same seconds against the
     # shipper, so they're rejected rather than merged — per Lookout, since
     # offsets only mean anything within one session.
-    for session_id in {removal.session_id for removal in removals}:
+    for session_id in {session_id for session_id, _, _ in video_ranges}:
         overlap = first_overlap(
-            (removal.start_seconds, removal.end_seconds)
-            for removal in removals
-            if removal.session_id == session_id
+            (start, end)
+            for candidate_id, start, end in video_ranges
+            if candidate_id == session_id
         )
         if overlap:
             start, end = overlap

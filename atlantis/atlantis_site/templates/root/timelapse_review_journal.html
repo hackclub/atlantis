@@ -58,6 +58,7 @@
                         <h3>{{ session.tracked_display }} tracked</h3>
                         <p class="review-event-byline">
                             {{ session.session_id }} &middot; {{ session.screenshot_count }} screenshots
+                            &middot; {{ session.video_duration_display }} of video
                             &middot; recorded {{ session.created_at|date:"M j, Y" }}
                         </p>
                         <video class="timelapse-video" src="{{ session.video_url }}" poster="{{ session.thumbnail_url }}" controls preload="none"></video>
@@ -71,7 +72,8 @@
                                     {% for removal in session.review_removals %}
                                         <li>
                                             <span class="is-no">&minus;{{ removal.duration_display }}</span>
-                                            &middot; {{ removal.range_display }}
+                                            &middot; {{ removal.video_range_display }} on the video
+                                            ({{ removal.range_display }} tracked)
                                             &mdash; {{ removal.reason }}
                                         </li>
                                     {% endfor %}
@@ -86,8 +88,10 @@
                                 Remove a range
                             </button>
                             <p class="removal-hint">
-                                Offsets into this Lookout's tracked time (m:ss or h:mm:ss),
-                                up to {{ session.tracked_display }}. Ranges can't overlap.
+                                Offsets read off the video above (m:ss or h:mm:ss), up to
+                                {{ session.video_duration_display }}. The timelapse runs 60&times;,
+                                so one second of it is a recorded minute &mdash; cutting
+                                0:56&ndash;1:11 removes 15 minutes. Ranges can't overlap.
                             </p>
                         {% endif %}
                     </div>
@@ -157,12 +161,50 @@
         const template = document.getElementById('removal-row-template');
         const summary = document.getElementById('removal-summary');
 
+        // One second of video is a recorded minute, so the ranges are typed in
+        // seconds and cost minutes. Mirrors models.parse_timecode /
+        // TRACKED_SECONDS_PER_VIDEO_SECOND, and is only a preview — the server
+        // parses and validates the same values again.
+        const TRACKED_PER_VIDEO_SECOND = 60;
+
+        function parseTimecode(value) {
+            const parts = value.trim().split(':');
+            if (parts.length < 1 || parts.length > 3) return null;
+            if (!parts.every((part) => /^\d+$/.test(part.trim()))) return null;
+            const numbers = parts.map((part) => parseInt(part, 10));
+            if (numbers.slice(1).some((number) => number > 59)) return null;
+            return numbers.reduce((total, number) => total * 60 + number, 0);
+        }
+
+        function trackedDisplay(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            return minutes >= 60
+                ? Math.floor(minutes / 60) + 'h ' + (minutes % 60) + 'm'
+                : minutes + 'm';
+        }
+
         function updateSummary() {
-            const rows = document.querySelectorAll('.removal-row').length;
+            const rows = document.querySelectorAll('.removal-row');
             if (!summary) return;
-            summary.textContent = rows
-                ? rows + (rows === 1 ? ' range' : ' ranges') + ' will be removed.'
-                : 'No time removed.';
+            if (!rows.length) {
+                summary.textContent = 'No time removed.';
+                return;
+            }
+            let tracked = 0;
+            let unreadable = false;
+            rows.forEach((row) => {
+                const start = parseTimecode(row.querySelector('input[name="removal_start"]').value);
+                const end = parseTimecode(row.querySelector('input[name="removal_end"]').value);
+                if (start === null || end === null || end <= start) {
+                    unreadable = true;
+                    return;
+                }
+                tracked += (end - start) * TRACKED_PER_VIDEO_SECOND;
+            });
+            const count = rows.length + (rows.length === 1 ? ' range' : ' ranges');
+            summary.textContent = unreadable
+                ? count + ' \u2014 ' + trackedDisplay(tracked) + ' so far, plus the ranges still being typed.'
+                : count + ' \u2014 ' + trackedDisplay(tracked) + ' will be removed.';
         }
 
         document.querySelectorAll('.add-removal').forEach((button) => {
@@ -183,6 +225,11 @@
             if (!drop) return;
             drop.closest('.removal-row').remove();
             updateSummary();
+        });
+
+        // Keeps the minutes in the sidebar honest while a range is typed.
+        document.addEventListener('input', (event) => {
+            if (event.target.closest('.removal-range')) updateSummary();
         });
     })();
 </script>

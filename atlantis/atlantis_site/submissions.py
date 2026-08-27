@@ -139,8 +139,11 @@ def build_lookout_audit(ship):
 				lines.append("    nothing removed")
 			for removal in removals:
 				removed += removal.duration_seconds
+				# Both timelines: the video range is where to scrub to on the
+				# link above, the tracked range is what it cost.
 				lines.append(
-					f"    removed {removal.range_display} "
+					f"    removed {removal.video_range_display} on the video "
+					f"= {removal.range_display} tracked "
 					f"({removal.duration_display}): {removal.reason}"
 				)
 		blocks.append("\n".join(lines))

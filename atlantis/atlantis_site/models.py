@@ -110,6 +110,32 @@ def parse_timecode(value):
 	return total
 
 
+# Lookout stitches one recorded minute of a session into exactly one second of
+# the compiled video (its worker: "every capture unit (one recorded minute)
+# becomes exactly one second of output"). A reviewer scrubbing that video is
+# reading a timeline sped up sixty times, so 0:56-1:11 on the player is fifteen
+# *minutes* of tracked time, not fifteen seconds. Reviewers type video offsets,
+# because that is all they can see; we store tracked ones, because that is what
+# comes off the shipper's hours.
+TRACKED_SECONDS_PER_VIDEO_SECOND = 60
+
+
+def video_to_tracked(video_seconds):
+	"""An offset read off the compiled video, as tracked seconds."""
+	return int(video_seconds) * TRACKED_SECONDS_PER_VIDEO_SECOND
+
+
+def tracked_to_video(tracked_seconds):
+	"""Tracked seconds, as an offset into the compiled video.
+
+	Rounded up: a trailing part-minute of tracking still occupies a whole
+	second of video, and a length that rounded down would claim the video ends
+	before the footage does.
+	"""
+	tracked_seconds = max(int(tracked_seconds), 0)
+	return -(-tracked_seconds // TRACKED_SECONDS_PER_VIDEO_SECOND)
+
+
 def first_overlap(ranges):
 	"""The first (start, end) in `ranges` that overlaps an earlier one, else None.
 
@@ -618,6 +644,19 @@ class LookoutSession(models.Model):
 		return f"{base}/api/media/{self.session_id}/thumbnail.jpg"
 
 	@property
+	def video_seconds(self):
+		"""How long the compiled video runs, in its own sped-up timeline.
+
+		This is the timeline a timelapse reviewer's ranges are read in — see
+		TRACKED_SECONDS_PER_VIDEO_SECOND.
+		"""
+		return tracked_to_video(self.tracked_seconds or 0)
+
+	@property
+	def video_duration_display(self):
+		return format_timecode(self.video_seconds)
+
+	@property
 	def removed_seconds(self):
 		return self.removals.aggregate(
 			total=models.Sum(
@@ -693,10 +732,12 @@ class TimelapseRemoval(models.Model):
 	"""A stretch of one Lookout session the reviewer refused to pay for.
 
 	Offsets are into the session's tracked timeline, not into the compiled
-	video: the video is sped up, so a range read off it wouldn't map back to
-	the seconds being deducted. Capping end_seconds at the session's
-	tracked_seconds (enforced by the view) is what keeps an adjusted duration
-	from going negative.
+	video the reviewer read them off: the video runs sixty times faster (see
+	TRACKED_SECONDS_PER_VIDEO_SECOND), and it is tracked seconds the deduction
+	is made of. The view converts what was typed on its way in, and
+	video_range_display converts back for anyone re-checking against the
+	player. Capping end_seconds at the session's tracked_seconds (enforced by
+	the view) is what keeps an adjusted duration from going negative.
 	"""
 	review = models.ForeignKey(
 		TimelapseReview,
@@ -741,6 +782,18 @@ class TimelapseRemoval(models.Model):
 	@property
 	def range_display(self):
 		return f"{format_timecode(self.start_seconds)}-{format_timecode(self.end_seconds)}"
+
+	@property
+	def video_range_display(self):
+		"""The same stretch as timecodes on the compiled video's own timeline.
+
+		What the reviewer typed, and what anyone re-checking the call scrubs
+		to. The end rounds up, so a range clamped to the end of a session's
+		tracked time still points at the last second of footage.
+		"""
+		start = tracked_to_video(self.start_seconds)
+		end = tracked_to_video(self.end_seconds)
+		return f"{format_timecode(start)}-{format_timecode(end)}"
 
 
 # shop models
