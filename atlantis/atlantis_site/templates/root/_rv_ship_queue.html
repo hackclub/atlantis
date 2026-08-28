@@ -25,7 +25,7 @@ expects: ships, queue, empty_text
         <tbody>
             {% for ship in ships %}
                 <tr class="rq-row" tabindex="0" data-href="{% url queue.detail ship.id %}">
-                    <td class="rq-col-num">{{ forloop.counter }}</td>
+                    <td class="rq-col-num">{{ ship.queue_index }}</td>
                     <td>
                         <a class="rq-project" href="{% url queue.detail ship.id %}">{{ ship.project.title }}</a>
                         <span class="rq-desc">{{ ship.project.description|truncatechars:110 }}</span>

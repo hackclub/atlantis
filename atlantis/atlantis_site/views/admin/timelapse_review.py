@@ -1,11 +1,18 @@
-"""Internal timelapse review.
+"""Internal Lookout review.
 
 Every journal lands in this queue when it's created and stays there until a
-timelapse reviewer signs it off, optionally cutting ranges of unearned time out
-of the Lookout footage first. The whole flow is invisible to the project owner:
+reviewer signs it off, optionally cutting ranges of unearned time out of the
+Lookout footage first. The whole flow is invisible to the project owner:
 nothing here notifies them, nothing here renders on a page they can load, and a
 project still ships normally while its journals sit in the queue. What waiting
 does hold up is the regular (T1) review queue — see timelapse_cleared_ships.
+
+The unit of work is a *project*, not a journal. Every lapse on a project is the
+same person recording the same build, and judging them one at a time meant
+re-learning that context on every visit and paying a page load between each.
+One project is one page: all of its unreviewed lapses, all of their Lookouts,
+one pass, one decision. The rows written are still one TimelapseReview per
+journal — that part of the record is unchanged.
 """
 
 from django.shortcuts import render, redirect, get_object_or_404
@@ -15,13 +22,15 @@ from django.contrib import messages
 from django.db import transaction
 
 from ...models import (
-    Journal, TimelapseRemoval, TimelapseReview, first_overlap, format_timecode,
-    parse_timecode, video_to_tracked,
+    Journal, Project, TimelapseRemoval, TimelapseReview, first_overlap,
+    format_timecode, parse_timecode, video_to_tracked,
 )
-from ..helpers import check_perms, display_name, record_audit, reviewer_leaderboard
+from ..helpers import (
+    check_perms, display_name, format_minutes, record_audit, reviewer_leaderboard,
+)
 from .queue import (
-    QUEUES, dash_context, decorate_rows, go_to_next, lookout_groups, owner_snapshot,
-    parse_skip, review_context,
+    QUEUES, dash_context, decorate_lapses, decorate_rows, go_to_next,
+    owner_snapshot, parse_skip, review_context,
 )
 
 # Its own permission, not a tier of the T1/T2/T3 ladder. Organizers keep their
@@ -33,22 +42,38 @@ TIMELAPSE_REVIEW_PERMS = [
 
 REASON_MAX_LENGTH = 1000
 INTERNAL_NOTES_MAX_LENGTH = 1000
-# Well past anything a real review needs, and it keeps a crafted POST from
-# turning one form submission into thousands of rows.
-MAX_REMOVALS = 50
+# Well past anything a real pass needs, and it keeps a crafted POST from
+# turning one form submission into thousands of rows. Per submission, which is
+# now a whole project rather than a single lapse.
+MAX_REMOVALS = 200
 
 RECENT_REVIEWS = 25
+
+# How many of a project's lapses the desk lists under it before it stops and
+# says how many more there are. The desk is a queue, not the review page.
+DESK_LAPSE_PREVIEW = 5
 
 
 class RemovalError(Exception):
     """A posted range we refuse to record. The message is shown to the reviewer."""
 
 
-def _parse_removals(request, sessions):
-    """Build the unsaved TimelapseRemoval rows for a posted review.
+def _pending_lapses(project):
+    """The project's unreviewed lapses, oldest first, footage attached."""
+    return list(
+        Journal.objects
+        .filter(project=project, timelapse_review__isnull=True)
+        .prefetch_related("timelapses")
+        .order_by("created_at", "id")
+    )
 
-    `sessions` maps id -> LookoutSession for the journal being reviewed. The
-    rows arrive as four parallel lists, one entry per range the reviewer added.
+
+def _parse_removals(request, sessions):
+    """Build the unsaved TimelapseRemoval rows for a posted pass.
+
+    `sessions` maps id -> LookoutSession across every lapse being signed off,
+    so one form can carry cuts from several lapses at once. The rows arrive as
+    four parallel lists, one entry per range the reviewer added.
 
     Every offset posted here is read off the compiled video, the only timeline
     the reviewer can see, and the video runs sixty times faster than the
@@ -66,7 +91,7 @@ def _parse_removals(request, sessions):
         raise RemovalError("That form didn't come through cleanly. Reload and try again.")
 
     if len(session_ids) > MAX_REMOVALS:
-        raise RemovalError(f"At most {MAX_REMOVALS} removed ranges per journal.")
+        raise RemovalError(f"At most {MAX_REMOVALS} removed ranges per pass.")
 
     removals = []
     # (session id, start, end) on the video timeline, for the overlap check and
@@ -82,7 +107,9 @@ def _parse_removals(request, sessions):
         try:
             session = sessions[int(raw_session)]
         except (ValueError, KeyError):
-            raise RemovalError(f"Range {position} isn't on a Lookout attached to this lapse.")
+            raise RemovalError(
+                f"Range {position} isn't on a Lookout attached to this project."
+            )
 
         start = parse_timecode(raw_start)
         end = parse_timecode(raw_end)
@@ -139,49 +166,58 @@ def _parse_removals(request, sessions):
     return removals
 
 
-def _decorate_sessions(journal, review):
-    """The journal's Lookouts, oldest first, each carrying its removed ranges."""
-    removals = list(review.removals.all()) if review else []
-    sessions = list(journal.timelapses.order_by("created_at"))
-    for session in sessions:
-        session.review_removals = [r for r in removals if r.session_id == session.id]
-    return sessions
+def _reviewed_lapses(project):
+    """The project's signed-off lapses, most recent first, with their cuts.
+
+    Shown read-only under the pass being made: a reviewer deciding what counts
+    on lapse seven should be able to see what was ruled on lapses one to six
+    without leaving the page.
+    """
+    reviewed = list(
+        Journal.objects
+        .filter(project=project, timelapse_review__isnull=False)
+        .select_related("timelapse_review", "timelapse_review__reviewer")
+        .prefetch_related("timelapses", "timelapse_review__removals")
+        .order_by("-timelapse_review__reviewed_at")
+    )
+    for lapse in reviewed:
+        review = lapse.timelapse_review
+        removals = list(review.removals.all())
+        lapse.reviewer_name = display_name(review.reviewer)
+        for session in lapse.timelapses.all():
+            session.review_removals = [r for r in removals if r.session_id == session.id]
+    return reviewed
 
 
 @staff_member_required
 @check_perms(TIMELAPSE_REVIEW_PERMS)
 def timelapse_review_dash(request):
-    # Only the recently-reviewed log is built from this; the pending queue
-    # comes from Queue.pending, which does its own loading.
-    base = (
-        Journal.objects
-        .filter(project__deleted=False)
-        .select_related("project", "project__owner", "project__owner__hackclub_profile")
-    )
+    """The desk: one row per project, its waiting lapses listed underneath."""
+    projects = decorate_rows("lookout", QUEUES["lookout"].pending())
+    for project in projects:
+        project.preview_lapses = project.lapses[:DESK_LAPSE_PREVIEW]
+        project.more_lapses = project.lapse_count - len(project.preview_lapses)
 
-    # Gathered under their projects, projects ordered by their longest wait —
-    # Queue.pending already sorts for exactly this, so the numbering on the page
-    # is the order "Start reviewing" walks. A journal sitting here is holding
-    # its project out of T1, and a project with no ship at all still belongs on
-    # the desk: its lapses are reviewed the same way, whenever it does ship.
-    pending = decorate_rows("lookout", QUEUES["lookout"].pending())
-    groups = lookout_groups(pending)
     reviewed = list(
-        base.filter(timelapse_review__isnull=False)
-        .select_related("timelapse_review", "timelapse_review__reviewer")
+        Journal.objects
+        .filter(project__deleted=False, timelapse_review__isnull=False)
+        .select_related(
+            "project", "timelapse_review", "timelapse_review__reviewer",
+            "timelapse_review__reviewer__hackclub_profile",
+        )
         .prefetch_related("timelapse_review__removals")
         .order_by("-timelapse_review__reviewed_at")[:RECENT_REVIEWS]
     )
 
+    waiting_lapses = sum(project.lapse_count for project in projects)
     return render(request, "root/timelapse_review.html", {
-        "pending": pending,
-        "groups": groups,
+        "projects": projects,
         "reviewed": reviewed,
         "leaderboard": reviewer_leaderboard("timelapse_reviews"),
-        **dash_context(request, "lookout", pending, extra_stats=[{
-            "label": "Projects",
-            "value": str(len(groups)),
-            "sub": "with lapses waiting",
+        **dash_context(request, "lookout", projects, extra_stats=[{
+            "label": "Lapses",
+            "value": str(waiting_lapses),
+            "sub": "across those projects",
         }]),
     })
 
@@ -189,117 +225,159 @@ def timelapse_review_dash(request):
 @staff_member_required
 @check_perms(TIMELAPSE_REVIEW_PERMS)
 def timelapse_review_next(request):
-    """Open the next unreviewed lapse, or return to the desk when none are left."""
+    """Open the next project with waiting lapses, or return to the desk."""
     return go_to_next(request, "lookout", parse_skip(request))
 
 
 @staff_member_required
 @check_perms(TIMELAPSE_REVIEW_PERMS)
-def timelapse_review_journal(request, journal_id):
-    journal = get_object_or_404(
-        Journal.objects.select_related(
-            "project", "project__owner", "project__owner__hackclub_profile", "ship"
-        ),
-        id=journal_id,
+def timelapse_review_project(request, project_id):
+    project = get_object_or_404(
+        Project.objects.select_related("owner", "owner__hackclub_profile"),
+        id=project_id,
+        deleted=False,
     )
-    review = journal.timelapse_review_or_none
+    pending = decorate_lapses(_pending_lapses(project), QUEUES["lookout"].sla_days)
+    reviewed = _reviewed_lapses(project)
 
-    sessions = _decorate_sessions(journal, review)
-    return render(request, "root/timelapse_review_journal.html", {
-        "journal": journal,
-        "project": journal.project,
-        "review": review,
-        "reviewer_name": display_name(review.reviewer) if review else "",
-        "sessions": sessions,
-        "session_count": len(sessions),
-        "screenshot_count": sum(s.screenshot_count for s in sessions),
+    tracked_seconds = sum(lapse.tracked_seconds_total for lapse in pending)
+    return render(request, "root/timelapse_review_project.html", {
+        "project": project,
+        "owner": owner_snapshot(project.owner),
+        "pending": pending,
+        "reviewed": reviewed,
+        "lapse_count": len(pending),
+        "lookout_count": sum(lapse.lookout_count for lapse in pending),
+        "screenshot_count": sum(
+            session.screenshot_count
+            for lapse in pending for session in lapse.timelapses.all()
+        ),
+        "tracked_seconds": tracked_seconds,
+        "tracked_display": format_minutes(tracked_seconds // 60),
+        "held_ships": sorted({lapse.ship_id for lapse in pending if lapse.ship_id}),
         "reason_max_length": REASON_MAX_LENGTH,
-        "owner": owner_snapshot(journal.project.owner),
-        **review_context(request, "lookout", journal, claimable=review is None),
+        **review_context(
+            request, "lookout", project,
+            claimable=bool(pending),
+            waiting_since=pending[0].created_at if pending else None,
+        ),
     })
 
 
 @require_POST
 @staff_member_required
 @check_perms(TIMELAPSE_REVIEW_PERMS)
-def timelapse_decision(request, journal_id):
-    journal = get_object_or_404(Journal.objects.select_related("project"), id=journal_id)
-    sessions = {session.id: session for session in journal.timelapses.all()}
+def timelapse_decision(request, project_id):
+    """Sign off every lapse on the project in one pass."""
+    project = get_object_or_404(Project, id=project_id, deleted=False)
+
+    lapses = _pending_lapses(project)
+    if not lapses:
+        messages.error(request, "Every lapse on that project has already been reviewed.")
+        return redirect("timelapse_review_dash")
 
     internal_notes = request.POST.get("internal_notes", "").strip()
     if not internal_notes:
-        messages.error(request, "This lapse needs a justification before it can be approved.")
-        return redirect("timelapse_review_journal", journal_id=journal_id)
+        messages.error(request, "This pass needs a justification before it can be approved.")
+        return redirect("timelapse_review_project", project_id=project_id)
     if len(internal_notes) > INTERNAL_NOTES_MAX_LENGTH:
         messages.error(
             request,
             f"Internal notes too long (max {INTERNAL_NOTES_MAX_LENGTH} characters).",
         )
-        return redirect("timelapse_review_journal", journal_id=journal_id)
+        return redirect("timelapse_review_project", project_id=project_id)
 
+    sessions = {
+        session.id: session
+        for lapse in lapses
+        for session in lapse.timelapses.all()
+    }
     try:
         removals = _parse_removals(request, sessions)
     except RemovalError as exc:
         messages.error(request, str(exc))
-        return redirect("timelapse_review_journal", journal_id=journal_id)
+        return redirect("timelapse_review_project", project_id=project_id)
 
     with transaction.atomic():
-        journal = get_object_or_404(
-            Journal.objects.select_for_update().select_related("project"), id=journal_id
+        # Re-read inside the transaction: two reviewers opening the same project
+        # is the ordinary way to get here, and a lapse someone else signed off
+        # in the meantime is theirs, not ours to write again.
+        pending = list(
+            Journal.objects.select_for_update()
+            .filter(project=project, timelapse_review__isnull=True)
+            .order_by("created_at", "id")
         )
-        # A review is written once and never edited, so it can be trusted as the
-        # audit record. Two reviewers opening the same journal is the ordinary
-        # way to get here.
-        if TimelapseReview.objects.filter(journal=journal).exists():
-            messages.error(request, "That lapse's timelapse has already been reviewed.")
+        if not pending:
+            messages.error(request, "Every lapse on that project has already been reviewed.")
             return redirect("timelapse_review_dash")
 
-        review = TimelapseReview.objects.create(
-            journal=journal,
-            reviewer=request.user,
-            internal_notes=internal_notes,
-        )
+        reviews = {
+            journal.id: TimelapseReview.objects.create(
+                journal=journal,
+                reviewer=request.user,
+                # One pass, one justification, recorded against each lapse it
+                # covered. What is specific to a cut lives on the cut's own
+                # reason, which is required per range.
+                internal_notes=internal_notes,
+            )
+            for journal in pending
+        }
+
+        kept = []
         for removal in removals:
+            review = reviews.get(removal.session.journal_id)
+            # A range on a lapse that was signed off by someone else mid-pass
+            # has nowhere to go; the rest of the pass still stands.
+            if review is None:
+                continue
             removal.review = review
-        TimelapseRemoval.objects.bulk_create(removals)
+            kept.append(removal)
+        TimelapseRemoval.objects.bulk_create(kept)
 
-    removed_seconds = sum(removal.duration_seconds for removal in removals)
+    removed_seconds = sum(removal.duration_seconds for removal in kept)
+    dropped = len(removals) - len(kept)
 
-    # No send_slack_dm and no notify_followers, deliberately: timelapse review
-    # is internal, and the shipper is not told that it happened or what it cost
+    # No send_slack_dm and no notify_followers, deliberately: Lookout review is
+    # internal, and the shipper is not told that it happened or what it cost
     # them.
     record_audit(
         request,
         "timelapse_review",
-        target=f"Journal #{journal.id} ({journal.project.title})",
+        target=f"Project #{project.id} ({project.title})",
         metadata={
-            "journal_id": journal.id,
-            "review_id": review.id,
-            "project_id": journal.project_id,
-            "project": journal.project.title,
+            "project_id": project.id,
+            "project": project.title,
+            "journal_ids": [journal.id for journal in pending],
+            "review_ids": [review.id for review in reviews.values()],
             "removed_seconds": removed_seconds,
             "removals": [
                 {
                     "session_id": removal.session_id,
+                    "journal_id": removal.session.journal_id,
                     "start_seconds": removal.start_seconds,
                     "end_seconds": removal.end_seconds,
                     "reason": removal.reason,
                 }
-                for removal in removals
+                for removal in kept
             ],
         },
     )
 
-    if removals:
+    lapses = f"{len(pending)} lapse{'' if len(pending) == 1 else 's'}"
+    if kept:
         messages.success(
             request,
-            f'Approved "{journal.title}" with {format_timecode(removed_seconds)} removed '
-            f"across {len(removals)} range{'' if len(removals) == 1 else 's'}.",
+            f'Approved {lapses} on "{project.title}" with {format_timecode(removed_seconds)} '
+            f"removed across {len(kept)} range{'' if len(kept) == 1 else 's'}.",
         )
     else:
-        messages.success(request, f'Approved "{journal.title}" with no time removed.')
+        messages.success(request, f'Approved {lapses} on "{project.title}" with no time removed.')
+    if dropped:
+        messages.warning(
+            request,
+            f"{dropped} range{'' if dropped == 1 else 's'} were dropped: another reviewer "
+            "signed off the lapse they were on while this pass was open.",
+        )
 
-    # On to the next lapse rather than back to the desk — the queue is usually
-    # several lapses deep on one project, and each round trip cost a page load
-    # and a hunt for the row that used to be next.
-    return go_to_next(request, "lookout", parse_skip(request) + [journal.id])
+    # On to the next project rather than back to the desk.
+    return go_to_next(request, "lookout", parse_skip(request) + [project.id])

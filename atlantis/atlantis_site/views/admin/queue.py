@@ -25,14 +25,16 @@ from dataclasses import dataclass
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.cache import cache
-from django.db.models import OuterRef, Subquery
+from django.db.models import Exists, OuterRef, Prefetch, Subquery
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
-from ...models import Journal, LookoutSession, Ship, T1, T2, T3, TimelapseReview
+from ...models import (
+    Journal, LookoutSession, Project, Ship, T1, T2, T3, TimelapseReview,
+)
 from ..helpers import (
     approved_minutes_for_journals, display_name, format_minutes,
     timelapse_cleared_ships, tracked_minutes_for_journals,
@@ -58,6 +60,24 @@ SHIP_STATUS_FOR = {
     "t2": Ship.ShipStatus.T2_QUEUE,
     "t3": Ship.ShipStatus.T3_QUEUE,
 }
+
+
+def project_lapse_prefetch():
+    """The unreviewed lapses of a project, oldest first, footage attached.
+
+    The desk lists every queued project's lapses under it, so they load as two
+    extra queries for the whole page rather than two per project.
+    """
+    return Prefetch(
+        "journals",
+        queryset=(
+            Journal.objects
+            .filter(timelapse_review__isnull=True)
+            .prefetch_related("timelapses")
+            .order_by("created_at", "id")
+        ),
+        to_attr="pending_lapses",
+    )
 
 
 @dataclass(frozen=True)
@@ -91,25 +111,24 @@ class Queue:
         set of people who have been waiting longest.
         """
         if self.key == "lookout":
-            # Lapses are gathered under their project on the desk, so the order
-            # has to gather too: projects sorted by their longest-waiting lapse,
-            # and each project's lapses oldest-first within it. `next` then walks
-            # one project end to end before moving on, which is how the work
-            # actually goes — the same footage, the same person, the same habits,
-            # judged once instead of re-learned six times.
-            oldest_in_project = (
-                Journal.objects
-                .filter(project=OuterRef("project"), timelapse_review__isnull=True)
-                .order_by("created_at", "id")
-                .values("created_at")[:1]
+            # A project, not a lapse. Every lapse on a project is the same
+            # footage of the same person working on the same thing, and judging
+            # them one at a time meant re-learning that context on every visit.
+            # One project is one sitting: all of its lapses, all of their
+            # Lookouts, one decision.
+            pending_lapses = Journal.objects.filter(
+                project=OuterRef("pk"), timelapse_review__isnull=True
             )
             return (
-                Journal.objects
-                .filter(project__deleted=False, timelapse_review__isnull=True)
-                .select_related("project", "project__owner", "project__owner__hackclub_profile")
-                .prefetch_related("timelapses")
-                .annotate(project_wait=Subquery(oldest_in_project))
-                .order_by("project_wait", "project_id", "created_at", "id")
+                Project.objects
+                .filter(deleted=False)
+                .filter(Exists(pending_lapses))
+                .select_related("owner", "owner__hackclub_profile")
+                .prefetch_related(project_lapse_prefetch())
+                .annotate(waiting_since=Subquery(
+                    pending_lapses.order_by("created_at", "id").values("created_at")[:1]
+                ))
+                .order_by("waiting_since", "id")
             )
         base = Ship.objects.filter(status=SHIP_STATUS_FOR[self.key], project__deleted=False)
         if self.key == "t1":
@@ -137,8 +156,8 @@ QUEUES = {
         dash="fraud_review_dash", detail="fraud_review_project", next_url="fraud_review_next",
     ),
     "lookout": Queue(
-        key="lookout", label="Lookout review", short="Lookout", accent="sand", noun="lapse",
-        dash="timelapse_review_dash", detail="timelapse_review_journal",
+        key="lookout", label="Lookout review", short="Lookout", accent="sand", noun="project",
+        dash="timelapse_review_dash", detail="timelapse_review_project",
         next_url="timelapse_review_next",
     ),
 }
@@ -295,17 +314,27 @@ def decorate_rows(queue_key, items):
     queue = QUEUES[queue_key]
     rows = list(items)
     claims = claims_for(queue_key, [row.id for row in rows])
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
+        row.queue_index = index
         row.claim = claims.get(row.id)
-        row.age_display = age_display(row.created_at)
-        row.age_bucket = age_bucket(row.created_at, queue.sla_days)
+        # A lookout row is a project, and a project has been waiting since its
+        # oldest unreviewed lapse — not since the project was created.
+        waiting = getattr(row, "waiting_since", None) or row.created_at
+        row.age_display = age_display(waiting)
+        row.age_bucket = age_bucket(waiting, queue.sla_days)
         if queue_key == "lookout":
-            # Journal.tracked_seconds re-aggregates per row and ignores the
-            # prefetch; the sessions are already in memory, so count them there.
+            decorate_lapses(row.pending_lapses, queue.sla_days)
+            row.lapses = row.pending_lapses
+            row.lapse_count = len(row.lapses)
+            row.lookout_count = sum(len(lapse.timelapses.all()) for lapse in row.lapses)
             row.tracked_seconds_total = sum(
-                session.tracked_seconds for session in row.timelapses.all()
+                lapse.tracked_seconds_total for lapse in row.lapses
             )
             row.tracked_label = format_minutes(row.tracked_seconds_total // 60)
+            # The ships this project can't get into T1 until the queue clears it.
+            row.held_ships = sorted({
+                lapse.ship_id for lapse in row.lapses if lapse.ship_id
+            })
         else:
             row.time_spent_display = format_minutes(
                 approved_minutes_for_journals(row.project.journals.all())
@@ -313,46 +342,19 @@ def decorate_rows(queue_key, items):
     return rows
 
 
-def lookout_groups(rows):
-    """Pending lapses gathered under the project they belong to.
-
-    Shipped or not: the queue is made of journals, and a journal has a project
-    long before it has a ship. Grouping by project is what lets a reviewer take
-    a whole project in one sitting instead of meeting it six times a day in
-    someone else's order.
-
-    `rows` must already be in queue order (see Queue.pending), which is what
-    keeps the numbering here the same as the order `next` walks.
-    """
-    groups = []
-    by_project = {}
-    for index, row in enumerate(rows, start=1):
-        row.queue_index = index
-        group = by_project.get(row.project_id)
-        if group is None:
-            group = by_project[row.project_id] = {
-                "project": row.project,
-                "owner": display_name(row.project.owner),
-                "journals": [],
-                "tracked_seconds": 0,
-                "lookouts": 0,
-                "held_ships": [],
-            }
-            groups.append(group)
-        group["journals"].append(row)
-        group["tracked_seconds"] += row.tracked_seconds_total
-        group["lookouts"] += len(row.timelapses.all())
-        # The ships this project can't get into T1 until the group is cleared.
-        if row.ship_id and row.ship_id not in group["held_ships"]:
-            group["held_ships"].append(row.ship_id)
-
-    for group in groups:
-        oldest = group["journals"][0]  # oldest-first within a project
-        group["count"] = len(group["journals"])
-        group["tracked_display"] = format_minutes(group["tracked_seconds"] // 60)
-        group["age_display"] = oldest.age_display
-        group["age_bucket"] = oldest.age_bucket
-    return groups
+def decorate_lapses(lapses, sla_days):
+    """Annotate a project's lapses with what the desk and the review page show."""
+    for lapse in lapses:
+        # Journal.tracked_seconds re-aggregates per row and ignores the
+        # prefetch; the sessions are already in memory, so count them there.
+        lapse.tracked_seconds_total = sum(
+            session.tracked_seconds for session in lapse.timelapses.all()
+        )
+        lapse.tracked_label = format_minutes(lapse.tracked_seconds_total // 60)
+        lapse.lookout_count = len(lapse.timelapses.all())
+        lapse.age_display = age_display(lapse.created_at)
+        lapse.age_bucket = age_bucket(lapse.created_at, sla_days)
+    return lapses
 
 
 def queue_stats(queue_key, rows, user=None, extra=()):
@@ -397,7 +399,7 @@ def reviews_today(queue_key, user):
     return model.objects.filter(reviewer=user, reviewed_at__gte=start).count()
 
 
-def review_context(request, queue_key, item, claimable=True):
+def review_context(request, queue_key, item, claimable=True, waiting_since=None):
     """Everything the reviewer shell needs to place one item in its queue.
 
     Claiming happens here rather than in each view, because every path onto a
@@ -447,8 +449,8 @@ def review_context(request, queue_key, item, claimable=True):
         "claim_held": claimable,
         "heartbeat_url": reverse("review_heartbeat", args=[queue_key, item.id]),
         "heartbeat_seconds": CLAIM_HEARTBEAT_SECONDS,
-        "age_display": age_display(item.created_at),
-        "age_bucket": age_bucket(item.created_at, queue.sla_days),
+        "age_display": age_display(waiting_since or item.created_at),
+        "age_bucket": age_bucket(waiting_since or item.created_at, queue.sla_days),
     }
 
 

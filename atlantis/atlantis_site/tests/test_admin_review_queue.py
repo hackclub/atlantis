@@ -185,77 +185,19 @@ class DecisionAdvancesTests(BaseTestCase):
 
 
 class LookoutQueueTests(BaseTestCase):
-	def setUp(self):
-		super().setUp()
-		self.reviewer = grant_perms(make_user("lapserev"), "timelapse_review")
-		self.client.force_login(self.reviewer)
-		self.project = make_project(make_user("author"), shippable=True)
+	"""The Lookout queue holds projects, not lapses.
 
-	def test_next_opens_the_longest_waiting_lapse(self):
-		first = make_journal(self.project)
-		make_journal(self.project)
-		response = self.client.get(reverse("timelapse_review_next"))
-		self.assertRedirects(
-			response,
-			reverse("timelapse_review_journal", args=[first.id]),
-			fetch_redirect_response=False,
-		)
-
-	def test_reviewed_lapses_leave_the_queue(self):
-		reviewed = make_journal(self.project)
-		approve_timelapse(reviewed)
-		pending = make_journal(self.project)
-		response = self.client.get(reverse("timelapse_review_next"))
-		self.assertRedirects(
-			response,
-			reverse("timelapse_review_journal", args=[pending.id]),
-			fetch_redirect_response=False,
-		)
-
-	def test_signing_off_opens_the_next_lapse(self):
-		first = make_journal(self.project)
-		second = make_journal(self.project)
-		response = self.client.post(
-			reverse("timelapse_decision", args=[first.id]), {"internal_notes": "clean"}
-		)
-		self.assertRedirects(
-			response,
-			f"{reverse('timelapse_review_journal', args=[second.id])}?skip={first.id}",
-			fetch_redirect_response=False,
-		)
-		self.assertTrue(TimelapseReview.objects.filter(journal=first).exists())
-
-	def test_last_sign_off_returns_to_the_desk(self):
-		only = make_journal(self.project)
-		response = self.client.post(
-			reverse("timelapse_decision", args=[only.id]), {"internal_notes": "clean"}
-		)
-		self.assertRedirects(
-			response, reverse("timelapse_review_dash"), fetch_redirect_response=False
-		)
-
-	def test_pending_is_oldest_first_across_projects(self):
-		other = make_project(make_user("someone-else"), shippable=True)
-		first = make_journal(self.project)
-		second = make_journal(other)
-		rows = self.client.get(reverse("timelapse_review_dash")).context["pending"]
-		self.assertEqual([j.id for j in rows], [first.id, second.id])
-
-
-class LookoutGroupingTests(BaseTestCase):
-	"""The desk gathers lapses under their project, and `next` walks the same way.
-
-	A project's lapses are the same footage and the same person, so they are
-	reviewed together rather than met one at a time in whatever order the
-	global clock happens to produce.
+	Every lapse on a project is the same person recording the same build, so
+	the unit of work is the project: one page, one sitting, one decision.
 	"""
 
 	def setUp(self):
 		super().setUp()
 		self.reviewer = grant_perms(make_user("lapserev"), "timelapse_review")
 		self.client.force_login(self.reviewer)
+		self.project = make_project(make_user("author"), shippable=True)
 
-	def _lapse(self, project, days_ago, **kwargs):
+	def _lapse(self, project, days_ago=0, **kwargs):
 		journal = make_journal(project, **kwargs)
 		Journal.objects.filter(pk=journal.pk).update(
 			created_at=timezone.now() - timedelta(days=days_ago)
@@ -263,94 +205,159 @@ class LookoutGroupingTests(BaseTestCase):
 		journal.refresh_from_db()
 		return journal
 
+	def test_next_opens_the_project_not_the_lapse(self):
+		self._lapse(self.project, 3)
+		self._lapse(self.project, 1)
+		response = self.client.get(reverse("timelapse_review_next"))
+		self.assertRedirects(
+			response,
+			reverse("timelapse_review_project", args=[self.project.id]),
+			fetch_redirect_response=False,
+		)
+
 	def test_projects_are_ordered_by_their_longest_waiting_lapse(self):
 		newer = make_project(make_user("newer"), shippable=True)
 		older = make_project(make_user("older"), shippable=True)
 		self._lapse(newer, 2)
 		self._lapse(older, 9)
 
-		groups = self.client.get(reverse("timelapse_review_dash")).context["groups"]
-		self.assertEqual([g["project"].id for g in groups], [older.id, newer.id])
+		rows = self.client.get(reverse("timelapse_review_dash")).context["projects"]
+		self.assertEqual([p.id for p in rows], [older.id, newer.id])
 
-	def test_a_project_s_lapses_stay_together_and_oldest_first(self):
-		one = make_project(make_user("one"), shippable=True)
-		two = make_project(make_user("two"), shippable=True)
-		# Interleaved in time: without grouping these would alternate.
-		one_old = self._lapse(one, 8)
-		two_mid = self._lapse(two, 6)
-		one_new = self._lapse(one, 4)
-		two_new = self._lapse(two, 2)
+	def test_a_project_waits_from_its_oldest_lapse_not_its_creation(self):
+		self._lapse(self.project, 9)
+		self._lapse(self.project, 1)
+		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
+		self.assertEqual(row.age_display, "9d")
+		self.assertEqual(row.age_bucket, "overdue")
 
-		rows = self.client.get(reverse("timelapse_review_dash")).context["pending"]
-		self.assertEqual(
-			[j.id for j in rows], [one_old.id, one_new.id, two_mid.id, two_new.id]
-		)
+	def test_a_row_totals_the_work_inside_it(self):
+		ship = make_ship(self.project, journal_minutes=(), timelapse_approved=False)
+		self._lapse(self.project, 3, ship=ship, time_spent=90)
+		self._lapse(self.project, 1, ship=ship, time_spent=30)
 
-	def test_next_clears_a_project_before_moving_on(self):
-		one = make_project(make_user("one"), shippable=True)
-		two = make_project(make_user("two"), shippable=True)
-		one_old = self._lapse(one, 8)
-		two_mid = self._lapse(two, 6)
-		one_new = self._lapse(one, 4)
+		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
+		self.assertEqual(row.lapse_count, 2)
+		self.assertEqual(row.lookout_count, 2)
+		self.assertEqual(row.tracked_label, "2h 0m")
+		self.assertEqual(row.held_ships, [ship.id])
 
-		self.assertEqual(next_item_id("lookout"), one_old.id)
-		self.assertEqual(next_item_id("lookout", skip_ids=[one_old.id]), one_new.id)
-		self.assertEqual(
-			next_item_id("lookout", skip_ids=[one_old.id, one_new.id]), two_mid.id
-		)
+	def test_lapses_within_a_project_are_oldest_first(self):
+		second = self._lapse(self.project, 4)
+		first = self._lapse(self.project, 8)
+		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
+		self.assertEqual([lapse.id for lapse in row.lapses], [first.id, second.id])
 
-	def test_numbering_matches_the_order_next_walks(self):
-		one = make_project(make_user("one"), shippable=True)
-		two = make_project(make_user("two"), shippable=True)
-		self._lapse(one, 8)
-		self._lapse(two, 6)
-		self._lapse(one, 4)
-
-		rows = self.client.get(reverse("timelapse_review_dash")).context["pending"]
-		self.assertEqual([j.queue_index for j in rows], [1, 2, 3])
+	def test_the_desk_lists_a_few_lapses_and_counts_the_rest(self):
+		for day in range(8):
+			self._lapse(self.project, 8 - day)
+		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
+		self.assertEqual(len(row.preview_lapses), 5)
+		self.assertEqual(row.more_lapses, 3)
 
 	def test_an_unshipped_project_is_on_the_desk(self):
 		"""A journal has a project long before it has a ship."""
-		unshipped = make_project(make_user("drafting"), shippable=True)
-		journal = make_journal(unshipped)
+		journal = make_journal(self.project)
 		self.assertIsNone(journal.ship_id)
 
-		groups = self.client.get(reverse("timelapse_review_dash")).context["groups"]
-		self.assertEqual([g["project"].id for g in groups], [unshipped.id])
-		self.assertEqual(groups[0]["held_ships"], [])
+		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
+		self.assertEqual(row.id, self.project.id)
+		self.assertEqual(row.held_ships, [])
 
-	def test_a_group_summarises_what_is_inside_it(self):
-		project = make_project(make_user("busy"), shippable=True)
-		ship = make_ship(project, journal_minutes=(), timelapse_approved=False)
-		self._lapse(project, 3, ship=ship, time_spent=90)
-		self._lapse(project, 1, ship=ship, time_spent=30)
+	def test_signing_off_opens_the_next_project(self):
+		other = make_project(make_user("other"), shippable=True)
+		self._lapse(self.project, 6)
+		self._lapse(other, 2)
 
-		group = self.client.get(reverse("timelapse_review_dash")).context["groups"][0]
-		self.assertEqual(group["count"], 2)
-		self.assertEqual(group["tracked_display"], "2h 0m")
-		self.assertEqual(group["lookouts"], 2)
-		self.assertEqual(group["held_ships"], [ship.id])
-		self.assertEqual(group["age_display"], "3d")
-		self.assertEqual(group["owner"], "busy")
+		response = self.client.post(
+			reverse("timelapse_decision", args=[self.project.id]),
+			{"internal_notes": "clean"},
+		)
+		self.assertRedirects(
+			response,
+			f"{reverse('timelapse_review_project', args=[other.id])}?skip={self.project.id}",
+			fetch_redirect_response=False,
+		)
 
-	def test_the_header_counts_projects_as_well_as_lapses(self):
-		one = make_project(make_user("one"), shippable=True)
-		two = make_project(make_user("two"), shippable=True)
-		make_journal(one)
-		make_journal(one)
-		make_journal(two)
+	def test_the_last_pass_returns_to_the_desk(self):
+		self._lapse(self.project)
+		response = self.client.post(
+			reverse("timelapse_decision", args=[self.project.id]),
+			{"internal_notes": "clean"},
+		)
+		self.assertRedirects(
+			response, reverse("timelapse_review_dash"), fetch_redirect_response=False
+		)
+
+	def test_the_header_counts_projects_and_the_lapses_under_them(self):
+		other = make_project(make_user("other"), shippable=True)
+		self._lapse(self.project)
+		self._lapse(self.project)
+		self._lapse(other)
 
 		stats = {s["label"]: s["value"] for s in
 				 self.client.get(reverse("timelapse_review_dash")).context["queue_stats"]}
-		self.assertEqual(stats["Waiting"], "3")
-		self.assertEqual(stats["Projects"], "2")
+		self.assertEqual(stats["Waiting"], "2")
+		self.assertEqual(stats["Lapses"], "3")
 
-	def test_a_reviewed_project_leaves_the_desk_entirely(self):
-		project = make_project(make_user("done"), shippable=True)
-		approve_timelapse(make_journal(project))
-		context = self.client.get(reverse("timelapse_review_dash")).context
+
+class LookoutReviewPageTests(BaseTestCase):
+	"""One page per project: everything waiting on it, and what came before."""
+
+	def setUp(self):
+		super().setUp()
+		self.reviewer = grant_perms(make_user("lapserev"), "timelapse_review")
+		self.client.force_login(self.reviewer)
+		self.project = make_project(make_user("author"), shippable=True)
+
+	def _page(self):
+		return self.client.get(
+			reverse("timelapse_review_project", args=[self.project.id])
+		)
+
+	def test_the_page_carries_every_waiting_lapse(self):
+		first = make_journal(self.project, time_spent=60)
+		second = make_journal(self.project, time_spent=30)
+		context = self._page().context
+
+		self.assertEqual([lapse.id for lapse in context["pending"]], [first.id, second.id])
+		self.assertEqual(context["lapse_count"], 2)
+		self.assertEqual(context["lookout_count"], 2)
+		self.assertEqual(context["tracked_display"], "1h 30m")
+
+	def test_already_signed_off_lapses_are_shown_read_only(self):
+		done = make_journal(self.project, time_spent=60)
+		approve_timelapse(done, reviewer=self.reviewer, internal_notes="watched it")
+		make_journal(self.project, time_spent=30)
+
+		context = self._page().context
+		self.assertEqual([lapse.id for lapse in context["reviewed"]], [done.id])
+		self.assertEqual(context["reviewed"][0].reviewer_name, "lapserev")
+
+	def test_a_finished_project_offers_nothing_to_decide(self):
+		approve_timelapse(make_journal(self.project), reviewer=self.reviewer)
+		context = self._page().context
 		self.assertEqual(list(context["pending"]), [])
-		self.assertEqual(context["groups"], [])
+		self.assertFalse(context["claim_held"])
+		self.assertIsNone(context["queue_position"])
+
+	def test_position_counts_projects(self):
+		other = make_project(make_user("other"), shippable=True)
+		journal = make_journal(other)
+		Journal.objects.filter(pk=journal.pk).update(
+			created_at=timezone.now() - timedelta(days=5)
+		)
+		make_journal(self.project)
+
+		context = self._page().context
+		self.assertEqual(context["queue_position"], 2)
+		self.assertEqual(context["queue_total"], 2)
+
+	def test_a_deleted_project_is_gone(self):
+		make_journal(self.project)
+		self.project.deleted = True
+		self.project.save()
+		self.assertEqual(self._page().status_code, 404)
 
 
 class ClaimTests(BaseTestCase):
@@ -436,12 +443,18 @@ class ClaimTests(BaseTestCase):
 		self.assertIsNone(claim_holder("t1", ship.id))
 		self.assertIsNone(response.context["queue_position"])
 
-	def test_a_reviewed_lapse_is_not_claimed(self):
-		journal = make_journal(self.project)
-		approve_timelapse(journal)
+	def test_a_finished_project_is_not_claimed(self):
+		approve_timelapse(make_journal(self.project))
 		self.client.force_login(grant_perms(make_user("lapserev"), "timelapse_review"))
-		self.client.get(reverse("timelapse_review_journal", args=[journal.id]))
-		self.assertIsNone(claim_holder("lookout", journal.id))
+		self.client.get(reverse("timelapse_review_project", args=[self.project.id]))
+		self.assertIsNone(claim_holder("lookout", self.project.id))
+
+	def test_opening_a_project_pass_claims_the_project(self):
+		make_journal(self.project)
+		reviewer = grant_perms(make_user("lapserev2"), "timelapse_review")
+		self.client.force_login(reviewer)
+		self.client.get(reverse("timelapse_review_project", args=[self.project.id]))
+		self.assertEqual(claim_holder("lookout", self.project.id)["user_id"], reviewer.id)
 
 	def test_release_is_a_no_op_without_a_claim(self):
 		self.assertFalse(release_claim(self.one))

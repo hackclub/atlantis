@@ -312,6 +312,14 @@
     padding: 14px 16px 40px;
 }
 
+/* Every panel in here sets overflow:hidden to clip its own corners, and that
+   zeroes a flex item's automatic minimum size — so in a column flex container
+   with a definite height the cards squashed and clipped their own contents
+   instead of letting the column scroll. Nothing in this column shrinks. */
+.root-page .rv-evidence > * {
+    flex: 0 0 auto;
+}
+
 .root-page .rv-decision {
     padding: 14px 16px 40px;
     border-left: 1px solid var(--oc-line);
@@ -460,16 +468,6 @@
     border-color: #6a5323;
     background: var(--oc-warn-soft);
     color: var(--oc-warn);
-}
-
-.root-page .rv-chip-link {
-    color: var(--oc-tide);
-    text-decoration: none;
-}
-
-.root-page .rv-chip-link:hover {
-    color: var(--oc-tide-2);
-    text-decoration: underline;
 }
 
 /* Waiting time is the one number that should change colour on its own. */
@@ -1126,13 +1124,6 @@
     color: var(--oc-ink-2);
 }
 
-.root-page .rv-readonly p {
-    margin: 4px 0 0;
-    font-size: 13px;
-    line-height: 1.55;
-    color: var(--oc-ink-2);
-}
-
 /* ---------- the decision buttons ---------- */
 
 .root-page .rv-verdicts {
@@ -1221,14 +1212,55 @@
    Lookout removal editor
    ============================================================ */
 
+/* A lapse card holds every Lookout recorded for that entry; the pass holds
+   every unreviewed lapse on the project. Both levels carry a running total so
+   a reviewer can collapse what they are done with. */
+.root-page .rv-lapse-cut {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--oc-bad);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-lookout + .rv-lookout {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--oc-line);
+}
+
+.root-page .rv-lookout-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 0 0 8px;
+    font-size: 12.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-lookout-head strong {
+    color: var(--oc-ink);
+    font-size: 13.5px;
+}
+
+/* The box's shape is pinned, and that matters: preload="none" means no
+   metadata until the reviewer presses play, so a video sized only by width
+   sits at the 300x150 default and then snaps to its intrinsic height mid-page,
+   lurching everything under it. aspect-ratio fixes the height up front and
+   object-fit letterboxes whatever shape the recording turns out to be.
+   Capped by width rather than height so eight of them still scroll sanely. */
 .root-page .rv-lookout-video {
     display: block;
     width: 100%;
-    max-height: 52vh;
+    max-width: 780px;
+    aspect-ratio: 16 / 9;
+    height: auto;
     object-fit: contain;
     border-radius: 9px;
     border: 1px solid var(--oc-line);
-    background: #000;
+    background: var(--oc-abyss);
 }
 
 .root-page .rv-cut-bar {
@@ -1344,6 +1376,55 @@
 .root-page .rv-removal-reason {
     flex-basis: 100%;
     color: var(--oc-ink-2);
+}
+
+/* Lapses on this project that were already ruled on. Read-only, and below the
+   pass being made: it is context for the decision, not part of it. */
+.root-page .rv-reviewed {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.root-page .rv-reviewed-item {
+    padding: 10px 12px;
+    border: 1px solid var(--oc-line);
+    border-radius: 9px;
+    background: var(--oc-bg);
+}
+
+.root-page .rv-reviewed-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.root-page .rv-reviewed-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--oc-ink);
+}
+
+.root-page .rv-reviewed-meta {
+    margin: 4px 0 0;
+    font-size: 12.5px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-reviewed-note {
+    margin: 6px 0 0;
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: var(--oc-sand);
+    border: 1px solid var(--oc-sand-line);
+    color: var(--oc-sand-ink);
+    font-size: 12.5px;
+    line-height: 1.5;
 }
 
 /* ============================================================
@@ -1661,8 +1742,9 @@
     font-style: italic;
 }
 
-/* A project's lapses, gathered. The header is the summary of the block below
-   it, so a reviewer can decide whether to open a project without opening it. */
+/* One project per block: a clickable header row, and under it the lapses the
+   sitting will cover. Opening any of them opens the same page, so the list is
+   there to say what the work is, not to be navigated into. */
 .root-page .rq-group {
     margin-bottom: 12px;
     border: 1px solid var(--oc-line);
@@ -1672,44 +1754,34 @@
     overflow: hidden;
 }
 
-.root-page .rq-group > summary {
+.root-page .rq-group-head {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 10px;
     padding: 11px 14px;
     background: var(--oc-surface-2);
-    cursor: pointer;
-    list-style: none;
 }
 
-.root-page .rq-group > summary::-webkit-details-marker {
-    display: none;
-}
-
-.root-page .rq-group > summary:hover {
+.root-page .rq-group-head:hover {
     background: var(--oc-shallow);
 }
 
-.root-page .rq-group > summary::after {
-    content: "";
-    order: -1;
-    width: 7px;
-    height: 7px;
-    border-right: 2px solid var(--oc-ink-3);
-    border-bottom: 2px solid var(--oc-ink-3);
-    transform: rotate(-45deg);
-    transition: transform 140ms ease;
-}
-
-.root-page .rq-group[open] > summary::after {
-    transform: rotate(45deg);
+.root-page .rq-group-head:focus {
+    outline: none;
+    background: var(--oc-tide-soft);
+    box-shadow: inset 0 0 0 1px var(--oc-tide);
 }
 
 .root-page .rq-group-title {
     font-size: 14.5px;
     font-weight: 700;
     color: var(--oc-ink);
+    text-decoration: none;
+}
+
+.root-page .rq-group-head:hover .rq-group-title {
+    text-decoration: underline;
 }
 
 .root-page .rq-group-owner {
@@ -1746,14 +1818,16 @@
     border-bottom: none;
 }
 
-.root-page .rq-lapse:hover {
-    background: var(--oc-shallow);
+.root-page .rq-lapse-title {
+    flex-shrink: 0;
+    font-size: 13px;
+    color: var(--oc-ink-2);
 }
 
-.root-page .rq-lapse:focus {
-    outline: none;
-    background: var(--oc-tide-soft);
-    box-shadow: inset 0 0 0 1px var(--oc-tide);
+.root-page .rq-lapse-more {
+    color: var(--oc-ink-3);
+    font-size: 12px;
+    font-style: italic;
 }
 
 .root-page .rq-lapse-index {
@@ -1837,10 +1911,6 @@
     .root-page .rv-decision {
         border-left: none;
         border-top: 1px solid var(--oc-line);
-    }
-
-    .root-page .rv-timeline {
-        max-height: none;
     }
 }
 

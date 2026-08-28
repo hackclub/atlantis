@@ -141,6 +141,8 @@
         var unreadable = false;
         var rowCount = 0;
 
+        // Per Lookout, then rolled up per lapse, then across the pass — a
+        // reviewer working one project's six lapses needs all three.
         document.querySelectorAll('.rv-lookout').forEach(function (card) {
             var cardTotal = 0;
             var limit = parseInt(card.dataset.videoSeconds, 10) || 0;
@@ -176,6 +178,18 @@
                     : 'nothing removed';
                 readout.classList.toggle('is-no', Boolean(cardTotal));
             }
+            card.dataset.cutSeconds = String(cardTotal);
+        });
+
+        // The lapse's own line in its (possibly collapsed) card header, so a
+        // reviewer can shut a lapse they are done with and still see what it cost.
+        document.querySelectorAll('.rv-lapse-card').forEach(function (lapse) {
+            var lapseTotal = 0;
+            lapse.querySelectorAll('.rv-lookout').forEach(function (card) {
+                lapseTotal += parseInt(card.dataset.cutSeconds, 10) || 0;
+            });
+            var readout = lapse.querySelector('[data-lapse-total]');
+            if (readout) readout.textContent = lapseTotal ? '−' + trackedDisplay(lapseTotal) : '';
         });
 
         document.querySelectorAll('[data-live-removed]').forEach(function (el) {

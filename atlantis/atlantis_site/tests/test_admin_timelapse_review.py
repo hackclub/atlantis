@@ -71,12 +71,13 @@ class TimecodeTests(BaseTestCase):
 class TimelapseReviewAccessControlTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()
-		self.journal = make_journal(make_project(make_user("author")))
+		self.project = make_project(make_user("author"))
+		self.journal = make_journal(self.project)
 
 	def _urls(self):
 		return [
 			reverse("timelapse_review_dash"),
-			reverse("timelapse_review_journal", args=[self.journal.id]),
+			reverse("timelapse_review_project", args=[self.project.id]),
 		]
 
 	def test_anonymous_redirected(self):
@@ -138,12 +139,12 @@ class TimelapseReviewAccessControlTests(BaseTestCase):
 
 	def test_decision_rejects_get(self):
 		self.client.force_login(grant_perms(make_user("tlrev3"), "timelapse_review"))
-		response = self.client.get(reverse("timelapse_decision", args=[self.journal.id]))
+		response = self.client.get(reverse("timelapse_decision", args=[self.project.id]))
 		self.assertEqual(response.status_code, 405)
 
 	def test_decision_needs_the_permission(self):
 		self.client.force_login(grant_perms(make_user("t1only"), "t1_review"))
-		self.client.post(reverse("timelapse_decision", args=[self.journal.id]), {})
+		self.client.post(reverse("timelapse_decision", args=[self.project.id]), {})
 		self.assertFalse(TimelapseReview.objects.exists())
 
 
@@ -154,25 +155,38 @@ class TimelapseReviewQueueTests(BaseTestCase):
 		self.client.force_login(self.reviewer)
 		self.project = make_project(make_user("author"), shippable=True)
 
-	def test_every_submitted_journal_enters_the_queue(self):
+	def test_a_project_enters_the_queue_once_carrying_all_its_lapses(self):
 		first = make_journal(self.project)
 		second = make_journal(self.project)
 		response = self.client.get(reverse("timelapse_review_dash"))
-		self.assertEqual(list(response.context["pending"]), [first, second])
 
-	def test_reviewed_journals_leave_the_queue(self):
+		self.assertEqual([p.id for p in response.context["projects"]], [self.project.id])
+		self.assertEqual(
+			[lapse.id for lapse in response.context["projects"][0].lapses],
+			[first.id, second.id],
+		)
+
+	def test_a_project_stays_queued_while_any_lapse_is_unreviewed(self):
 		reviewed = make_journal(self.project)
 		pending = make_journal(self.project)
 		approve_timelapse(reviewed, reviewer=self.reviewer)
 
 		response = self.client.get(reverse("timelapse_review_dash"))
-		self.assertEqual(list(response.context["pending"]), [pending])
+		self.assertEqual([p.id for p in response.context["projects"]], [self.project.id])
+		self.assertEqual(
+			[lapse.id for lapse in response.context["projects"][0].lapses], [pending.id]
+		)
 		self.assertEqual(list(response.context["reviewed"]), [reviewed])
+
+	def test_a_fully_reviewed_project_leaves_the_queue(self):
+		approve_timelapse(make_journal(self.project), reviewer=self.reviewer)
+		response = self.client.get(reverse("timelapse_review_dash"))
+		self.assertEqual(list(response.context["projects"]), [])
 
 	def test_deleted_projects_are_not_queued(self):
 		make_journal(make_project(make_user("gone"), deleted=True))
 		response = self.client.get(reverse("timelapse_review_dash"))
-		self.assertEqual(list(response.context["pending"]), [])
+		self.assertEqual(list(response.context["projects"]), [])
 
 
 class TimelapseDecisionTests(BaseTestCase):
@@ -185,9 +199,9 @@ class TimelapseDecisionTests(BaseTestCase):
 		self.journal = make_journal(self.project, time_spent=60)
 		self.session = self.journal.timelapses.get()
 
-	def _decide(self, journal=None, ranges=(), **extra):
-		"""POST a decision. `ranges` is (session, start, end, reason) tuples."""
-		journal = journal or self.journal
+	def _decide(self, project=None, ranges=(), **extra):
+		"""POST a pass. `ranges` is (session, start, end, reason) tuples."""
+		project = project or self.project
 		data = {
 			"internal_notes": "reviewed",
 			"removal_session": [str(getattr(r[0], "id", r[0])) for r in ranges],
@@ -196,7 +210,7 @@ class TimelapseDecisionTests(BaseTestCase):
 			"removal_reason": [r[3] for r in ranges],
 		}
 		data.update(extra)
-		return self.client.post(reverse("timelapse_decision", args=[journal.id]), data)
+		return self.client.post(reverse("timelapse_decision", args=[project.id]), data)
 
 	def test_approve_with_no_removals(self):
 		self._decide(internal_notes="looks real")
@@ -227,7 +241,7 @@ class TimelapseDecisionTests(BaseTestCase):
 		session = journal.timelapses.get()
 		self.assertEqual(session.video_seconds, 120)
 
-		self._decide(journal=journal, ranges=[(session, "0:56", "1:11", "afk")])
+		self._decide(ranges=[(session, "0:56", "1:11", "afk")])
 
 		removal = TimelapseRemoval.objects.get()
 		self.assertEqual(removal.duration_seconds, 15 * 60)
@@ -274,11 +288,13 @@ class TimelapseDecisionTests(BaseTestCase):
 
 		log = AuditLog.objects.get(action="timelapse_review")
 		self.assertEqual(log.actor, self.reviewer)
+		self.assertEqual(log.metadata["project_id"], self.project.id)
+		self.assertEqual(log.metadata["journal_ids"], [self.journal.id])
 		self.assertEqual(log.metadata["removed_seconds"], 1500)
 		self.assertEqual(log.metadata["removals"][0]["reason"], "afk")
 
 	def test_blank_rows_are_ignored(self):
-		self.client.post(reverse("timelapse_decision", args=[self.journal.id]), {
+		self.client.post(reverse("timelapse_decision", args=[self.project.id]), {
 			"internal_notes": "reviewed",
 			"removal_session": [str(self.session.id)],
 			"removal_start": [""],
@@ -288,7 +304,21 @@ class TimelapseDecisionTests(BaseTestCase):
 		self.assertTrue(TimelapseReview.objects.exists())
 		self.assertFalse(TimelapseRemoval.objects.exists())
 
-	def test_a_journal_is_only_reviewed_once(self):
+	def test_one_pass_signs_off_every_waiting_lapse_on_the_project(self):
+		second = make_journal(self.project, time_spent=30)
+		self._decide(internal_notes="watched both")
+
+		self.assertEqual(TimelapseReview.objects.count(), 2)
+		self.assertEqual(
+			sorted(TimelapseReview.objects.values_list("journal_id", flat=True)),
+			sorted([self.journal.id, second.id]),
+		)
+		# One pass, one justification, recorded against each lapse it covered.
+		self.assertEqual(
+			{r.internal_notes for r in TimelapseReview.objects.all()}, {"watched both"}
+		)
+
+	def test_a_lapse_is_only_reviewed_once(self):
 		self._decide()
 		response = self._decide(ranges=[(self.session, "0:05", "0:30", "afk")])
 
@@ -296,6 +326,16 @@ class TimelapseDecisionTests(BaseTestCase):
 		self.assertFalse(TimelapseRemoval.objects.exists())
 		self.assertIn(
 			"already been reviewed", " ".join(message_texts(response))
+		)
+
+	def test_a_lapse_added_after_the_pass_queues_the_project_again(self):
+		self._decide()
+		later = make_journal(self.project, time_spent=45)
+
+		response = self.client.get(reverse("timelapse_review_dash"))
+		self.assertEqual([p.id for p in response.context["projects"]], [self.project.id])
+		self.assertEqual(
+			[lapse.id for lapse in response.context["projects"][0].lapses], [later.id]
 		)
 
 	def test_justification_is_required(self):
@@ -320,9 +360,9 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 		self.journal = make_journal(self.project, time_spent=60)
 		self.session = self.journal.timelapses.get()
 
-	def _post(self, ranges, journal=None):
-		journal = journal or self.journal
-		return self.client.post(reverse("timelapse_decision", args=[journal.id]), {
+	def _post(self, ranges, project=None):
+		project = project or self.project
+		return self.client.post(reverse("timelapse_decision", args=[project.id]), {
 			"internal_notes": "reviewed",
 			"removal_session": [str(getattr(r[0], "id", r[0])) for r in ranges],
 			"removal_start": [r[1] for r in ranges],
@@ -396,7 +436,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 		session.save(update_fields=["tracked_seconds"])
 
 		self.assertEqual(session.video_seconds, 9)
-		self._post([(session, "0:00", "0:09", "nothing on screen")], journal=journal)
+		self._post([(session, "0:00", "0:09", "nothing on screen")])
 
 		removal = TimelapseRemoval.objects.get()
 		self.assertEqual(removal.end_seconds, 9 * 60)
@@ -415,13 +455,19 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 		response = self._post([(self.session, "five minutes", "0:30", "afk")])
 		self._assert_rejected(response, "couldn't read that range")
 
-	def test_lookout_from_another_journal_rejected(self):
+	def test_a_lookout_on_a_sibling_lapse_is_part_of_the_same_pass(self):
+		"""The pass covers the project, so its other waiting lapses are in scope."""
 		other = make_journal(self.project, time_spent=60)
-		response = self._post([(other.timelapses.get(), "0:05", "0:30", "afk")])
-		self._assert_rejected(response, "isn't on a Lookout attached to this lapse")
+		self._post([(other.timelapses.get(), "0:05", "0:30", "afk")])
+		self.assertEqual(TimelapseRemoval.objects.get().review.journal, other)
+
+	def test_lookout_from_another_project_rejected(self):
+		elsewhere = make_journal(make_project(make_user("stranger")), time_spent=60)
+		response = self._post([(elsewhere.timelapses.get(), "0:05", "0:30", "afk")])
+		self._assert_rejected(response, "isn't on a Lookout attached to this project")
 
 	def test_mismatched_row_lengths_rejected(self):
-		response = self.client.post(reverse("timelapse_decision", args=[self.journal.id]), {
+		response = self.client.post(reverse("timelapse_decision", args=[self.project.id]), {
 			"internal_notes": "reviewed",
 			"removal_session": [str(self.session.id), str(self.session.id)],
 			"removal_start": ["0:05"],
@@ -436,7 +482,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 
 	def test_over_long_internal_notes_rejected(self):
 		response = self.client.post(
-			reverse("timelapse_decision", args=[self.journal.id]),
+			reverse("timelapse_decision", args=[self.project.id]),
 			{"internal_notes": "x" * 1001},
 		)
 		self._assert_rejected(response, "Internal notes too long")
