@@ -1,10 +1,78 @@
-{% extends 'root/_base_root.html' %}
+{% extends 'root/_review_shell.html' %}
 {% load static %}
 
 {% block page_id %}admin-project-review-page{% endblock %}
-{% block title %}Review Project{% endblock %}
+{% block title %}T1 &middot; {{ ship.project.title }}{% endblock %}
 
-{% block content %}
+{% block subject_title %}{{ ship.project.title }}{% endblock %}
+{% block subject_byline %}@{{ owner.name }} &middot; {{ subject.approved_display }} &middot; waiting {{ age_display }}{% endblock %}
+
+{% block topbar_actions %}
+    <a class="rv-btn" href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener" data-key="u">Owner<kbd>U</kbd></a>
+    {% if ship.project.printablesUrl %}
+        <a class="rv-btn" href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer noopener" data-key="p">Printables<kbd>P</kbd></a>
+    {% endif %}
+{% endblock %}
+
+{% block shortcut_rows %}
+    <dt><kbd>A</kbd></dt><dd>Approve &mdash; sends the ship to T2</dd>
+    <dt><kbd>R</kbd></dt><dd>Reject</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Approve, from inside a text box</dd>
+    <dt><kbd>F</kbd></dt><dd>Jump to Feedback</dd>
+    <dt><kbd>I</kbd></dt><dd>Jump to Internal notes</dd>
+    <dt><kbd>U</kbd></dt><dd>Open the owner's profile</dd>
+    <dt><kbd>P</kbd></dt><dd>Open the Printables listing</dd>
+    <dt><kbd>M</kbd></dt><dd>Open the editor model</dd>
+    <dt><kbd>C</kbd></dt><dd>Copy the Printables link</dd>
+{% endblock %}
+
+{% block evidence %}
+    {% include "root/_rv_overview.html" %}
+    {% include "root/_rv_journals.html" with journal_empty="No journal entries. How did this happen?" %}
+    {% include "root/_rv_history.html" %}
+{% endblock %}
+
+{% block decision %}
+<form class="rv-form" method="POST"
+      action="{% url 't1_decision' ship.id %}{% if skip_value %}?skip={{ skip_value }}{% endif %}">
+    {% csrf_token %}
+    <h2 class="rv-form-title">T1 decision</h2>
+    <p class="rv-form-note">Approving moves this ship into the T2 queue. Either way the
+        shipper and you are both pinged in the review checkpoint channel.</p>
+
+    {% include "root/_rv_checks.html" %}
+
+    <label class="rv-field">
+        <span class="rv-field-label">Feedback <em>public</em><kbd>F</kbd></span>
+        <textarea name="feedback" id="rv-feedback" data-focus="f" rows="4" maxlength="1000" required
+                  placeholder="What the shipper is told about this decision."></textarea>
+        <span class="rv-counter" data-counter-for="rv-feedback" data-max="1000"></span>
+    </label>
+
+    <label class="rv-field">
+        <span class="rv-field-label">Internal notes <em>reviewers only</em><kbd>I</kbd></span>
+        <textarea name="internal_notes" id="rv-internal" data-focus="i" rows="3" maxlength="1000" required
+                  placeholder="Why, for whoever picks this up next."></textarea>
+        <span class="rv-counter" data-counter-for="rv-internal" data-max="1000"></span>
+    </label>
+
+    <div class="rv-verdicts">
+        <button type="submit" name="approved" value="approved" class="rv-verdict rv-verdict-good"
+                data-key="a" data-primary {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            Approve<kbd>A</kbd>
+        </button>
+        <button type="submit" name="approved" value="denied" class="rv-verdict rv-verdict-bad"
+                data-key="r" {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            Reject<kbd>R</kbd>
+        </button>
+    </div>
+    {% if ship.project.locked %}
+        <p class="rv-form-note is-no">This project is locked, so no decision can be recorded.</p>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block page_scripts %}
 <script type="importmap">
     {
         "imports": {
@@ -14,61 +82,4 @@
     }
 </script>
 <script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
-<div class="content">
-    {% include "root/_messages_admin.html" %}
-    <div class="review-layout">
-        <div class="review-main">
-            {% include "root/_review_project_header.html" with heading="Review Project" %}
-            {% include "root/_review_journals.html" with journal_empty="No journal entries. How did this happen?" %}
-            {% include "root/_review_history.html" %}
-        </div>
-        <aside class="review-sidebar">
-            <h2>Review</h2>
-            <form action="{% url 't1_decision' ship.id %}" method="POST" class="review-form">
-                {% csrf_token %}
-                <div class="form-row">
-                    <input type="text" name="feedback" placeholder="Feedback (1000 characters, public)" maxlength=1000 required>
-                </div>
-                <div class="form-row">
-                    <input type="text" name="internal_notes" placeholder="Internal Notes (1000 characters, private)" maxlength=1000 required>
-                </div>
-                <div class="form-row">
-                    {% if hasMake %}
-                        <span>Has make?: <span class="is-yes">True</span></span>
-                    {% else %}
-                        <span>Has make?: <span class="is-no">False</span></span>
-                    {% endif %}
-                </div>
-                <div class="form-row">
-                    <label for="approved_checkbox">Approved?</label>
-                    <input type="checkbox" id="approved_checkbox">
-                    <input type="hidden" id="approved_hidden" name="approved" value="denied">
-                </div>
-                {% if not ship.project.locked %}
-                    <button id="review_button" type="submit">Reject</button>
-                {% else %}
-                    <button id="review_button" type="submit" disabled title="Can't review a locked project.">Reject</button>
-                {% endif %}
-            </form>
-        </aside>
-    </div>
-</div>
-
-<script>
-    const approvedCheckbox = document.getElementById('approved_checkbox');
-    const approvedHidden = document.getElementById('approved_hidden');
-    const submitButton = document.getElementById('review_button');
-
-    function updateButtonText() {
-        if (approvedCheckbox.checked) {
-            approvedHidden.value = 'approved';
-            submitButton.textContent = 'Approve';
-        } else {
-            approvedHidden.value = 'denied';
-            submitButton.textContent = 'Reject';
-        }
-    }
-
-    approvedCheckbox.addEventListener('change', updateButtonText);
-</script>
 {% endblock %}

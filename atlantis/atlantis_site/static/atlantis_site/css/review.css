@@ -1,0 +1,1865 @@
+/* ============================================================
+   Reviewer desks and the reviewer shell.
+
+   Scoped under `.root-page` like the rest of the admin theme (see admin.css
+   for why that matters), and imported after it so it can specialise the shared
+   card and table rules for the two shapes this file owns:
+
+     .rq-*  the desks — a queue, its header numbers, its table
+     .rv-*  the shell — the top bar, the evidence column, the decision panel
+
+   The shell is the only admin page that takes over the viewport. Both of its
+   columns scroll on their own, so the decision panel is always on screen next
+   to the thing it decides about; nothing here should reintroduce a page-level
+   scrollbar above 1100px.
+   ============================================================ */
+
+/* Each desk carries a colour, so a reviewer with three tabs open knows which
+   one they are looking at before they read a word. */
+.root-page .rv-accent-tide {
+    --rv-accent: var(--oc-tide);
+    --rv-accent-soft: var(--oc-tide-soft);
+}
+
+.root-page .rv-accent-lagoon {
+    --rv-accent: var(--oc-lagoon);
+    --rv-accent-soft: #102b2e;
+}
+
+.root-page .rv-accent-warn {
+    --rv-accent: var(--oc-warn);
+    --rv-accent-soft: var(--oc-warn-soft);
+}
+
+.root-page .rv-accent-sand {
+    --rv-accent: #d8b26a;
+    --rv-accent-soft: var(--oc-sand);
+}
+
+/* ============================================================
+   The shell
+   ============================================================ */
+
+.root-page.review-shell {
+    display: block;
+    height: 100dvh;
+    overflow: hidden;
+}
+
+.root-page .rv {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+    border-top: 3px solid var(--rv-accent, var(--oc-tide));
+}
+
+/* ---------- top bar ---------- */
+
+.root-page .rv-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 9px 16px;
+    background: var(--oc-surface);
+    border-bottom: 1px solid var(--oc-line);
+}
+
+.root-page .rv-nav,
+.root-page .rv-actions,
+.root-page .rv-where {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.root-page .rv-actions {
+    margin-left: auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+.root-page .rv-subject {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 220px;
+    line-height: 1.25;
+}
+
+.root-page .rv-subject-title {
+    font-weight: 600;
+    font-size: 14.5px;
+    color: var(--oc-ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.root-page .rv-subject-byline {
+    font-size: 12px;
+    color: var(--oc-ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.root-page .rv-queue-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--rv-accent-soft, var(--oc-tide-soft));
+    border: 1px solid var(--rv-accent, var(--oc-tide));
+    color: var(--rv-accent, var(--oc-tide));
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.root-page .rv-position {
+    font-size: 12.5px;
+    color: var(--oc-ink-3);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.root-page .rv-position strong {
+    color: var(--oc-ink);
+}
+
+.root-page .rv-position-off {
+    font-style: italic;
+}
+
+.root-page .rv-progress {
+    height: 2px;
+    background: var(--oc-shallow);
+    flex-shrink: 0;
+}
+
+.root-page .rv-progress-fill {
+    display: block;
+    height: 100%;
+    width: 0;
+    background: var(--rv-accent, var(--oc-tide));
+    transition: width 240ms ease;
+}
+
+/* ---------- buttons ---------- */
+
+.root-page .rv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-surface-2);
+    color: var(--oc-ink-2);
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.3;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+
+.root-page .rv-btn:hover:not([disabled]):not([aria-disabled="true"]) {
+    background: var(--oc-shallow);
+    border-color: var(--rv-accent, var(--oc-tide));
+    color: var(--oc-ink);
+}
+
+.root-page .rv-btn:focus-visible {
+    outline: 2px solid var(--oc-tide);
+    outline-offset: 2px;
+}
+
+.root-page .rv-btn[disabled],
+.root-page .rv-btn-off {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.root-page .rv-btn-primary {
+    background: var(--oc-btn);
+    border-color: var(--oc-btn);
+    color: var(--oc-on-accent);
+    font-weight: 600;
+}
+
+.root-page .rv-btn-primary:hover:not([disabled]) {
+    background: var(--oc-btn-2);
+    border-color: var(--oc-btn-2);
+    color: var(--oc-on-accent);
+}
+
+.root-page .rv-btn-danger {
+    border-color: var(--oc-bad-line);
+    color: var(--oc-bad);
+}
+
+.root-page .rv-btn-danger:hover:not([disabled]) {
+    background: var(--oc-bad-soft);
+    border-color: var(--oc-bad);
+    color: var(--oc-bad-strong);
+}
+
+.root-page .rv-btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    font-size: 16px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+/* Keycaps ride along inside the control they belong to, so the shortcut is
+   learned from the button rather than from a list nobody opens. */
+.root-page .rv kbd,
+.root-page .rq kbd,
+.root-page .rv-shortcuts kbd {
+    display: inline-block;
+    min-width: 17px;
+    padding: 1px 4px;
+    border: 1px solid var(--oc-line-2);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    background: var(--oc-field);
+    color: var(--oc-ink-3);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.root-page .rv-speed {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-speed select {
+    padding: 4px 6px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 7px;
+    background: var(--oc-field);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 12px;
+}
+
+/* ---------- banners and messages ---------- */
+
+.root-page .rv-banner {
+    padding: 9px 16px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--oc-line);
+    flex-shrink: 0;
+}
+
+.root-page .rv-banner-warn {
+    background: var(--oc-warn-soft);
+    color: var(--oc-warn);
+}
+
+.root-page .rv-banner a {
+    color: inherit;
+    font-weight: 600;
+}
+
+.root-page .rv-messages {
+    display: grid;
+    gap: 6px;
+    padding: 10px 16px 0;
+    flex-shrink: 0;
+}
+
+.root-page .rv-messages .message {
+    margin: 0;
+}
+
+/* ---------- the two columns ---------- */
+
+.root-page .rv-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 384px;
+    flex: 1;
+    min-height: 0;
+}
+
+.root-page .rv-evidence,
+.root-page .rv-decision {
+    min-width: 0;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.root-page .rv-evidence {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px 16px 40px;
+}
+
+.root-page .rv-decision {
+    padding: 14px 16px 40px;
+    border-left: 1px solid var(--oc-line);
+    background: var(--oc-bg);
+}
+
+/* ---------- panels and collapsible cards ---------- */
+
+.root-page .rv-panel,
+.root-page .rv-card {
+    background: var(--oc-surface);
+    border: 1px solid var(--oc-line);
+    border-radius: var(--oc-radius);
+    box-shadow: var(--oc-shadow);
+    overflow: hidden;
+}
+
+.root-page .rv-panel {
+    padding: 16px 18px;
+}
+
+.root-page .rv-card > summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: var(--oc-surface-2);
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.root-page .rv-card > summary::-webkit-details-marker {
+    display: none;
+}
+
+.root-page .rv-card > summary:hover {
+    background: var(--oc-shallow);
+}
+
+.root-page .rv-card-title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--oc-ink);
+    flex-shrink: 0;
+}
+
+/* The summary line is what makes collapsing safe: a closed panel still says
+   what is inside it, so shutting one is not the same as hiding it. */
+.root-page .rv-card-summary {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.root-page .rv-card-key {
+    flex-shrink: 0;
+}
+
+.root-page .rv-card > summary::after {
+    content: "";
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid var(--oc-ink-3);
+    border-bottom: 2px solid var(--oc-ink-3);
+    transform: rotate(-45deg);
+    transition: transform 140ms ease;
+}
+
+.root-page .rv-card[open] > summary::after {
+    transform: rotate(45deg);
+}
+
+.root-page .rv-card-body {
+    padding: 14px;
+    border-top: 1px solid var(--oc-line);
+}
+
+/* ---------- overview ---------- */
+
+.root-page .rv-overview-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.root-page .rv-title {
+    margin: 0 0 6px;
+    font-size: 20px;
+    line-height: 1.25;
+}
+
+.root-page .rv-title a {
+    color: var(--oc-ink);
+    text-decoration: none;
+}
+
+.root-page .rv-title a:hover {
+    color: var(--oc-tide-2);
+    text-decoration: underline;
+}
+
+.root-page .rv-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0;
+}
+
+.root-page .rv-chip {
+    display: inline-block;
+    padding: 2px 8px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 999px;
+    background: var(--oc-shallow);
+    color: var(--oc-ink-2);
+    font-size: 11.5px;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+.root-page .rv-chip-quiet {
+    color: var(--oc-ink-3);
+    background: transparent;
+}
+
+.root-page .rv-chip-good {
+    border-color: #1f5a49;
+    background: var(--oc-good-soft);
+    color: var(--oc-good);
+}
+
+.root-page .rv-chip-bad {
+    border-color: var(--oc-bad-line);
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad);
+}
+
+.root-page .rv-chip-warn {
+    border-color: #6a5323;
+    background: var(--oc-warn-soft);
+    color: var(--oc-warn);
+}
+
+.root-page .rv-chip-link {
+    color: var(--oc-tide);
+    text-decoration: none;
+}
+
+.root-page .rv-chip-link:hover {
+    color: var(--oc-tide-2);
+    text-decoration: underline;
+}
+
+/* Waiting time is the one number that should change colour on its own. */
+.root-page .rv-age-fresh {
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-age-aging {
+    border-color: #6a5323;
+    background: var(--oc-warn-soft);
+    color: var(--oc-warn);
+}
+
+.root-page .rv-age-overdue {
+    border-color: var(--oc-bad-line);
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad);
+    font-weight: 600;
+}
+
+.root-page .rv-description {
+    margin: 12px 0;
+    color: var(--oc-ink-2);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.root-page .rv-internal-note {
+    padding: 9px 12px;
+    border: 1px solid var(--oc-sand-line);
+    border-radius: 9px;
+    background: var(--oc-sand);
+    color: var(--oc-sand-ink);
+    font-size: 13px;
+}
+
+.root-page .rv-stat-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 1px;
+    margin: 14px 0;
+    padding: 0;
+    background: var(--oc-line);
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.root-page .rv-stat-strip > div {
+    padding: 9px 12px;
+    background: var(--oc-surface);
+}
+
+.root-page .rv-stat-strip dt {
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-stat-strip dd {
+    margin: 2px 0 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--oc-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-stat-strip .rv-stat-sub {
+    font-size: 11.5px;
+    font-weight: 400;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-owner {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 9px 0;
+    border-top: 1px solid var(--oc-line);
+    font-size: 13px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.root-page .rv-owner-name {
+    color: var(--oc-tide);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.root-page .rv-owner-name:hover {
+    text-decoration: underline;
+}
+
+.root-page .rv-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-top: 12px;
+    border-top: 1px solid var(--oc-line);
+}
+
+/* ---------- the journal timeline ---------- */
+
+.root-page .rv-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.root-page .rv-ship-event {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 7px 12px;
+    border: 1px dashed var(--oc-line-2);
+    border-radius: 9px;
+    background: var(--oc-shallow);
+    font-size: 12.5px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-ship-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--rv-accent, var(--oc-tide));
+}
+
+.root-page .rv-ship-meta {
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-entry {
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--oc-bg);
+}
+
+.root-page .rv-entry-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.root-page .rv-entry-head h3 {
+    margin: 0;
+    font-size: 14.5px;
+}
+
+.root-page .rv-entry-meta {
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-entry-media {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.root-page .rv-entry-image {
+    width: 180px;
+    height: 130px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid var(--oc-line);
+}
+
+.root-page .rv-entry-stl {
+    width: 200px;
+    height: 130px;
+    border-radius: 8px;
+}
+
+.root-page .rv-lapses {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.root-page .rv-lapse {
+    margin: 0;
+    width: 220px;
+}
+
+.root-page .rv-lapse video {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--oc-line);
+    background: #000;
+}
+
+.root-page .rv-lapse figcaption {
+    margin-top: 4px;
+    font-size: 11.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-lapse-empty {
+    margin: 8px 0 0;
+    font-size: 12.5px;
+}
+
+.root-page .rv-entry-foot {
+    margin: 10px 0 0;
+    font-size: 12.5px;
+}
+
+.root-page .rv-empty {
+    margin: 0;
+    color: var(--oc-ink-3);
+    font-size: 13px;
+    font-style: italic;
+}
+
+/* ---------- history ---------- */
+
+.root-page .rv-comment-form {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+}
+
+.root-page .rv-comment-form textarea {
+    flex: 1;
+    min-width: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-field);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 13px;
+    resize: vertical;
+}
+
+.root-page .rv-history {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.root-page .rv-history-item {
+    padding: 10px 12px;
+    border: 1px solid var(--oc-line);
+    border-left: 3px solid var(--oc-line-2);
+    border-radius: 9px;
+    background: var(--oc-bg);
+    font-size: 13px;
+}
+
+/* Reviewer-only notes keep the warm cast they have everywhere else, so an
+   internal comment can never read as something the owner has seen. */
+.root-page .rv-history-comment {
+    background: var(--oc-sand);
+    border-color: var(--oc-sand-line);
+    border-left-color: var(--oc-sand-ink);
+    color: var(--oc-sand-ink);
+}
+
+.root-page .rv-history-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 5px;
+}
+
+.root-page .rv-history-label {
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.root-page .rv-history-byline {
+    font-size: 11.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-history-comment .rv-history-byline {
+    color: #b6a37f;
+}
+
+.root-page .rv-history-item p {
+    margin: 3px 0;
+    line-height: 1.5;
+}
+
+.root-page .rv-history-field {
+    display: inline-block;
+    min-width: 74px;
+    color: var(--oc-ink-3);
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.root-page .rv-history-verdict {
+    font-weight: 600;
+}
+
+/* ---------- Airtable justification ---------- */
+
+.root-page .rv-airtable-state {
+    margin: 0 0 8px;
+    font-size: 13px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-airtable-justification {
+    margin: 0;
+    padding: 12px 14px;
+    max-height: 360px;
+    overflow: auto;
+    background: var(--oc-shallow);
+    border: 1px solid var(--oc-line);
+    border-radius: 9px;
+    color: var(--oc-ink-2);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   The decision panel
+   ============================================================ */
+
+.root-page .rv-form {
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    padding: 15px 16px;
+    background: var(--oc-surface);
+    border: 1px solid var(--oc-line);
+    border-radius: var(--oc-radius);
+    box-shadow: var(--oc-shadow);
+}
+
+.root-page .rv-form-busy {
+    opacity: 0.65;
+    pointer-events: none;
+}
+
+.root-page .rv-form-title {
+    margin: 0;
+    font-size: 15px;
+}
+
+.root-page .rv-form-note {
+    margin: -6px 0 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    position: relative;
+}
+
+.root-page .rv-field-inline {
+    flex: 1;
+}
+
+.root-page .rv-field-pair {
+    display: flex;
+    gap: 10px;
+}
+
+.root-page .rv-field-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-field-label em {
+    font-style: normal;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-field-label kbd {
+    margin-left: auto;
+}
+
+.root-page .rv-form textarea,
+.root-page .rv-form input[type="number"],
+.root-page .rv-form input[type="text"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-field);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 13.5px;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.root-page .rv-form textarea:focus,
+.root-page .rv-form input:focus {
+    outline: none;
+    border-color: var(--oc-tide);
+    box-shadow: 0 0 0 2px var(--oc-tide-soft);
+}
+
+.root-page .rv-counter {
+    position: absolute;
+    right: 4px;
+    bottom: -14px;
+    font-size: 10.5px;
+    color: var(--oc-ink-3);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-counter-near {
+    color: var(--oc-warn);
+}
+
+.root-page .rv-range {
+    width: 100%;
+    accent-color: var(--oc-tide);
+}
+
+.root-page .rv-multiplier-value {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-ink);
+}
+
+/* ---------- preflight ---------- */
+
+.root-page .rv-checks {
+    border: 1px solid var(--oc-line);
+    border-radius: 9px;
+    background: var(--oc-bg);
+    overflow: hidden;
+}
+
+.root-page .rv-checks > summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 11px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.root-page .rv-checks > summary::-webkit-details-marker {
+    display: none;
+}
+
+.root-page .rv-checks-title {
+    flex: 1;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-checks-tally {
+    display: flex;
+    gap: 3px;
+}
+
+.root-page .rv-tally {
+    min-width: 19px;
+    padding: 1px 5px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-tally-fail {
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad);
+}
+
+.root-page .rv-tally-warn {
+    background: var(--oc-warn-soft);
+    color: var(--oc-warn);
+}
+
+.root-page .rv-tally-pass {
+    background: var(--oc-good-soft);
+    color: var(--oc-good);
+}
+
+.root-page .rv-tally-zero {
+    background: var(--oc-shallow);
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-check-list {
+    margin: 0;
+    padding: 4px 11px 10px;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.root-page .rv-check {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    font-size: 12.5px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-check-mark {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transform: translateY(-1px);
+}
+
+.root-page .rv-check-pass .rv-check-mark { background: var(--oc-good); }
+.root-page .rv-check-warn .rv-check-mark { background: var(--oc-warn); }
+.root-page .rv-check-fail .rv-check-mark { background: var(--oc-bad); }
+
+.root-page .rv-check-pass { color: var(--oc-ink-3); }
+.root-page .rv-check-fail .rv-check-label { color: var(--oc-bad); font-weight: 600; }
+.root-page .rv-check-warn .rv-check-label { color: var(--oc-warn); }
+
+.root-page .rv-check-note {
+    color: var(--oc-ink-3);
+    font-size: 11.5px;
+}
+
+/* ---------- ledger and payout ---------- */
+
+.root-page .rv-ledger {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--oc-line);
+    border-radius: 9px;
+    background: var(--oc-bg);
+    font-size: 13px;
+}
+
+.root-page .rv-ledger > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.root-page .rv-ledger dt {
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-ledger dd {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-ledger-total {
+    margin-top: 4px;
+    padding-top: 5px;
+    border-top: 1px solid var(--oc-line);
+    font-weight: 700;
+}
+
+.root-page .rv-ledger-total dt,
+.root-page .rv-ledger-total dd {
+    color: var(--oc-ink);
+}
+
+/* The consequence of the form, spelled out before it is committed. */
+.root-page .rv-payout {
+    padding: 10px 12px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 9px;
+    background: var(--oc-tide-soft);
+}
+
+.root-page .rv-payout-scaled {
+    border-color: var(--oc-warn);
+}
+
+.root-page .rv-payout-line {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-payout-from {
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-payout-arrow {
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-payout-to {
+    font-weight: 700;
+    color: var(--oc-tide-2);
+}
+
+.root-page .rv-payout-note {
+    margin: 4px 0 0;
+    font-size: 11.5px;
+    color: var(--oc-ink-3);
+    line-height: 1.45;
+}
+
+.root-page .rv-removal-summary {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-readonly p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--oc-ink-2);
+}
+
+/* ---------- the decision buttons ---------- */
+
+.root-page .rv-verdicts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 2px;
+}
+
+.root-page .rv-verdicts-three {
+    grid-template-columns: 1fr 1fr 1fr;
+}
+
+.root-page .rv-verdicts:has(> :only-child) {
+    grid-template-columns: 1fr;
+}
+
+.root-page .rv-verdict {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    padding: 11px 10px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 9px;
+    background: var(--oc-surface-2);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+}
+
+.root-page .rv-verdict:focus-visible {
+    outline: 2px solid var(--oc-tide);
+    outline-offset: 2px;
+}
+
+.root-page .rv-verdict[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.root-page .rv-verdict-good {
+    border-color: #1f5a49;
+    background: var(--oc-good-soft);
+    color: var(--oc-good);
+}
+
+.root-page .rv-verdict-good:hover:not([disabled]) {
+    background: #12382f;
+    border-color: var(--oc-good);
+}
+
+.root-page .rv-verdict-warn {
+    border-color: #6a5323;
+    background: var(--oc-warn-soft);
+    color: var(--oc-warn);
+}
+
+.root-page .rv-verdict-warn:hover:not([disabled]) {
+    background: #3a2c17;
+    border-color: var(--oc-warn);
+}
+
+.root-page .rv-verdict-bad {
+    border-color: var(--oc-bad-line);
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad);
+}
+
+.root-page .rv-verdict-bad:hover:not([disabled]) {
+    background: #3a1c1e;
+    border-color: var(--oc-bad);
+}
+
+.root-page .rv-verdict kbd {
+    border-color: currentColor;
+    background: transparent;
+    color: inherit;
+    opacity: 0.75;
+}
+
+/* ============================================================
+   Lookout removal editor
+   ============================================================ */
+
+.root-page .rv-lookout-video {
+    display: block;
+    width: 100%;
+    max-height: 52vh;
+    object-fit: contain;
+    border-radius: 9px;
+    border: 1px solid var(--oc-line);
+    background: #000;
+}
+
+.root-page .rv-cut-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 11px;
+}
+
+.root-page .rv-cut-total {
+    margin-left: auto;
+    font-size: 12.5px;
+    color: var(--oc-ink-3);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-cut-hint {
+    margin: 8px 0 0;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-removal-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 11px;
+}
+
+.root-page .rv-removal-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 9px 10px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 9px;
+    background: var(--oc-bg);
+}
+
+.root-page .rv-removal-bad {
+    border-color: var(--oc-bad-line);
+    background: var(--oc-bad-soft);
+}
+
+.root-page .rv-removal-range-inputs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.root-page .rv-removal-row input[type="text"] {
+    box-sizing: border-box;
+    padding: 6px 9px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 7px;
+    background: var(--oc-field);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 13px;
+}
+
+.root-page .rv-removal-range-inputs input[name="removal_start"],
+.root-page .rv-removal-range-inputs input[name="removal_end"] {
+    width: 78px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    text-align: center;
+}
+
+.root-page .rv-removal-row input[name="removal_reason"] {
+    width: 100%;
+}
+
+.root-page .rv-removal-dash {
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-removal-cost {
+    margin-left: auto;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--oc-bad);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-removal-record {
+    margin: 11px 0 0;
+    padding: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.root-page .rv-removal-record li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid var(--oc-line);
+    border-radius: 8px;
+    background: var(--oc-bg);
+    font-size: 12.5px;
+}
+
+.root-page .rv-removal-range {
+    color: var(--oc-ink-3);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11.5px;
+}
+
+.root-page .rv-removal-reason {
+    flex-basis: 100%;
+    color: var(--oc-ink-2);
+}
+
+/* ============================================================
+   Shortcut sheet and toasts
+   ============================================================ */
+
+.root-page .rv-shortcuts {
+    width: min(460px, 92vw);
+    padding: 20px 22px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: var(--oc-radius);
+    background: var(--oc-surface);
+    color: var(--oc-ink);
+    box-shadow: var(--oc-shadow-modal);
+}
+
+.root-page .rv-shortcuts::backdrop {
+    background: var(--oc-scrim);
+}
+
+.root-page .rv-shortcuts h2 {
+    margin: 0 0 14px;
+    font-size: 16px;
+}
+
+.root-page .rv-shortcuts dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 7px 14px;
+    margin: 0 0 18px;
+    align-items: baseline;
+}
+
+.root-page .rv-shortcuts dt {
+    white-space: nowrap;
+}
+
+.root-page .rv-shortcuts dd {
+    margin: 0;
+    font-size: 13px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-toasts {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.root-page .rv-toast {
+    margin: 0;
+    padding: 9px 14px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 9px;
+    background: var(--oc-surface-2);
+    color: var(--oc-ink);
+    font-size: 13px;
+    box-shadow: var(--oc-shadow-modal);
+    transition: opacity 400ms ease, transform 400ms ease;
+}
+
+.root-page .rv-toast-bad {
+    border-color: var(--oc-bad-line);
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad-strong);
+}
+
+.root-page .rv-toast-out {
+    opacity: 0;
+    transform: translateY(6px);
+}
+
+/* ============================================================
+   The desks
+   ============================================================ */
+
+.root-page .rq-header {
+    margin-bottom: 20px;
+    padding: 18px 20px;
+    border: 1px solid var(--oc-line);
+    border-top: 3px solid var(--rv-accent, var(--oc-tide));
+    border-radius: var(--oc-radius);
+    background: var(--oc-surface);
+    box-shadow: var(--oc-shadow);
+}
+
+.root-page .rq-head-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.root-page .rq-header h1 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 22px;
+}
+
+.root-page .rq-blurb {
+    margin: 7px 0 0;
+    max-width: 68ch;
+    font-size: 13.5px;
+    line-height: 1.6;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-start {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 18px;
+    border: 1px solid var(--oc-btn);
+    border-radius: 9px;
+    background: var(--oc-btn);
+    color: var(--oc-on-accent);
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.root-page .rq-start:hover {
+    background: var(--oc-btn-2);
+    border-color: var(--oc-btn-2);
+    color: var(--oc-on-accent);
+}
+
+.root-page .rq-start kbd {
+    border-color: rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--oc-on-accent);
+}
+
+.root-page .rq-start-off {
+    background: transparent;
+    border-color: var(--oc-line-2);
+    color: var(--oc-ink-3);
+    cursor: default;
+}
+
+.root-page .rq-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    margin: 18px 0 0;
+}
+
+.root-page .rq-stat {
+    padding: 10px 13px;
+    border: 1px solid var(--oc-line);
+    border-left: 3px solid var(--oc-line-2);
+    border-radius: 9px;
+    background: var(--oc-bg);
+}
+
+.root-page .rq-stat-good { border-left-color: var(--oc-good); }
+.root-page .rq-stat-bad { border-left-color: var(--oc-bad); }
+
+.root-page .rq-stat dt {
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-stat dd {
+    margin: 0;
+}
+
+.root-page .rq-stat-value {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--oc-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rq-stat-sub {
+    font-size: 11.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-hint {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-hint kbd {
+    margin: 0 1px;
+}
+
+.root-page .rq-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--oc-line);
+    border-radius: var(--oc-radius);
+    background: var(--oc-surface);
+    box-shadow: var(--oc-shadow);
+}
+
+.root-page .rq-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+}
+
+.root-page .rq-table th {
+    padding: 9px 12px;
+    text-align: left;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--oc-ink-3);
+    background: var(--oc-surface-2);
+    border-bottom: 1px solid var(--oc-line);
+    white-space: nowrap;
+}
+
+.root-page .rq-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--oc-line);
+    vertical-align: top;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rq-table tr:last-child td {
+    border-bottom: none;
+}
+
+.root-page .rq-row {
+    cursor: pointer;
+}
+
+.root-page .rq-row:hover td {
+    background: var(--oc-shallow);
+}
+
+.root-page .rq-row:focus {
+    outline: none;
+}
+
+.root-page .rq-row:focus-visible td,
+.root-page .rq-row:focus td {
+    background: var(--oc-tide-soft);
+    box-shadow: inset 0 0 0 1px var(--oc-tide);
+}
+
+.root-page .rq-col-num {
+    width: 40px;
+    color: var(--oc-ink-3);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rq-project {
+    display: block;
+    color: var(--oc-tide);
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.root-page .rq-project:hover {
+    color: var(--oc-tide-2);
+    text-decoration: underline;
+}
+
+.root-page .rq-desc {
+    display: block;
+    margin-top: 2px;
+    max-width: 46ch;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-owner {
+    white-space: nowrap;
+}
+
+.root-page .rq-quiet {
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-num {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.root-page .rq-since {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-flags {
+    display: table-cell;
+}
+
+.root-page .rq-flags .rv-chip {
+    margin: 0 4px 4px 0;
+}
+
+.root-page .rq-empty {
+    padding: 26px 12px;
+    text-align: center;
+    color: var(--oc-ink-3);
+    font-style: italic;
+}
+
+/* A project's lapses, gathered. The header is the summary of the block below
+   it, so a reviewer can decide whether to open a project without opening it. */
+.root-page .rq-group {
+    margin-bottom: 12px;
+    border: 1px solid var(--oc-line);
+    border-radius: var(--oc-radius);
+    background: var(--oc-surface);
+    box-shadow: var(--oc-shadow);
+    overflow: hidden;
+}
+
+.root-page .rq-group > summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 11px 14px;
+    background: var(--oc-surface-2);
+    cursor: pointer;
+    list-style: none;
+}
+
+.root-page .rq-group > summary::-webkit-details-marker {
+    display: none;
+}
+
+.root-page .rq-group > summary:hover {
+    background: var(--oc-shallow);
+}
+
+.root-page .rq-group > summary::after {
+    content: "";
+    order: -1;
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid var(--oc-ink-3);
+    border-bottom: 2px solid var(--oc-ink-3);
+    transform: rotate(-45deg);
+    transition: transform 140ms ease;
+}
+
+.root-page .rq-group[open] > summary::after {
+    transform: rotate(45deg);
+}
+
+.root-page .rq-group-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--oc-ink);
+}
+
+.root-page .rq-group-owner {
+    font-size: 13px;
+    color: var(--oc-tide);
+}
+
+.root-page .rq-group-meta {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+/* One line per lapse, no column headings: the group header above already
+   names the project and totals it, and repeating a seven-column thead for
+   every project buried the rows in chrome. */
+.root-page .rq-lapses {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--oc-line);
+}
+
+.root-page .rq-lapse {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px;
+    border-bottom: 1px solid var(--oc-line);
+}
+
+.root-page .rq-lapses > .rq-lapse:last-child {
+    border-bottom: none;
+}
+
+.root-page .rq-lapse:hover {
+    background: var(--oc-shallow);
+}
+
+.root-page .rq-lapse:focus {
+    outline: none;
+    background: var(--oc-tide-soft);
+    box-shadow: inset 0 0 0 1px var(--oc-tide);
+}
+
+.root-page .rq-lapse-index {
+    width: 22px;
+    flex-shrink: 0;
+    color: var(--oc-ink-3);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rq-lapse .rq-project {
+    flex-shrink: 0;
+}
+
+.root-page .rq-lapse-meta {
+    flex: 1;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.root-page .rq-lapse-flags {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+.root-page .rq-recent {
+    margin-top: 20px;
+}
+
+.root-page .rq-recent > summary {
+    padding: 9px 2px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rq-recent > summary:hover {
+    color: var(--oc-ink);
+}
+
+.root-page .rq-charts {
+    margin-top: 26px;
+}
+
+/* ============================================================
+   Narrow screens
+
+   Below this the two columns can't both be useful, so the shell gives up its
+   fixed height and becomes an ordinary scrolling page with the decision panel
+   underneath the evidence.
+   ============================================================ */
+
+@media (max-width: 1100px) {
+    .root-page.review-shell {
+        height: auto;
+        overflow: visible;
+    }
+
+    .root-page .rv {
+        height: auto;
+    }
+
+    .root-page .rv-body {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .root-page .rv-evidence,
+    .root-page .rv-decision {
+        overflow: visible;
+    }
+
+    .root-page .rv-decision {
+        border-left: none;
+        border-top: 1px solid var(--oc-line);
+    }
+
+    .root-page .rv-timeline {
+        max-height: none;
+    }
+}
+
+@media (max-width: 760px) {
+    .root-page .rv-topbar {
+        padding: 8px 12px;
+    }
+
+    .root-page .rv-subject {
+        order: 10;
+        flex-basis: 100%;
+    }
+
+    .root-page .rv-verdicts,
+    .root-page .rv-verdicts-three {
+        grid-template-columns: 1fr;
+    }
+
+    .root-page .rv-field-pair {
+        flex-direction: column;
+    }
+}

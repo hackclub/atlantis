@@ -13,7 +13,11 @@ from ...models import (
     PAYOUT_MULTIPLIER_STEP, PEARLS_PER_HOUR,
 )
 from ...submissions import build_override_justification, submit_ship
-from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, format_minutes, build_review_history, rate_limit, safe_redirect_back, timelapse_cleared_ships
+from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, rate_limit, safe_redirect_back
+from .queue import (
+    QUEUES, dash_context, decorate_rows, go_to_next, owner_snapshot, parse_skip,
+    preflight_checks, review_context, ship_snapshot,
+)
 
 INTERNAL_COMMENT_MAX_LENGTH = 1000
 T1_FIELD_MAX_LENGTH = 1000
@@ -113,19 +117,18 @@ def report_submission(request, submission):
 @staff_member_required
 @check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def review_dash(request):
-    ships = (
-        timelapse_cleared_ships(Ship.objects.filter(status=Ship.ShipStatus.T1_QUEUE))
-        .select_related("project", "project__owner", "project__owner__hackclub_profile")
-        .order_by("-created_at")
-    )
-    for ship in ships:
-        ship.time_spent_display = format_minutes(
-            approved_minutes_for_journals(ship.project.journals.all())
-        )
+    ships = decorate_rows("t1", QUEUES["t1"].pending())
     return render(request, "root/review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboard("t1_reviews"),
+        **dash_context(request, "t1", ships),
     })
+
+@staff_member_required
+@check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+def review_next(request):
+    """Open the next T1 ship, or return to the desk when the queue is clear."""
+    return go_to_next(request, "t1", parse_skip(request))
 
 @staff_member_required
 @check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
@@ -141,12 +144,19 @@ def review_project(request, ship_id):
     except:
         hasMake = False
 
+    owner = owner_snapshot(ship.project.owner)
+    subject = ship_snapshot(ship)
     return render(request, "root/review_project.html", {
         "ship": ship,
         "journals": journals,
         "timeline": timeline,
         "review_history": build_review_history(ship),
         "hasMake": hasMake,
+        "owner": owner,
+        "logged_time": approved_minutes_for_journals(ship.project.journals.all()),
+        "subject": subject,
+        "preflight": preflight_checks(ship, subject, owner, has_make=hasMake),
+        **review_context(request, "t1", ship, claimable=ship.status == Ship.ShipStatus.T1_QUEUE),
     })
 
 @require_POST
@@ -206,24 +216,25 @@ def t1_decision(request, ship_id):
     })
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with approved = {approved}!')
-    return redirect("review_dash")
+    # Straight on to the next ship in the queue rather than back to the desk:
+    # the desk is a place to start from, not somewhere to pass through between
+    # every review.
+    return go_to_next(request, "t1", parse_skip(request) + [ship.id])
 
 @staff_member_required
 @check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def ysws_review_dash(request):
-    ships = (
-        Ship.objects.filter(status=Ship.ShipStatus.T2_QUEUE)
-        .select_related("project", "project__owner", "project__owner__hackclub_profile")
-        .order_by("-created_at")
-    )
-    for ship in ships:
-        ship.time_spent_display = format_minutes(
-            approved_minutes_for_journals(ship.project.journals.all())
-        )
+    ships = decorate_rows("t2", QUEUES["t2"].pending())
     return render(request, "root/ysws_review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboard("t2_reviews"),
+        **dash_context(request, "t2", ships),
     })
+
+@staff_member_required
+@check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+def ysws_review_next(request):
+    return go_to_next(request, "t2", parse_skip(request))
 
 @staff_member_required
 @check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
@@ -235,6 +246,8 @@ def ysws_review_project(request, ship_id):
     # the sidebar's pearl preview has to agree with the ceiling the POST
     # handler will enforce.
     logged_time = approved_minutes_for_journals(ship.journals.all())
+    owner = owner_snapshot(ship.project.owner)
+    subject = ship_snapshot(ship)
     return render(request, "root/ysws_review_project.html", {
         "ship": ship,
         "journals": journals,
@@ -243,6 +256,10 @@ def ysws_review_project(request, ship_id):
         "logged_time": logged_time,
         "base_layers": layers_for_minutes(logged_time),
         "pearls_per_hour": PEARLS_PER_HOUR,
+        "owner": owner,
+        "subject": subject,
+        "preflight": preflight_checks(ship, subject, owner),
+        **review_context(request, "t2", ship, claimable=ship.status == Ship.ShipStatus.T2_QUEUE),
     })
 
 @require_POST
@@ -317,24 +334,22 @@ def t2_decision(request, ship_id):
     })
 
     messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision} and a deduction of {deductions} minutes!')
-    return redirect("ysws_review_dash")
+    return go_to_next(request, "t2", parse_skip(request) + [ship.id])
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer", "atlantis_site.t3_review"])
 def fraud_review_dash(request):
-    ships = (
-        Ship.objects.filter(status=Ship.ShipStatus.T3_QUEUE)
-        .select_related("project", "project__owner", "project__owner__hackclub_profile")
-        .order_by("-created_at")
-    )
-    for ship in ships:
-        ship.time_spent_display = format_minutes(
-            approved_minutes_for_journals(ship.project.journals.all())
-        )
+    ships = decorate_rows("t3", QUEUES["t3"].pending())
     return render(request, "root/fraud_review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboard("t3_reviews"),
+        **dash_context(request, "t3", ships),
     })
+
+@staff_member_required
+@check_perms(["atlantis_site.organizer", "atlantis_site.t3_review"])
+def fraud_review_next(request):
+    return go_to_next(request, "t3", parse_skip(request))
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer", "atlantis_site.t3_review"])
@@ -348,6 +363,8 @@ def fraud_review_project(request, ship_id):
     deductions = latest_t2.deductions if latest_t2 else 0
     total_time = max(logged_time - deductions, 0)
 
+    owner = owner_snapshot(ship.project.owner)
+    subject = ship_snapshot(ship)
     return render(request, "root/fraud_review_project.html", {
         "ship": ship,
         "journals": journals,
@@ -367,6 +384,10 @@ def fraud_review_project(request, ship_id):
         # Nothing else shows a T3 reviewer the timelapse review in full.
         "override_justification": build_override_justification(ship),
         "airtable_submission": AirtableSubmission.objects.filter(ship=ship).first(),
+        "owner": owner,
+        "subject": subject,
+        "preflight": preflight_checks(ship, subject, owner),
+        **review_context(request, "t3", ship, claimable=ship.status == Ship.ShipStatus.T3_QUEUE),
     })
 
 @require_POST
@@ -466,7 +487,7 @@ def t3_decision(request, ship_id):
     messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}{outcome}")
     if submission:
         report_submission(request, submission)
-    return redirect("fraud_review_dash")
+    return go_to_next(request, "t3", parse_skip(request) + [ship.id])
 
 @staff_member_required
 @require_POST

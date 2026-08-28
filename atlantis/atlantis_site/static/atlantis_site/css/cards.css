@@ -1,34 +1,13 @@
-.project-list,
 .item-list {
     margin: 24px 0;
 }
 
-.project-list ul,
 .item-list ul {
     list-style: none;
     padding: 0;
     margin: 16px 0 0;
     display: grid;
     gap: 12px;
-}
-
-.journal-list {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-    margin-bottom: 24px;
-}
-
-.review-history {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.review-history .review-card,
-.review-history .internal-comment {
-    margin: 0;
 }
 
 .item-grid {
@@ -58,12 +37,7 @@
 
 .project-card,
 .item-card,
-.journal-card,
-.review-card,
 .ship-card,
-.ship-event,
-.internal-comment,
-.project-info,
 .order-card {
     border: 1px solid #ddd;
     border-radius: 12px;
@@ -72,38 +46,9 @@
     color: black;
 }
 
-/* Widths are ceilings, not fixed sizes: these cards sit in a review column
-   that is itself fluid, and at a fixed width they both overflowed a phone and
-   left the stack ragged next to the full-width .project-info above them. */
-.journal-card { width: fit-content; max-width: 100%; }
-.review-card { width: min(450px, 100%); }
+/* A ceiling, not a fixed size: the card sits in a fluid column and at a fixed
+   width it overflowed a phone. */
 .ship-card { width: min(400px, 100%); }
-.ship-event { width: min(400px, 100%); }
-.project-info { width: min(750px, 100%); }
-
-/* Tinted so a reviewer can't mistake an internal note for something the
-   project owner can see. */
-.internal-comment {
-    width: min(450px, 100%);
-    background: #fffbea;
-    border-color: #e6d8a8;
-}
-
-.review-event-byline {
-    margin: 0 0 8px;
-    color: #666;
-    font-size: 14px;
-}
-
-.review-main .project-info {
-    width: auto;
-}
-
-.review-card h4,
-.ship-event h4,
-.internal-comment h4 {
-    margin: 0 0 8px;
-}
 
 .user-card {
     padding: 16px;
@@ -125,14 +70,9 @@
     margin-bottom: 8px;
 }
 
-.item-card-cost,
-.project-byline {
+.item-card-cost {
     color: #666;
     font-size: 14px;
-}
-
-.project-byline {
-    margin: 4px 0;
 }
 
 .project-locked {
@@ -140,31 +80,12 @@
     color: #a33;
 }
 
-.project-card a:not(.card-detail-link),
-.item-card a:not(.card-detail-link),
-.journal-card a:not(.card-detail-link),
-.review-card a:not(.card-detail-link),
-.ship-card a:not(.card-detail-link),
-.project-info a:not(.card-detail-link),
-.order-card a:not(.card-detail-link) {
+.project-card a,
+.item-card a,
+.ship-card a,
+.order-card a {
     color: inherit;
     text-decoration: none;
-}
-
-.card-detail-link {
-    display: inline-block;
-    margin-top: 12px;
-    padding: 8px 12px;
-    border: 1px solid #0066cc;
-    border-radius: 8px;
-    color: #0066cc;
-    text-decoration: none;
-    font-size: 14px;
-}
-
-.card-detail-link:hover {
-    background: #0066cc;
-    color: #fff;
 }
 
 .order-actions {
@@ -172,17 +93,6 @@
     flex-wrap: wrap;
     gap: 8px;
     margin-top: 12px;
-}
-
-.card-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    align-items: center;
-}
-
-.card-main {
-    flex: 1 1 auto;
 }
 
 .card-controls {

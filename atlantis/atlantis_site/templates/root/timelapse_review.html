@@ -1,67 +1,76 @@
 {% extends 'root/_base_root.html' %}
+{% load static %}
 
 {% block page_id %}admin-timelapse-review-page{% endblock %}
-{% block title %}Timelapse Review{% endblock %}
+{% block title %}Lookout Review Desk{% endblock %}
 
 {% block content %}
-<div class="content">
+<div class="content rq">
     {% include "root/_messages_admin.html" %}
-    <h1>Timelapse Review</h1>
-    <p class="internal-only-note">
-        Internal only. Shippers are never told a lapse was reviewed, how much time
-        came off it, or why. A project can't reach T1 until every one of its
-        lapses is signed off here &mdash; but it can still ship while it waits.
-    </p>
-    <section class="project-list">
-        <h2>Queue</h2>
-        <div class="table-scroll">
-            <table class="users-table">
-                <thead>
-                    <tr>
-                        <th>Lapse</th>
-                        <th>Tracked</th>
-                        <th>Lookouts</th>
-                        <th>Submitted</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% regroup pending by project as pending_groups %}
-                    {% for group in pending_groups %}
-                        <tr class="group-header">
-                            <td colspan="5">
-                                {{ group.grouper.title }}
-                                &middot; @{{ group.grouper.owner.hackclub_profile.slack_username }}
-                            </td>
-                        </tr>
-                        {% for journal in group.list %}
-                            <tr>
-                                <td><a href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a></td>
-                                <td>{{ journal.tracked_display }}</td>
-                                <td>{{ journal.timelapses.all|length }}</td>
-                                <td>{{ journal.created_at|date:"M j, Y" }}</td>
-                                <td>
-                                    <a href="{% url 'timelapse_review_journal' journal.id %}">Review timelapse</a>
-                                    {% if journal.ship_id %}
-                                        <br><span class="is-no">Holding ship #{{ journal.ship_id }} out of T1</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                        {% endfor %}
-                    {% empty %}
-                        <tr><td colspan="5">Nothing awaiting timelapse review.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    {% include "root/_rv_queue_header.html" with blurb="Internal only. Shippers are never told a lapse was reviewed, how much time came off it, or why. A project can't reach T1 until every one of its lapses is signed off here — but it can still ship while it waits." %}
+
+    <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> to move through the queue, <kbd>&crarr;</kbd> to open, or <strong>Start reviewing</strong> to take the longest-waiting project from the top.</p>
+
+    {% comment %}
+    One block per project, in the order "Start reviewing" walks them. Lapses on
+    the same project are reviewed together — same footage, same person — so
+    they are shown together, whether or not the project has ever been shipped.
+    {% endcomment %}
+    {% for group in groups %}
+        <details class="rq-group" open>
+            <summary>
+                <span class="rq-group-title">{{ group.project.title }}</span>
+                <span class="rq-group-owner">@{{ group.owner }}</span>
+                <span class="rq-group-meta">
+                    {{ group.count }} lapse{{ group.count|pluralize }} &middot;
+                    {{ group.tracked_display }} tracked &middot;
+                    {{ group.lookouts }} Lookout{{ group.lookouts|pluralize }}
+                </span>
+                <span class="rv-chip rv-age-{{ group.age_bucket }}">{{ group.age_display }}</span>
+                {% if group.held_ships %}
+                    <span class="rv-chip rv-chip-bad">
+                        holding ship{{ group.held_ships|pluralize }}
+                        {% for ship_id in group.held_ships %}#{{ ship_id }}{% if not forloop.last %}, {% endif %}{% endfor %}
+                        out of T1
+                    </span>
+                {% else %}
+                    <span class="rv-chip rv-chip-quiet">not shipped yet</span>
+                {% endif %}
+            </summary>
+            <ul class="rq-lapses">
+                {% for journal in group.journals %}
+                    <li class="rq-row rq-lapse" tabindex="0" data-href="{% url 'timelapse_review_journal' journal.id %}">
+                        <span class="rq-lapse-index">{{ journal.queue_index }}</span>
+                        <a class="rq-project" href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a>
+                        <span class="rq-lapse-meta">
+                            {{ journal.created_at|date:"M j" }} &middot;
+                            {{ journal.tracked_label }} tracked &middot;
+                            {{ journal.timelapses.all|length }} Lookout{{ journal.timelapses.all|length|pluralize }}
+                        </span>
+                        <span class="rq-lapse-flags">
+                            {% if journal.claim %}<span class="rv-chip rv-chip-warn">{{ journal.claim.name }} is in this</span>{% endif %}
+                            {% if not journal.timelapses.all %}<span class="rv-chip rv-chip-bad">no footage</span>{% endif %}
+                            {% if journal.ship_id %}<span class="rv-chip rv-chip-quiet">ship #{{ journal.ship_id }}</span>{% endif %}
+                            <span class="rv-chip rv-age-{{ journal.age_bucket }}">{{ journal.age_display }}</span>
+                        </span>
+                    </li>
+                {% endfor %}
+            </ul>
+        </details>
+    {% empty %}
+        <div class="rq-table-wrap">
+            <p class="rq-empty">Nothing awaiting Lookout review.</p>
         </div>
-    </section>
-    <section class="project-list">
-        <h2>Recently reviewed</h2>
-        <div class="table-scroll">
-            <table class="users-table">
+    {% endfor %}
+
+    <details class="rq-recent">
+        <summary>Recently reviewed <span class="rq-quiet">last {{ reviewed|length }}</span></summary>
+        <div class="rq-table-wrap">
+            <table class="rq-table">
                 <thead>
                     <tr>
                         <th>Lapse</th>
+                        <th>Project</th>
                         <th>Tracked</th>
                         <th>Removed</th>
                         <th>Approved</th>
@@ -70,41 +79,33 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% regroup reviewed by project as reviewed_groups %}
-                    {% for group in reviewed_groups %}
-                        <tr class="group-header">
-                            <td colspan="6">{{ group.grouper.title }}</td>
+                    {% for journal in reviewed %}
+                        <tr class="rq-row" tabindex="0" data-href="{% url 'timelapse_review_journal' journal.id %}">
+                            <td><a class="rq-project" href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a></td>
+                            <td class="rq-quiet">{{ journal.project.title }}</td>
+                            <td class="rq-num">{{ journal.tracked_display }}</td>
+                            <td class="rq-num">
+                                {% if journal.timelapse_review.removed_seconds %}
+                                    <span class="is-no">&minus;{{ journal.timelapse_review.removed_display }}</span>
+                                {% else %}
+                                    &mdash;
+                                {% endif %}
+                            </td>
+                            <td class="rq-num">{{ journal.approved_display }}</td>
+                            <td class="rq-owner">@{{ journal.timelapse_review.reviewer.hackclub_profile.slack_username }}</td>
+                            <td class="rq-quiet">{{ journal.timelapse_review.reviewed_at|date:"M j, g:i a" }}</td>
                         </tr>
-                        {% for journal in group.list %}
-                            <tr>
-                                <td><a href="{% url 'timelapse_review_journal' journal.id %}">{{ journal.title }}</a></td>
-                                <td>{{ journal.tracked_display }}</td>
-                                <td>
-                                    {% if journal.timelapse_review.removed_seconds %}
-                                        <span class="is-no">&minus;{{ journal.timelapse_review.removed_display }}</span>
-                                    {% else %}
-                                        &mdash;
-                                    {% endif %}
-                                </td>
-                                <td>{{ journal.approved_display }}</td>
-                                <td>@{{ journal.timelapse_review.reviewer.hackclub_profile.slack_username }}</td>
-                                <td>{{ journal.timelapse_review.reviewed_at|date:"M j, Y, g:i a" }}</td>
-                            </tr>
-                        {% endfor %}
                     {% empty %}
-                        <tr><td colspan="6">No timelapse reviews yet.</td></tr>
+                        <tr><td colspan="7" class="rq-empty">No Lookout reviews yet.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
-    </section>
-    <section class="chart-grid">
-        {% include "root/_metric_chart.html" with title="Top timelapse reviewers" rows=leaderboard empty="No reviews yet" %}
+    </details>
+
+    <section class="chart-grid rq-charts">
+        {% include "root/_metric_chart.html" with title="Top Lookout reviewers" rows=leaderboard empty="No reviews yet" %}
     </section>
 </div>
-<script>
-    document.querySelectorAll('[data-bar]').forEach((el) => {
-        el.style.width = el.dataset.bar + '%';
-    });
-</script>
+<script src="{% static 'atlantis_site/review.js' %}" defer></script>
 {% endblock %}

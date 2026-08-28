@@ -16,3 +16,6 @@
 /* Admin-only (/root) theme. Last so it can override the shared rules above;
    every selector inside is scoped to .root-page. */
 @import url('css/admin.css');
+/* Reviewer desks and the reviewer shell. After admin.css so it can specialise
+   the admin card/table rules; every selector is scoped to .root-page too. */
+@import url('css/review.css');

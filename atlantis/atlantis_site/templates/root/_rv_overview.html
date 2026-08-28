@@ -1,0 +1,104 @@
+{% comment %}
+The one panel that never collapses: what is being reviewed, who made it, and
+the handful of numbers a decision actually turns on. Everything here used to be
+spread across a paragraph of prose, the journal list and a second tab on the
+user's profile.
+
+expects: ship, owner, subject; optional: show_lock
+{% endcomment %}
+<section class="rv-panel rv-overview">
+    <div class="rv-overview-head">
+        <div>
+            <h1 class="rv-title">
+                <a href="{% url 'project_detail' ship.project.id %}" target="_blank" rel="noreferrer noopener">{{ ship.project.title }}</a>
+            </h1>
+            <p class="rv-chips">
+                <span class="rv-chip">{{ ship.project.editor_name }}</span>
+                {% if subject.attempts > 1 %}
+                    <span class="rv-chip rv-chip-warn" title="This project has been shipped {{ subject.attempts }} times">
+                        ship {{ subject.attempt }} of {{ subject.attempts }}
+                    </span>
+                {% endif %}
+                {% if ship.project.locked %}<span class="rv-chip rv-chip-bad">locked</span>{% endif %}
+                {% if subject.unreviewed_lapses %}
+                    <span class="rv-chip rv-chip-bad">{{ subject.unreviewed_lapses }} lapse{{ subject.unreviewed_lapses|pluralize }} unreviewed</span>
+                {% endif %}
+                <span class="rv-chip rv-chip-quiet">shipped {{ ship.created_at|date:"M j, Y" }}</span>
+                <span class="rv-chip rv-age-{{ age_bucket }}">waiting {{ age_display }}</span>
+            </p>
+        </div>
+        {% if show_lock %}
+            <div class="rv-overview-controls">
+                {% if ship.project.locked %}
+                    <form method="post" action="{% url 'unlock_project' ship.project.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="rv-btn">Unlock project</button>
+                    </form>
+                {% else %}
+                    <form method="post" action="{% url 'lock_project' ship.project.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="rv-btn rv-btn-danger">Lock project</button>
+                    </form>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    <p class="rv-description">{{ ship.project.description }}</p>
+
+    <dl class="rv-stat-strip">
+        <div>
+            <dt>Approved time</dt>
+            <dd>{{ subject.approved_display }}</dd>
+            <dd class="rv-stat-sub">
+                {% if subject.removed %}{{ subject.tracked_display }} tracked, &minus;{{ subject.removed_display }} cut{% else %}nothing cut{% endif %}
+            </dd>
+        </div>
+        <div>
+            <dt>Journals</dt>
+            <dd>{{ subject.journals }}</dd>
+            <dd class="rv-stat-sub">{{ subject.ship_journals }} on this ship</dd>
+        </div>
+        <div>
+            <dt>Lookouts</dt>
+            <dd>{{ subject.lookouts }}</dd>
+            <dd class="rv-stat-sub">{% if subject.lookouts %}verifiable footage{% else %}no verifiable time{% endif %}</dd>
+        </div>
+        <div>
+            <dt>Owner pearls</dt>
+            <dd>{{ owner.pearls }}</dd>
+            <dd class="rv-stat-sub">{{ owner.finalized }} finalized</dd>
+        </div>
+    </dl>
+
+    <div class="rv-owner">
+        {% if owner.avatar %}<img src="{{ owner.avatar }}" alt="" class="rv-avatar">{% endif %}
+        <a href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener" class="rv-owner-name">@{{ owner.name }}</a>
+        {% if owner.verified %}
+            <span class="rv-chip rv-chip-good">verified</span>
+        {% else %}
+            <span class="rv-chip rv-chip-bad">unverified</span>
+        {% endif %}
+        <span class="rv-owner-facts">
+            {{ owner.projects }} project{{ owner.projects|pluralize }} &middot;
+            {{ owner.ships }} ship{{ owner.ships|pluralize }} &middot;
+            {{ owner.finalized }} finalized{% if owner.rejected %} &middot; <span class="is-no">{{ owner.rejected }} rejected</span>{% endif %}
+        </span>
+    </div>
+
+    <div class="rv-links">
+        {% if ship.project.printablesUrl %}
+            <a class="rv-btn" href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer noopener" data-key="p">Printables<kbd>P</kbd></a>
+        {% else %}
+            <span class="rv-btn rv-btn-off" aria-disabled="true">No Printables link</span>
+        {% endif %}
+        {% if ship.project.editor_model_url %}
+            <a class="rv-btn" href="{{ ship.project.editor_model_display_url }}" target="_blank" rel="noreferrer noopener" data-key="m">Editor model<kbd>M</kbd></a>
+        {% endif %}
+        {% if ship.project.image_url %}
+            <a class="rv-btn" href="{{ ship.project.image_display_url }}" target="_blank" rel="noreferrer noopener">Cover image</a>
+        {% endif %}
+        <button type="button" class="rv-btn" data-copy="{{ ship.project.printablesUrl }}" data-key="c"
+                {% if not ship.project.printablesUrl %}disabled{% endif %}>Copy link<kbd>C</kbd></button>
+    </div>
+</section>

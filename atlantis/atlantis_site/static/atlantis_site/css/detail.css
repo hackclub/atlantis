@@ -53,24 +53,9 @@
     white-space: pre-wrap;
 }
 
-.journal-media {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: 16px;
-}
-
 /* Square by aspect-ratio rather than by a matching pixel height, so the box
    keeps its shape as it narrows instead of overflowing the card. The ratio
-   still gives the STL canvas a height to measure before the model lands. */
-.journal-image {
-    width: min(400px, 100%);
-    aspect-ratio: 1;
-    height: auto;
-    object-fit: contain;
-    border-radius: 5px;
-}
-
+   gives the STL canvas a height to measure before the model lands. */
 .stl-viewer {
     width: min(400px, 100%);
     aspect-ratio: 1;
@@ -82,47 +67,4 @@
 
 .stl-viewer canvas {
     display: block;
-}
-
-.review-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 360px);
-    gap: 24px;
-    align-items: start;
-}
-
-.review-main {
-    min-width: 0;
-}
-
-.review-sidebar {
-    position: sticky;
-    top: 24px;
-    align-self: start;
-    box-sizing: border-box;
-    max-height: calc(100vh - 48px);
-    overflow-y: auto;
-    border: 1px solid #ddd;
-    border-radius: 12px;
-    padding: 16px;
-    background: #fff;
-}
-
-.review-sidebar h2 {
-    margin-top: 0;
-}
-
-@media (max-width: 900px) {
-    /* minmax(0, 1fr), not 1fr: a bare 1fr floors the track at the column's
-       min-content, and the review form's 320px fields make that wider than a
-       small phone. With a 0 minimum their max-width: 100% can do its job. */
-    .review-layout {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .review-sidebar {
-        position: static;
-        max-height: none;
-        overflow: visible;
-    }
 }

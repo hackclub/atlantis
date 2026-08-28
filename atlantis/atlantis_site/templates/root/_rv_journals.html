@@ -1,0 +1,82 @@
+{% comment %}
+The build, in reverse order, with each entry's time accounted for on the entry
+itself. Lookout footage is embedded rather than linked: `preload="none"` means
+nothing but the poster frame loads until the reviewer presses play, so checking
+a lapse costs a click instead of a tab.
+
+expects: timeline, subject; optional: journal_empty
+{% endcomment %}
+<details class="rv-card" data-card="journals" open>
+    <summary>
+        <span class="rv-card-title">Journal</span>
+        <span class="rv-card-summary">
+            {{ subject.journals }} entr{{ subject.journals|pluralize:"y,ies" }} &middot;
+            {{ subject.approved_display }} approved
+            {% if subject.removed %}&middot; <span class="is-no">&minus;{{ subject.removed_display }} cut</span>{% endif %}
+            &middot; {{ subject.lookouts }} Lookout{{ subject.lookouts|pluralize }}
+        </span>
+        <span class="rv-card-key"></span>
+    </summary>
+    <div class="rv-card-body rv-timeline">
+        {% for event in timeline %}
+            {% if event.type == "ship" %}
+                <div class="rv-ship-event">
+                    <span class="rv-ship-dot"></span>
+                    <span><strong>Shipped</strong> {{ event.ship.created_at|date:"M j, Y" }}</span>
+                    <span class="rv-ship-meta">{{ event.time_display }} &middot; {{ event.ship.get_status_display }}</span>
+                    {% if event.feedback %}<span class="rv-ship-meta">&ldquo;{{ event.feedback }}&rdquo;</span>{% endif %}
+                </div>
+            {% else %}
+                <article class="rv-entry">
+                    <header class="rv-entry-head">
+                        <h3>{{ event.journal.title }}</h3>
+                        <span class="rv-entry-meta">
+                            {{ event.journal.created_at|date:"M j, Y" }} &middot;
+                            {{ event.journal.tracked_display }} tracked
+                            {% if event.journal.removed_seconds %}
+                                &middot; <span class="is-no">&minus;{{ event.journal.removed_display }}</span>
+                                &middot; <strong>{{ event.journal.approved_display }} approved</strong>
+                            {% elif not event.journal.timelapse_reviewed %}
+                                &middot; <span class="is-no">lapse review pending</span>
+                            {% endif %}
+                        </span>
+                    </header>
+
+                    <div class="rv-entry-media">
+                        {% if event.journal.image_url %}
+                            <a href="{{ event.journal.image_display_url }}" target="_blank" rel="noreferrer noopener">
+                                <img src="{{ event.journal.image_display_url }}" alt="{{ event.journal.title }}" class="rv-entry-image" loading="lazy">
+                            </a>
+                        {% endif %}
+                        {% if event.journal.model_url %}
+                            <div class="stl-viewer rv-entry-stl" data-stl-url="{{ event.journal.model_display_url }}"></div>
+                        {% endif %}
+                    </div>
+
+                    <div class="rv-lapses">
+                        {% for timelapse in event.journal.timelapses.all %}
+                            <figure class="rv-lapse">
+                                <video src="{{ timelapse.video_url }}" poster="{{ timelapse.thumbnail_url }}" controls preload="none"></video>
+                                <figcaption>
+                                    {{ timelapse.tracked_display }} tracked
+                                    {% if timelapse.removed_seconds %}&middot; <span class="is-no">&minus;{{ timelapse.removed_display }}</span>{% endif %}
+                                    &middot; <a href="{{ timelapse.video_url }}" target="_blank" rel="noreferrer noopener">open</a>
+                                </figcaption>
+                            </figure>
+                        {% empty %}
+                            <p class="rv-lapse-empty is-no">No timelapse attached &mdash; no verifiable time.</p>
+                        {% endfor %}
+                    </div>
+
+                    {% if event.journal.model_url %}
+                        <p class="rv-entry-foot">
+                            <a href="{{ event.journal.model_display_url }}" target="_blank" rel="noreferrer noopener">Download STL</a>
+                        </p>
+                    {% endif %}
+                </article>
+            {% endif %}
+        {% empty %}
+            <p class="rv-empty">{{ journal_empty|default:"No journal entries yet." }}</p>
+        {% endfor %}
+    </div>
+</details>

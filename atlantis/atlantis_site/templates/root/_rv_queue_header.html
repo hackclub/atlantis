@@ -1,0 +1,30 @@
+{% comment %}
+The header every review desk carries: what the desk is for, how far behind it
+is, and one button that starts working it. "Start reviewing" goes to the
+queue's `next` route rather than to a specific row, so a reviewer never has to
+choose which item to pick up — the queue already knows.
+
+expects: queue_label, queue_short, queue_accent, queue_stats, start_url, has_pending; optional: blurb
+{% endcomment %}
+<header class="rq-header rv-accent-{{ queue_accent }}">
+    <div class="rq-head-row">
+        <div class="rq-head-text">
+            <h1><span class="rv-queue-tag">{{ queue_short }}</span> {{ queue_label }}</h1>
+            {% if blurb %}<p class="rq-blurb">{{ blurb }}</p>{% endif %}
+        </div>
+        {% if has_pending %}
+            <a class="rq-start" href="{{ start_url }}" data-key="enter">Start reviewing<kbd>&crarr;</kbd></a>
+        {% else %}
+            <span class="rq-start rq-start-off" aria-disabled="true">Queue is clear</span>
+        {% endif %}
+    </div>
+    <dl class="rq-stats">
+        {% for stat in queue_stats %}
+            <div class="rq-stat{% if stat.tone %} rq-stat-{{ stat.tone }}{% endif %}">
+                <dt>{{ stat.label }}</dt>
+                <dd class="rq-stat-value">{{ stat.value }}</dd>
+                <dd class="rq-stat-sub">{{ stat.sub }}</dd>
+            </div>
+        {% endfor %}
+    </dl>
+</header>

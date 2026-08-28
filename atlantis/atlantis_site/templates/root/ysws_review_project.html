@@ -1,10 +1,100 @@
-{% extends 'root/_base_root.html' %}
+{% extends 'root/_review_shell.html' %}
 {% load static %}
 
 {% block page_id %}admin-ysws-project-review-page{% endblock %}
-{% block title %}YSWS Review Project{% endblock %}
+{% block title %}T2 &middot; {{ ship.project.title }}{% endblock %}
 
-{% block content %}
+{% block subject_title %}{{ ship.project.title }}{% endblock %}
+{% block subject_byline %}@{{ owner.name }} &middot; {{ subject.approved_display }} &middot; waiting {{ age_display }}{% endblock %}
+
+{% block topbar_actions %}
+    <a class="rv-btn" href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener" data-key="u">Owner<kbd>U</kbd></a>
+    {% if ship.project.printablesUrl %}
+        <a class="rv-btn" href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer noopener" data-key="p">Printables<kbd>P</kbd></a>
+    {% endif %}
+{% endblock %}
+
+{% block shortcut_rows %}
+    <dt><kbd>A</kbd></dt><dd>Approve &mdash; sends the ship to fraud review</dd>
+    <dt><kbd>R</kbd></dt><dd>Return to T1</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Approve, from inside a text box</dd>
+    <dt><kbd>F</kbd></dt><dd>Jump to Feedback</dd>
+    <dt><kbd>I</kbd></dt><dd>Jump to the Airtable justification</dd>
+    <dt><kbd>D</kbd></dt><dd>Jump to Deductions</dd>
+    <dt><kbd>U</kbd></dt><dd>Open the owner's profile</dd>
+    <dt><kbd>P</kbd></dt><dd>Open the Printables listing</dd>
+    <dt><kbd>M</kbd></dt><dd>Open the editor model</dd>
+    <dt><kbd>C</kbd></dt><dd>Copy the Printables link</dd>
+{% endblock %}
+
+{% block evidence %}
+    {% include "root/_rv_overview.html" with show_lock=True %}
+    {% include "root/_rv_journals.html" with journal_empty="No journal entries. How did this happen?" %}
+    {% include "root/_rv_history.html" %}
+{% endblock %}
+
+{% block decision %}
+<form class="rv-form" method="POST"
+      action="{% url 't2_decision' ship.id %}{% if skip_value %}?skip={{ skip_value }}{% endif %}">
+    {% csrf_token %}
+    <h2 class="rv-form-title">T2 decision</h2>
+    <p class="rv-form-note">Approving sends the ship to fraud review. Deductions come off
+        this ship's logged time before pearls are worked out.</p>
+
+    {% include "root/_rv_checks.html" %}
+
+    <label class="rv-field">
+        <span class="rv-field-label">Feedback <em>public</em><kbd>F</kbd></span>
+        <textarea name="feedback" id="rv-feedback" data-focus="f" rows="4" maxlength="1000" required
+                  placeholder="What the shipper is told about this decision."></textarea>
+        <span class="rv-counter" data-counter-for="rv-feedback" data-max="1000"></span>
+    </label>
+
+    <label class="rv-field">
+        <span class="rv-field-label">Airtable justification <em>private</em><kbd>I</kbd></span>
+        <textarea name="justification" id="rv-internal" data-focus="i" rows="3" maxlength="1000"
+                  placeholder="Why the hours sent to HQ are what they are."></textarea>
+        <span class="rv-counter" data-counter-for="rv-internal" data-max="1000"></span>
+    </label>
+
+    {% comment %}
+    No max attribute on the deduction: Chrome sizes a number input from the
+    digit count of its max, which shrinks this to a stub. t2_decision rejects
+    an over-large deduction anyway.
+    {% endcomment %}
+    <label class="rv-field rv-field-inline">
+        <span class="rv-field-label">Deductions <em>minutes</em><kbd>D</kbd></span>
+        <input type="number" name="deductions" id="rv-deductions" data-focus="d" min="0" step="1" placeholder="0"
+               data-payout-input>
+    </label>
+
+    <div class="rv-payout" data-payout="deduct"
+         data-logged="{{ logged_time }}" data-pearls-per-hour="{{ pearls_per_hour }}">
+        <div class="rv-payout-line">
+            <span class="rv-payout-from">{{ logged_time }} min</span>
+            <span class="rv-payout-arrow">&rarr;</span>
+            <span class="rv-payout-to" data-payout-out>{{ base_layers }} pearls</span>
+        </div>
+        <p class="rv-payout-note">Before the T3 reviewer's pearl multiplier.</p>
+    </div>
+
+    <div class="rv-verdicts">
+        <button type="submit" name="decision" value="A" class="rv-verdict rv-verdict-good"
+                data-key="a" data-primary {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            Approve<kbd>A</kbd>
+        </button>
+        <button type="submit" name="decision" value="T1" class="rv-verdict rv-verdict-warn"
+                data-key="r" {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            Return to T1<kbd>R</kbd>
+        </button>
+    </div>
+    {% if ship.project.locked %}
+        <p class="rv-form-note is-no">This project is locked, so no decision can be recorded.</p>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block page_scripts %}
 <script type="importmap">
     {
         "imports": {
@@ -14,100 +104,4 @@
     }
 </script>
 <script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
-<div class="content">
-    {% include "root/_messages_admin.html" %}
-    <div class="review-layout">
-        <div class="review-main">
-            {% include "root/_review_project_header.html" with heading="YSWS Review Project" show_lock=True %}
-            {% include "root/_review_journals.html" with journal_empty="No journal entries. How did this happen?" %}
-            {% include "root/_review_history.html" %}
-        </div>
-        <aside class="review-sidebar">
-            <h2>Review</h2>
-            <form action="{% url 't2_decision' ship.id %}" method="POST" class="review-form">
-                {% csrf_token %}
-                <div class="form-row">
-                    <select name="decision" id="decision_select" required>
-                        <option value="" disabled selected>Decision</option>
-                        <option value="A">Approve</option>
-                        <option value="T1">Return to T1</option>
-                    </select>
-                </div>
-                <div class="form-row">
-                    <input type="text" name="feedback" placeholder="Feedback (1000 characters, public)" maxlength="1000" required>
-                </div>
-                <div class="form-row">
-                    <input type="text" name="justification" id="justification_input" placeholder="Airtable Justification (1000 characters, private)" maxlength="1000">
-                </div>
-                <div class="form-row">
-                    {% comment %}
-                        No max attribute: Chrome sizes a number input from the
-                        digit count of its max, which shrinks this to a stub.
-                        t2_decision rejects an over-large deduction anyway.
-                    {% endcomment %}
-                    <input type="number" name="deductions" id="deductions_input" placeholder="Deductions (minutes)" min="0">
-                </div>
-                <div class="form-row payout-preview-row">
-                    <p class="payout-preview">
-                        <span id="payout_preview">{{ logged_time }} min &rarr; {{ base_layers }} pearls</span><br>
-                        Before the T3 reviewer's pearl multiplier.
-                    </p>
-                </div>
-                {% if ship.project.locked %}
-                    <button type="submit" disabled title="Can't review a locked project" id="submit_btn">Submit</button>
-                {% else %}
-                    <button type="submit" id="submit_btn">Submit</button>
-                {% endif %}
-            </form>
-        </aside>
-    </div>
-</div>
-
-<script>
-    const decisionSelect = document.getElementById('decision_select');
-    const justificationInput = document.getElementById('justification_input');
-    const submitBtn = document.getElementById('submit_btn');
-
-    decisionSelect.addEventListener('change', function () {
-        if (this.value === 'A') {
-            justificationInput.placeholder = 'Airtable Justification (1000 characters, private)';
-            submitBtn.textContent = 'Approve';
-        } else {
-            justificationInput.placeholder = 'Internal Notes (1000 characters, private)';
-            submitBtn.textContent = 'Return to T1';
-        }
-    });
-
-    (function () {
-        const LOGGED_TIME = {{ logged_time }};
-        const PEARLS_PER_HOUR = {{ pearls_per_hour }};
-        const preview = document.getElementById('payout_preview');
-        const deductions = document.getElementById('deductions_input');
-
-        // Mirrors layers_for_minutes() in views/helpers.py, banker's rounding
-        // included, so the preview matches the pearls actually awarded.
-        function roundHalfEven(value) {
-            const nearest = Math.round(value);
-            const isTie = Math.abs(value % 1) === 0.5;
-            return isTie && nearest % 2 !== 0 ? nearest - 1 : nearest;
-        }
-
-        function layersFor(minutes) {
-            return roundHalfEven(Math.floor(minutes / 6) * (PEARLS_PER_HOUR / 10));
-        }
-
-        function render() {
-            const deducted = Math.min(
-                Math.max(parseInt(deductions.value, 10) || 0, 0),
-                LOGGED_TIME
-            );
-            const net = LOGGED_TIME - deducted;
-            preview.textContent = `${net} min → ${layersFor(net)} pearls`;
-        }
-
-        deductions.addEventListener('input', render);
-        render();
-    })();
-</script>
 {% endblock %}
-

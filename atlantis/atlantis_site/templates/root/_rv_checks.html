@@ -1,0 +1,25 @@
+{% comment %}
+Preflight: the questions a reviewer asks every time, answered before they ask.
+Nothing here blocks a decision — it only says where to look first.
+
+expects: preflight
+{% endcomment %}
+<details class="rv-checks" {% if preflight.failed or preflight.warned %}open{% endif %}>
+    <summary>
+        <span class="rv-checks-title">Preflight</span>
+        <span class="rv-checks-tally">
+            <span class="rv-tally rv-tally-fail{% if not preflight.failed %} rv-tally-zero{% endif %}">{{ preflight.failed }}</span>
+            <span class="rv-tally rv-tally-warn{% if not preflight.warned %} rv-tally-zero{% endif %}">{{ preflight.warned }}</span>
+            <span class="rv-tally rv-tally-pass">{{ preflight.passed }}</span>
+        </span>
+    </summary>
+    <ul class="rv-check-list">
+        {% for check in preflight.checks %}
+            <li class="rv-check rv-check-{{ check.state }}">
+                <span class="rv-check-mark" aria-hidden="true"></span>
+                <span class="rv-check-label">{{ check.label }}</span>
+                {% if check.note %}<span class="rv-check-note">{{ check.note }}</span>{% endif %}
+            </li>
+        {% endfor %}
+    </ul>
+</details>

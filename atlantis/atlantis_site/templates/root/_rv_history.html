@@ -1,0 +1,60 @@
+{% comment %}
+Every decision and internal note this project has already collected, plus the
+box for adding one. Open by default when there is something in it: a ship that
+has been round the loop before is exactly the one where the last reviewer's
+reasoning matters, and a reviewer should not have to go looking for it.
+
+expects: ship, review_history
+{% endcomment %}
+<details class="rv-card" data-card="history" {% if review_history %}open{% endif %}>
+    <summary>
+        <span class="rv-card-title">History</span>
+        <span class="rv-card-summary">
+            {% if review_history %}
+                {{ review_history|length }} entr{{ review_history|length|pluralize:"y,ies" }} &mdash; earlier decisions and internal notes
+            {% else %}
+                nothing yet &mdash; first time through
+            {% endif %}
+        </span>
+        <span class="rv-card-key"></span>
+    </summary>
+    <div class="rv-card-body">
+        <form action="{% url 'add_internal_comment' ship.id %}" method="POST" class="rv-comment-form">
+            {% csrf_token %}
+            <textarea name="text" rows="2" maxlength="1000" required
+                      placeholder="Internal comment &mdash; reviewers only, takes no review action"></textarea>
+            <button type="submit" class="rv-btn">Add comment</button>
+        </form>
+
+        <ol class="rv-history">
+            {% for event in review_history %}
+                <li class="rv-history-item rv-history-{{ event.type }}">
+                    <div class="rv-history-head">
+                        <span class="rv-history-label">{{ event.label }}</span>
+                        <span class="rv-history-byline">
+                            {{ event.actor }} &middot; {{ event.at|date:"M j, Y, g:i a" }}
+                            {% if event.other_ship %}&middot; left on ship #{{ event.comment.ship_id }}{% endif %}
+                        </span>
+                    </div>
+                    {% if event.type == "comment" %}
+                        <p>{{ event.comment.text|linebreaksbr }}</p>
+                    {% elif event.type == "t1" %}
+                        <p class="rv-history-verdict">
+                            {% if event.review.approved %}<span class="is-yes">Approved</span>{% else %}<span class="is-no">Rejected</span>{% endif %}
+                        </p>
+                        <p><span class="rv-history-field">Feedback</span> {{ event.review.feedback }}</p>
+                        <p><span class="rv-history-field">Internal</span> {{ event.review.internal_notes }}</p>
+                    {% elif event.type == "t2" %}
+                        <p class="rv-history-verdict">{{ event.review.get_decision_display }}
+                            {% if event.review.deductions %}&middot; <span class="is-no">&minus;{{ event.review.deductions }} min</span>{% endif %}
+                        </p>
+                        <p><span class="rv-history-field">Feedback</span> {{ event.review.feedback }}</p>
+                        <p><span class="rv-history-field">Justification</span> {{ event.review.justification }}</p>
+                    {% endif %}
+                </li>
+            {% empty %}
+                <li class="rv-empty">Nothing here yet.</li>
+            {% endfor %}
+        </ol>
+    </div>
+</details>

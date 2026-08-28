@@ -4,9 +4,9 @@
    Everything here is scoped under `.root-page`, the class only
    templates/root/_base_root.html puts on <body>. style.css is shared with
    the public site, and a good number of the classes styled below
-   (.page, .content, .sidebar, .project-info, .modal-panel, .journal-card,
-   .address-box, .stl-viewer, ...) are used by both, so an unscoped rule
-   here would leak straight into the public pages. Keep the prefix.
+   (.page, .content, .sidebar, .modal-panel, .item-card, .address-box,
+   .stl-viewer, ...) are used by both, so an unscoped rule here would leak
+   straight into the public pages. Keep the prefix.
 
    Dark oceanic: near-black navy grounds, cards lifted a shade above them,
    and a bright ocean blue doing the accent work (links, primary buttons,
@@ -320,19 +320,6 @@
     background: var(--oc-surface-2);
 }
 
-.root-page .users-table > tbody > tr.group-header > td {
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--oc-ink-2);
-    background: var(--oc-shallow);
-}
-
-.root-page .users-table > tbody > tr.group-header:hover > td {
-    background: var(--oc-shallow);
-}
-
 /* Action cells stack short links ("edit project", "view project"); left to
    wrap they break mid-label and inflate every row. The prose columns have
    slack to give up instead. */
@@ -434,19 +421,6 @@
     text-decoration: underline;
 }
 
-.root-page .card-detail-link {
-    border-color: var(--oc-line-2);
-    border-radius: 8px;
-    background: var(--oc-field);
-    color: var(--oc-tide);
-}
-
-.root-page .card-detail-link:hover {
-    background: var(--oc-btn);
-    border-color: var(--oc-btn);
-    color: var(--oc-on-accent);
-}
-
 /* ---------- fields ---------- */
 
 .root-page input[type="text"],
@@ -543,16 +517,11 @@
 
 /* ---------- cards ---------- */
 
-.root-page .project-info,
-.root-page .review-card,
-.root-page .journal-card,
 .root-page .ship-card,
-.root-page .ship-event,
 .root-page .order-card,
 .root-page .item-card,
 .root-page .user-card,
-.root-page .audit-entry,
-.root-page .review-sidebar {
+.root-page .audit-entry {
     background: var(--oc-surface);
     border: 1px solid var(--oc-line);
     border-radius: var(--oc-radius);
@@ -560,74 +529,15 @@
     color: var(--oc-ink);
 }
 
-.root-page .project-info,
-.root-page .review-sidebar {
-    padding: 20px;
-}
-
-.root-page .project-info h2 {
-    margin-top: 0;
-}
-
-.root-page .review-sidebar h2 {
-    margin: 0 0 4px;
-    font-size: 17px;
-}
-
-.root-page .internal-comment {
-    background: var(--oc-sand);
-    border: 1px solid var(--oc-sand-line);
-    border-radius: var(--oc-radius);
-    box-shadow: var(--oc-shadow);
-    color: var(--oc-sand-ink);
-}
-
-.root-page .internal-comment .review-event-byline {
-    color: #b6a37f;
-}
-
-.root-page .project-info a:not(.card-detail-link),
-.root-page .review-card a:not(.card-detail-link),
-.root-page .journal-card a:not(.card-detail-link),
-.root-page .ship-card a:not(.card-detail-link),
-.root-page .ship-event a:not(.card-detail-link),
-.root-page .internal-comment a:not(.card-detail-link),
-.root-page .order-card a:not(.card-detail-link) {
+.root-page .ship-card a,
+.root-page .order-card a {
     color: var(--oc-tide);
 }
 
-.root-page .project-info a:not(.card-detail-link):hover,
-.root-page .review-card a:not(.card-detail-link):hover,
-.root-page .journal-card a:not(.card-detail-link):hover,
-.root-page .ship-card a:not(.card-detail-link):hover,
-.root-page .ship-event a:not(.card-detail-link):hover,
-.root-page .internal-comment a:not(.card-detail-link):hover,
-.root-page .order-card a:not(.card-detail-link):hover {
+.root-page .ship-card a:hover,
+.root-page .order-card a:hover {
     color: var(--oc-tide-2);
     text-decoration: underline;
-}
-
-/* Keep the lock/unlock control level with the project title rather than
-   floating at the vertical centre of a tall description. */
-.root-page .project-info .card-row {
-    align-items: flex-start;
-}
-
-.root-page .review-event-byline,
-.root-page .project-byline {
-    color: var(--oc-ink-3);
-}
-
-.root-page .locked-flag {
-    display: inline-block;
-    margin: 2px 0 6px;
-    padding: 2px 9px;
-    border: 1px solid var(--oc-bad-line);
-    border-radius: 999px;
-    background: var(--oc-bad-soft);
-    color: var(--oc-bad);
-    font-size: 12px;
-    font-weight: 600;
 }
 
 .root-page .is-yes {
@@ -684,55 +594,10 @@
 
 /* ---------- review layout ---------- */
 
-.root-page .review-history,
-.root-page .journal-list {
-    margin-bottom: 28px;
-}
-
 .root-page .stl-viewer {
     background: var(--oc-shallow);
     border: 1px solid var(--oc-line);
     box-sizing: border-box;
-}
-
-.root-page .journal-timelapses {
-    margin: 8px 0 12px;
-    padding-left: 20px;
-    color: var(--oc-ink-2);
-    font-size: 14px;
-}
-
-/* The justification that goes to Airtable, shown to T3 reviewers exactly as it
-   will be sent — hence the monospace block and the preserved line breaks. */
-.root-page .airtable-panel {
-    /* Wider than the 450px ceiling review cards get in the shared cards.css:
-       this one holds Lookout URLs, and at that width every one of them wraps
-       mid-path. Matched to .project-info instead. */
-    width: min(750px, 100%);
-    padding: 16px 18px;
-    margin-bottom: 28px;
-}
-
-.root-page .airtable-state {
-    margin: 0 0 8px;
-    font-size: 14px;
-    color: var(--oc-ink-2);
-}
-
-.root-page .airtable-justification {
-    margin: 0;
-    padding: 12px 14px;
-    max-height: 420px;
-    overflow: auto;
-    background: var(--oc-shallow);
-    border: 1px solid var(--oc-line);
-    border-radius: 10px;
-    color: var(--oc-ink-2);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 12.5px;
-    line-height: 1.55;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
 }
 
 /* ---------- audit log ---------- */
@@ -991,120 +856,4 @@
     .root-page .bulk-actions {
         flex-wrap: wrap;
     }
-}
-
-/* ---------- timelapse review ----------
-   /root only, like everything else in here — the pages these style don't
-   exist outside the internal queue. */
-
-.root-page .internal-only-note {
-    max-width: 70ch;
-    margin: -4px 0 20px;
-    padding: 10px 14px;
-    border: 1px solid var(--oc-line-2);
-    border-left: 3px solid var(--oc-bad);
-    border-radius: 8px;
-    background: var(--oc-surface);
-    color: var(--oc-ink-2);
-    font-size: 13px;
-}
-
-/* Fills the review column rather than sitting at a fixed width — the
-   justification field below is 500 characters and needs the room. */
-.root-page .timelapse-review-card {
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.root-page .timelapse-video {
-    display: block;
-    /* The box's shape is pinned, and that matters: a Lookout is a
-       full-resolution screen recording, so a video sized only by width snaps
-       to its intrinsic height the moment metadata loads and the page lurches
-       under the reviewer mid-click. aspect-ratio fixes the height ahead of
-       metadata the way a pixel height did, and still lets the box narrow with
-       the review column instead of overflowing it. object-fit letterboxes
-       whatever shape the recording turns out to be into it. */
-    width: 100%;
-    max-width: 860px;
-    aspect-ratio: 860 / 380;
-    height: auto;
-    object-fit: contain;
-    margin: 10px 0;
-    border: 1px solid var(--oc-line);
-    border-radius: 8px;
-    background: var(--oc-abyss);
-}
-
-.root-page .removal-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin: 12px 0;
-}
-
-.root-page .removal-row {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 10px 12px;
-    border: 1px solid var(--oc-line);
-    border-left: 3px solid var(--oc-bad);
-    border-radius: 8px;
-    background: var(--oc-surface-2);
-}
-
-.root-page .removal-range {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.root-page .removal-range input[type="text"] {
-    width: 110px;
-    min-width: 0;
-    flex: 0 1 110px;
-}
-
-/* The justification is the part of a removal that has to survive an audit, so
-   it gets the full width of the card rather than the stub an unstyled text
-   input defaults to. */
-.root-page .removal-row input[name="removal_reason"] {
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-}
-
-.root-page .removal-range .drop-removal {
-    margin-left: auto;
-    padding: 2px 10px;
-    line-height: 1.4;
-}
-
-.root-page .removal-hint {
-    margin: 6px 0 0;
-    color: var(--oc-ink-3);
-    font-size: 12px;
-}
-
-.root-page .removal-record {
-    margin: 10px 0 0;
-    padding-left: 20px;
-    color: var(--oc-ink-2);
-    font-size: 14px;
-}
-
-.root-page .removal-record li {
-    margin-bottom: 4px;
-}
-
-.root-page .review-sidebar textarea {
-    width: 100%;
-    box-sizing: border-box;
-}
-
-.root-page #removal-summary {
-    margin: 0;
-    color: var(--oc-ink-2);
-    font-size: 13px;
 }

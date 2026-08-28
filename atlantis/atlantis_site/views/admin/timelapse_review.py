@@ -19,6 +19,10 @@ from ...models import (
     parse_timecode, video_to_tracked,
 )
 from ..helpers import check_perms, display_name, record_audit, reviewer_leaderboard
+from .queue import (
+    QUEUES, dash_context, decorate_rows, go_to_next, lookout_groups, owner_snapshot,
+    parse_skip, review_context,
+)
 
 # Its own permission, not a tier of the T1/T2/T3 ladder. Organizers keep their
 # skeleton key; nobody else gets this by holding another review perm.
@@ -147,29 +151,46 @@ def _decorate_sessions(journal, review):
 @staff_member_required
 @check_perms(TIMELAPSE_REVIEW_PERMS)
 def timelapse_review_dash(request):
+    # Only the recently-reviewed log is built from this; the pending queue
+    # comes from Queue.pending, which does its own loading.
     base = (
         Journal.objects
         .filter(project__deleted=False)
         .select_related("project", "project__owner", "project__owner__hackclub_profile")
-        .prefetch_related("timelapses")
     )
-    # Grouped by project, oldest first within each project: a journal sitting
-    # here is holding its project out of T1.
-    pending = base.filter(timelapse_review__isnull=True).order_by("project__title", "created_at")
+
+    # Gathered under their projects, projects ordered by their longest wait —
+    # Queue.pending already sorts for exactly this, so the numbering on the page
+    # is the order "Start reviewing" walks. A journal sitting here is holding
+    # its project out of T1, and a project with no ship at all still belongs on
+    # the desk: its lapses are reviewed the same way, whenever it does ship.
+    pending = decorate_rows("lookout", QUEUES["lookout"].pending())
+    groups = lookout_groups(pending)
     reviewed = list(
         base.filter(timelapse_review__isnull=False)
         .select_related("timelapse_review", "timelapse_review__reviewer")
         .prefetch_related("timelapse_review__removals")
         .order_by("-timelapse_review__reviewed_at")[:RECENT_REVIEWS]
     )
-    # Grouped by project for display, most-recently-reviewed first within each group.
-    reviewed.sort(key=lambda journal: journal.project.title)
 
     return render(request, "root/timelapse_review.html", {
         "pending": pending,
+        "groups": groups,
         "reviewed": reviewed,
         "leaderboard": reviewer_leaderboard("timelapse_reviews"),
+        **dash_context(request, "lookout", pending, extra_stats=[{
+            "label": "Projects",
+            "value": str(len(groups)),
+            "sub": "with lapses waiting",
+        }]),
     })
+
+
+@staff_member_required
+@check_perms(TIMELAPSE_REVIEW_PERMS)
+def timelapse_review_next(request):
+    """Open the next unreviewed lapse, or return to the desk when none are left."""
+    return go_to_next(request, "lookout", parse_skip(request))
 
 
 @staff_member_required
@@ -183,13 +204,18 @@ def timelapse_review_journal(request, journal_id):
     )
     review = journal.timelapse_review_or_none
 
+    sessions = _decorate_sessions(journal, review)
     return render(request, "root/timelapse_review_journal.html", {
         "journal": journal,
         "project": journal.project,
         "review": review,
         "reviewer_name": display_name(review.reviewer) if review else "",
-        "sessions": _decorate_sessions(journal, review),
+        "sessions": sessions,
+        "session_count": len(sessions),
+        "screenshot_count": sum(s.screenshot_count for s in sessions),
         "reason_max_length": REASON_MAX_LENGTH,
+        "owner": owner_snapshot(journal.project.owner),
+        **review_context(request, "lookout", journal, claimable=review is None),
     })
 
 
@@ -273,4 +299,7 @@ def timelapse_decision(request, journal_id):
     else:
         messages.success(request, f'Approved "{journal.title}" with no time removed.')
 
-    return redirect("timelapse_review_dash")
+    # On to the next lapse rather than back to the desk — the queue is usually
+    # several lapses deep on one project, and each round trip cost a page load
+    # and a hunt for the row that used to be next.
+    return go_to_next(request, "lookout", parse_skip(request) + [journal.id])

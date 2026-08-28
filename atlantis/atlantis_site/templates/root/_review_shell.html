@@ -1,0 +1,116 @@
+{% extends 'root/_base_root.html' %}
+{% load static %}
+
+{% comment %}
+The reviewer shell: one screen, three fixed parts, nothing that scrolls out of
+reach.
+
+  ┌ top bar ─────────────────────────────────────────────────┐
+  │ back · skip · where you are · what you're looking at      │
+  ├────────────────────────────────┬──────────────────────────┤
+  │ evidence (scrolls on its own)  │ decision (always visible) │
+  └────────────────────────────────┴──────────────────────────┘
+
+Both columns own their scrolling, so the decision panel can't be scrolled away
+from the thing it is a decision about — the single change that stops a reviewer
+paging up and down between reading and deciding.
+
+Pages extend this and fill `evidence` and `decision`. Everything the shell
+needs beyond that comes from queue.review_context().
+{% endcomment %}
+
+{% block body_class %} review-shell{% endblock %}
+{% block nav %}{% endblock %}
+
+{% block content %}
+<div class="rv rv-accent-{{ queue_accent }}">
+    <header class="rv-topbar">
+        <div class="rv-nav">
+            <a class="rv-btn" href="{{ queue_dash_url }}" data-key="e" title="Back to the {{ queue_label|lower }} desk">
+                Desk<kbd>E</kbd>
+            </a>
+            {% if claim_held %}
+                <a class="rv-btn" href="{{ skip_url }}" data-key="s" title="Leave this one and open the next">
+                    Skip<kbd>S</kbd>
+                </a>
+            {% endif %}
+        </div>
+
+        <div class="rv-where">
+            <span class="rv-queue-tag">{{ queue_short }}</span>
+            {% if queue_position %}
+                <span class="rv-position" title="{{ queue_remaining }} still waiting behind this one">
+                    <strong>{{ queue_position }}</strong> / {{ queue_total }}
+                </span>
+            {% else %}
+                <span class="rv-position rv-position-off">not in queue</span>
+            {% endif %}
+        </div>
+
+        <div class="rv-subject">
+            <span class="rv-subject-title">{% block subject_title %}{% endblock %}</span>
+            <span class="rv-subject-byline">{% block subject_byline %}{% endblock %}</span>
+        </div>
+
+        <div class="rv-actions">
+            {% block topbar_actions %}{% endblock %}
+            <button type="button" class="rv-btn rv-btn-icon" data-key="?" data-shortcut-help
+                    title="Keyboard shortcuts">?</button>
+        </div>
+    </header>
+
+    {% if queue_position %}
+        {% comment %}
+        A hairline of progress through the queue. Purely orienting — it tells a
+        reviewer twenty items in that they are twenty items in.
+        {% endcomment %}
+        <div class="rv-progress" role="presentation">
+            <span class="rv-progress-fill" data-progress="{{ queue_position }}" data-progress-of="{{ queue_total }}"></span>
+        </div>
+    {% endif %}
+
+    {% if claim_conflict %}
+        <div class="rv-banner rv-banner-warn">
+            <strong>{{ claim_conflict.name }}</strong> has this open right now. Two decisions can't
+            both land — whoever submits first wins and the other is turned away.
+            <a href="{{ skip_url }}">Skip to the next one instead →</a>
+        </div>
+    {% endif %}
+
+    {% if messages %}
+        <div class="rv-messages">
+            {% for message in messages %}
+                <p class="message {{ message.tags }}">{{ message }}</p>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="rv-body">
+        <main class="rv-evidence" id="rv-evidence">
+            {% block evidence %}{% endblock %}
+        </main>
+        <aside class="rv-decision">
+            {% block decision %}{% endblock %}
+        </aside>
+    </div>
+</div>
+
+<dialog class="rv-shortcuts" id="rv-shortcuts">
+    <h2>Keyboard shortcuts</h2>
+    <dl>
+        <dt><kbd>E</kbd></dt><dd>Back to the {{ queue_label|lower }} desk</dd>
+        {% if claim_held %}<dt><kbd>S</kbd></dt><dd>Skip — open the next one without deciding</dd>{% endif %}
+        {% block shortcut_rows %}{% endblock %}
+        <dt><kbd>1</kbd>&hellip;<kbd>9</kbd></dt><dd>Open / close the numbered panels</dd>
+        <dt><kbd>?</kbd></dt><dd>This list</dd>
+        <dt><kbd>Esc</kbd></dt><dd>Close this list</dd>
+    </dl>
+    <form method="dialog"><button class="rv-btn">Close</button></form>
+</dialog>
+
+<script src="{% static 'atlantis_site/review.js' %}"
+        data-heartbeat-url="{% if claim_held %}{{ heartbeat_url }}{% endif %}"
+        data-heartbeat-seconds="{{ heartbeat_seconds }}"
+        defer></script>
+{% block page_scripts %}{% endblock %}
+{% endblock %}

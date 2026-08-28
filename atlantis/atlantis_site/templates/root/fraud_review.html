@@ -1,64 +1,18 @@
 {% extends 'root/_base_root.html' %}
+{% load static %}
 
 {% block page_id %}admin-fraud-review-page{% endblock %}
-{% block title %}Fraud Review Dash{% endblock %}
+{% block title %}T3 Review Desk{% endblock %}
 
 {% block content %}
-<div class="content">
+<div class="content rq">
     {% include "root/_messages_admin.html" %}
-    <h1>Fraud Review Dash</h1>
-    <section class="project-list">
-        <h2>Ships</h2>
-            <div class="table-scroll">
-                <table class="users-table">
-                    <thead>
-                        <tr>
-                            <th>Project Title</th>
-                            <th>Owner</th>
-                            <th>Type</th>
-                            <th>Time Spent</th>
-                            <th>Shipped</th>
-                            <th>Description</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for ship in ships %}
-                            {% if not ship.project.deleted %}
-                            <tr data-project-id="{{ ship.project.id }}">
-                                <td><a href="{% url 'fraud_review_project' ship.id %}">{{ ship.project.title }}</a></td>
-                                <td>@{{ ship.project.owner.hackclub_profile.slack_username }}</td>
-                                <td>
-                                    {{ ship.project.editor_name }}
-                                </td>
-                                <td>{{ ship.time_spent_display }}</td>
-                                <td>{{ ship.created_at|date:"M j, Y" }}</td>
-                                <td>{{ ship.project.description|truncatechars:80 }}</td>
-                                <td>
-                                    <a href="{% url 'fraud_review_project' ship.id %}">Review project</a>
-                                    <br>
-                                    {% if ship.project.printablesUrl %}
-                                        <a href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer">Printables link</a>
-                                    {% else %}
-                                        <span aria-disabled="true">No printables link</span>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            {% endif %}
-                        {% empty %}
-                            <tr><td colspan="7">No projects awaiting T3 review.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-    </section>
-    <section class="chart-grid">
+    {% include "root/_rv_queue_header.html" with blurb="The last gate. Approving finalizes the ship, pays the pearls, and sends the record to HQ." %}
+    <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> to move through the queue, <kbd>&crarr;</kbd> to open, or <strong>Start reviewing</strong> to be handed the longest-waiting one.</p>
+    {% include "root/_rv_ship_queue.html" with empty_text="No projects awaiting T3 review." %}
+    <section class="chart-grid rq-charts">
         {% include "root/_metric_chart.html" with title="Top T3 reviewers" rows=leaderboard empty="No reviews yet" %}
     </section>
 </div>
-<script>
-    document.querySelectorAll('[data-bar]').forEach((el) => {
-        el.style.width = el.dataset.bar + '%';
-    });
-</script>
+<script src="{% static 'atlantis_site/review.js' %}" defer></script>
 {% endblock %}

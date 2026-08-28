@@ -1,0 +1,51 @@
+{% comment %}
+The pending table the three ship desks share. Oldest first, because that is the
+order the queue should be worked; the row a reviewer wants is the top one, and
+"Start reviewing" opens it for them.
+
+Rows are whole-row links (see review.js) and walkable with j / k / Enter, so
+clearing a queue by hand costs one keystroke per item instead of a hunt for the
+right small blue link.
+
+expects: ships, queue, empty_text
+{% endcomment %}
+<div class="rq-table-wrap">
+    <table class="rq-table">
+        <thead>
+            <tr>
+                <th class="rq-col-num">#</th>
+                <th>Project</th>
+                <th>Owner</th>
+                <th>Type</th>
+                <th>Time</th>
+                <th>Waiting</th>
+                <th>Flags</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ship in ships %}
+                <tr class="rq-row" tabindex="0" data-href="{% url queue.detail ship.id %}">
+                    <td class="rq-col-num">{{ forloop.counter }}</td>
+                    <td>
+                        <a class="rq-project" href="{% url queue.detail ship.id %}">{{ ship.project.title }}</a>
+                        <span class="rq-desc">{{ ship.project.description|truncatechars:110 }}</span>
+                    </td>
+                    <td class="rq-owner">@{{ ship.project.owner.hackclub_profile.slack_username }}</td>
+                    <td class="rq-quiet">{{ ship.project.editor_name }}</td>
+                    <td class="rq-num">{{ ship.time_spent_display }}</td>
+                    <td>
+                        <span class="rv-chip rv-age-{{ ship.age_bucket }}">{{ ship.age_display }}</span>
+                        <span class="rq-since">{{ ship.created_at|date:"M j" }}</span>
+                    </td>
+                    <td class="rq-flags">
+                        {% if ship.claim %}<span class="rv-chip rv-chip-warn">{{ ship.claim.name }} is in this</span>{% endif %}
+                        {% if ship.project.locked %}<span class="rv-chip rv-chip-bad">locked</span>{% endif %}
+                        {% if not ship.project.printablesUrl %}<span class="rv-chip rv-chip-bad">no Printables</span>{% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="7" class="rq-empty">{{ empty_text }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
