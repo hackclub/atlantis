@@ -23,12 +23,31 @@ ASSETS_DIR = Path(settings.BASE_DIR) / "dist"
 MANIFEST_PATH = ASSETS_DIR / "manifest.json"
 
 
+# (manifest mtime_ns, token) — see asset_version().
+_version_cache = (None, None)
+
+
 def asset_version():
-    """A stable version token for the Inertia asset-version check."""
+    """A stable version token for the Inertia asset-version check.
+
+    The middleware resolves this once per request (so a rebuild invalidates
+    connected clients), so memoise the hash against the manifest's mtime
+    rather than re-reading and hashing the file on every request.
+    """
+    global _version_cache
     try:
-        return hashlib.md5(MANIFEST_PATH.read_bytes()).hexdigest()[:12]
+        mtime = MANIFEST_PATH.stat().st_mtime_ns
     except OSError:
         return "dev"
+    cached_mtime, cached_token = _version_cache
+    if cached_mtime == mtime:
+        return cached_token
+    try:
+        token = hashlib.md5(MANIFEST_PATH.read_bytes()).hexdigest()[:12]
+    except OSError:
+        return "dev"
+    _version_cache = (mtime, token)
+    return token
 
 
 def _manifest():

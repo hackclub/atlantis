@@ -27,3 +27,8 @@ slack_sdk==3.42.0
 sqlparse==0.6.0
 urllib3==2.7.0
 whitenoise==6.12.0
+
+# NOTE: no `django-inertia` entry here on purpose. Its last release (1.3.0,
+# May 2022) pins `django<5`, so listing it makes pip fail to resolve against
+# the Django pin above. The adapter is vendored in ./django_inertia/ instead —
+# see the module docstring in django_inertia/core.py.
