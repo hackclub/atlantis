@@ -29,7 +29,7 @@
                     {{ project.lookout_count }} Lookout{{ project.lookout_count|pluralize }}
                 </span>
                 <span class="rq-lapse-flags">
-                    {% if project.claim %}<span class="rv-chip rv-chip-warn">{{ project.claim.name }} is in this</span>{% endif %}
+                    {% if project.claim %}<span class="rv-chip rv-chip-warn">{{ project.claim.name }} is reviewing this</span>{% endif %}
                     {% if project.held_ships %}
                         <span class="rv-chip rv-chip-bad">
                             holding ship{{ project.held_ships|pluralize }}
