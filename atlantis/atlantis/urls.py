@@ -18,6 +18,9 @@ from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
+    # Fallout-port review pages — declared before the Django admin so the
+    # `/admin/reviews/...` routes win over admin's catch-all.
+    path("", include("fallout_site.urls")),
     path("", include("atlantis_site.urls")),
     path('admin/', admin.site.urls)
 ]

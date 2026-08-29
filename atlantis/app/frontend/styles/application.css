@@ -1,0 +1,1056 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+@import '@fontsource-variable/geist';
+
+@custom-variant dark (&:is(.dark *));
+@custom-variant short (@media (max-height: 700px));
+
+@source '../../../node_modules/@inertiaui/modal-react';
+@source '../../../docs/**/*.mdx';
+
+/* shadcn/ui color token mappings — resolved at runtime via CSS variables.
+   Actual values are scoped under .admin in admin.css so they only
+   apply to admin pages, not the user-facing Fallout theme. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* @plugin '@tailwindcss/typography'; */
+/* @plugin '@tailwindcss/forms'; */
+
+@theme {
+  --font-sans:
+    'Google Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+    'Noto Color Emoji';
+  --font-google: 'Google Sans', sans-serif;
+  --font-outfit: 'Outfit', sans-serif;
+  --font-bells: 'Hells Bells', sans-serif;
+  --font-comico: 'Comico', sans-serif;
+  --color-dark-blue: #007bda;
+
+  --breakpoint-2xs: 320px;
+  --breakpoint-xs: 480px;
+
+  --radius-4xl: 2rem;
+  --color-blue: #38c9ff;
+  --color-light-blue: #c3efff;
+  --color-lighter-blue: #edf7fb;
+  --color-dark-brown: #61453a;
+  --color-black: #61453a;
+  --color-brown: #9f715d;
+  --color-light-brown: #edd1b0;
+  --color-beige: #fcf1e5;
+
+  --color-light-green: #c8e6d8;
+  --color-green: #37b576;
+  /* --color-light-blue: #c3efff; */
+  --color-yellow: #ffebad;
+  --color-dark-yellow: #ef9300;
+  --color-pink: #fc90d2;
+  --color-coral: #ff7d70;
+  --color-ice-blue: #00a2ff;
+
+  --color-gray: #777777;
+
+  --color-backdrop: rgba(65, 88, 97, 0.5);
+}
+@font-face {
+  font-family: 'Hells Bells';
+  src: url('/fonts/Hells-Bells.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Comico';
+  src: url('/fonts/Comico-Regular.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+.font-bells {
+  font-family: 'Hells Bells', sans-serif;
+}
+
+.font-comico {
+  font-family: 'Comico', sans-serif;
+}
+
+:root {
+  @apply bg-light-brown text-dark-brown overscroll-none;
+  /* Override lookout-react theme.ts which injects SF Pro on :root */
+  font-family: var(--font-sans) !important;
+  scroll-behavior: smooth;
+  overflow-x: hidden;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* macOS-style thin translucent scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* WebKit fallback for older Chrome/Safari/Edge */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0);
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.im-modal-positioner {
+  @apply h-full!;
+}
+.im-dialog,
+.im-modal-container,
+.im-slideover-container {
+  z-index: 10000 !important;
+}
+.im-modal-wrapper {
+  @apply h-full! min-w-full! p-8;
+}
+.im-modal-wrapper:has(> .bulletin-board-modal-panel) {
+  @apply py-0!;
+}
+.im-modal-wrapper:has(> .event-detail-modal-panel) {
+  @apply flex items-center justify-center;
+}
+.im-modal-wrapper:has(> .professor-enrollment-modal-panel) {
+  @apply flex items-center justify-center;
+}
+/* Event detail modal sits above the state-driven CalendarViewModal overlay (z-index 10040) so
+   clicking an event chip in the calendar opens the detail on top instead of behind it. */
+.im-dialog:has(.event-detail-modal-panel),
+.im-modal-container:has(.event-detail-modal-panel),
+.im-slideover-container:has(.event-detail-modal-panel) {
+  z-index: 10100 !important;
+}
+
+img {
+  @apply select-none;
+}
+
+button:focus,
+input:focus,
+textarea:focus {
+  outline: none;
+}
+
+.custom-checkbox {
+  @apply appearance-none w-5 h-5 border-2 border-dark-brown rounded bg-white cursor-pointer grid place-content-center;
+}
+
+.custom-checkbox::after {
+  content: '';
+  @apply w-2.5 h-2.5 bg-light-brown;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+  transform: scale(0);
+}
+
+.custom-checkbox:checked {
+  @apply bg-brown border-dark-brown;
+}
+
+.custom-checkbox:checked::after {
+  transform: scale(1);
+}
+
+/* BGM player range inputs */
+.bgm-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.bgm-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(97, 69, 58, 0.25);
+}
+
+.bgm-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(97, 69, 58, 0.25);
+}
+
+.bgm-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #61453a;
+  margin-top: -3px;
+}
+
+.bgm-slider::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #61453a;
+  border: none;
+}
+
+.sticker {
+  will-change: transform;
+}
+
+@keyframes continue-button-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.02);
+  }
+}
+
+.continue-button-breathe {
+  display: inline-block;
+  animation: continue-button-breathe 2.1s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.markdown-content {
+  margin: 2rem auto;
+  padding: 0 1rem;
+  font-size: 1.125rem;
+  line-height: 1.8;
+  font-weight: 400;
+  color: var(--color-dark-brown);
+}
+
+.markdown-content h1 {
+  font-size: 2.75rem;
+  font-weight: 600;
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.5rem;
+  line-height: 1.1;
+  border-bottom: 1px solid rgba(97, 69, 58, 0.15);
+}
+
+.markdown-content h2 {
+  font-size: 1.875rem;
+  font-weight: 600;
+  margin-top: 2rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.375rem;
+  line-height: 1.1;
+  border-bottom: 1px solid rgba(97, 69, 58, 0.15);
+}
+
+.markdown-content h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  line-height: 1.1;
+}
+
+.markdown-content h4 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-top: 1.75rem;
+  margin-bottom: 0.75rem;
+  line-height: 1.1;
+}
+
+.markdown-content p {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  margin-bottom: 0.875rem;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+}
+
+.markdown-content a {
+  color: #1a6fa0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 2px;
+}
+
+.markdown-content a:hover {
+  background: rgba(26, 111, 160, 0.08);
+  border-radius: 3px;
+}
+
+.markdown-content ul,
+.markdown-content ol {
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+}
+
+.markdown-content li:has(> .checkbox-do, > .checkbox-dont) {
+  list-style: none;
+}
+
+.markdown-content > ul:has(> li > .checkbox-do, > li > .checkbox-dont) {
+  padding-left: 0;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+}
+
+.markdown-content li {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  margin-bottom: 0.125rem;
+}
+
+.markdown-content li > ul,
+.markdown-content li > ol {
+  margin-top: 0.125rem;
+  margin-bottom: 0;
+}
+
+.markdown-content blockquote {
+  background: rgba(97, 69, 58, 0.04);
+  border-left: 4px solid var(--color-brown);
+  margin: 1.5em 0;
+  padding: 1.25rem 1.25rem;
+  font-size: 1.125rem;
+  line-height: 1.8;
+  font-style: normal;
+}
+
+.markdown-content blockquote p {
+  display: inline;
+  margin-bottom: 0;
+}
+
+.markdown-content code {
+  background-color: rgba(97, 69, 58, 0.08);
+  color: var(--color-dark-brown);
+  padding: 0.125rem 0.375rem;
+  border-radius: 3px;
+  font-size: 0.9em;
+  font-family: monospace;
+}
+
+.markdown-content pre {
+  background-color: rgba(97, 69, 58, 0.06);
+  color: var(--color-dark-brown);
+  padding: 1rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-radius: 3px;
+  overflow-x: auto;
+  line-height: 1.25;
+}
+
+.markdown-content pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.9rem;
+  color: inherit;
+}
+
+.markdown-content table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  margin-bottom: 1rem;
+}
+
+.markdown-content th {
+  border-bottom: 1px solid rgba(97, 69, 58, 0.15);
+  padding: 0.75rem 1.5rem 0.75rem 0;
+  text-align: left;
+  font-weight: 600;
+}
+
+.markdown-content table:not(:has(td)) th {
+  border-bottom: none;
+}
+
+.markdown-content td {
+  padding: 0.75rem 1.5rem 0.75rem 0;
+  vertical-align: top;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid rgba(97, 69, 58, 0.15);
+  margin: 1.5rem 0;
+}
+
+.markdown-content img {
+  /* max-width: min(32rem, 100%); */
+  max-height: 30rem;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 3px;
+}
+
+.markdown-content .doc-video-container {
+  display: block;
+  max-width: 100%;
+}
+
+.markdown-content .checkbox-do,
+.markdown-content .checkbox-dont {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin-right: 0.375rem;
+  vertical-align: text-bottom;
+}
+
+.markdown-content .checkbox-do {
+  background-color: rgba(55, 181, 118, 0.15);
+  color: var(--color-green);
+}
+
+.markdown-content .checkbox-dont {
+  background-color: rgba(255, 125, 112, 0.15);
+  color: var(--color-coral);
+}
+
+.markdown-content aside {
+  background-color: rgba(97, 69, 58, 0.04);
+  border-left: 4px solid var(--color-brown);
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 0 3px 3px 0;
+  color: var(--color-dark-brown);
+}
+
+.markdown-content small {
+  font-size: 0.8em;
+}
+
+.markdown-content sup {
+  font-size: 0.75em;
+}
+
+.markdown-content .footnotes {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(97, 69, 58, 0.15);
+  font-size: 0.875rem;
+}
+
+.markdown-content .external-image-callout {
+  background-color: rgba(97, 69, 58, 0.04);
+  border: 1px solid var(--color-brown);
+  border-radius: 3px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+  color: var(--color-dark-brown);
+}
+
+.markdown-content .external-image-callout a {
+  color: var(--color-brown);
+  text-decoration: underline;
+}
+
+/* Callouts */
+.markdown-content .callout {
+  padding: 1rem 1.25rem;
+  margin: 1rem 0;
+  border-left: 4px solid;
+  border-radius: 0 3px 3px 0;
+  font-size: 1rem;
+  line-height: 1.8;
+}
+
+.markdown-content .callout-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.markdown-content .callout p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-content .callout-info {
+  background-color: rgba(56, 201, 255, 0.08);
+  border-color: var(--color-blue);
+}
+
+.markdown-content .callout-alert {
+  background-color: rgba(255, 235, 173, 0.3);
+  border-color: var(--color-yellow);
+}
+
+.markdown-content .callout-danger {
+  background-color: rgba(255, 125, 112, 0.08);
+  border-color: var(--color-coral);
+}
+
+.markdown-content .callout-success {
+  background-color: rgba(55, 181, 118, 0.08);
+  border-color: var(--color-green);
+}
+
+/* Timeline markdown */
+.markdown-content.timeline-markdown {
+  margin: 0rem auto;
+  padding: 0 0rem;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.markdown-content.timeline-markdown h1 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.markdown-content.timeline-markdown h2 {
+  font-size: 1.65rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.375rem;
+}
+
+.markdown-content.timeline-markdown h3 {
+  font-size: 1.45rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.markdown-content.timeline-markdown h4 {
+  font-size: 1.25rem;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-content.timeline-markdown p {
+  font-size: inherit;
+  line-height: 1.5;
+  margin-bottom: 0.875rem;
+}
+
+.markdown-content.timeline-markdown a {
+  padding: 1px;
+}
+
+.markdown-content.timeline-markdown li {
+  font-size: inherit;
+  line-height: 1.7;
+}
+
+.markdown-content.timeline-markdown blockquote {
+  margin: 0.8em 0;
+  padding: 1rem 1rem;
+  font-size: inherit;
+  line-height: 1.5;
+}
+
+.markdown-content.timeline-markdown code {
+  font-size: inherit;
+}
+
+.markdown-content.timeline-markdown th {
+  padding: 0.5rem 1rem 0.5rem 0;
+}
+
+.markdown-content.timeline-markdown td {
+  padding: 0.5rem 1rem 0.5rem 0;
+}
+
+.markdown-content hr {
+  margin: 1rem 0;
+}
+
+.markdown-content.timeline-markdown .footnotes {
+  margin-top: 1.5rem;
+  padding-top: 0.5rem;
+  font-size: 0.75rem;
+}
+
+/* TOC bar styles */
+.toc-bar {
+  background-color: rgba(97, 69, 58, 0.2);
+}
+
+.toc-bar-active {
+  background-color: var(--color-dark-brown);
+}
+
+.cursor-none,
+.cursor-none * {
+  cursor: none !important;
+}
+
+/* Dark mode for docs pages */
+@media (prefers-color-scheme: dark) {
+  /* Scoped to .docs-page so dark mode doesn't affect journal preview */
+  .docs-page .markdown-content {
+    color: #e8d5c4;
+  }
+
+  .docs-page .markdown-content h1,
+  .docs-page .markdown-content h2 {
+    border-bottom-color: rgba(237, 209, 176, 0.15);
+  }
+
+  .docs-page .markdown-content a {
+    color: #6db8e0;
+  }
+
+  .docs-page .markdown-content a:hover {
+    background: rgba(109, 184, 224, 0.1);
+  }
+
+  .docs-page .markdown-content blockquote {
+    background: rgba(237, 209, 176, 0.06);
+  }
+
+  .docs-page .markdown-content code {
+    background-color: rgba(237, 209, 176, 0.1);
+    color: #e8d5c4;
+  }
+
+  .docs-page .markdown-content pre {
+    background-color: rgba(237, 209, 176, 0.08);
+    color: #e8d5c4;
+  }
+
+  .docs-page .markdown-content th {
+    border-bottom-color: rgba(237, 209, 176, 0.15);
+  }
+
+  .docs-page .markdown-content table:not(:has(td)) th {
+    border-bottom: none;
+  }
+
+  .docs-page .markdown-content hr {
+    border-top-color: rgba(237, 209, 176, 0.15);
+  }
+
+  .docs-page .markdown-content .footnotes {
+    border-top-color: rgba(237, 209, 176, 0.15);
+  }
+
+  .docs-page .markdown-content aside {
+    background-color: rgba(237, 209, 176, 0.06);
+    color: #e8d5c4;
+  }
+
+  .docs-page .markdown-content .external-image-callout {
+    background-color: rgba(237, 209, 176, 0.06);
+    color: #e8d5c4;
+  }
+
+  .docs-page .markdown-content .callout-info {
+    background-color: rgba(56, 201, 255, 0.12);
+  }
+
+  .docs-page .markdown-content .callout-alert {
+    background-color: rgba(255, 235, 173, 0.1);
+  }
+
+  .docs-page .markdown-content .callout-danger {
+    background-color: rgba(255, 125, 112, 0.12);
+  }
+
+  .docs-page .markdown-content .callout-success {
+    background-color: rgba(55, 181, 118, 0.12);
+  }
+
+  .docs-page .markdown-content .checkbox-do {
+    background-color: rgba(55, 181, 118, 0.2);
+  }
+
+  .docs-page .markdown-content .checkbox-dont {
+    background-color: rgba(255, 125, 112, 0.2);
+  }
+
+  /* Docs layout dark mode */
+  .docs-page {
+    background-color: #120d0b;
+    color: #e8d5c4;
+  }
+
+  .docs-page .bg-light-brown {
+    background-color: #1e1613;
+  }
+
+  .docs-page .bg-brown {
+    background-color: #6b4a3a;
+  }
+
+  .docs-page .border-dark-brown\/20 {
+    border-color: rgba(237, 209, 176, 0.15);
+  }
+
+  .docs-page button[aria-label='Open navigation'] {
+    background-color: #1e1613;
+    border-color: rgba(237, 209, 176, 0.2);
+    color: #e8d5c4;
+  }
+
+  .toc-bar {
+    background-color: rgba(237, 209, 176, 0.2);
+  }
+
+  .toc-bar-active {
+    background-color: #e8d5c4;
+  }
+
+  .toc-sidebar .bg-light-brown {
+    background-color: #1e1613;
+  }
+
+  .toc-sidebar .text-dark-brown {
+    color: #e8d5c4;
+  }
+
+  .toc-sidebar .border-dark-brown\/15 {
+    border-color: rgba(237, 209, 176, 0.15);
+  }
+
+  .toc-sidebar button[style*='color'] {
+    color: #6db8e0 !important;
+  }
+
+  .toc-sidebar button:hover {
+    background-color: rgba(237, 209, 176, 0.08);
+  }
+}
+
+/* Doc Search — light mode */
+.doc-search-trigger {
+  color: #9f715d;
+  border: 1px solid #c5a080;
+  background: #fffcf5;
+  transition: background 0.15s;
+}
+.doc-search-trigger:hover {
+  background: #fcf1e5;
+}
+.doc-search-kbd {
+  background: #f5e8d5;
+  border: 1px solid #c5a080;
+  color: #9f715d;
+}
+.doc-search-backdrop {
+  background: rgba(97, 69, 58, 0.45);
+}
+.doc-search-panel {
+  background: #fffcf5;
+  border: 1.5px solid #9f715d;
+  box-shadow: 0 24px 80px rgba(97, 69, 58, 0.22), 0 2px 8px rgba(97, 69, 58, 0.1);
+}
+.doc-search-input-row {
+  border-bottom: 1px solid #edd1b0;
+}
+.doc-search-input {
+  color: #61453a;
+}
+.doc-search-input::placeholder {
+  color: #9f715d;
+}
+.doc-search-icon {
+  color: #9f715d;
+}
+.doc-search-empty {
+  color: #9f715d;
+}
+.doc-search-result {
+  background: transparent;
+  transition: background 0.08s;
+}
+.doc-search-result[data-active='true'] {
+  background: #edd1b0;
+}
+.doc-search-result-title {
+  color: #61453a;
+}
+.doc-search-result-excerpt {
+  color: #9f715d;
+}
+.doc-search-result mark {
+  background: #ffebad;
+  color: #61453a;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .docs-page .doc-search-trigger {
+    color: #b89a85;
+    border-color: rgba(237, 209, 176, 0.2);
+    background: #1e1613;
+  }
+  .docs-page .doc-search-trigger:hover {
+    background: #2a1e19;
+  }
+  .docs-page .doc-search-kbd {
+    background: #2a1e19;
+    border-color: rgba(237, 209, 176, 0.2);
+    color: #b89a85;
+  }
+  .doc-search-backdrop {
+    background: rgba(0, 0, 0, 0.6);
+  }
+  .doc-search-panel {
+    background: #1e1613;
+    border-color: rgba(237, 209, 176, 0.2);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+  .doc-search-input-row {
+    border-bottom-color: rgba(237, 209, 176, 0.12);
+  }
+  .doc-search-input {
+    color: #e8d5c4;
+  }
+  .doc-search-input::placeholder {
+    color: #7a5a4a;
+  }
+  .doc-search-icon {
+    color: #7a5a4a;
+  }
+  .doc-search-empty {
+    color: #7a5a4a;
+  }
+  .doc-search-result[data-active='true'] {
+    background: #2e1f18;
+  }
+  .doc-search-result-title {
+    color: #e8d5c4;
+  }
+  .doc-search-result-excerpt {
+    color: #b89a85;
+  }
+  .doc-search-result mark {
+    background: rgba(255, 235, 173, 0.2);
+    color: #e8d5c4;
+  }
+  .doc-search-kbd {
+    background: #2a1e19;
+    border-color: rgba(237, 209, 176, 0.2);
+    color: #b89a85;
+  }
+}
+
+@theme inline {
+  --font-heading: var(--font-sans);
+  --font-sans: 'Geist Variable', sans-serif;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Admin perf badges (rack-mini-profiler + #db-query-badge). Toggled by Shift+\ in inertia.ts. */
+#db-query-badge {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 9999;
+  max-width: 360px;
+  padding: 4px 8px;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: right;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  border-bottom-left-radius: 4px;
+  cursor: pointer;
+  word-spacing: 0.05em;
+  user-select: none;
+}
+#db-query-badge .short {
+  display: inline;
+}
+#db-query-badge .long {
+  display: none;
+}
+#db-query-badge.expanded .short {
+  display: none;
+}
+#db-query-badge.expanded .long {
+  display: inline;
+}
+.perf-badges-hidden #db-query-badge,
+.perf-badges-hidden .profiler-results {
+  display: none !important;
+}
+.announcements-hidden .announcements-bar {
+  display: none !important;
+}

@@ -97,9 +97,10 @@ def tracked_minutes_for_journals(journals):
     return tracked_seconds_for_journals(journals) // 60
 
 def removed_seconds_for_journals(journals):
-    return TimelapseRemoval.objects.filter(review__journal__in=journals).aggregate(
-        total=Sum(F("end_seconds") - F("start_seconds"), output_field=IntegerField())
-    )["total"] or 0
+    return sum(
+        removal.deducted_seconds
+        for removal in TimelapseRemoval.objects.filter(review__journal__in=journals)
+    )
 
 def approved_seconds_for_journals(journals):
     return max(

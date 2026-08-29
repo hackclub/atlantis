@@ -658,12 +658,7 @@ class LookoutSession(models.Model):
 
 	@property
 	def removed_seconds(self):
-		return self.removals.aggregate(
-			total=models.Sum(
-				models.F("end_seconds") - models.F("start_seconds"),
-				output_field=models.IntegerField(),
-			)
-		)["total"] or 0
+		return sum(removal.deducted_seconds for removal in self.removals.all())
 
 	@property
 	def removed_display(self):
@@ -711,12 +706,7 @@ class TimelapseReview(models.Model):
 
 	@property
 	def removed_seconds(self):
-		return self.removals.aggregate(
-			total=models.Sum(
-				models.F("end_seconds") - models.F("start_seconds"),
-				output_field=models.IntegerField(),
-			)
-		)["total"] or 0
+		return sum(removal.deducted_seconds for removal in self.removals.all())
 
 	@property
 	def removed_minutes(self):
@@ -752,6 +742,12 @@ class TimelapseRemoval(models.Model):
 
 	start_seconds = models.PositiveIntegerField()
 	end_seconds = models.PositiveIntegerField()
+	# 100 preserves the original all-or-nothing removal behavior. Fallout
+	# deflations store the percentage of the range that is deducted.
+	deduction_percent = models.PositiveSmallIntegerField(
+		default=100,
+		validators=[MinValueValidator(0), MaxValueValidator(100)],
+	)
 	# Required, per range: a deduction nobody can explain later is indefensible.
 	reason = models.CharField(max_length=1000)
 
@@ -766,6 +762,10 @@ class TimelapseRemoval(models.Model):
 				condition=~models.Q(reason=""),
 				name="timelapse_removal_reason_required",
 			),
+			models.CheckConstraint(
+				condition=models.Q(deduction_percent__lte=100),
+				name="timelapse_removal_deduction_percent_valid",
+			),
 		]
 
 	def __str__(self):
@@ -774,6 +774,10 @@ class TimelapseRemoval(models.Model):
 	@property
 	def duration_seconds(self):
 		return max(self.end_seconds - self.start_seconds, 0)
+
+	@property
+	def deducted_seconds(self):
+		return round(self.duration_seconds * self.deduction_percent / 100)
 
 	@property
 	def duration_display(self):

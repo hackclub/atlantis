@@ -1,0 +1,10 @@
+# Frontend tooling output
+node_modules/
+dist/
+.vite/
+coverage/
+
+# Local frontend configuration
+.env
+.env.*
+!.env.example

@@ -93,6 +93,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'atlantis_site',
+    'fallout_site',
+    'django_inertia',
     'storages'
 ]
 
@@ -111,6 +113,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    "fallout_site.middleware.FalloutInertiaMiddleware",
 ]
 
 ROOT_URLCONF = 'atlantis.urls'
@@ -262,3 +265,20 @@ JAZZMIN_UI_TWEAKS = {
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# Vite-built Fallout frontend bundle (see vite.config.ts → build.outDir).
+STATICFILES_DIRS = [
+    BASE_DIR / "dist",
+]
+
+# Serve the copied Fallout public assets (fonts, etc.) at their root-relative
+# paths (/fonts/Hells-Bells.otf, /favicon.ico, ...) via WhiteNoise.
+WHITENOISE_ROOT = BASE_DIR / "public"
+
+# Inertia root view + asset versioning
+INERTIA_ROOT_VIEW = "fallout_site/app.html"
+
+# The Fallout frontend sends the CSRF token in the `X-CSRF-Token` header
+# (read from <meta name="csrf-token">). Teach Django's CSRF middleware to
+# accept that header name.
+CSRF_HEADER_NAME = "HTTP_X_CSRF_TOKEN"

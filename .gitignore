@@ -7,3 +7,4 @@ pgdata/
 staticfiles
 certs/
 .claude
+atlantis/lookout-local/

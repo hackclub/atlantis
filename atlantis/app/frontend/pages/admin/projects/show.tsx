@@ -1,0 +1,879 @@
+import type { ReactNode } from 'react'
+import { useState } from 'react'
+import { Deferred, Link, usePage, router } from '@inertiajs/react'
+import type { ColumnDef } from '@tanstack/react-table'
+import AdminLayout from '@/layouts/AdminLayout'
+import { Badge } from '@/components/admin/ui/badge'
+import { Button } from '@/components/admin/ui/button'
+import { Card, CardContent } from '@/components/admin/ui/card'
+import { Input } from '@/components/admin/ui/input'
+import { Textarea } from '@/components/admin/ui/textarea'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/admin/ui/alert-dialog'
+import { DataTable } from '@/components/admin/DataTable'
+import HoursDisplay from '@/components/admin/HoursDisplay'
+import AuditLog, { AuditLogLoading } from '@/components/admin/AuditLog'
+import type { AuditLogEntry } from '@/components/admin/AuditLog'
+import { ChevronLeftIcon, ExternalLinkIcon, ClockIcon, StarIcon, TimerIcon, LinkIcon, Trash2Icon } from 'lucide-react'
+import { useLiveReload } from '@/lib/useLiveReload'
+import { ReviewStatusBadge } from '@/components/admin/ReviewStatusBadge'
+import type {
+  AdminProjectDetail,
+  PagyProps,
+  SiblingStatus,
+  SiblingStatuses,
+  SharedProps,
+  PreviousReview,
+  ProjectAuditSessionRow,
+} from '@/types'
+
+function BurnoutToggle({ projectId, isBurnout }: { projectId: number; isBurnout: boolean }) {
+  const [saving, setSaving] = useState(false)
+
+  function handleToggle() {
+    setSaving(true)
+    router.patch(
+      `/admin/projects/${projectId}/toggle_burnout`,
+      {},
+      {
+        preserveScroll: true,
+        onFinish: () => setSaving(false),
+      },
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <Button
+        type="button"
+        size="sm"
+        variant={isBurnout ? 'destructive' : 'outline'}
+        className="h-7 text-xs"
+        disabled={saving}
+        onClick={handleToggle}
+      >
+        {saving ? 'Saving…' : isBurnout ? 'Remove Burnout' : 'Add Burnout'}
+      </Button>
+    </div>
+  )
+}
+
+function UnlistToggle({ projectId, isUnlisted }: { projectId: number; isUnlisted: boolean }) {
+  const [saving, setSaving] = useState(false)
+
+  function handleToggle() {
+    setSaving(true)
+    router.patch(
+      `/admin/projects/${projectId}/toggle_unlisted`,
+      {},
+      {
+        preserveScroll: true,
+        onFinish: () => setSaving(false),
+      },
+    )
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <Button
+        type="button"
+        size="sm"
+        variant={isUnlisted ? 'destructive' : 'outline'}
+        className="h-7 text-xs"
+        disabled={saving}
+        onClick={handleToggle}
+      >
+        {saving ? 'Saving…' : isUnlisted ? 'Re-list' : 'Unlist'}
+      </Button>
+    </div>
+  )
+}
+
+function ManualHoursForm({ projectId, initialHours }: { projectId: number; initialHours: number }) {
+  const [hours, setHours] = useState(String(initialHours))
+  const [saving, setSaving] = useState(false)
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setSaving(true)
+    router.patch(
+      `/admin/projects/${projectId}/update_manual_seconds`,
+      { manual_hours: hours },
+      {
+        preserveScroll: true,
+        onFinish: () => setSaving(false),
+      },
+    )
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex items-center gap-2 mt-1">
+      <Input
+        type="number"
+        min="0"
+        step="0.01"
+        value={hours}
+        onChange={(e) => setHours(e.target.value)}
+        className="h-7 w-24 text-sm"
+      />
+      <Button type="submit" size="sm" variant="outline" className="h-7 text-xs" disabled={saving}>
+        {saving ? 'Saving…' : 'Save'}
+      </Button>
+    </form>
+  )
+}
+
+interface JournalEntry {
+  id: number
+  content_html: string
+  images: string[]
+  author_display_name: string
+  author_avatar: string
+  created_at: string
+  ship_id: number | null
+  total_duration: number
+  recordings: {
+    id: number
+    type: string
+    name: string
+    duration: number
+    removed_seconds: number
+    description: string | null
+    playback_url: string | null
+  }[]
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
+
+function recordingTypeLabel(type: string): string {
+  switch (type) {
+    case 'LookoutTimelapse':
+      return 'Lookout'
+    case 'LapseTimelapse':
+      return 'Lapse'
+    case 'YouTubeVideo':
+      return 'YouTube'
+    default:
+      return type
+  }
+}
+
+function recordingTypeBadgeColor(type: string): string {
+  switch (type) {
+    case 'LookoutTimelapse':
+      return 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800'
+    case 'LapseTimelapse':
+      return 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800'
+    case 'YouTubeVideo':
+      return 'bg-red-100 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800'
+    default:
+      return 'bg-zinc-100 text-zinc-700 border-zinc-200'
+  }
+}
+
+interface ShipRow {
+  id: number
+  status: string
+  approved_public_hours: number | null
+  approved_internal_hours: number | null
+  review_statuses: SiblingStatuses
+  created_at: string
+}
+
+const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  pending: 'secondary',
+  approved: 'default',
+  rejected: 'destructive',
+  returned: 'outline',
+}
+
+function StepBadge({ label, review, path }: { label: string; review: SiblingStatus; path: string }) {
+  const { status, id } = review
+  if (!status) return null
+  const color =
+    status === 'approved'
+      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400'
+      : status === 'returned' || status === 'rejected'
+        ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400'
+        : status === 'cancelled'
+          ? 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-500'
+          : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400'
+  const className = `px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`
+  const text = `${label}: ${status}`
+  if (id && (status === 'pending' || status === 'approved')) {
+    return (
+      <Link href={`/admin/reviews/${path}/${id}`} className={`${className} hover:underline`}>
+        {text}
+      </Link>
+    )
+  }
+  return <span className={className}>{text}</span>
+}
+
+const shipColumns: ColumnDef<ShipRow>[] = [
+  {
+    accessorKey: 'id',
+    header: 'ID',
+    cell: ({ row }) => (
+      <Link href={`/admin/reviews/${row.original.id}`} className="text-muted-foreground hover:underline">
+        {row.original.id}
+      </Link>
+    ),
+  },
+  {
+    accessorKey: 'status',
+    header: 'Status',
+    cell: ({ row }) => {
+      const { status, review_statuses } = row.original
+      const showSteps = status === 'pending' && review_statuses
+      if (showSteps) {
+        return (
+          <div className="flex flex-wrap gap-1">
+            <StepBadge label="TA" review={review_statuses.time_audit} path="time_audits" />
+            <StepBadge label="RC" review={review_statuses.requirements_check} path="requirements_checks" />
+            <StepBadge label="Design" review={review_statuses.design_review} path="design_reviews" />
+            <StepBadge label="Build" review={review_statuses.build_review} path="build_reviews" />
+          </div>
+        )
+      }
+      return (
+        <Badge variant={statusColors[status] ?? 'outline'} className="capitalize">
+          {status}
+        </Badge>
+      )
+    },
+  },
+  {
+    accessorKey: 'approved_public_hours',
+    header: 'Hours Approved',
+    cell: ({ row }) => (
+      <HoursDisplay
+        publicHours={row.original.approved_public_hours}
+        internalHours={row.original.approved_internal_hours}
+        className="text-xs"
+      />
+    ),
+  },
+  {
+    accessorKey: 'created_at',
+    header: 'Created',
+  },
+]
+
+function isSafeUrl(url: string | null): boolean {
+  if (!url) return false
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function formatUrl(url: string): string {
+  const match = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)/)
+  return match ? match[1] : url
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="text-sm mt-0.5">{children}</dd>
+    </div>
+  )
+}
+
+// Ad-hoc, project-wide time audits. Admin-only: the rows expose the secret share links, and only
+// admins can open or revoke a session.
+function TimeAuditSessions({ projectId, sessions }: { projectId: number; sessions: ProjectAuditSessionRow[] }) {
+  const [label, setLabel] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [copiedToken, setCopiedToken] = useState<string | null>(null)
+
+  function create() {
+    setCreating(true)
+    router.post(
+      `/admin/projects/${projectId}/project_audits`,
+      { project_time_audit: { label: label.trim() || null } },
+      { onFinish: () => setCreating(false) },
+    )
+  }
+
+  function copy(session: ProjectAuditSessionRow) {
+    navigator.clipboard.writeText(session.share_url).then(() => {
+      setCopiedToken(session.token)
+      setTimeout(() => setCopiedToken(null), 2000)
+    })
+  }
+
+  return (
+    <div className="mt-8">
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-lg font-semibold tracking-tight">Standalone Time Audits</h2>
+        <Badge variant="secondary" className="text-sm">
+          {sessions.length}
+        </Badge>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => setDialogOpen(true)}>
+          <TimerIcon data-icon="inline-start" />
+          New Audit
+        </Button>
+      </div>
+
+      {sessions.length > 0 ? (
+        <Card className="py-0">
+          <div className="divide-y divide-border">
+            {sessions.map((session) => (
+              <div key={session.token} className="p-3 flex items-center gap-3 flex-wrap">
+                <Link href={session.path} className="text-sm font-medium hover:underline">
+                  {session.label || 'Untitled audit'}
+                </Link>
+                <span className="text-xs text-muted-foreground">
+                  by {session.created_by_display_name} · {session.created_at}
+                </span>
+                {session.computed_hours !== null ? (
+                  <Badge variant="outline" className="text-xs">
+                    {session.computed_hours}h
+                  </Badge>
+                ) : (
+                  <span className="text-xs text-muted-foreground">not saved yet</span>
+                )}
+                {session.last_edited_by_display_name && (
+                  <span className="text-xs text-muted-foreground">
+                    last edited by {session.last_edited_by_display_name}
+                    {session.saved_at && ` · ${session.saved_at}`}
+                  </span>
+                )}
+                <div className="ml-auto flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={() => copy(session)}>
+                    <LinkIcon data-icon="inline-start" />
+                    {copiedToken === session.token ? 'Copied!' : 'Copy Link'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => router.delete(session.path, { preserveScroll: true })}
+                    title="Delete this audit and revoke its link"
+                  >
+                    <Trash2Icon />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No standalone audits. Creating one opens a shareable audit over every journal entry on this project — it never
+          affects ship time audits or approved hours.
+        </p>
+      )}
+
+      <AlertDialog open={dialogOpen} onOpenChange={(o) => !creating && setDialogOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>New standalone time audit</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <label htmlFor="audit-label" className="text-sm font-medium">
+              Label <span className="text-muted-foreground">(optional)</span>
+            </label>
+            <Input
+              id="audit-label"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="Why is this project being audited?"
+            />
+            <p className="text-xs text-muted-foreground">
+              Generates a secret link any time auditor or admin can open. Saving it has no effect on ship time audits,
+              approved hours, or koi.
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={creating}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={create} disabled={creating}>
+              {creating ? 'Creating…' : 'Create & Open'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+function reviewTypeLabel(type: string): string {
+  switch (type) {
+    case 'requirements_check_review':
+      return 'RC'
+    case 'design_review':
+      return 'Design'
+    case 'build_review':
+      return 'Build'
+    case 'time_audit_review':
+      return 'Time Audit'
+    default:
+      return type
+  }
+}
+
+export default function AdminProjectsShow({
+  project,
+  ships,
+  pagy_ships,
+  all_reviews,
+  journal_entries,
+  pagy_entries,
+  audit_log,
+  time_audit_sessions,
+}: {
+  project: AdminProjectDetail
+  ships: ShipRow[]
+  pagy_ships: PagyProps
+  all_reviews: PreviousReview[]
+  journal_entries: JournalEntry[]
+  pagy_entries: PagyProps
+  audit_log?: AuditLogEntry[]
+  time_audit_sessions?: ProjectAuditSessionRow[] // Admin-only — omitted for other staff
+}) {
+  const { auth, admin_permissions } = usePage<SharedProps & { admin_permissions?: { is_admin: boolean } }>().props
+  const isAdmin = auth.user?.is_admin ?? false
+  const canFeature = admin_permissions?.is_admin ?? false
+
+  // Keep the Feature/Featured button in sync when this project gets (un)featured from
+  // anywhere else (the Featured Projects admin page, another admin, etc.). Without this,
+  // a stale featured_project_id leads to DELETE on a missing record and a Ruby 404.
+  const liveProps = useLiveReload<{ project: AdminProjectDetail }>({
+    stream: 'featured_projects',
+    only: ['project'],
+  })
+  const liveProject = liveProps?.project ?? project
+
+  const [featureDialogOpen, setFeatureDialogOpen] = useState(false)
+  const [featureNote, setFeatureNote] = useState('')
+  const [featuring, setFeaturing] = useState(false)
+  const [selectedRecording, setSelectedRecording] = useState<JournalEntry['recordings'][number] | null>(null)
+
+  function toggleFeatured() {
+    if (liveProject.featured_project_id) {
+      router.delete(`/admin/featured_projects/${liveProject.featured_project_id}`, { preserveScroll: true })
+    } else {
+      setFeatureNote('')
+      setFeatureDialogOpen(true)
+    }
+  }
+
+  function submitFeature() {
+    setFeaturing(true)
+    router.post(
+      '/admin/featured_projects',
+      { featured_project: { project_id: project.id, note: featureNote.trim() || null } },
+      {
+        preserveScroll: true,
+        onFinish: () => {
+          setFeaturing(false)
+          setFeatureDialogOpen(false)
+        },
+      },
+    )
+  }
+
+  return (
+    <div>
+      <button
+        onClick={() => window.history.back()}
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4"
+      >
+        <ChevronLeftIcon className="size-4" />
+        Back
+      </button>
+
+      <div className="flex items-end justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {project.name}
+            {project.is_unlisted && (
+              <Badge variant="outline" className="ml-2 align-middle">
+                Unlisted
+              </Badge>
+            )}
+            {project.is_discarded && (
+              <Badge variant="destructive" className="ml-2 align-middle">
+                Deleted {project.discarded_at}
+              </Badge>
+            )}
+            {project.tags.includes('burnout') && (
+              <Badge variant="secondary" className="ml-2 align-middle">
+                Burnout
+              </Badge>
+            )}
+          </h1>
+          <div className="flex items-center flex-wrap gap-1 text-sm text-muted-foreground mt-1">
+            <span>by</span>
+            <Link
+              href={`/admin/users/${project.user_id}`}
+              className="inline-flex items-center gap-1 text-foreground hover:underline"
+            >
+              <img src={project.user_avatar} alt={project.user_display_name} className="size-4 rounded-full" />
+              {project.user_display_name}
+            </Link>
+            {project.collaborators.length > 0 && (
+              <>
+                <span>&</span>
+                {project.collaborators.map((collab, i) => (
+                  <span key={collab.id} className="inline-flex items-center gap-1">
+                    {i > 0 && (
+                      <span className="text-muted-foreground">
+                        {i === project.collaborators.length - 1 ? 'and' : ','}
+                      </span>
+                    )}
+                    <Link
+                      href={`/admin/users/${collab.id}`}
+                      className="inline-flex items-center gap-1 text-foreground hover:underline"
+                    >
+                      <img src={collab.avatar} alt={collab.display_name} className="size-4 rounded-full" />
+                      {collab.display_name}
+                    </Link>
+                  </span>
+                ))}
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {canFeature && !project.is_discarded && !project.is_unlisted && (
+            <Button
+              variant={liveProject.featured_project_id ? 'default' : 'outline'}
+              size="sm"
+              onClick={toggleFeatured}
+              title={liveProject.featured_project_id ? 'Click to unfeature' : 'Click to feature on the bulletin board'}
+            >
+              <StarIcon
+                data-icon="inline-start"
+                className={liveProject.featured_project_id ? 'fill-current' : undefined}
+              />
+              {liveProject.featured_project_id ? 'Featured' : 'Feature'}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/projects/${project.id}`}>
+              <ExternalLinkIcon data-icon="inline-start" />
+              User Facing
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      <Card className="mb-6">
+        <CardContent>
+          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <Field label="Entries">{project.journal_entries_count}</Field>
+            <Field label="Repo Link">
+              {isSafeUrl(project.repo_link) ? (
+                <a
+                  href={project.repo_link!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline truncate block"
+                >
+                  {formatUrl(project.repo_link!)}
+                </a>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </Field>
+            <Field label="Hrs Tracked">{project.hours_tracked}</Field>
+            {isAdmin && (
+              <Field label="+ Manual Hrs">
+                <ManualHoursForm projectId={project.id} initialHours={project.manual_hours} />
+              </Field>
+            )}
+            <Field label="Last Entry">
+              {project.last_entry_at ?? <span className="text-muted-foreground">—</span>}
+            </Field>
+            <Field label="Demo Link">
+              {isSafeUrl(project.demo_link) ? (
+                <a
+                  href={project.demo_link!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline truncate block"
+                >
+                  {formatUrl(project.demo_link!)}
+                </a>
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              )}
+            </Field>
+            <Field label="Tags">{project.tags.length > 0 ? project.tags.join(', ') : '—'}</Field>
+            {isAdmin && (
+              <Field label="Burnout">
+                <BurnoutToggle projectId={project.id} isBurnout={project.tags.includes('burnout')} />
+              </Field>
+            )}
+            {isAdmin && (
+              <Field label="Unlisted">
+                <UnlistToggle projectId={project.id} isUnlisted={project.is_unlisted} />
+              </Field>
+            )}
+            <Field label="Created">{project.created_at}</Field>
+          </dl>
+          {project.description && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <Field label="Description">{project.description}</Field>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center gap-2 mb-4">
+        <h2 className="text-lg font-semibold tracking-tight">Ships</h2>
+        <Badge variant="secondary" className="text-sm">
+          {pagy_ships.count}
+        </Badge>
+      </div>
+
+      <DataTable columns={shipColumns} data={ships} pagy={pagy_ships} noun="ships" pageParam="ships_page" />
+
+      {all_reviews.length > 0 && (
+        <div className="mt-8">
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-lg font-semibold tracking-tight">Reviews</h2>
+            <Badge variant="secondary" className="text-sm">
+              {all_reviews.length}
+            </Badge>
+          </div>
+          <Card className="py-0">
+            <div className="divide-y divide-border">
+              {all_reviews.map((r, i) => (
+                <div key={i} className="p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <ReviewStatusBadge status={r.status} />
+                      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">
+                        {reviewTypeLabel(r.review_type)}
+                      </span>
+                      <Link
+                        href={`/admin/reviews/${r.ship_id}`}
+                        className="text-[10px] text-muted-foreground hover:underline"
+                      >
+                        Ship {r.ship_id}
+                      </Link>
+                    </div>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {r.reviewer_display_name && `${r.reviewer_display_name} · `}
+                      {r.reviewed_at}
+                    </span>
+                  </div>
+                  {r.feedback && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-0.5">Feedback</p>
+                      <p className="text-sm whitespace-pre-wrap">{r.feedback}</p>
+                    </div>
+                  )}
+                  {r.internal_reason && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-0.5">Internal Reason</p>
+                      <p className="text-sm whitespace-pre-wrap text-muted-foreground">{r.internal_reason}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {time_audit_sessions !== undefined && <TimeAuditSessions projectId={project.id} sessions={time_audit_sessions} />}
+
+      <div className="flex items-center gap-2 mb-4 mt-8">
+        <h2 className="text-lg font-semibold tracking-tight">Journal Entries</h2>
+        <Badge variant="secondary" className="text-sm">
+          {pagy_entries.count}
+        </Badge>
+      </div>
+
+      {journal_entries.length > 0 ? (
+        <>
+          <Card className="py-0">
+            <div className="divide-y divide-border">
+              {journal_entries.map((entry) => (
+                <div key={entry.id} className="p-3 space-y-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <img src={entry.author_avatar} alt="" className="size-4 rounded-full" />
+                    <span>{entry.author_display_name}</span>
+                    <span>|</span>
+                    <span>{entry.created_at}</span>
+                    <span className="flex items-center gap-1">
+                      <ClockIcon className="size-3" />
+                      {formatDuration(entry.total_duration)}
+                    </span>
+                    {entry.ship_id && (
+                      <Badge variant="outline" className="text-[10px]">
+                        Ship {entry.ship_id}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {entry.recordings.length > 0 && (
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {entry.recordings.map((rec) => (
+                        <button
+                          key={rec.id}
+                          type="button"
+                          disabled={!rec.playback_url}
+                          onClick={() => setSelectedRecording(rec)}
+                          className="w-full bg-transparent text-xs rounded border border-border p-2 space-y-1 text-left disabled:cursor-default disabled:opacity-100 enabled:cursor-pointer enabled:hover:bg-muted/40"
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <Badge
+                              className={`text-[10px] shrink-0 ${recordingTypeBadgeColor(rec.type)}`}
+                              variant="outline"
+                            >
+                              {recordingTypeLabel(rec.type)}
+                            </Badge>
+                            <span className="text-muted-foreground">{formatDuration(rec.duration)}</span>
+                            {rec.removed_seconds > 0 && (
+                              <span className="text-red-600 dark:text-red-400">
+                                → {formatDuration(rec.duration - rec.removed_seconds)}
+                              </span>
+                            )}
+                          </div>
+                          {rec.description && <p className="text-muted-foreground leading-snug">{rec.description}</p>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div
+                    className="markdown-content max-w-none text-xs"
+                    style={{ zoom: 0.85 }}
+                    dangerouslySetInnerHTML={{ __html: entry.content_html }}
+                  />
+                  {entry.images.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {entry.images.map((img, j) => (
+                        <a key={j} href={img} target="_blank" rel="noopener noreferrer">
+                          <img src={img} alt="" className="rounded border border-border object-cover w-full max-h-24" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {pagy_entries.pages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!pagy_entries.prev}
+                onClick={() => {
+                  const url = new URL(window.location.href)
+                  url.searchParams.set('entries_page', String(pagy_entries.prev!))
+                  window.location.href = url.toString()
+                }}
+              >
+                Previous
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {pagy_entries.page} / {pagy_entries.pages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!pagy_entries.next}
+                onClick={() => {
+                  const url = new URL(window.location.href)
+                  url.searchParams.set('entries_page', String(pagy_entries.next!))
+                  window.location.href = url.toString()
+                }}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="text-sm text-muted-foreground">No journal entries.</p>
+      )}
+
+      {audit_log !== undefined && (
+        <div className="mt-8">
+          <Deferred data="audit_log" fallback={<AuditLogLoading />}>
+            <AuditLog entries={audit_log!} />
+          </Deferred>
+        </div>
+      )}
+
+      <AlertDialog
+        open={selectedRecording !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedRecording(null)
+        }}
+      >
+        <AlertDialogContent className="!max-w-4xl p-4">
+          <AlertDialogHeader className="items-start text-left">
+            <AlertDialogTitle>{selectedRecording?.name || 'Recording'}</AlertDialogTitle>
+          </AlertDialogHeader>
+          {selectedRecording?.playback_url && (
+            <video
+              key={selectedRecording.id}
+              src={selectedRecording.playback_url}
+              controls
+              autoPlay
+              className="w-full max-h-[75vh] rounded-md bg-black"
+            />
+          )}
+          <AlertDialogFooter className="border-t-0 bg-transparent p-0 pt-2">
+            <AlertDialogCancel>Close</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={featureDialogOpen} onOpenChange={(o) => !featuring && setFeatureDialogOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Feature {project.name}?</AlertDialogTitle>
+          </AlertDialogHeader>
+          <div className="space-y-1.5">
+            <label htmlFor="feature-note" className="text-sm font-medium">
+              Note <span className="text-muted-foreground">(optional)</span>
+            </label>
+            <Textarea
+              id="feature-note"
+              rows={3}
+              value={featureNote}
+              onChange={(e) => setFeatureNote(e.target.value)}
+              placeholder="Why this project?"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={featuring}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={submitFeature} disabled={featuring}>
+              {featuring ? 'Featuring…' : 'Feature'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
+
+AdminProjectsShow.layout = (page: ReactNode) => <AdminLayout>{page}</AdminLayout>
