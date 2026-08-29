@@ -1,51 +1,73 @@
 {% comment %}
-The pending table the three ship desks share. Oldest first, because that is the
-order the queue should be worked; the row a reviewer wants is the top one, and
-"Start reviewing" opens it for them.
+The pending table the three ship desks share, in Fallout's shape: a section
+heading carrying the count and the one button that starts the work, then the
+queue itself.
 
-Rows are whole-row links (see review.js) and walkable with j / k / Enter, so
-clearing a queue by hand costs one keystroke per item instead of a hunt for the
-right small blue link.
+Oldest first, because that is the order the queue should be worked; the row a
+reviewer wants is the top one, and "Start reviewing" opens it for them so they
+never have to choose. Rows are whole-row links (see review.js) and walkable
+with j / k / Enter, so clearing a queue costs one keystroke per item rather
+than a hunt for the right small blue link.
 
-expects: ships, queue, empty_text
+expects: ships, queue, queue_plural, pending_count, start_url, empty_text
 {% endcomment %}
-<div class="rq-table-wrap">
-    <table class="rq-table">
-        <thead>
-            <tr>
-                <th class="rq-col-num">#</th>
-                <th>Project</th>
-                <th>Owner</th>
-                <th>Type</th>
-                <th>Time</th>
-                <th>Waiting</th>
-                <th>Flags</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for ship in ships %}
-                <tr class="rq-row" tabindex="0" data-href="{% url queue.detail ship.id %}">
-                    <td class="rq-col-num">{{ ship.queue_index }}</td>
-                    <td>
-                        <a class="rq-project" href="{% url queue.detail ship.id %}">{{ ship.project.title }}</a>
-                        <span class="rq-desc">{{ ship.project.description|truncatechars:110 }}</span>
-                    </td>
-                    <td class="rq-owner">@{{ ship.project.owner.hackclub_profile.slack_username }}</td>
-                    <td class="rq-quiet">{{ ship.project.editor_name }}</td>
-                    <td class="rq-num">{{ ship.time_spent_display }}</td>
-                    <td>
-                        <span class="rv-chip rv-age-{{ ship.age_bucket }}">{{ ship.age_display }}</span>
-                        <span class="rq-since">{{ ship.created_at|date:"M j" }}</span>
-                    </td>
-                    <td class="rq-flags">
-                        {% if ship.claim %}<span class="rv-chip rv-chip-warn">{{ ship.claim.name }} is in this</span>{% endif %}
-                        {% if ship.project.locked %}<span class="rv-chip rv-chip-bad">locked</span>{% endif %}
-                        {% if not ship.project.printablesUrl %}<span class="rv-chip rv-chip-bad">no Printables</span>{% endif %}
-                    </td>
+<section class="rq-section">
+    <div class="rq-section-head">
+        <h2 class="rq-section-title">
+            Pending {{ queue_plural }}
+            {% if pending_count %}<span class="rq-count">{{ pending_count }}</span>{% endif %}
+        </h2>
+        {% if has_pending %}
+            <a class="rq-start" href="{{ start_url }}" data-key="enter">Start reviewing<kbd>&crarr;</kbd></a>
+        {% endif %}
+    </div>
+
+    {% include "root/_rv_queue_summary.html" %}
+
+    <div class="rq-table-wrap">
+        <table class="rq-table">
+            <thead>
+                <tr>
+                    <th class="rq-col-num">#</th>
+                    <th>Project</th>
+                    <th>Owner</th>
+                    <th class="rq-col-num">Hours</th>
+                    <th>Reviewer</th>
+                    <th>Waiting</th>
+                    <th>Flags</th>
                 </tr>
-            {% empty %}
-                <tr><td colspan="7" class="rq-empty">{{ empty_text }}</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+            </thead>
+            <tbody>
+                {% for ship in ships %}
+                    <tr class="rq-row" tabindex="0" data-href="{% url queue.detail ship.id %}">
+                        <td class="rq-col-num">{{ ship.queue_index }}</td>
+                        <td>
+                            <a class="rq-project" href="{% url queue.detail ship.id %}">{{ ship.project.title }}</a>
+                            <span class="rq-desc">{{ ship.project.description|truncatechars:110 }}</span>
+                        </td>
+                        <td class="rq-owner">{{ ship.project.owner.hackclub_profile.slack_username }}</td>
+                        <td class="rq-num">{{ ship.time_spent_display }}</td>
+                        <td>
+                            {% if ship.claim %}
+                                <span class="rv-chip rv-chip-warn">Claimed by {{ ship.claim.name }}</span>
+                            {% else %}
+                                <span class="rq-quiet">Unassigned</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="rv-age-{{ ship.age_bucket }}">{{ ship.age_display }}</span>
+                            <span class="rq-since">since {{ ship.created_at|date:"M j" }}</span>
+                        </td>
+                        <td class="rq-flags">
+                            {% if ship.project.locked %}<span class="rv-chip rv-chip-bad">locked</span>{% endif %}
+                            {% if not ship.project.printablesUrl %}<span class="rv-chip rv-chip-bad">no Printables</span>{% endif %}
+                            {% if ship.project.editor_name %}<span class="rq-quiet">{{ ship.project.editor_name }}</span>{% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="7" class="rq-empty">{{ empty_text }}</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>

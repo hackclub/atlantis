@@ -51,7 +51,15 @@
     }
 
     var form = document.getElementById('timelapse-review-form');
+    var finalDialog = document.getElementById('ta-final');
     var draftKey = 'lookout-draft:' + payload.projectId;
+
+    /* A key that means something on the page must not mean it mid-sentence. */
+    function isTyping(el) {
+        if (!el) return false;
+        var tag = el.tagName;
+        return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+    }
 
     /* ---------------------------------------------------------------- time */
 
@@ -458,20 +466,57 @@
 
         var ready = outstanding.length === 0;
         document.querySelectorAll('[data-submit-pass]').forEach(function (button) {
-            button.disabled = !ready;
+            // Approve lives inside the sign-off panel, and [data-primary] is
+            // looked up across the whole document: left enabled while the
+            // panel is shut, Cmd+Enter would post the pass without ever
+            // showing the reviewer the notes field it exists to raise.
+            var panel = button.closest('dialog');
+            button.disabled = !ready || Boolean(panel && !panel.open);
             button.title = ready
                 ? 'Approve every waiting lapse on this project'
-                : 'Describe and save every Lookout before submitting';
+                : 'Describe and save every timelapse before submitting';
         });
 
         var progress = document.querySelector('[data-save-progress]');
         if (progress) {
             progress.textContent = ready
-                ? 'Every Lookout in this pass has been described.'
-                : outstanding.length + ' Lookout' + (outstanding.length === 1 ? '' : 's') +
+                ? 'Every timelapse in this pass has been described.'
+                : outstanding.length + ' timelapse' + (outstanding.length === 1 ? '' : 's') +
                   ' still to describe and save.';
             progress.classList.toggle('is-no', !ready);
         }
+    }
+
+    /* --------------------------------------------------------- sign-off panel */
+
+    /*
+     * The pass ends in a modal rather than at the bottom of the column: the
+     * notes are the last thing written and the first thing a reviewer reaches
+     * for, and scrolling past every entry to find them was the long way round.
+     */
+    function openFinal() {
+        if (!finalDialog || finalDialog.open) return;
+        finalDialog.showModal();
+        renderSubmitState();
+        var notes = document.getElementById('ta-internal');
+        if (notes) notes.focus();
+    }
+
+    function closeFinal() {
+        if (finalDialog && finalDialog.open) finalDialog.close();
+    }
+
+    function setupFinal() {
+        if (!finalDialog) return;
+        document.querySelectorAll('[data-open-final]').forEach(function (button) {
+            button.addEventListener('click', openFinal);
+        });
+        document.querySelectorAll('[data-close-final]').forEach(function (button) {
+            button.addEventListener('click', closeFinal);
+        });
+        // Esc closes it without going through the button, so re-gate from the
+        // event the dialog fires either way.
+        finalDialog.addEventListener('close', renderSubmitState);
     }
 
     function markUnsaved(rec) {
@@ -831,7 +876,12 @@
         }
 
         var next = children[current + 1];
-        if (next) next.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (next) {
+            next.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else {
+            // Nothing below the last entry any more — the pass ends here.
+            openFinal();
+        }
     }
 
     /* -------------------------------------------------------------- submit */
@@ -897,14 +947,36 @@
 
         wireEntries();
         setupPlaybackRate();
+        setupFinal();
         setupSubmit();
         renderTotals();
 
         document.addEventListener('keydown', function (event) {
-            if (event.key !== 'Enter' || !event.shiftKey) return;
-            if (event.metaKey || event.ctrlKey || event.altKey) return;
-            event.preventDefault();
-            saveAndNext();
+            if (event.defaultPrevented) return;
+            if (event.altKey) return;
+
+            // Cmd/Ctrl+Enter raises the panel; from inside it, review.js has a
+            // live [data-primary] to press and submits the pass instead.
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                event.preventDefault();
+                openFinal();
+                return;
+            }
+            if (event.metaKey || event.ctrlKey) return;
+            if (finalDialog && finalDialog.open) return;
+
+            if (event.key === 'Enter' && event.shiftKey) {
+                event.preventDefault();
+                saveAndNext();
+                return;
+            }
+
+            // I still means "the notes on the pass" — it just has to open the
+            // panel holding them first. Not while something is being typed in.
+            if (event.key.toLowerCase() === 'i' && !isTyping(event.target)) {
+                event.preventDefault();
+                openFinal();
+            }
         });
 
         var notes = document.getElementById('ta-internal');

@@ -1393,51 +1393,156 @@
    The desks
    ============================================================ */
 
+/* No box around the head: the cards are the header, and a panel around a row
+   of panels reads as chrome rather than as information. */
 .root-page .rq-header {
-    margin-bottom: 20px;
-    padding: 18px 20px;
-    border: 1px solid var(--oc-line);
-    border-top: 3px solid var(--rv-accent, var(--oc-tide));
-    border-radius: var(--oc-radius);
-    background: var(--oc-surface);
-    box-shadow: var(--oc-shadow);
+    margin-bottom: 22px;
 }
 
-.root-page .rq-head-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 20px;
-    flex-wrap: wrap;
-}
-
-.root-page .rq-header h1 {
+.root-page .rq-title {
     display: flex;
     align-items: center;
     gap: 10px;
     margin: 0;
     font-size: 22px;
+    letter-spacing: -0.01em;
 }
 
 .root-page .rq-blurb {
-    margin: 7px 0 0;
-    max-width: 68ch;
+    margin: 8px 0 0;
+    max-width: 78ch;
     font-size: 13.5px;
     line-height: 1.6;
     color: var(--oc-ink-3);
 }
 
+/* ---------- the stat cards ---------- */
+
+.root-page .rq-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.root-page .rq-stat-card {
+    padding: 11px 14px;
+    border: 1px solid var(--oc-line);
+    border-radius: var(--oc-radius);
+    background: var(--oc-surface);
+}
+
+.root-page .rq-stat-label {
+    margin: 0;
+    font-size: 11.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-stat-value {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin: 3px 0 0;
+    font-size: 25px;
+    font-weight: 600;
+    line-height: 1.15;
+    color: var(--oc-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rq-stat-value.is-no { color: var(--oc-bad); }
+
+.root-page .rq-stat-count {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-stat-desc {
+    margin: 4px 0 0;
+    font-size: 11px;
+    color: var(--oc-ink-3);
+}
+
+/* A number without a direction is a fact you can't act on, so every windowed
+   card carries the move against the three days before it. */
+.root-page .rq-delta {
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.root-page .rq-delta-good { color: var(--oc-good); }
+.root-page .rq-delta-bad { color: var(--oc-bad); }
+.root-page .rq-delta-flat { color: var(--oc-ink-3); }
+
+/* ---------- sections ---------- */
+
+.root-page .rq-section {
+    margin-bottom: 26px;
+}
+
+.root-page .rq-section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.root-page .rq-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 10px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.root-page .rq-section-head .rq-section-title {
+    margin-bottom: 0;
+}
+
+.root-page .rq-count {
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: var(--oc-shallow);
+    border: 1px solid var(--oc-line-2);
+    color: var(--oc-ink-2);
+    font-size: 11.5px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+/* The facts about the list directly below it, on one line. */
+.root-page .rq-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin: 0 0 8px;
+    font-size: 12.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rq-summary-item strong {
+    color: var(--oc-ink-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rq-summary-good strong { color: var(--oc-good); }
+.root-page .rq-summary-bad strong { color: var(--oc-bad); }
+
 .root-page .rq-start {
     display: inline-flex;
     align-items: center;
     gap: 9px;
-    padding: 11px 18px;
+    padding: 8px 15px;
     border: 1px solid var(--oc-btn);
-    border-radius: 9px;
+    border-radius: 8px;
     background: var(--oc-btn);
     color: var(--oc-on-accent);
-    font-size: 14px;
-    font-weight: 700;
+    font-size: 13.5px;
+    font-weight: 600;
     text-decoration: none;
     white-space: nowrap;
 }
@@ -1454,53 +1559,51 @@
     color: var(--oc-on-accent);
 }
 
-.root-page .rq-start-off {
-    background: transparent;
-    border-color: var(--oc-line-2);
-    color: var(--oc-ink-3);
-    cursor: default;
-}
+/* ---------- the lookout desk's grouped rows ---------- */
 
-.root-page .rq-stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 10px;
-    margin: 18px 0 0;
-}
-
-.root-page .rq-stat {
-    padding: 10px 13px;
-    border: 1px solid var(--oc-line);
-    border-left: 3px solid var(--oc-line-2);
-    border-radius: 9px;
+/* One <tbody> per project: the project's own row, then the lapses waiting on
+   it. The lapses aren't links — opening any of them opens the same page, the
+   project's whole pass — so they read as detail under the row rather than as
+   rows of their own. */
+.root-page .rq-subrow td {
+    padding-top: 3px;
+    padding-bottom: 3px;
+    border-top: none;
+    font-size: 12px;
     background: var(--oc-bg);
 }
 
-.root-page .rq-stat-good { border-left-color: var(--oc-good); }
-.root-page .rq-stat-bad { border-left-color: var(--oc-bad); }
+.root-page .rq-subrow:last-child td {
+    padding-bottom: 8px;
+}
 
-.root-page .rq-stat dt {
-    font-size: 10.5px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+.root-page .rq-sub-title {
+    color: var(--oc-ink-2);
+    margin-right: 8px;
+}
+
+/* ---------- paging the decided table ---------- */
+
+.root-page .rq-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    padding-top: 12px;
+}
+
+.root-page .rq-pager-count,
+.root-page .rq-pager-at {
+    font-size: 12.5px;
     color: var(--oc-ink-3);
-}
-
-.root-page .rq-stat dd {
-    margin: 0;
-}
-
-.root-page .rq-stat-value {
-    font-size: 24px;
-    font-weight: 700;
-    line-height: 1.15;
-    color: var(--oc-ink);
     font-variant-numeric: tabular-nums;
 }
 
-.root-page .rq-stat-sub {
-    font-size: 11.5px;
-    color: var(--oc-ink-3);
+.root-page .rq-pager-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
 .root-page .rq-hint {
@@ -1633,136 +1736,11 @@
 /* One project per block: a clickable header row, and under it the lapses the
    sitting will cover. Opening any of them opens the same page, so the list is
    there to say what the work is, not to be navigated into. */
-.root-page .rq-group {
-    margin-bottom: 12px;
-    border: 1px solid var(--oc-line);
-    border-radius: var(--oc-radius);
-    background: var(--oc-surface);
-    box-shadow: var(--oc-shadow);
-    overflow: hidden;
-}
-
-.root-page .rq-group-head {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 11px 14px;
-    background: var(--oc-surface-2);
-}
-
-.root-page .rq-group-head:hover {
-    background: var(--oc-shallow);
-}
-
-.root-page .rq-group-head:focus {
-    outline: none;
-    background: var(--oc-tide-soft);
-    box-shadow: inset 0 0 0 1px var(--oc-tide);
-}
-
-.root-page .rq-group-title {
-    font-size: 14.5px;
-    font-weight: 700;
-    color: var(--oc-ink);
-    text-decoration: none;
-}
-
-.root-page .rq-group-head:hover .rq-group-title {
-    text-decoration: underline;
-}
-
-.root-page .rq-group-owner {
-    font-size: 13px;
-    color: var(--oc-tide);
-}
-
-.root-page .rq-group-meta {
-    flex: 1;
-    min-width: 0;
-    font-size: 12px;
-    color: var(--oc-ink-3);
-}
-
-/* One line per lapse, no column headings: the group header above already
-   names the project and totals it, and repeating a seven-column thead for
-   every project buried the rows in chrome. */
-.root-page .rq-lapses {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    border-top: 1px solid var(--oc-line);
-}
-
-.root-page .rq-lapse {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 9px 14px;
-    border-bottom: 1px solid var(--oc-line);
-}
-
-.root-page .rq-lapses > .rq-lapse:last-child {
-    border-bottom: none;
-}
-
-.root-page .rq-lapse-title {
-    flex-shrink: 0;
-    font-size: 13px;
-    color: var(--oc-ink-2);
-}
-
-.root-page .rq-lapse-more {
-    color: var(--oc-ink-3);
-    font-size: 12px;
-    font-style: italic;
-}
-
-.root-page .rq-lapse-index {
-    width: 22px;
-    flex-shrink: 0;
-    color: var(--oc-ink-3);
-    font-size: 12.5px;
-    font-variant-numeric: tabular-nums;
-}
-
-.root-page .rq-lapse .rq-project {
-    flex-shrink: 0;
-}
-
-.root-page .rq-lapse-meta {
-    flex: 1;
-    min-width: 0;
-    font-size: 12px;
-    color: var(--oc-ink-3);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.root-page .rq-lapse-flags {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 5px;
-    flex-shrink: 0;
-}
-
-.root-page .rq-recent {
-    margin-top: 20px;
-}
-
-.root-page .rq-recent > summary {
-    padding: 9px 2px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--oc-ink-2);
-}
-
-.root-page .rq-recent > summary:hover {
-    color: var(--oc-ink);
+/* A project and the lapses under it are one <tbody>, so the browser keeps them
+   together and the group needs no box of its own — the hairline above each
+   project row is the whole separation. */
+.root-page .rq-group + .rq-group .rq-row td {
+    border-top: 1px solid var(--oc-line-2);
 }
 
 .root-page .rq-charts {

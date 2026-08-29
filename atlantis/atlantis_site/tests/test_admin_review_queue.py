@@ -10,10 +10,12 @@ from datetime import timedelta
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import Journal, LookoutSession, Ship, T1, TimelapseReview
+from django.core.cache import cache
+
+from ..models import Journal, LookoutSession, Ship, T1, T2, T3, TimelapseReview
 from ..views.admin.queue import (
-	age_bucket, age_display, claim_holder, claim_review, next_item_id,
-	release_claim,
+	REVIEW_STAT_KEYS, age_bucket, age_display, all_reviews_page, claim_holder,
+	claim_review, next_item_id, percentile, release_claim, review_stats,
 )
 from .base import (
 	BaseTestCase,
@@ -597,3 +599,169 @@ class ReviewContextTests(BaseTestCase):
 		self.assertEqual(stats["Waiting"], "2")
 		self.assertEqual(stats["Oldest"], "9d")
 		self.assertEqual(stats["Overdue"], "1")
+
+
+class PercentileTests(BaseTestCase):
+	"""The 90th and not the mean — a mean hides exactly the tail we care about."""
+
+	def test_interpolates_between_neighbours(self):
+		self.assertEqual(percentile([0, 10], 0.5), 5)
+		self.assertEqual(percentile([0, 10, 20, 30], 0.5), 15)
+
+	def test_a_single_value_is_its_own_percentile(self):
+		self.assertEqual(percentile([7], 0.9), 7)
+
+	def test_nothing_measured_is_not_zero(self):
+		self.assertIsNone(percentile([], 0.9))
+
+	def test_the_long_tail_is_what_it_reports(self):
+		"""Half fast, half slow: the mean says 5.5 and hides them; P90 says 10."""
+		values = [1] * 5 + [10] * 5
+		self.assertEqual(percentile(values, 0.9), 10)
+		self.assertEqual(sum(values) / len(values), 5.5)
+
+
+class DeskStatsTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		cache.clear()
+		self.reviewer = grant_perms(make_user("rev"), "t1_review", "t2_review", "t3_review", "organizer")
+		self.client.force_login(self.reviewer)
+		self.project = make_project(make_user("author"), shippable=True)
+
+	def _cards(self, queue_key):
+		cache.clear()
+		return {card["key"]: card for card in review_stats(queue_key)}
+
+	def test_each_desk_carries_the_metrics_that_mean_something_there(self):
+		"""Lookout review has no verdict to average, so it gets no ratio."""
+		self.assertEqual(REVIEW_STAT_KEYS["lookout"], ["turnaround"])
+		self.assertNotIn("approval_ratio", REVIEW_STAT_KEYS["lookout"])
+		self.assertIn("reship_ratio", REVIEW_STAT_KEYS["t1"])
+		self.assertIn("hours_pending", REVIEW_STAT_KEYS["t2"])
+
+	def test_the_waiting_backlog_counts_toward_turnaround(self):
+		"""A queue that is quietly growing has to show up before it is cleared."""
+		self.assertIsNone(self._cards("t1")["turnaround"]["value"])
+
+		ages(make_ship(self.project), days=8)
+		card = self._cards("t1")["turnaround"]
+
+		self.assertAlmostEqual(card["value"], 8.0, places=1)
+		self.assertEqual(card["count"], 1)
+		self.assertTrue(card["breached"])
+
+	def test_the_slow_half_of_the_queue_is_the_number_reported(self):
+		"""Ten waiting a week and ten waiting an hour is a week-long queue."""
+		for _ in range(10):
+			ages(make_ship(self.project), days=8)
+		for _ in range(10):
+			make_ship(self.project)
+
+		self.assertAlmostEqual(self._cards("t1")["turnaround"]["value"], 8.0, places=1)
+
+	def test_approval_ratio_is_the_share_of_decisions_that_approved(self):
+		ship = make_ship(self.project)
+		for approved in (True, True, False, False):
+			T1.objects.create(
+				ship=ship, reviewer=self.reviewer,
+				feedback="", internal_notes="", approved=approved,
+			)
+		card = self._cards("t1")["approval_ratio"]
+		self.assertEqual(card["value"], 50.0)
+		self.assertEqual(card["count"], 4)
+
+	def test_a_ratio_with_nothing_to_divide_is_not_zero(self):
+		"""Nought decisions is "—", not "0% approved"."""
+		self.assertIsNone(self._cards("t1")["approval_ratio"]["value"])
+
+	def test_a_reship_is_an_attempt_after_a_rejection(self):
+		make_ship(self.project, status=Ship.ShipStatus.REJECTED)
+		make_ship(self.project)
+		self.assertEqual(self._cards("t1")["reship_ratio"]["value"], 100.0)
+
+	def test_a_ship_after_a_clean_approval_is_not_a_reship(self):
+		"""A second ship after a finish is new work, not another go at a failure."""
+		make_ship(self.project, status=Ship.ShipStatus.FINALIZED)
+		make_ship(self.project)
+		self.assertEqual(self._cards("t1")["reship_ratio"]["value"], 0.0)
+
+	def test_hours_pending_is_what_the_queue_is_sitting_on(self):
+		make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(120, 60))
+		self.assertEqual(self._cards("t2")["hours_pending"]["value"], 3.0)
+
+	def test_a_snapshot_has_no_direction_to_move_in(self):
+		"""Hours pending is right now; there is no prior window to sit against."""
+		make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE)
+		self.assertIsNone(self._cards("t2")["hours_pending"]["tone"])
+
+	def test_the_desk_renders_the_cards_it_declares(self):
+		response = self.client.get(reverse("review_dash"))
+		self.assertEqual(
+			[card["key"] for card in response.context["stat_cards"]],
+			REVIEW_STAT_KEYS["t1"],
+		)
+
+
+class AllReviewsTableTests(BaseTestCase):
+	"""The second table: what this desk has already decided."""
+
+	def setUp(self):
+		super().setUp()
+		cache.clear()
+		self.reviewer = grant_perms(make_user("rev"), "t1_review", "t2_review", "organizer")
+		self.client.force_login(self.reviewer)
+		self.project = make_project(make_user("author"), shippable=True, title="Tide Gauge")
+		self.ship = make_ship(self.project)
+
+	def test_a_verdict_is_flattened_the_same_way_at_every_tier(self):
+		T1.objects.create(ship=self.ship, reviewer=self.reviewer,
+						  feedback="", internal_notes="", approved=False)
+		T2.objects.create(ship=self.ship, reviewer=self.reviewer,
+						  decision=T2.Decision.RETURN_T1, feedback="", justification="")
+
+		_, t1_rows = all_reviews_page("t1", 1)
+		_, t2_rows = all_reviews_page("t2", 1)
+
+		self.assertEqual(t1_rows[0]["status"], "rejected")
+		self.assertEqual(t1_rows[0]["project"], "Tide Gauge")
+		self.assertEqual(t2_rows[0]["status"], "returned")
+
+	def test_a_lookout_pass_is_reported_with_what_came_off_it(self):
+		journal = make_journal(self.project, time_spent=60)
+		approve_timelapse(journal, reviewer=self.reviewer,
+						  removals=[(journal.timelapses.get(), 0, 1500, "afk")])
+
+		_, rows = all_reviews_page("lookout", 1)
+		self.assertEqual(rows[0]["status"], "signed off")
+		self.assertEqual(rows[0]["note"], "−0h 25m")
+
+	def test_newest_first(self):
+		first = T1.objects.create(ship=self.ship, reviewer=self.reviewer,
+								  feedback="", internal_notes="", approved=True)
+		second = T1.objects.create(ship=self.ship, reviewer=self.reviewer,
+								   feedback="", internal_notes="", approved=False)
+		_, rows = all_reviews_page("t1", 1)
+		self.assertEqual([row["id"] for row in rows], [second.id, first.id])
+
+	def test_it_pages(self):
+		for _ in range(30):
+			T1.objects.create(ship=self.ship, reviewer=self.reviewer,
+							  feedback="", internal_notes="", approved=True)
+
+		page, rows = all_reviews_page("t1", 1)
+		self.assertEqual(len(rows), 25)
+		self.assertEqual(page.paginator.num_pages, 2)
+		self.assertTrue(page.has_next())
+
+		page, rows = all_reviews_page("t1", 2)
+		self.assertEqual(len(rows), 5)
+		self.assertFalse(page.has_next())
+
+	def test_the_desk_asks_for_the_page_in_the_query_string(self):
+		for _ in range(30):
+			T1.objects.create(ship=self.ship, reviewer=self.reviewer,
+							  feedback="", internal_notes="", approved=True)
+		response = self.client.get(reverse("review_dash"), {"page": 2})
+		self.assertEqual(response.context["reviews_page"].number, 2)
+		self.assertEqual(len(response.context["all_reviews"]), 5)

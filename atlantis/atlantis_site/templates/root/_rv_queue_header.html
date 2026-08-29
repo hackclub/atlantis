@@ -1,30 +1,48 @@
 {% comment %}
-The header every review desk carries: what the desk is for, how far behind it
-is, and one button that starts working it. "Start reviewing" goes to the
-queue's `next` route rather than to a specific row, so a reviewer never has to
-choose which item to pick up — the queue already knows.
+The head of a desk, in Fallout's shape: a plain title over a row of stat cards.
+No panel around it — the cards are the header, and a box around a box reads as
+chrome rather than as information.
 
-expects: queue_label, queue_short, queue_accent, queue_stats, start_url, has_pending; optional: blurb
+Each card is one number and the direction it has moved in three days. A number
+without a direction is a fact you can't act on: 4.1d means nothing until you
+know it was 5.2d on Tuesday.
+
+expects: queue_label, queue_short, stat_cards; optional: blurb
 {% endcomment %}
-<header class="rq-header rv-accent-{{ queue_accent }}">
-    <div class="rq-head-row">
-        <div class="rq-head-text">
-            <h1><span class="rv-queue-tag">{{ queue_short }}</span> {{ queue_label }}</h1>
-            {% if blurb %}<p class="rq-blurb">{{ blurb }}</p>{% endif %}
+<header class="rq-header">
+    <h1 class="rq-title">
+        <span class="rv-queue-tag rv-accent-{{ queue_accent }}">{{ queue_short }}</span>
+        {{ queue_label }}
+    </h1>
+    {% if blurb %}<p class="rq-blurb">{{ blurb }}</p>{% endif %}
+
+    {% if stat_cards %}
+        <div class="rq-stat-grid">
+            {% for card in stat_cards %}
+                <div class="rq-stat-card">
+                    <p class="rq-stat-label">{{ card.label }}</p>
+                    <p class="rq-stat-value{% if card.breached %} is-no{% endif %}">
+                        {% if card.value is None %}
+                            &mdash;
+                        {% else %}
+                            {{ card.value }}{{ card.unit }}
+                        {% endif %}
+                        {% if card.tone == "flat" %}
+                            <span class="rq-delta rq-delta-flat" title="No change against the prior 3 days">&minus;</span>
+                        {% elif card.tone %}
+                            <span class="rq-delta rq-delta-{{ card.tone }}" title="Against the prior 3 days">
+                                {% if card.delta_up %}&uarr;{% else %}&darr;{% endif %}{{ card.delta_size|floatformat:1 }}{{ card.unit }}
+                            </span>
+                        {% endif %}
+                        {% if card.count %}
+                            <span class="rq-stat-count">({{ card.count }} {{ card.count_noun }}{{ card.count|pluralize }})</span>
+                        {% endif %}
+                    </p>
+                    <p class="rq-stat-desc">
+                        {{ card.description }}{% if card.breached %} &middot; <span class="is-no">past the {{ sla_days }}d SLA</span>{% endif %}
+                    </p>
+                </div>
+            {% endfor %}
         </div>
-        {% if has_pending %}
-            <a class="rq-start" href="{{ start_url }}" data-key="enter">Start reviewing<kbd>&crarr;</kbd></a>
-        {% else %}
-            <span class="rq-start rq-start-off" aria-disabled="true">Queue is clear</span>
-        {% endif %}
-    </div>
-    <dl class="rq-stats">
-        {% for stat in queue_stats %}
-            <div class="rq-stat{% if stat.tone %} rq-stat-{{ stat.tone }}{% endif %}">
-                <dt>{{ stat.label }}</dt>
-                <dd class="rq-stat-value">{{ stat.value }}</dd>
-                <dd class="rq-stat-sub">{{ stat.sub }}</dd>
-            </div>
-        {% endfor %}
-    </dl>
+    {% endif %}
 </header>

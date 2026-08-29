@@ -69,7 +69,7 @@ optional: journal_empty
                             {% for session in event.journal.timelapses.all %}
                                 <div class="rv-rec">
                                     <p class="rv-rec-head">
-                                        <span class="ta-badge ta-badge-lookout">Lookout</span>
+                                        <span class="ta-badge ta-badge-lookout">Timelapse</span>
                                         <span class="rv-rec-time">{{ session.tracked_display }}</span>
                                         {% if session.review_removed_seconds %}
                                             <span class="is-no">&rarr; {{ session.review_approved_display }}</span>

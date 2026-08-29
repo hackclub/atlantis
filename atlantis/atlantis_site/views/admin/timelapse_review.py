@@ -68,8 +68,6 @@ REMOVAL_REASONS = [
 # now a whole project rather than a single lapse.
 MAX_REMOVALS = 200
 
-RECENT_REVIEWS = 25
-
 # How many of a project's lapses the desk lists under it before it stops and
 # says how many more there are. The desk is a queue, not the review page.
 DESK_LAPSE_PREVIEW = 5
@@ -364,26 +362,14 @@ def timelapse_review_dash(request):
         project.preview_lapses = project.lapses[:DESK_LAPSE_PREVIEW]
         project.more_lapses = project.lapse_count - len(project.preview_lapses)
 
-    reviewed = list(
-        Journal.objects
-        .filter(project__deleted=False, timelapse_review__isnull=False)
-        .select_related(
-            "project", "timelapse_review", "timelapse_review__reviewer",
-            "timelapse_review__reviewer__hackclub_profile",
-        )
-        .prefetch_related("timelapse_review__removals")
-        .order_by("-timelapse_review__reviewed_at")[:RECENT_REVIEWS]
-    )
-
     waiting_lapses = sum(project.lapse_count for project in projects)
     return render(request, "root/timelapse_review.html", {
         "projects": projects,
-        "reviewed": reviewed,
         "leaderboard": reviewer_leaderboard("timelapse_reviews"),
         **dash_context(request, "lookout", projects, extra_stats=[{
             "label": "Lapses",
             "value": str(waiting_lapses),
-            "sub": "across those projects",
+            "phrase": "lapses across them",
         }]),
     })
 

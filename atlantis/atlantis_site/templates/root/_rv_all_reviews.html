@@ -1,0 +1,76 @@
+{% comment %}
+Everything this desk has ever decided, newest first — Fallout's second table.
+
+The pending queue answers "what should I do now". This answers the questions
+that come after: what happened to that ship, who called it, and has this desk
+been approving everything it sees. A queue page that only shows the queue makes
+those a database query.
+
+expects: all_reviews, reviews_page, queue_plural
+{% endcomment %}
+<section class="rq-section">
+    <h2 class="rq-section-title">All {{ queue_plural }}</h2>
+
+    <div class="rq-table-wrap">
+        <table class="rq-table">
+            <thead>
+                <tr>
+                    <th class="rq-col-num">#</th>
+                    <th>Project</th>
+                    <th>Owner</th>
+                    <th>Verdict</th>
+                    <th>Reviewed by</th>
+                    <th>Reviewed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for review in all_reviews %}
+                    <tr class="rq-row" tabindex="0" data-href="{{ review.url }}">
+                        <td class="rq-col-num rq-quiet">{{ review.id }}</td>
+                        <td>
+                            <a class="rq-project" href="{{ review.url }}">{{ review.project }}</a>
+                            <span class="rq-desc">{{ review.subject }}</span>
+                        </td>
+                        <td class="rq-owner">{{ review.owner }}</td>
+                        <td>
+                            <span class="rv-sibling rv-sibling-{{ review.status|slugify }}">{{ review.status }}</span>
+                            {% if review.note %}<span class="rq-quiet">{{ review.note }}</span>{% endif %}
+                        </td>
+                        <td class="rq-owner">{{ review.reviewer }}</td>
+                        <td class="rq-quiet">{{ review.at|date:"M j, Y, g:i a" }}</td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6" class="rq-empty">Nothing decided here yet.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if reviews_page.paginator.count %}
+        <div class="rq-pager">
+            <span class="rq-pager-count">
+                {% if reviews_page.paginator.num_pages > 1 %}
+                    Showing {{ reviews_page.start_index }}&ndash;{{ reviews_page.end_index }}
+                    of {{ reviews_page.paginator.count }} reviews
+                {% else %}
+                    {{ reviews_page.paginator.count }} review{{ reviews_page.paginator.count|pluralize }}
+                {% endif %}
+            </span>
+            {% if reviews_page.paginator.num_pages > 1 %}
+                <span class="rq-pager-nav">
+                    {% if reviews_page.has_previous %}
+                        <a class="rv-btn rv-btn-sm" href="?page={{ reviews_page.previous_page_number }}">Previous</a>
+                    {% else %}
+                        <span class="rv-btn rv-btn-sm" aria-disabled="true">Previous</span>
+                    {% endif %}
+                    <span class="rq-pager-at">{{ reviews_page.number }} / {{ reviews_page.paginator.num_pages }}</span>
+                    {% if reviews_page.has_next %}
+                        <a class="rv-btn rv-btn-sm" href="?page={{ reviews_page.next_page_number }}">Next</a>
+                    {% else %}
+                        <span class="rv-btn rv-btn-sm" aria-disabled="true">Next</span>
+                    {% endif %}
+                </span>
+            {% endif %}
+        </div>
+    {% endif %}
+</section>

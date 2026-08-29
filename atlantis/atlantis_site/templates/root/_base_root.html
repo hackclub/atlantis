@@ -8,12 +8,6 @@
     <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
     {% include '_favicon.html' %}
 </head>
-{% comment %}
-`body_class` and `nav` exist for the reviewer shell, which runs full-bleed: it
-drops the sidebar (its own top bar carries the way back to the desk) and takes
-over the viewport so its two columns can scroll independently. Every other
-admin page leaves both blocks alone and gets the sidebar layout as before.
-{% endcomment %}
 <body class="page root-page{% block body_class %}{% endblock %}" id="{% block page_id %}base-page{% endblock %}">
     {% block nav %}{% include 'root/_navbar_root.html' %}{% endblock %}
 

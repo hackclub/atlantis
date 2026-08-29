@@ -22,9 +22,11 @@ the thing that's authoritative.
 """
 
 from dataclasses import dataclass
+from datetime import timedelta
 
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.cache import cache
+from django.core.paginator import Paginator
 from django.db.models import Exists, OuterRef, Prefetch, Subquery
 from django.http import JsonResponse
 from django.shortcuts import redirect
@@ -87,6 +89,10 @@ class Queue:
 
     key: str
     label: str
+    # What a page calls a set of them: "Pending Project reviews", "All
+    # Timelapse reviews". Spelled out rather than label + "s" so the acronyms
+    # survive.
+    plural: str
     short: str
     dash: str
     detail: str
@@ -145,19 +151,23 @@ class Queue:
 
 QUEUES = {
     "t1": Queue(
-        key="t1", label="Project review", short="T1", accent="tide", noun="ship",
+        key="t1", label="Project review", plural="Project reviews",
+        short="T1", accent="tide", noun="ship",
         dash="review_dash", detail="review_project", next_url="review_next",
     ),
     "t2": Queue(
-        key="t2", label="YSWS review", short="T2", accent="lagoon", noun="ship",
+        key="t2", label="YSWS review", plural="YSWS reviews",
+        short="T2", accent="lagoon", noun="ship",
         dash="ysws_review_dash", detail="ysws_review_project", next_url="ysws_review_next",
     ),
     "t3": Queue(
-        key="t3", label="Fraud review", short="T3", accent="warn", noun="ship",
+        key="t3", label="Fraud review", plural="Fraud reviews",
+        short="T3", accent="warn", noun="ship",
         dash="fraud_review_dash", detail="fraud_review_project", next_url="fraud_review_next",
     ),
     "lookout": Queue(
-        key="lookout", label="Lookout review", short="Lookout", accent="sand", noun="project",
+        key="lookout", label="Timelapse review", plural="Timelapse reviews",
+        short="Timelapse", accent="sand", noun="project",
         dash="timelapse_review_dash", detail="timelapse_review_project",
         next_url="timelapse_review_next",
     ),
@@ -363,29 +373,39 @@ def decorate_lapses(lapses, sla_days):
 
 
 def queue_stats(queue_key, rows, user=None, extra=()):
-    """The four numbers a desk's header carries.
+    """The shape of the queue, as the one line printed above it.
+
+    Facts about the list directly below, as distinct from the windowed metrics
+    in the cards at the top of the page: how long it is, how long its oldest
+    item has waited, how much of it is late, and how much of it you have
+    cleared today.
 
     Everything here is read off `rows`, which the dash already has in memory,
-    so the header costs one extra query at most (the reviewer's own count) no
-    matter how long the queue is.
+    so the line costs one extra query at most (the reviewer's own count) no
+    matter how long the queue is. `phrase` is how the number reads in the
+    sentence; `label` is what it is, and the two are not the same words.
     """
     queue = QUEUES[queue_key]
     oldest = rows[0] if rows else None  # rows are oldest-first
     overdue = sum(1 for row in rows if row.age_bucket == "overdue")
 
     stats = [
-        {"label": "Waiting", "value": str(len(rows)), "sub": queue.noun + ("" if len(rows) == 1 else "s")},
+        {
+            "label": "Waiting",
+            "value": str(len(rows)),
+            "phrase": queue.noun + ("" if len(rows) == 1 else "s") + " waiting",
+        },
         *extra,
         {
             "label": "Oldest",
             "value": oldest.age_display if oldest else "—",
-            "sub": f"SLA {queue.sla_days}d",
+            "phrase": f"oldest, against a {queue.sla_days}d SLA",
             "tone": "bad" if oldest and oldest.age_bucket == "overdue" else "",
         },
         {
             "label": "Overdue",
             "value": str(overdue),
-            "sub": f"past {queue.sla_days}d",
+            "phrase": "past that SLA",
             "tone": "bad" if overdue else "good",
         },
     ]
@@ -393,7 +413,7 @@ def queue_stats(queue_key, rows, user=None, extra=()):
         stats.append({
             "label": "Your reviews today",
             "value": str(reviews_today(queue_key, user)),
-            "sub": "since midnight",
+            "phrase": "cleared by you since midnight",
         })
     return stats
 
@@ -463,17 +483,354 @@ def dash_context(request, queue_key, rows, extra_stats=()):
     """The header a desk shows above its table."""
     queue = QUEUES[queue_key]
     release_claim(request.user)  # Back at the desk: not reviewing anything.
-    start_url = reverse(queue.next_url)
+    page, reviews = all_reviews_page(queue_key, request.GET.get("page"))
     return {
         "queue": queue,
         "queue_key": queue_key,
         "queue_label": queue.label,
+        "queue_plural": queue.plural,
         "queue_short": queue.short,
         "queue_accent": queue.accent,
         "queue_stats": queue_stats(queue_key, rows, request.user, extra_stats),
-        "start_url": start_url,
+        "stat_cards": review_stats(queue_key),
+        "sla_days": queue.sla_days,
+        "start_url": reverse(queue.next_url),
         "has_pending": bool(rows),
+        "pending_count": len(rows),
+        "all_reviews": reviews,
+        "reviews_page": page,
     }
+
+
+# ------------------------------------------------------------ desk stats
+
+# Windowed stats compare the last three days against the three before them. A
+# short window keeps the figure about now rather than smoothing a week of state
+# into it; a delta against the prior window is what turns a number into a
+# direction.
+STATS_WINDOW = timedelta(days=3)
+STATS_CACHE_TTL = 5 * 60
+
+# Which cards each desk carries, and in what order. Not every metric means
+# something at every tier: Lookout review has no verdict to average, so it gets
+# no approval ratio, and the hours a queue is sitting on are only knowable once
+# lapse review has settled them — which is after T1.
+REVIEW_STAT_KEYS = {
+    "lookout": ["turnaround"],
+    "t1": ["turnaround", "approval_ratio", "reship_ratio"],
+    "t2": ["hours_pending", "turnaround", "approval_ratio"],
+    "t3": ["hours_pending", "turnaround", "approval_ratio"],
+}
+
+STAT_CARDS = {
+    "hours_pending": {
+        "label": "Hours pending review",
+        "description": "approved hours waiting in this queue",
+        "better": "down",
+    },
+    "turnaround": {
+        "label": "P90 turnaround (3d)",
+        "description": "90th-percentile wait, backlog included",
+        "better": "down",
+    },
+    "approval_ratio": {
+        "label": "Approval ratio (3d)",
+        "description": "share of decisions that approved",
+        "better": "up",
+    },
+    "reship_ratio": {
+        "label": "Reship ratio (3d)",
+        "description": "ships that follow a rejected attempt",
+        "better": "down",
+    },
+}
+
+REVIEW_MODEL = {"t1": T1, "t2": T2, "t3": T3, "lookout": TimelapseReview}
+
+
+def percentile(values, fraction):
+    """Linear-interpolated percentile, or None for an empty set.
+
+    The 90th and not the mean: most reviews are fast, and a mean is dragged
+    down by them until the tail everybody actually complains about is
+    invisible in it.
+    """
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    rank = fraction * (len(ordered) - 1)
+    low = ordered[int(rank)]
+    high = ordered[min(int(rank) + 1, len(ordered) - 1)]
+    return low + (high - low) * (rank - int(rank))
+
+
+def _waited_seconds(queue_key, window, as_of):
+    """Every wait this desk saw in `window`, in seconds.
+
+    Two populations, and the second is the point. Decided reviews say how long
+    the work that finished took; things *still waiting* at `as_of` are counted
+    by the wait they had accrued by then, so a queue that is quietly growing
+    shows up now rather than in a fortnight when its oldest items finally get
+    looked at. A 90th percentile makes that safe — a review submitted this
+    morning lands at the bottom of the distribution and cannot drag it down.
+
+    Reconstructing "was this waiting at `as_of`" costs nothing for the items
+    still in the queue, and for the ones since decided it is exactly `created
+    before, decided after`. A ship that bounced back down a tier is counted
+    once per decision, which slightly over-weights the few that do.
+    """
+    model = REVIEW_MODEL[queue_key]
+    subject_created = "journal__created_at" if queue_key == "lookout" else "ship__created_at"
+
+    waits = [
+        (reviewed_at - created_at).total_seconds()
+        for reviewed_at, created_at in model.objects
+        .filter(reviewed_at__gte=window[0], reviewed_at__lte=window[1])
+        .values_list("reviewed_at", subject_created)
+    ]
+
+    still_waiting = list(
+        model.objects
+        .filter(reviewed_at__gt=as_of, **{f"{subject_created}__lte": as_of})
+        .values_list(subject_created, flat=True)
+    )
+    if queue_key == "lookout":
+        still_waiting += list(
+            Journal.objects
+            .filter(project__deleted=False, timelapse_review__isnull=True, created_at__lte=as_of)
+            .values_list("created_at", flat=True)
+        )
+    else:
+        still_waiting += list(
+            QUEUES[queue_key].pending()
+            .filter(created_at__lte=as_of)
+            .values_list("created_at", flat=True)
+        )
+
+    waits += [(as_of - created_at).total_seconds() for created_at in still_waiting]
+    return waits
+
+
+def _decisions(queue_key, window):
+    """(approved, total) for the decisions this desk made inside `window`."""
+    model = REVIEW_MODEL[queue_key]
+    decided = model.objects.filter(reviewed_at__gte=window[0], reviewed_at__lte=window[1])
+    total = decided.count()
+    if not total:
+        return 0, 0
+    if queue_key == "t1":
+        approved = decided.filter(approved=True).count()
+    else:
+        approved = decided.filter(decision=model.Decision.APPROVE).count()
+    return approved, total
+
+
+def _reships(window, as_of):
+    """(reships, total) across the ships T1 saw in `window` or was holding.
+
+    A reship is a ship on a project that already had one rejected. An approved
+    sibling doesn't count — a second ship after a clean finish is a new piece
+    of work, not another go at a failed one.
+    """
+    earlier_rejection = Exists(Ship.objects.filter(
+        project=OuterRef("project"),
+        created_at__lt=OuterRef("created_at"),
+        status=Ship.ShipStatus.REJECTED,
+    ))
+    decided_ships = Ship.objects.filter(
+        t1_reviews__reviewed_at__gte=window[0], t1_reviews__reviewed_at__lte=window[1]
+    )
+    waiting_ships = Ship.objects.filter(
+        status=Ship.ShipStatus.T1_QUEUE, project__deleted=False, created_at__lte=as_of
+    )
+    ships = (decided_ships | waiting_ships).distinct()
+
+    total = ships.count()
+    if not total:
+        return 0, 0
+    return ships.filter(earlier_rejection).count(), total
+
+
+def _hours_pending(queue_key):
+    """Approved hours sitting in this queue right now."""
+    ships = QUEUES[queue_key].pending()
+    minutes = approved_minutes_for_journals(Journal.objects.filter(ship__in=ships))
+    return round(minutes / 60, 1)
+
+
+def _delta(current, prior):
+    """The move against the prior window, or None when there's nothing to compare.
+
+    None and zero are different answers: no prior data means no signal, and a
+    flat three days means we looked and it hasn't moved. The card renders them
+    differently.
+    """
+    if current is None or prior is None:
+        return None
+    return round(current - prior, 1)
+
+
+def _tone(delta, better):
+    """"good", "bad", "flat", or None when there is nothing to compare against."""
+    if delta is None:
+        return None
+    if delta == 0:
+        return "flat"
+    rising = delta > 0
+    return "good" if rising == (better == "up") else "bad"
+
+
+def _stat_value(queue_key, key, window, as_of):
+    """One metric over one window. `None` where there is nothing to measure."""
+    if key == "hours_pending":
+        return {"value": _hours_pending(queue_key), "count": None}
+    if key == "turnaround":
+        waits = _waited_seconds(queue_key, window, as_of)
+        days = percentile(waits, 0.9)
+        return {
+            "value": round(days / 86400, 1) if days is not None else None,
+            "count": len(waits),
+        }
+    if key == "approval_ratio":
+        approved, total = _decisions(queue_key, window)
+        return {
+            "value": round(approved / total * 100, 1) if total else None,
+            "count": total,
+        }
+    reships, total = _reships(window, as_of)
+    return {"value": round(reships / total * 100, 1) if total else None, "count": total}
+
+
+def review_stats(queue_key):
+    """The cards above a desk's queue, with their three-day direction.
+
+    Cached briefly: these are aggregates over every review ever made, the desk
+    is the most-reloaded page in /root, and a number five minutes stale has
+    never changed anybody's mind about which project to open next.
+    """
+    keys = REVIEW_STAT_KEYS[queue_key]
+    cached = cache.get(f"review-stats:{queue_key}")
+    if cached is not None:
+        return cached
+
+    now = timezone.now()
+    current = (now - STATS_WINDOW, now)
+    prior = (now - 2 * STATS_WINDOW, now - STATS_WINDOW)
+
+    cards = []
+    for key in keys:
+        meta = STAT_CARDS[key]
+        here = _stat_value(queue_key, key, current, current[1])
+        # A snapshot of right now has no prior window to sit against.
+        there = (
+            _stat_value(queue_key, key, prior, prior[1])
+            if key != "hours_pending" else {"value": None}
+        )
+        delta = _delta(here["value"], there["value"])
+        cards.append({
+            "key": key,
+            "label": meta["label"],
+            "description": meta["description"],
+            # What the card is counting, which is not the same thing at every
+            # desk: Lookout review measures the wait of a lapse, the ship
+            # queues measure the wait of a ship.
+            "count_noun": (
+                "decision" if key == "approval_ratio"
+                else ("lapse" if queue_key == "lookout" and key == "turnaround" else "ship")
+            ),
+            "unit": "h" if key == "hours_pending" else ("d" if key == "turnaround" else "%"),
+            "value": here["value"],
+            "count": here["count"],
+            "delta": delta,
+            "delta_size": abs(delta) if delta is not None else None,
+            "delta_up": delta is not None and delta > 0,
+            # Whether the move is the direction this metric wants to go. A
+            # turnaround falling is good news; an approval ratio falling is not.
+            "tone": _tone(delta, meta["better"]),
+            # Turnaround is the only card with a threshold to breach: the SLA
+            # is a statement about how long a queue may take, and this is how
+            # long it is taking.
+            "breached": (
+                key == "turnaround"
+                and here["value"] is not None
+                and here["value"] >= QUEUE_SLA_DAYS[queue_key]
+            ),
+        })
+
+    cache.set(f"review-stats:{queue_key}", cards, STATS_CACHE_TTL)
+    return cards
+
+
+# ------------------------------------------------- everything decided so far
+
+# One page of the "all reviews" table. Long enough to scan, short enough that
+# the desk stays a desk rather than an archive.
+REVIEWS_PER_PAGE = 25
+
+
+def _review_row(queue_key, review):
+    """One decided review, in the shape the desk's second table renders.
+
+    Four models with four different verdict fields, flattened once here so the
+    table is one template instead of four near-copies of one.
+    """
+    if queue_key == "lookout":
+        journal = review.journal
+        project = journal.project
+        removed = review.removed_seconds
+        return {
+            "id": review.id,
+            "project": project.title,
+            "subject": journal.title,
+            "owner": display_name(project.owner),
+            "status": "signed off",
+            "note": f"−{format_minutes(removed // 60)}" if removed else "",
+            "reviewer": display_name(review.reviewer),
+            "at": review.reviewed_at,
+            "url": reverse("timelapse_review_project", args=[project.id]),
+        }
+
+    ship = review.ship
+    if queue_key == "t1":
+        status = "approved" if review.approved else "rejected"
+        note = ""
+    else:
+        status = "approved" if review.decision == review.Decision.APPROVE else "returned"
+        note = review.get_decision_display() if status == "returned" else ""
+    return {
+        "id": review.id,
+        "project": ship.project.title,
+        "subject": f"Ship #{ship.id}",
+        "owner": display_name(ship.project.owner),
+        "status": status,
+        "note": note,
+        "reviewer": display_name(review.reviewer),
+        "at": review.reviewed_at,
+        "url": QUEUES[queue_key].detail_url(ship.id),
+    }
+
+
+def all_reviews_page(queue_key, page_number):
+    """Every decision this desk has ever made, newest first, one page of it."""
+    model = REVIEW_MODEL[queue_key]
+    if queue_key == "lookout":
+        rows = model.objects.select_related(
+            "journal", "journal__project", "journal__project__owner",
+            "journal__project__owner__hackclub_profile",
+            "reviewer", "reviewer__hackclub_profile",
+        ).prefetch_related("removals")
+    else:
+        rows = model.objects.select_related(
+            "ship", "ship__project", "ship__project__owner",
+            "ship__project__owner__hackclub_profile",
+            "reviewer", "reviewer__hackclub_profile",
+        )
+
+    paginator = Paginator(rows.order_by("-reviewed_at", "-id"), REVIEWS_PER_PAGE)
+    page = paginator.get_page(page_number)
+    return page, [_review_row(queue_key, review) for review in page]
 
 
 def owner_snapshot(user):

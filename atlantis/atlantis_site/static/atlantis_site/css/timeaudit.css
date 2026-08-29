@@ -819,16 +819,24 @@
 
 /* ---------- the sign-off panel ---------- */
 
-.root-page .ta-entry-final {
-    scroll-snap-align: start;
-    min-height: calc(100dvh - 45px);
-    align-items: center;
-    justify-content: center;
-    padding: 32px 16px;
+/* Raised over the column by Submit rather than parked at the bottom of it.
+   The dialog is only the frame; .ta-final is still the card. */
+.root-page .ta-final-dialog {
+    width: min(560px, 92vw);
+    max-height: 90dvh;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--oc-ink);
+    overflow: auto;
+}
+
+.root-page .ta-final-dialog::backdrop {
+    background: var(--oc-scrim);
 }
 
 .root-page .ta-final {
-    width: min(560px, 100%);
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 14px;
@@ -836,6 +844,7 @@
     border: 1px solid var(--oc-line);
     border-radius: 12px;
     background: var(--oc-surface);
+    box-shadow: var(--oc-shadow-modal);
 }
 
 .root-page .ta-final h2 {
@@ -919,6 +928,14 @@
     font-size: 13px;
     resize: vertical;
 }
+
+.root-page .ta-final-actions {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+
+.root-page .ta-final-actions .ta-approve { flex: 1 1 auto; }
 
 .root-page .ta-approve {
     display: flex;

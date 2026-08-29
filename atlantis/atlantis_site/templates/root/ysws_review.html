@@ -2,14 +2,18 @@
 {% load static %}
 
 {% block page_id %}admin-ysws-review-page{% endblock %}
-{% block title %}T2 Review Desk{% endblock %}
+{% block title %}T2 Review{% endblock %}
 
 {% block content %}
 <div class="content rq">
     {% include "root/_messages_admin.html" %}
-    {% include "root/_rv_queue_header.html" with blurb="Ships that passed T1 and are waiting on a hours-and-payout pass. Approving sends them to fraud review." %}
-    <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> to move through the queue, <kbd>&crarr;</kbd> to open, or <strong>Start reviewing</strong> to be handed the longest-waiting one.</p>
+    {% include "root/_rv_queue_header.html" with blurb="Second pass: the hours HQ will be told about, and the justification for them." %}
+
     {% include "root/_rv_ship_queue.html" with empty_text="No projects awaiting T2 review." %}
+    <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> to move through the queue, <kbd>&crarr;</kbd> to open, or <strong>Start reviewing</strong> to be handed the longest-waiting one.</p>
+
+    {% include "root/_rv_all_reviews.html" %}
+
     <section class="chart-grid rq-charts">
         {% include "root/_metric_chart.html" with title="Top T2 reviewers" rows=leaderboard empty="No reviews yet" %}
     </section>

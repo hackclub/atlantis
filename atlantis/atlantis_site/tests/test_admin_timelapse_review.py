@@ -192,7 +192,11 @@ class TimelapseReviewQueueTests(BaseTestCase):
 		self.assertEqual(
 			[lapse.id for lapse in response.context["projects"][0].lapses], [pending.id]
 		)
-		self.assertEqual(list(response.context["reviewed"]), [reviewed])
+		# The one already signed off moves to the desk's decided table.
+		self.assertEqual(
+			[row["id"] for row in response.context["all_reviews"]],
+			[reviewed.timelapse_review.id],
+		)
 
 	def test_a_fully_reviewed_project_leaves_the_queue(self):
 		approve_timelapse(make_journal(self.project), reviewer=self.reviewer)

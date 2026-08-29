@@ -4,14 +4,14 @@
 {% block body_class %} review-shell{% endblock %}
 {% block nav %}{% endblock %}
 {% block page_id %}admin-timelapse-review-project-page{% endblock %}
-{% block title %}Lookout &middot; {{ project.title }}{% endblock %}
+{% block title %}Timelapse &middot; {{ project.title }}{% endblock %}
 
 {% block content %}
 <div class="ta rv-accent-{{ queue_accent }}" id="ta-root">
 
     <header class="ta-topbar">
         <div class="ta-topbar-left">
-            <a class="rv-btn" href="{{ queue_dash_url }}" data-key="e" title="Back to the Lookout desk">End Session<kbd>E</kbd></a>
+            <a class="rv-btn" href="{{ queue_dash_url }}" data-key="e" title="Back to the timelapse desk">End Session<kbd>E</kbd></a>
             {% if pending %}
                 <a class="rv-btn rv-btn-ghost" href="{{ skip_url }}" data-key="s" title="Leave this project and open the next">Skip<kbd>S</kbd></a>
             {% endif %}
@@ -56,9 +56,9 @@
 
             {% if pending %}
                 <span class="ta-sep" role="presentation"></span>
-                <button type="submit" form="timelapse-review-form" class="rv-btn rv-btn-primary"
-                        data-submit-pass data-primary disabled
-                        title="Describe every Lookout before submitting">
+                <button type="button" class="rv-btn rv-btn-primary"
+                        data-submit-pass data-open-final disabled
+                        title="Describe every timelapse before submitting">
                     Submit<kbd>&#8984;&crarr;</kbd>
                 </button>
             {% else %}
@@ -103,45 +103,6 @@
         {% if not pending and not reviewed %}
             <section class="ta-entry"><div class="ta-empty">Nothing on this project to review.</div></section>
         {% endif %}
-
-        {% if pending %}
-            <section class="ta-entry ta-entry-final">
-                <div class="ta-final">
-                    <h2>Sign off {{ lapse_count }} {{ lapse_count|pluralize:"entry,entries" }}</h2>
-                    <p class="ta-final-note">
-                        Approving clears every waiting lapse on this project for T1. Nothing is
-                        sent to @{{ owner.name }} &mdash; not that it happened, not what it cost.
-                    </p>
-
-                    <dl class="ta-ledger">
-                        <div><dt>Tracked</dt><dd>{{ tracked_display }}</dd></div>
-                        <div><dt>Removing</dt><dd class="is-no" data-live-removed>0h 0m</dd></div>
-                        <div class="ta-ledger-total"><dt>Approving</dt><dd data-live-approved>{{ tracked_display }}</dd></div>
-                    </dl>
-
-                    <p class="ta-final-progress" data-save-progress></p>
-
-                    <label class="ta-field">
-                        <span class="ta-field-label">
-                            Notes on the pass <em>optional &middot; internal</em><kbd>I</kbd>
-                        </span>
-                        <textarea name="internal_notes" id="ta-internal" form="timelapse-review-form"
-                                  data-focus="i" rows="3" maxlength="{{ internal_notes_max_length }}"
-                                  placeholder="Anything that spans the whole project rather than one recording."></textarea>
-                        <span class="rv-counter" data-counter-for="ta-internal" data-max="{{ internal_notes_max_length }}"></span>
-                    </label>
-                    <p class="ta-final-note">
-                        The per-Lookout descriptions above are what carry the account of this
-                        pass; this is only for what didn&rsquo;t fit in one of them.
-                    </p>
-
-                    <button type="submit" form="timelapse-review-form" class="ta-approve"
-                            data-submit-pass disabled>
-                        Approve {{ lapse_count }} {{ lapse_count|pluralize:"lapse,lapses" }}<kbd>&#8984;&crarr;</kbd>
-                    </button>
-                </div>
-            </section>
-        {% endif %}
     </div>
 
     {% if pending %}
@@ -151,18 +112,64 @@
             {% csrf_token %}
             <div data-removal-inputs></div>
         </form>
+
+        {% comment %}
+        The sign-off panel. It is the last thing in the pass but not the last
+        thing in the column: a reviewer who wants to submit shouldn't have to
+        scroll past every entry to reach it, so Submit (and Cmd+Enter) raises
+        it over the page instead, with the notes field already focused.
+        {% endcomment %}
+        <dialog class="ta-final-dialog" id="ta-final" aria-labelledby="ta-final-title">
+            <div class="ta-final">
+                <h2 id="ta-final-title">Sign off {{ lapse_count }} {{ lapse_count|pluralize:"entry,entries" }}</h2>
+                <p class="ta-final-note">
+                    Approving clears every waiting lapse on this project for T1. Nothing is
+                    sent to @{{ owner.name }} &mdash; not that it happened, not what it cost.
+                </p>
+
+                <dl class="ta-ledger">
+                    <div><dt>Tracked</dt><dd>{{ tracked_display }}</dd></div>
+                    <div><dt>Removing</dt><dd class="is-no" data-live-removed>0h 0m</dd></div>
+                    <div class="ta-ledger-total"><dt>Approving</dt><dd data-live-approved>{{ tracked_display }}</dd></div>
+                </dl>
+
+                <p class="ta-final-progress" data-save-progress></p>
+
+                <label class="ta-field">
+                    <span class="ta-field-label">
+                        Notes on the pass <em>optional &middot; internal</em>
+                    </span>
+                    <textarea name="internal_notes" id="ta-internal" form="timelapse-review-form"
+                              rows="3" maxlength="{{ internal_notes_max_length }}"
+                              placeholder="Anything that spans the whole project rather than one recording."></textarea>
+                    <span class="rv-counter" data-counter-for="ta-internal" data-max="{{ internal_notes_max_length }}"></span>
+                </label>
+                <p class="ta-final-note">
+                    The per-timelapse descriptions in the pass are what carry the account of
+                    it; this is only for what didn&rsquo;t fit in one of them.
+                </p>
+
+                <div class="ta-final-actions">
+                    <button type="button" class="rv-btn" data-close-final>Back<kbd>Esc</kbd></button>
+                    <button type="submit" form="timelapse-review-form" class="ta-approve"
+                            data-submit-pass data-primary disabled>
+                        Approve {{ lapse_count }} {{ lapse_count|pluralize:"lapse,lapses" }}<kbd>&#8984;&crarr;</kbd>
+                    </button>
+                </div>
+            </div>
+        </dialog>
     {% endif %}
 </div>
 
 <dialog class="rv-shortcuts" id="rv-shortcuts">
     <h2>Keyboard shortcuts</h2>
     <dl>
-        <dt><kbd>E</kbd></dt><dd>End session &mdash; back to the Lookout desk</dd>
+        <dt><kbd>E</kbd></dt><dd>End session &mdash; back to the timelapse desk</dd>
         {% if pending %}
             <dt><kbd>S</kbd></dt><dd>Skip &mdash; open the next project without deciding</dd>
             <dt><kbd>&#8679;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Save this entry&rsquo;s recordings and scroll to the next</dd>
-            <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Submit the pass</dd>
-            <dt><kbd>I</kbd></dt><dd>Jump to the notes on the pass</dd>
+            <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Open the sign-off panel &mdash; and, from inside it, submit</dd>
+            <dt><kbd>I</kbd></dt><dd>Open the sign-off panel and write the notes on the pass</dd>
         {% endif %}
         <dt><kbd>U</kbd></dt><dd>Open the owner&rsquo;s profile</dd>
         <dt><kbd>O</kbd></dt><dd>Open the project as the shipper sees it</dd>

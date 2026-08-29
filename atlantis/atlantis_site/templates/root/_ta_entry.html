@@ -47,8 +47,8 @@ removal_reasons
                     </div>
 
                     <div class="ta-rec-info">
-                        <span class="ta-rec-name">Lookout {{ forloop.counter }}</span>
-                        <span class="ta-badge ta-badge-lookout">Lookout</span>
+                        <span class="ta-rec-name">Timelapse {{ forloop.counter }}</span>
+                        <span class="ta-badge ta-badge-lookout">Timelapse</span>
                         {% if session.activity_checked and session.inactive_percentage %}
                             <span class="ta-badge {% if session.inactive_percentage > 30 %}ta-badge-bad{% else %}ta-badge-quiet{% endif %}"
                                   title="{{ session.inactive_display }} of tracked time shows no change on screen">
@@ -67,7 +67,7 @@ removal_reasons
                     {# The timeline, both bars, drawn by lookout_review.js. #}
                     <div class="ta-timeline-row">
                         <div class="ta-timeline" data-timeline tabindex="0" role="slider"
-                             aria-label="Lookout {{ forloop.counter }} timeline"
+                             aria-label="Timelapse {{ forloop.counter }} timeline"
                              aria-valuemin="0" aria-valuemax="{{ session.video_seconds }}" aria-valuenow="0">
                             <div class="ta-track ta-track-main" data-track-main>
                                 <div class="ta-preview" data-preview hidden></div>

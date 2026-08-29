@@ -136,8 +136,10 @@
 
     function primaryButton() {
         // Anywhere on the page: the reviewer shell keeps its decision in an
-        // .rv-form, the Lookout page keeps its submit in the top bar, and both
-        // mean the same thing — the one action Cmd/Ctrl+Enter performs.
+        // .rv-form, the timelapse page keeps its submit in the sign-off panel
+        // (live only while that panel is open, so Cmd/Ctrl+Enter raises it
+        // first and posts on the second press), and both mean the same thing —
+        // the one action Cmd/Ctrl+Enter performs.
         return document.querySelector('[data-primary]:not([disabled])');
     }
 
@@ -193,7 +195,10 @@
         }
 
         if (event.metaKey || event.ctrlKey || event.altKey) return;
-        if (dialog && dialog.open) return;
+        // Any open modal owns the unmodified keys — the shortcut sheet, and
+        // the timelapse sign-off panel. Cmd/Ctrl+Enter is handled above and
+        // still submits from inside one, which is the point of raising it.
+        if (document.querySelector('dialog[open]')) return;
 
         // Enter in a single-line field would fire the form's first submit
         // button — which on these forms is a decision. Never that by accident.
