@@ -20,6 +20,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 
 from ...models import (
     Journal, Project, TimelapseRemoval, TimelapseReview, first_overlap,
@@ -58,11 +59,35 @@ class RemovalError(Exception):
     """A posted range we refuse to record. The message is shown to the reviewer."""
 
 
+def _unreviewed(lapses):
+    """Narrow a Journal queryset to the lapses nobody has signed off yet.
+
+    The obvious spelling is `timelapse_review__isnull=True`, and it compiles to
+    a LEFT OUTER JOIN onto the review table. That is fine to read and
+    impossible to lock: Postgres rejects `FOR UPDATE` the moment a nullable
+    side of an outer join is in the lock set, and the sign-off below re-reads
+    these rows under select_for_update. So the absence is asked as a NOT
+    EXISTS, which is a subquery rather than a join, and the same queryset
+    serves both the page and the locked read.
+    """
+    return lapses.filter(~Exists(
+        TimelapseReview.objects.filter(journal=OuterRef("pk"))
+    ))
+
+
+def _locked_pending_lapses(project):
+    """The project's unreviewed lapses, locked for the length of a sign-off."""
+    return (
+        _unreviewed(Journal.objects.filter(project=project))
+        .select_for_update()
+        .order_by("created_at", "id")
+    )
+
+
 def _pending_lapses(project):
     """The project's unreviewed lapses, oldest first, footage attached."""
     return list(
-        Journal.objects
-        .filter(project=project, timelapse_review__isnull=True)
+        _unreviewed(Journal.objects.filter(project=project))
         .prefetch_related("timelapses")
         .order_by("created_at", "id")
     )
@@ -302,11 +327,7 @@ def timelapse_decision(request, project_id):
         # Re-read inside the transaction: two reviewers opening the same project
         # is the ordinary way to get here, and a lapse someone else signed off
         # in the meantime is theirs, not ours to write again.
-        pending = list(
-            Journal.objects.select_for_update()
-            .filter(project=project, timelapse_review__isnull=True)
-            .order_by("created_at", "id")
-        )
+        pending = list(_locked_pending_lapses(project))
         if not pending:
             messages.error(request, "Every lapse on that project has already been reviewed.")
             return redirect("timelapse_review_dash")

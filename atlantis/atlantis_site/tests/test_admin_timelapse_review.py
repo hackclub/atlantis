@@ -7,6 +7,7 @@ from ..models import (
 	AuditLog, Journal, Ship, TimelapseRemoval, TimelapseReview, first_overlap,
 	format_timecode, parse_timecode, tracked_to_video, video_to_tracked,
 )
+from ..views.admin.timelapse_review import _locked_pending_lapses
 from .base import (
 	BaseTestCase,
 	approve_timelapse,
@@ -187,6 +188,35 @@ class TimelapseReviewQueueTests(BaseTestCase):
 		make_journal(make_project(make_user("gone"), deleted=True))
 		response = self.client.get(reverse("timelapse_review_dash"))
 		self.assertEqual(list(response.context["projects"]), [])
+
+
+class LockedReadTests(BaseTestCase):
+	"""The sign-off re-reads its lapses under FOR UPDATE. That read has to be lockable.
+
+	Postgres refuses to lock the nullable side of an outer join, so filtering on
+	`timelapse_review__isnull=True` — which joins — blew up every real pass with
+	"FOR UPDATE cannot be applied to the nullable side of an outer join". Sqlite
+	discards FOR UPDATE entirely, so no amount of exercising the view catches it
+	here; the shape of the compiled query is what the suite can actually check.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.project = make_project(make_user("author"), shippable=True)
+		self.journal = make_journal(self.project, time_spent=60)
+
+	def test_the_locked_read_joins_nothing(self):
+		sql = str(_locked_pending_lapses(self.project).query).upper()
+		self.assertNotIn("JOIN", sql)
+
+	def test_the_locked_read_finds_the_unreviewed_lapses(self):
+		lapse = make_journal(self.project, time_spent=30)
+		approve_timelapse(lapse)
+		waiting = make_journal(self.project, time_spent=30)
+		self.assertEqual(
+			{j.id for j in _locked_pending_lapses(self.project)},
+			{self.journal.id, waiting.id},
+		)
 
 
 class TimelapseDecisionTests(BaseTestCase):
