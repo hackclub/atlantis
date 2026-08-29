@@ -1,21 +1,6 @@
 {% extends 'root/_base_root.html' %}
 {% load static %}
 
-{% comment %}
-The Lookout pass, laid out the way Fallout's time audit is: a fixed top bar
-over one vertically snapping column of entries. An entry fills the viewport
-when it's open — footage on the left, the journal that claims the time on the
-right — so a reviewer reads one lapse at a time instead of scrolling a page of
-six.
-
-Every lapse on the project is here. The unreviewed ones are editable; the ones
-already signed off are below them, read-only, with the ranges that came off
-them drawn on the same timeline. What the reviewer produces per recording is a
-description (required — a Lookout nobody wrote a line about is a Lookout
-nobody watched) and any number of removed ranges. The pass-wide notes at the
-bottom are optional.
-{% endcomment %}
-
 {% block body_class %} review-shell{% endblock %}
 {% block nav %}{% endblock %}
 {% block page_id %}admin-timelapse-review-project-page{% endblock %}
@@ -24,7 +9,6 @@ bottom are optional.
 {% block content %}
 <div class="ta rv-accent-{{ queue_accent }}" id="ta-root">
 
-    {# ---------------------------------------------------------- top bar #}
     <header class="ta-topbar">
         <div class="ta-topbar-left">
             <a class="rv-btn" href="{{ queue_dash_url }}" data-key="e" title="Back to the Lookout desk">End Session<kbd>E</kbd></a>
@@ -107,7 +91,6 @@ bottom are optional.
         </div>
     {% endif %}
 
-    {# ---------------------------------------------------------- entries #}
     <div class="ta-scroll" id="ta-scroll">
         {% for lapse in pending %}
             {% include "root/_ta_entry.html" with lapse=lapse index=forloop.counter editable=True last=forloop.last %}
@@ -123,8 +106,6 @@ bottom are optional.
         {% endif %}
 
         {% if pending %}
-            {# The pass-wide box, last in the scroll column: it is the thing you
-               reach after the final entry, which is when it has anything to say. #}
             <section class="ta-entry ta-entry-final">
                 <div class="ta-final">
                     <h2>Sign off {{ lapse_count }} {{ lapse_count|pluralize:"entry,entries" }}</h2>
@@ -169,9 +150,6 @@ bottom are optional.
               data-tracked-seconds="{{ tracked_seconds }}"
               action="{% url 'timelapse_decision' project.id %}{% if skip_value %}?skip={{ skip_value }}{% endif %}">
             {% csrf_token %}
-            {# Every range the reviewer drew, mirrored here as hidden inputs when
-               the pass is submitted. The editor's own state lives in JavaScript;
-               this is the wire format the view already parses. #}
             <div data-removal-inputs></div>
         </form>
     {% endif %}
