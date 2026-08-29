@@ -4,6 +4,11 @@ review-queue helpers it uses (claim/heartbeat/next).
 Lookout-only: every recording is an atlantis_site LookoutSession. The routes
 live under `/admin/...` (same as Fallout) so the copied frontend needs no URL
 changes.
+
+This version is per-project (not per-ship) and shows up when a project has
+journals (devlogs) with timelapses. Time audits happen BEFORE shipping and
+continue independently - shipping puts the project in T1 queue but doesn't
+affect the time audit queue.
 """
 
 import json
@@ -13,7 +18,7 @@ from urllib.parse import urlencode
 
 from django.contrib.auth.decorators import user_passes_test
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Exists, OuterRef
 from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -25,6 +30,8 @@ from django_inertia.core import Inertia
 from . import inertia
 from .models import ProjectFlag, ReviewerNote, TimeAuditReview
 from atlantis_site.models import (
+    Journal,
+    LookoutSession,
     TimelapseRemoval,
     TimelapseReview,
     first_overlap,
@@ -34,8 +41,6 @@ from .serializers import (
     serialize_review_detail,
     serialize_review_row,
     serialize_reviewer_notes,
-    serialize_ship_context,
-    serialize_sibling_statuses,
     serialize_ta_journal_entry,
     serialize_ta_project_context,
 )
@@ -79,18 +84,63 @@ def _lazy(callable_):
     return Inertia.lazy(callable_)
 
 
-# ---------------------------------------------------------------------------
-# Index
-# ---------------------------------------------------------------------------
+def _get_reviews_with_unreviewed_timelapses(status_filter=None):
+    """
+    Get TimeAuditReviews for projects that have journals with LookoutSessions
+    that haven't been reviewed yet.
+    
+    A journal is considered "unreviewed" if it has at least one LookoutSession
+    that hasn't been reviewed in a completed time audit.
+    """
+    # Subquery: journals that have LookoutSessions
+    journals_with_sessions = Journal.objects.filter(
+        project=OuterRef("project"),
+        timelapses__isnull=False
+    ).distinct()
+
+    # Subquery: journals that have been marked as reviewed
+    reviewed_journal_ids = TimeAuditReview.objects.filter(
+        project=OuterRef("project")
+    ).values("reviewed_journal_ids")
+
+    reviews = TimeAuditReview.objects.select_related("project__owner", "reviewer", "claimed_by")
+
+    if status_filter:
+        reviews = reviews.filter(status=status_filter)
+
+    # Filter to only reviews where the project has journals with sessions
+    # that aren't in reviewed_journal_ids
+    review_ids = []
+    for review in reviews:
+        unreviewed = Journal.objects.filter(
+            project=review.project,
+            timelapses__isnull=False
+        ).exclude(
+            id__in=review.reviewed_journal_ids or []
+        ).distinct()
+        if unreviewed.exists():
+            review_ids.append(review.id)
+
+    return TimeAuditReview.objects.filter(id__in=review_ids).select_related(
+        "project__owner", "reviewer", "claimed_by"
+    )
+
 
 def _turnaround_stats():
     """Simplified P90 turnaround stat matching the frontend's expectations."""
-    reviews = TimeAuditReview.objects.filter(ship__isnull=False).prefetch_related("ship")
+    reviews = _get_reviews_with_unreviewed_timelapses()
     waits = []
     now = timezone.now()
     for r in reviews:
-        end = r.reviewed_at if r.status != "pending" and r.reviewed_at else now
-        waits.append((end - r.ship.created_at).total_seconds() / 86400)
+        oldest = Journal.objects.filter(
+            project=r.project,
+            timelapses__isnull=False
+        ).exclude(
+            id__in=r.reviewed_journal_ids or []
+        ).order_by("created_at").first()
+        if oldest:
+            end = r.reviewed_at if r.status != "pending" and r.reviewed_at else now
+            waits.append((end - oldest.created_at).total_seconds() / 86400)
     count = len(waits)
     if not waits:
         return {"turnaround": {"ship_days": None, "cycle_days": None, "count": 0,
@@ -105,25 +155,29 @@ def _turnaround_stats():
 @require_timelapse_reviewer
 def time_audit_index(request):
     def pending_rows():
-        qs = (
-            TimeAuditReview.objects.filter(status="pending")
-            .select_related("ship__project__owner", "reviewer", "claimed_by")
-            .order_by("created_at", "id")
-        )
-        flagged = set(ProjectFlag.objects.filter(project_id__in=qs.values("ship__project_id")).values_list("project_id", flat=True))
-        return [serialize_review_row(r, flagged) for r in qs]
+        qs = _get_reviews_with_unreviewed_timelapses(status_filter="pending")
+        # Sort by oldest unreviewed journal's created_at
+        reviews = list(qs)
+        reviews.sort(key=lambda r: (
+            Journal.objects.filter(
+                project=r.project,
+                timelapses__isnull=False
+            ).exclude(
+                id__in=r.reviewed_journal_ids or []
+            ).order_by("created_at").values_list("created_at", flat=True).first()
+            or r.created_at
+        ))
+        flagged = set(ProjectFlag.objects.filter(project_id__in=[r.project_id for r in reviews]).values_list("project_id", flat=True))
+        return [serialize_review_row(r, flagged) for r in reviews]
 
     def pagy_props():
-        qs = (
-            TimeAuditReview.objects.exclude(status="pending")
-            .select_related("ship__project__owner", "reviewer", "claimed_by")
-            .order_by("-created_at")
-        )
+        # All reviews (including those with no unreviewed timelapses) for the history table
+        qs = TimeAuditReview.objects.select_related("project__owner", "reviewer", "claimed_by").exclude(status="pending").order_by("-created_at")
         page = max(1, int(request.GET.get("page", 1)))
         total = qs.count()
         rows = list(qs[(page - 1) * PAGE_LIMIT : page * PAGE_LIMIT])
         pages = max(1, -(-total // PAGE_LIMIT))
-        flagged = set(ProjectFlag.objects.filter(project_id__in=qs.values("ship__project_id")).values_list("project_id", flat=True))
+        flagged = set(ProjectFlag.objects.filter(project_id__in=qs.values("project_id")).values_list("project_id", flat=True))
         return {
             "rows": [serialize_review_row(r, flagged) for r in rows],
             "pagy": {
@@ -149,22 +203,15 @@ def time_audit_index(request):
     return inertia.render(request, "admin/reviews/time_audits/index", props)
 
 
-# ---------------------------------------------------------------------------
-# Show / Next / Heartbeat
-# ---------------------------------------------------------------------------
-
 @require_GET
 @require_timelapse_reviewer
 def time_audit_next(request):
     skip_ids = request.GET.get("skip", "")
     skip = [int(s) for s in skip_ids.split(",") if s.strip().isdigit()]
-    nxt = (
-        TimeAuditReview.objects.filter(status="pending")
-        .exclude(id__in=skip)
-        .select_related("ship__project__owner")
-        .order_by("created_at", "id")
-        .first()
-    )
+
+    qs = _get_reviews_with_unreviewed_timelapses(status_filter="pending").exclude(id__in=skip).order_by("created_at", "id")
+    nxt = qs.first()
+
     if nxt:
         url = reverse("time_audit_show", args=[nxt.id])
         if skip_ids:
@@ -177,11 +224,10 @@ def time_audit_next(request):
 @require_timelapse_reviewer
 def time_audit_show(request, review_id):
     review = get_object_or_404(
-        TimeAuditReview.objects.select_related("ship__project__owner", "reviewer", "claimed_by"),
+        TimeAuditReview.objects.select_related("project__owner", "reviewer", "claimed_by"),
         id=review_id,
     )
-    ship = review.ship
-    project = ship.project
+    project = review.project
 
     # Claim lifecycle, mirroring Fallout: one claim at a time, redirect away if lost.
     claimed = review.claimed_by_user(request.user)
@@ -190,22 +236,26 @@ def time_audit_show(request, review_id):
     if not claimed and review.status == "pending" and not request.user.is_superuser:
         return redirect(reverse("time_audit_next"))
 
-    journals = list(
-        project.journals.filter(ship=ship)
-        .select_related("project__owner")
-        .prefetch_related("timelapses")
-        .order_by("created_at", "id")
-    )
-    new_entries = [serialize_ta_journal_entry(j, ship, request) for j in journals]
+    # Get ALL journals for this project that have LookoutSessions (timelapses)
+    # Split into unreviewed (new entries) and reviewed (previous entries)
+    all_journals_with_sessions = Journal.objects.filter(
+        project=project,
+        timelapses__isnull=False
+    ).distinct().prefetch_related("timelapses").order_by("created_at", "id")
+
+    reviewed_journal_ids = set(review.reviewed_journal_ids or [])
+    unreviewed_journals = [j for j in all_journals_with_sessions if j.id not in reviewed_journal_ids]
+    reviewed_journals = [j for j in all_journals_with_sessions if j.id in reviewed_journal_ids]
+
+    new_entries = [serialize_ta_journal_entry(j, request) for j in unreviewed_journals]
+    previous_entries = [serialize_ta_journal_entry(j, request) for j in reviewed_journals]
 
     props = {
         "mode": "ship",
         "review": serialize_review_detail(review),
-        "ship": serialize_ship_context(ship),
         "project": serialize_ta_project_context(project, request),
         "new_entries": new_entries,
-        "previous_entries": [],
-        "sibling_statuses": serialize_sibling_statuses(ship),
+        "previous_entries": previous_entries,
         "reviewer_notes": serialize_reviewer_notes(
             ReviewerNote.objects.filter(project=project).select_related("author")[:100]
         ),
@@ -232,10 +282,6 @@ def time_audit_heartbeat(request, review_id):
     return JsonResponse({"error": "claim_lost"}, status=409)
 
 
-# ---------------------------------------------------------------------------
-# Update
-# ---------------------------------------------------------------------------
-
 def _stamp_annotation_reviewer(annotations, current_user_id):
     """Mirror Fallout's stamp_annotation_reviewer: record who annotated each
     recording the first time it is saved."""
@@ -261,14 +307,15 @@ def _link_only_feedback(feedback):
 
 
 def _validated_annotations(review, annotations):
-    """Validate Fallout's video-time annotations against this ship's Lookouts."""
+    """Validate Fallout's video-time annotations against this project's Lookouts."""
     if not isinstance(annotations, dict):
         raise ValueError("Annotations must be an object.")
 
+    # Get all LookoutSessions for this project's journals
     sessions = {
         str(session.id): session
-        for session in review.ship.project.journals.filter(ship=review.ship).prefetch_related("timelapses")
-        for session in session.timelapses.all()
+        for journal in review.project.journals.prefetch_related("timelapses").all()
+        for session in journal.timelapses.all()
     }
     recordings = annotations.get("recordings", {})
     if not isinstance(recordings, dict):
@@ -278,7 +325,7 @@ def _validated_annotations(review, annotations):
     for recording_id, data in recordings.items():
         session = sessions.get(str(recording_id))
         if session is None or not isinstance(data, dict):
-            raise ValueError("Annotations include a Lookout that is not on this ship.")
+            raise ValueError("Annotations include a Lookout that is not on this project.")
 
         segments = data.get("segments", [])
         if not isinstance(segments, list):
@@ -351,11 +398,7 @@ def _approved_seconds(sessions, annotations):
 
 def _sync_legacy_reviews(review, annotations, reviewer, feedback):
     """Write one Atlantis review/removal set per journal, once only."""
-    journals = list(
-        review.ship.project.journals.filter(ship=review.ship)
-        .prefetch_related("timelapses")
-        .order_by("created_at", "id")
-    )
+    journals = list(review.project.journals.prefetch_related("timelapses").order_by("created_at", "id"))
     segments_by_session = {
         int(recording_id): data.get("segments", [])
         for recording_id, data in annotations["recordings"].items()
@@ -418,6 +461,16 @@ def time_audit_update(request, review_id):
     if status not in STATUSES:
         status = review.status
 
+    # Get journals that have timelapses and are being reviewed in this update
+    # (journals with sessions that haven't been marked as reviewed yet)
+    all_journals_with_sessions = Journal.objects.filter(
+        project=review.project,
+        timelapses__isnull=False
+    ).distinct()
+    reviewed_journal_ids = set(review.reviewed_journal_ids or [])
+    unreviewed_journals = [j for j in all_journals_with_sessions if j.id not in reviewed_journal_ids]
+    journal_ids = [j.id for j in unreviewed_journals]
+
     if annotations is not None:
         review.annotations = annotations
     if "feedback" in payload:
@@ -431,6 +484,10 @@ def time_audit_update(request, review_id):
         review.reviewed_at = timezone.now()
         if not review.reviewer_id:
             review.reviewer = request.user
+        # Mark journals as reviewed when the review is completed
+        if journal_ids:
+            review.mark_journals_reviewed(journal_ids)
+
     review.claimed_by = request.user
     review.claim_expires_at = timezone.now() + CLAIM_TTL
     with transaction.atomic():
@@ -452,10 +509,6 @@ def time_audit_update(request, review_id):
 
     return JsonResponse({"ok": True})
 
-
-# ---------------------------------------------------------------------------
-# Reviewer notes
-# ---------------------------------------------------------------------------
 
 @require_POST
 @require_timelapse_reviewer
@@ -522,10 +575,6 @@ def reviewer_notes_update(request, project_id, note_id):
     note.refresh_from_db()
     return JsonResponse(serialize_reviewer_notes([note])[0])
 
-
-# ---------------------------------------------------------------------------
-# Admin redirects (fallout absolute URLs the copied UI hardcodes)
-# ---------------------------------------------------------------------------
 
 @require_GET
 def admin_project_redirect(request, project_id):

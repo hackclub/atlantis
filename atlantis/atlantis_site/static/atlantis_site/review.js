@@ -313,7 +313,7 @@
         var timer = setInterval(function () {
             fetch(url, {
                 method: 'POST',
-                headers: { 'X-CSRFToken': csrfToken(), 'Accept': 'application/json' },
+                headers: { 'X-CSRF-Token': csrfToken(), 'Accept': 'application/json' },
                 credentials: 'same-origin',
             }).then(function (response) {
                 if (response.ok) {

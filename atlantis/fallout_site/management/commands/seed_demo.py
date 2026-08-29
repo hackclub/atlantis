@@ -100,7 +100,7 @@ class Command(BaseCommand):
             owners.append(_make_user(username, OWNER_PASSWORD, slack_username=display, slack_id=slack_id, is_staff=True))
 
         demo_projects = Project.objects.filter(owner__in=owners)
-        TimeAuditReview.objects.filter(ship__project__in=demo_projects).delete()
+        TimeAuditReview.objects.filter(project__in=demo_projects).delete()
         Journal.objects.filter(project__in=demo_projects).delete()
         ReviewerNote.objects.filter(project__in=demo_projects).delete()
         demo_projects.delete()
@@ -141,19 +141,12 @@ class Command(BaseCommand):
                     f"  journal {idx}: {title} ({seconds // 60} min, session {session.session_id})"
                 )
 
-            # A pending TimeAuditReview for the queue.
-            TimeAuditReview.objects.get_or_create(
-                ship=ship,
-                defaults={
-                    "status": TimeAuditReview.Status.PENDING,
-                    "annotations": {"recordings": {}},
-                },
-            )
-            self.stdout.write(f"project: {project.title} (ship #{ship.id})")
+            # TimeAuditReview is created automatically by the signal when journals are created
+            # Just verify it exists
+            review = TimeAuditReview.objects.get(project=project)
+            self.stdout.write(f"project: {project.title} (review #{review.id})")
 
         # One completed review so the "All Time Audits" table has a row.
-        # One *separate* completed review so the "All Time Audits" table has a
-        # row (its own project/ship — the pending queue ships stay pending).
         archived_owner = owners[-1]
         archived_project, _ = Project.objects.get_or_create(
             owner=archived_owner,
@@ -167,36 +160,41 @@ class Command(BaseCommand):
             project=archived_project,
             status=Ship.ShipStatus.FINALIZED,
         )
-        if not TimeAuditReview.objects.filter(ship=archived_ship, status=TimeAuditReview.Status.APPROVED).exists():
-            archived_journal, _ = Journal.objects.get_or_create(
+        archived_journal, _ = Journal.objects.get_or_create(
+            project=archived_project,
+            ship=archived_ship,
+            title="Final lap — pedestal finished",
+            defaults={
+                "image_url": f"{DEV_BASE}/mock-lookout/pedestal-01/thumbnail.jpg",
+                "model_url": "https://example.com/pedestal.stl",
+            },
+        )
+        if not LookoutSession.objects.filter(journal=archived_journal).exists():
+            LookoutSession.objects.create(
                 project=archived_project,
-                ship=archived_ship,
-                title="Final lap — pedestal finished",
-                defaults={
-                    "image_url": f"{DEV_BASE}/mock-lookout/pedestal-01/thumbnail.jpg",
-                    "model_url": "https://example.com/pedestal.stl",
-                },
+                owner=archived_owner,
+                journal=archived_journal,
+                session_id="pedestal-001",
+                token=f"demo-token-{next(_session_seq)}",
+                status=LookoutSession.Status.COMPLETE,
+                tracked_seconds=120 * 60,
+                screenshot_count=120,
             )
-            if not LookoutSession.objects.filter(journal=archived_journal).exists():
-                LookoutSession.objects.create(
-                    project=archived_project,
-                    owner=archived_owner,
-                    journal=archived_journal,
-                    session_id="pedestal-001",
-                    token=f"demo-token-{next(_session_seq)}",
-                    status=LookoutSession.Status.COMPLETE,
-                    tracked_seconds=120 * 60,
-                    screenshot_count=120,
-                )
-            TimeAuditReview.objects.create(
-                ship=archived_ship,
-                status=TimeAuditReview.Status.APPROVED,
-                reviewer=reviewer,
-                reviewed_at=now - timezone.timedelta(days=1),
-                approved_public_seconds=sum(j.tracked_seconds for j in archived_ship.journals.all()),
-                feedback="Clean laps. Nice parametric workflow.",
-                annotations={"recordings": {}},
-            )
+
+        # Create an approved time audit review for the archived project
+        review, created = TimeAuditReview.objects.get_or_create(
+            project=archived_project,
+            defaults={
+                "status": TimeAuditReview.Status.APPROVED,
+                "reviewer": reviewer,
+                "reviewed_at": now - timezone.timedelta(days=1),
+                "approved_public_seconds": sum(j.tracked_seconds for j in archived_project.journals.all()),
+                "feedback": "Clean laps. Nice parametric workflow.",
+                "annotations": {"recordings": {}},
+                "reviewed_journal_ids": [j.id for j in archived_project.journals.all()],
+            },
+        )
+        if created:
             self.stdout.write("completed time audit review created (approved)")
 
         self.stdout.write(self.style.SUCCESS("done ✔"))

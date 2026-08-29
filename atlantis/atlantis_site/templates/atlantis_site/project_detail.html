@@ -528,7 +528,7 @@
                 try {
                     res = await fetch(url, {
                         method: method || 'GET',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf },
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-Token': csrf },
                     });
                     payload = await res.json().catch(() => null);
                 } catch (e) {

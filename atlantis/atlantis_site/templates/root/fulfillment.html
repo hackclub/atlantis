@@ -152,7 +152,7 @@
             try {
                 const resp = await fetch(btn.dataset.url, {
                     method: "POST",
-                    headers: { "X-CSRFToken": getCookie("csrftoken") },
+                    headers: { "X-CSRF-Token": getCookie("csrftoken") },
                 });
                 const data = await resp.json();
                 if (data.ok) {

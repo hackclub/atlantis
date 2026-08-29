@@ -2,7 +2,7 @@
 
 These are deliberately *additive*: the existing atlantis_site models
 (Journal, LookoutSession, TimelapseReview, ...) are untouched. The Fallout
-time-audit queue operates on a Ship and persists its verdicts in the same
+time-audit queue operates on a Project and persists its verdicts in the same
 shape the Fallout frontend expects (annotations JSON, approved_public_seconds).
 
 Reviews decisions here live entirely in fallout_site — the older
@@ -18,12 +18,15 @@ from django.utils import timezone
 
 
 class TimeAuditReview(models.Model):
-    """One ship's Fallout-style time audit.
+    """One project's Fallout-style time audit.
 
     Mirrors Fallout's `TimeAuditReview`: status + reviewer + the annotation
     tree the review UI edits (`annotations.recordings.<recording_id>` holding
     `description`, `segments` (removed/deflated ranges) and
     `stretch_multiplier`), plus the aggregate the reviewer approves.
+
+    Unlike Fallout's ship-based review, this is per-project and shows up
+    as soon as the project has journals (devlogs), before shipping.
     """
 
     class Status(models.TextChoices):
@@ -33,8 +36,8 @@ class TimeAuditReview(models.Model):
         REJECTED = "rejected", "Rejected"
         CANCELLED = "cancelled", "Cancelled"
 
-    ship = models.OneToOneField(
-        "atlantis_site.Ship",
+    project = models.OneToOneField(
+        "atlantis_site.Project",
         on_delete=models.CASCADE,
         related_name="time_audit_review",
     )
@@ -42,6 +45,8 @@ class TimeAuditReview(models.Model):
     feedback = models.TextField(blank=True, default="")
     approved_public_seconds = models.IntegerField(null=True, blank=True)
     annotations = models.JSONField(default=dict, blank=True)
+    # Journals that have been reviewed in this audit (by ID)
+    reviewed_journal_ids = models.JSONField(default=list, blank=True)
     reviewer = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -68,7 +73,7 @@ class TimeAuditReview(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Time audit of ship #{self.ship_id} ({self.status})"
+        return f"Time audit of project #{self.project_id} ({self.status})"
 
     # -- claim helpers (simplified Fallout semantics) --
 
@@ -85,6 +90,23 @@ class TimeAuditReview(models.Model):
     def extend_claim(self):
         self.claim_expires_at = timezone.now() + datetime.timedelta(minutes=30)
         self.save(update_fields=["claim_expires_at"])
+
+    def get_unreviewed_journals(self):
+        """Get journals that haven't been reviewed yet, ordered oldest first."""
+        from atlantis_site.models import Journal
+        reviewed_ids = set(self.reviewed_journal_ids or [])
+        return Journal.objects.filter(project=self.project).exclude(id__in=reviewed_ids).order_by("created_at")
+
+    def get_oldest_unreviewed_journal(self):
+        """Get the oldest unreviewed journal for sorting the queue."""
+        return self.get_unreviewed_journals().first()
+
+    def mark_journals_reviewed(self, journal_ids):
+        """Mark journals as reviewed."""
+        current = set(self.reviewed_journal_ids or [])
+        current.update(journal_ids)
+        self.reviewed_journal_ids = list(current)
+        self.save(update_fields=["reviewed_journal_ids", "updated_at"])
 
 
 class ReviewerNote(models.Model):

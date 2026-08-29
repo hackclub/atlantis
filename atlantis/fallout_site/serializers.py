@@ -9,6 +9,8 @@ atlantis_site LookoutSession.
 from django.conf import settings
 from django.urls import reverse
 
+from atlantis_site.models import Journal, LookoutSession
+
 # Lookout stitches one recorded minute into one video second.
 VIDEO_SECONDS_PER_TRACKED_SECOND = 60
 
@@ -56,7 +58,7 @@ def serialize_ta_recording(session, request):
     }
 
 
-def serialize_ta_journal_entry(journal, ship, request):
+def serialize_ta_journal_entry(journal, request):
     """Mirror of Fallout's serialize_ta_journal_entry.
 
     The Atlantis journal has no free-text content; its title and image ARE the
@@ -73,7 +75,7 @@ def serialize_ta_journal_entry(journal, ship, request):
         "created_at_iso": journal.created_at.isoformat(),
         "recordings": [serialize_ta_recording(s, request) for s in sessions],
         "total_duration": sum(_recording_duration(s) for s in sessions),
-        "in_ship": ship is None or journal.ship_id == ship.id,
+        "in_ship": True,  # Always true since we're reviewing all project journals
     }
 
 
@@ -102,61 +104,39 @@ def serialize_ta_project_context(project, request):
     }
 
 
-def serialize_ship_context(ship):
-    return {
-        "id": ship.id,
-        "ship_type": "core",
-        "status": ship.status,
-        "created_at": ship.created_at.strftime("%B %d, %Y"),
-    }
-
-
 def serialize_review_detail(review):
+    # For "ship" mode, frontend expects a ship_id. Use the ship from the first journal
+    # or the oldest ship on the project.
+    first_journal = review.project.journals.order_by("created_at").first()
+    ship_id = first_journal.ship_id if first_journal else None
     return {
         "id": review.id,
-        "ship_id": review.ship_id,
+        "project_id": review.project_id,
+        "ship_id": ship_id,
         "status": review.status,
         "feedback": review.feedback or None,
         "approved_public_seconds": review.approved_public_seconds,
         "annotations": review.annotations or {"recordings": {}},
+        "reviewed_journal_ids": review.reviewed_journal_ids or [],
         "reviewer_display_name": _profile_display(review.reviewer) if review.reviewer_id else None,
         "created_at": review.created_at.strftime("%B %d, %Y"),
     }
 
 
-def serialize_sibling_statuses(ship):
-    review = getattr(ship, "time_audit_review", None)
-    time_audit = (
-        {
-            "status": review.status,
-            "reviewer": _profile_display(review.reviewer) if review.reviewer_id else None,
-            "path": reverse("time_audit_show", args=[review.id]),
-        }
-        if review
-        else {"status": None, "reviewer": None, "path": None}
-    )
-    return {
-        "time_audit": time_audit,
-        "requirements_check": {"status": None, "reviewer": None, "path": None},
-        "design_review": {"status": None, "reviewer": None, "path": None},
-        "build_review": {"status": None, "reviewer": None, "path": None},
-    }
-
-
 def serialize_review_row(review, flagged_project_ids=frozenset()):
-    ship = review.ship
-    project = ship.project
+    project = review.project
+    oldest_unreviewed = review.get_oldest_unreviewed_journal()
     return {
         "id": review.id,
-        "ship_id": ship.id,
+        "project_id": project.id,
         "project_name": project.title,
         "user_display_name": _profile_display(project.owner),
         "status": review.status,
         "project_flagged": project.id in flagged_project_ids,
         "reviewer_display_name": _profile_display(review.reviewer) if review.reviewer_id else None,
         "created_at": review.created_at.strftime("%b %d, %Y"),
-        "waiting_since": ship.created_at.isoformat(),
-        "cycle_started_at": ship.created_at.isoformat(),
+        "waiting_since": oldest_unreviewed.created_at.isoformat() if oldest_unreviewed else project.created_at.isoformat(),
+        "cycle_started_at": project.created_at.isoformat(),
         "is_claimed": review.claimed(),
         "claimed_by_display_name": _profile_display(review.claimed_by) if review.claimed() else None,
         "sibling_approved": False,

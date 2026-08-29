@@ -387,7 +387,7 @@
 		try {
 			const res = await fetch(SYNC_URL, {
 				method: "POST",
-				headers: { "X-CSRFToken": CSRF },
+				headers: { "X-CSRF-Token": CSRF },
 			});
 			if (!res.ok) { warn(`backend sync returned ${res.status}`); return null; }
 			return await res.json();
