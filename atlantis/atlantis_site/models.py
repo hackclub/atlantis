@@ -598,6 +598,17 @@ class LookoutSession(models.Model):
 
 	heartbeats_forwarded = models.BooleanField(default=False)
 
+	# What the activity checker found in the compiled video: stretches where
+	# nothing on screen changed. Advisory only — it is drawn under the player
+	# so a reviewer knows where to look, and it deducts nothing by itself. See
+	# activity.py for how the numbers are produced.
+	inactive_frame_count = models.IntegerField(default=0)
+	inactive_percentage = models.FloatField(default=0.0)
+	# [{"start": <video seconds>, "end": ..., "duration": ...}], in the
+	# compiled video's own timeline — the one the reviewer scrubs.
+	inactive_segments = models.JSONField(default=list, blank=True)
+	activity_checked_at = models.DateTimeField(null=True, blank=True)
+
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
@@ -678,6 +689,28 @@ class LookoutSession(models.Model):
 		total = self.approved_seconds
 		return f"{total // 3600}h {(total % 3600) // 60}m"
 
+	@property
+	def activity_checked(self):
+		"""True once the inactivity pass has run over this session's video.
+
+		Distinct from "found nothing": an unchecked session is drawn as
+		unanalysed, a checked one with no segments is drawn as clean, and the
+		reviewer is owed the difference.
+		"""
+		return self.activity_checked_at is not None
+
+	@property
+	def inactive_seconds(self):
+		"""Video seconds the checker called inactive — one per recorded minute."""
+		return sum(
+			int(segment.get("duration") or 0)
+			for segment in (self.inactive_segments or [])
+		)
+
+	@property
+	def inactive_display(self):
+		return format_timecode(video_to_tracked(self.inactive_seconds))
+
 
 # internal timelapse review
 class TimelapseReview(models.Model):
@@ -701,7 +734,9 @@ class TimelapseReview(models.Model):
 	)
 
 	reviewed_at = models.DateTimeField(auto_now_add=True)
-	internal_notes = models.CharField(max_length=1000)
+	# Optional: the per-Lookout descriptions carry the account of what was
+	# watched, and this is the space for anything that spans the whole pass.
+	internal_notes = models.CharField(max_length=1000, blank=True)
 
 	class Meta:
 		ordering = ["-reviewed_at"]
@@ -726,6 +761,45 @@ class TimelapseReview(models.Model):
 	def removed_display(self):
 		minutes = self.removed_minutes
 		return f"{minutes // 60}h {minutes % 60}m"
+
+
+class TimelapseAnnotation(models.Model):
+	"""What one reviewer wrote about one Lookout while signing it off.
+
+	A sentence or two, per piece of footage, for whoever reads this ship
+	downstream: what the recording shows, and whether the time in it looks
+	like the work it is claimed for. The reviewer writes one before the pass
+	can be submitted, which is the point — a Lookout nobody described is a
+	Lookout nobody watched.
+
+	Separate from TimelapseRemoval because a description is about a whole
+	recording and a removal is about a range of one; a Lookout with nothing
+	cut from it still gets described.
+	"""
+	review = models.ForeignKey(
+		TimelapseReview,
+		on_delete=models.CASCADE,
+		related_name="annotations"
+	)
+	session = models.ForeignKey(
+		LookoutSession,
+		on_delete=models.CASCADE,
+		related_name="annotations"
+	)
+
+	description = models.CharField(max_length=500)
+
+	class Meta:
+		ordering = ["session_id"]
+		constraints = [
+			models.UniqueConstraint(
+				fields=["review", "session"],
+				name="timelapse_annotation_one_per_session",
+			),
+		]
+
+	def __str__(self):
+		return f"Description of session {self.session_id} on review {self.review_id}"
 
 
 class TimelapseRemoval(models.Model):

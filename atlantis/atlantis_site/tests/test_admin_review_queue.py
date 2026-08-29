@@ -10,7 +10,7 @@ from datetime import timedelta
 from django.urls import reverse
 from django.utils import timezone
 
-from ..models import Journal, Ship, T1, TimelapseReview
+from ..models import Journal, LookoutSession, Ship, T1, TimelapseReview
 from ..views.admin.queue import (
 	age_bucket, age_display, claim_holder, claim_review, next_item_id,
 	release_claim,
@@ -72,7 +72,8 @@ class QueueOrderTests(BaseTestCase):
 		self.assertEqual(age_display(now - timedelta(days=2, hours=3)), "2d")
 		self.assertEqual(age_display(now - timedelta(hours=5)), "5h")
 		self.assertEqual(age_display(now - timedelta(minutes=20)), "20m")
-		self.assertEqual(age_display(now), "new")
+		# Reads as a duration mid-sentence, which is where the review pages put it.
+		self.assertEqual(age_display(now), "<1m")
 
 	def test_age_buckets_track_the_sla(self):
 		now = timezone.now()
@@ -197,6 +198,17 @@ class LookoutQueueTests(BaseTestCase):
 		self.client.force_login(self.reviewer)
 		self.project = make_project(make_user("author"), shippable=True)
 
+	def _describe(self, project):
+		"""A description for every Lookout waiting on the project.
+
+		The decision view won't take a pass until each recording in it has one,
+		so a test about where "next" lands has to supply them.
+		"""
+		sessions = LookoutSession.objects.filter(
+			journal__project=project, journal__timelapse_review__isnull=True
+		)
+		return {f"description_{session.id}": "watched it" for session in sessions}
+
 	def _lapse(self, project, days_ago=0, **kwargs):
 		journal = make_journal(project, **kwargs)
 		Journal.objects.filter(pk=journal.pk).update(
@@ -271,7 +283,7 @@ class LookoutQueueTests(BaseTestCase):
 
 		response = self.client.post(
 			reverse("timelapse_decision", args=[self.project.id]),
-			{"internal_notes": "clean"},
+			{"internal_notes": "clean", **self._describe(self.project)},
 		)
 		self.assertRedirects(
 			response,
@@ -283,7 +295,7 @@ class LookoutQueueTests(BaseTestCase):
 		self._lapse(self.project)
 		response = self.client.post(
 			reverse("timelapse_decision", args=[self.project.id]),
-			{"internal_notes": "clean"},
+			{"internal_notes": "clean", **self._describe(self.project)},
 		)
 		self.assertRedirects(
 			response, reverse("timelapse_review_dash"), fetch_redirect_response=False

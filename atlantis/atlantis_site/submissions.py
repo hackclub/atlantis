@@ -108,15 +108,16 @@ def download_url(value):
 def build_lookout_audit(ship):
 	"""The internal timelapse review of this ship, written out for HQ.
 
-	One block per journal: the reviewer's own justification for the journal's
-	decision, then every Lookout attached to it, and under each Lookout the
-	ranges a timelapse reviewer refused to pay for, with the reason they gave.
-	Lookouts with nothing removed are listed too — the links are part of the
-	evidence for the hours whether or not anything was cut from them.
+	One block per journal: the reviewer's notes on the pass if they left any,
+	then every Lookout attached to it — what the reviewer said that recording
+	showed, and the ranges they refused to pay for with the reason for each.
+	Lookouts with nothing removed are listed too: the links and the reviewer's
+	account of them are part of the evidence for the hours whether or not
+	anything was cut.
 	"""
 	journals = list(
 		ship.journals.order_by("created_at").select_related("timelapse_review").prefetch_related(
-			"timelapses", "timelapses__removals"
+			"timelapses", "timelapses__removals", "timelapse_review__annotations"
 		)
 	)
 
@@ -128,12 +129,20 @@ def build_lookout_audit(ship):
 		lines = [f'"{journal.title}" — {journal.tracked_display} tracked']
 		review = journal.timelapse_review_or_none
 		if review and review.internal_notes:
-			lines.append(f"  reviewer's justification: {review.internal_notes}")
+			lines.append(f"  reviewer's notes: {review.internal_notes}")
+		descriptions = {
+			annotation.session_id: annotation.description
+			for annotation in (review.annotations.all() if review else ())
+		}
 		if not sessions:
 			lines.append("  no Lookout attached")
 		for session in sessions:
 			tracked += session.tracked_seconds or 0
 			lines.append(f"  {session.video_url} ({session.tracked_display} tracked)")
+			# What the reviewer said this recording showed. The removals below
+			# say what they took off it; this says what they watched.
+			if descriptions.get(session.id):
+				lines.append(f"    reviewer: {descriptions[session.id]}")
 			removals = sorted(session.removals.all(), key=lambda r: r.start_seconds)
 			if not removals:
 				lines.append("    nothing removed")

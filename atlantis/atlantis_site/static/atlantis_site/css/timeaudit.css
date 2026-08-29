@@ -1,0 +1,985 @@
+/* ============================================================
+   The Lookout review page (.ta-*).
+
+   Fallout's time-audit layout, in Atlantis' oceanic admin palette: a fixed top
+   bar over one snapping column of entries, each entry a full viewport with
+   footage on the left and the journal that claims the time on the right.
+
+   Scoped under `.root-page` like everything else in the admin theme, and
+   imported after review.css so it can lean on .rv-btn, .rv-banner and the
+   shortcut dialog rather than restating them.
+
+   The one rule this file exists to protect: nothing above 1100px may
+   reintroduce a page-level scrollbar. The entry column is the only thing that
+   scrolls, and it snaps, which is what makes "one lapse at a time" true rather
+   than aspirational.
+   ============================================================ */
+
+.root-page .ta {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 0;
+    border-top: 3px solid var(--rv-accent, var(--oc-tide));
+}
+
+/* ---------- top bar ---------- */
+
+.root-page .ta-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    padding: 8px 16px;
+    background: var(--oc-surface);
+    border-bottom: 1px solid var(--oc-line);
+}
+
+.root-page .ta-topbar-left,
+.root-page .ta-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.root-page .ta-topbar-right {
+    margin-left: auto;
+    justify-content: flex-end;
+}
+
+.root-page .ta-sep {
+    width: 1px;
+    height: 22px;
+    background: var(--oc-line-2);
+    flex-shrink: 0;
+}
+
+.root-page .ta-subject {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--oc-ink);
+    text-decoration: none;
+    max-width: 34ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.root-page .ta-subject:hover { text-decoration: underline; }
+
+.root-page .ta-subject-id {
+    font-size: 12.5px;
+    color: var(--oc-ink-3);
+    text-decoration: none;
+}
+
+.root-page .ta-subject-id:hover { text-decoration: underline; }
+
+.root-page .ta-byline {
+    font-size: 12.5px;
+    color: var(--oc-ink-3);
+    white-space: nowrap;
+}
+
+.root-page .ta-byline a {
+    color: var(--oc-ink-2);
+    text-decoration: none;
+}
+
+.root-page .ta-byline a:hover { text-decoration: underline; }
+
+.root-page .ta-position strong { color: var(--oc-ink); }
+
+.root-page .ta-speed {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .ta-speed select {
+    background: var(--oc-field);
+    color: var(--oc-ink-2);
+    border: 1px solid var(--oc-line-2);
+    border-radius: 6px;
+    padding: 3px 6px;
+    font: inherit;
+    font-size: 12px;
+}
+
+/* ---------- badges ---------- */
+
+.root-page .ta-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    border: 1px solid var(--oc-line-2);
+    background: var(--oc-surface-2);
+    color: var(--oc-ink-2);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.root-page .ta-badge-quiet {
+    color: var(--oc-ink-3);
+    font-weight: 500;
+}
+
+.root-page .ta-badge-lookout {
+    border-color: var(--oc-tide);
+    background: var(--oc-tide-soft);
+    color: var(--oc-tide-2);
+}
+
+.root-page .ta-badge-done {
+    border-color: var(--oc-good);
+    background: var(--oc-good-soft);
+    color: var(--oc-good);
+}
+
+.root-page .ta-badge-warn {
+    border-color: var(--oc-warn, #d8b26a);
+    background: var(--oc-warn-soft, #2a2312);
+    color: var(--oc-warn, #d8b26a);
+}
+
+.root-page .ta-badge-bad {
+    border-color: var(--oc-bad);
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad);
+}
+
+/* Line icons, sized to the text they sit beside. */
+.root-page .ta-svg {
+    width: 13px;
+    height: 13px;
+    flex-shrink: 0;
+}
+
+.root-page .ta-ico {
+    font-size: 11px;
+    line-height: 1;
+    opacity: 0.85;
+}
+
+/* ---------- the scrolling column ---------- */
+
+/* Positioned so an entry's offsetTop is measured against the column it
+   scrolls in — that offset is how Shift+Enter works out which entry the
+   reviewer is looking at. */
+.root-page .ta-scroll {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+}
+
+.root-page .ta-entry {
+    display: flex;
+    flex-direction: column;
+    scroll-snap-align: start;
+}
+
+/* An open entry owns the viewport below the top bar; a closed one is just its
+   header, so a reviewer can shut the ones they are done with and see the
+   shape of what is left. */
+.root-page .ta-entry.is-open {
+    height: calc(100dvh - 45px);
+}
+
+.root-page .ta-entry-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    width: 100%;
+    padding: 8px 16px;
+    background: var(--oc-surface-2);
+    border-bottom: 1px solid var(--oc-line);
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    color: var(--oc-ink-2);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 120ms ease;
+}
+
+.root-page .ta-entry-head:hover { background: var(--oc-shallow); }
+
+.root-page .ta-chevron {
+    width: 0;
+    height: 0;
+    flex-shrink: 0;
+    border-left: 5px solid var(--oc-ink-3);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    transition: transform 120ms ease;
+}
+
+.root-page .ta-entry.is-open .ta-chevron {
+    transform: rotate(90deg) translateX(1px);
+}
+
+.root-page .ta-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.root-page .ta-entry-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--oc-ink);
+}
+
+.root-page .ta-entry-date,
+.root-page .ta-entry-meta,
+.root-page .ta-entry-clock {
+    font-size: 12px;
+    color: var(--oc-ink-3);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.root-page .ta-entry-title {
+    font-size: 12px;
+    color: var(--oc-ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 30ch;
+}
+
+.root-page .ta-entry-done .ta-entry-head { opacity: 0.85; }
+
+/* ---------- entry body ---------- */
+
+.root-page .ta-entry-body {
+    display: none;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.root-page .ta-entry.is-open .ta-entry-body { display: flex; }
+
+.root-page .ta-recordings,
+.root-page .ta-journal {
+    flex: 1 1 50%;
+    min-width: 0;
+    overflow-y: auto;
+    padding: 16px;
+}
+
+.root-page .ta-recordings {
+    display: flex;
+    flex-direction: column;
+    gap: 26px;
+}
+
+.root-page .ta-gutter {
+    flex: 0 0 6px;
+    background: var(--oc-line);
+}
+
+/* ---------- one recording ---------- */
+
+.root-page .ta-rec {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.root-page .ta-video-wrap {
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #000;
+}
+
+.root-page .ta-video {
+    display: block;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #000;
+}
+
+.root-page .ta-rec-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 13px;
+}
+
+.root-page .ta-rec-name {
+    font-weight: 600;
+    color: var(--oc-ink);
+}
+
+.root-page .ta-rec-spacer { flex: 1 1 auto; }
+
+.root-page .ta-rec-duration {
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .ta-rec-video-len { opacity: 0.75; }
+
+/* ---------- the two timelines ---------- */
+
+.root-page .ta-timeline-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.root-page .ta-timeline {
+    position: relative;
+    user-select: none;
+    touch-action: none;
+    cursor: pointer;
+}
+
+.root-page .ta-timeline:focus-visible {
+    outline: 2px solid var(--oc-tide);
+    outline-offset: 2px;
+}
+
+.root-page .ta-track {
+    position: relative;
+    overflow: hidden;
+}
+
+/* The decision: what the reviewer is taking off this recording. */
+.root-page .ta-track-main {
+    height: 20px;
+    background: var(--oc-field);
+    border: 1px solid var(--oc-line);
+    border-radius: 3px 3px 0 0;
+}
+
+/* The hint: where the checker found nothing changing. Green ground means the
+   pass ran and found this stretch clean; a flat grey one means it never ran,
+   and the difference matters — "clean" and "unknown" are not the same claim. */
+.root-page .ta-track-activity {
+    height: 6px;
+    margin-top: 1px;
+    background: var(--oc-field);
+    border-radius: 0 0 3px 3px;
+}
+
+.root-page .ta-track-activity.is-checked {
+    background: color-mix(in srgb, var(--oc-good) 30%, transparent);
+}
+
+.root-page .ta-seg {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: color-mix(in srgb, var(--oc-bad) 70%, transparent);
+}
+
+.root-page .ta-preview {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: color-mix(in srgb, var(--oc-bad) 20%, transparent);
+    border: 2px dashed color-mix(in srgb, var(--oc-bad) 60%, transparent);
+    box-sizing: border-box;
+}
+
+.root-page .ta-inactive {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: color-mix(in srgb, var(--ta-inactive, #a78bfa) 70%, transparent);
+}
+
+.root-page .ta-cursor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--oc-ink);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.root-page .ta-legend {
+    display: flex;
+    gap: 12px;
+    font-size: 10.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .ta-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.root-page .ta-key i {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.root-page .ta-key-removed { background: color-mix(in srgb, var(--oc-bad) 70%, transparent); }
+.root-page .ta-key-inactive { background: color-mix(in srgb, var(--ta-inactive, #a78bfa) 70%, transparent); }
+.root-page .ta-key-clean { background: color-mix(in srgb, var(--oc-good) 40%, transparent); }
+.root-page .ta-key-unknown { background: var(--oc-field); border: 1px solid var(--oc-line-2); }
+
+/* ---------- the segment editor ---------- */
+
+.root-page .ta-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.root-page .ta-editor-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .ta-editor-summary strong { color: var(--oc-ink); }
+
+.root-page .ta-segments {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.root-page .ta-segment {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad);
+    font-size: 12px;
+}
+
+.root-page .ta-segment-type {
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.root-page .ta-segment-range {
+    color: var(--oc-ink-3);
+    flex-shrink: 0;
+    cursor: pointer;
+    text-decoration: underline dotted;
+}
+
+.root-page .ta-segment-reason {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--oc-ink-2);
+}
+
+.root-page .ta-segment-cost {
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.root-page .ta-segment-drop {
+    border: none;
+    background: none;
+    color: var(--oc-ink-3);
+    cursor: pointer;
+    font-size: 15px;
+    line-height: 1;
+    padding: 0 2px;
+}
+
+.root-page .ta-segment-drop:hover { color: var(--oc-bad); }
+
+.root-page .ta-editor-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* ---------- the add form ---------- */
+
+.root-page .ta-add {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+    background: var(--oc-surface-2);
+}
+
+.root-page .ta-add-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--oc-ink-2);
+}
+
+.root-page .ta-add-range {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.root-page .ta-add-range label {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    font-size: 10.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .ta-add-input {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.root-page .ta-add-dash {
+    color: var(--oc-ink-3);
+    padding-bottom: 7px;
+}
+
+.root-page .ta-add input[type="number"],
+.root-page .ta-add input[type="text"] {
+    width: 100%;
+    min-width: 0;
+    height: 30px;
+    padding: 0 8px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 6px;
+    background: var(--oc-field);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 13px;
+}
+
+.root-page .ta-crosshair {
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 6px;
+    background: var(--oc-surface);
+    color: var(--oc-ink-3);
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.root-page .ta-crosshair:hover {
+    color: var(--oc-ink);
+    border-color: var(--oc-tide);
+}
+
+.root-page .ta-add-reason {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* The presets menu: free text stays the field, and these only fill it in. */
+.root-page .ta-presets {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.root-page .ta-presets summary {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 6px;
+    background: var(--oc-surface);
+    color: var(--oc-ink-3);
+    cursor: pointer;
+    list-style: none;
+    font-size: 12px;
+}
+
+.root-page .ta-presets summary::-webkit-details-marker { display: none; }
+.root-page .ta-presets summary:hover { color: var(--oc-ink); }
+
+.root-page .ta-presets ul {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    z-index: 30;
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    min-width: 190px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-surface);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.root-page .ta-presets li button {
+    display: block;
+    width: 100%;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 5px;
+    background: none;
+    color: var(--oc-ink-2);
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.root-page .ta-presets li button:hover {
+    background: var(--oc-surface-2);
+    color: var(--oc-ink);
+}
+
+.root-page .ta-add-error {
+    margin: 0;
+    font-size: 12px;
+}
+
+.root-page .ta-add-actions {
+    display: flex;
+    gap: 8px;
+}
+
+/* ---------- description and save ---------- */
+
+.root-page .ta-describe {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.root-page .ta-describe textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-field);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 13px;
+    resize: vertical;
+}
+
+.root-page .ta-describe textarea:focus-visible {
+    outline: 2px solid var(--oc-tide);
+    outline-offset: 1px;
+}
+
+.root-page .ta-save {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 12px;
+    border: 1px solid var(--oc-btn);
+    border-radius: 8px;
+    background: var(--oc-btn);
+    color: var(--oc-on-accent);
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.root-page .ta-save:hover:not([disabled]) { background: var(--oc-btn-2); }
+
+.root-page .ta-save[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+/* Saved is an outline button, not a filled one: the loud state is the one
+   asking to be pressed. */
+.root-page .ta-save.is-saved {
+    background: var(--oc-surface-2);
+    border-color: var(--oc-good);
+    color: var(--oc-good);
+}
+
+.root-page .ta-save-label {
+    flex: 1 1 auto;
+    text-align: center;
+}
+
+.root-page .ta-save kbd {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.12);
+    color: inherit;
+}
+
+.root-page .ta-save.is-saved kbd {
+    border-color: var(--oc-line-2);
+    background: var(--oc-field);
+}
+
+/* ---------- read-only recordings ---------- */
+
+.root-page .ta-editor-readonly .ta-segment { cursor: default; }
+
+.root-page .ta-readonly-note {
+    margin: 0;
+    padding: 8px 10px;
+    border: 1px solid var(--oc-line);
+    border-radius: 8px;
+    background: var(--oc-field);
+    color: var(--oc-ink-2);
+    font-size: 12.5px;
+    line-height: 1.5;
+}
+
+.root-page .ta-readonly-note.is-quiet { color: var(--oc-ink-3); font-style: italic; }
+
+/* ---------- the journal half ---------- */
+
+.root-page .ta-journal-title {
+    margin: 0 0 4px;
+    font-size: 15px;
+    color: var(--oc-ink);
+}
+
+.root-page .ta-journal-meta {
+    margin: 0 0 12px;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .ta-journal-note {
+    margin: 0 0 12px;
+    font-size: 12.5px;
+    color: var(--oc-ink-2);
+    line-height: 1.55;
+}
+
+.root-page .ta-journal-image {
+    display: block;
+    width: 100%;
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+    margin-bottom: 12px;
+}
+
+.root-page .ta-journal-stl {
+    width: 100%;
+    height: 300px;
+    border: 1px solid var(--oc-line);
+    border-radius: 10px;
+    margin-bottom: 8px;
+}
+
+.root-page .ta-empty {
+    margin: 0;
+    padding: 14px;
+    border: 1px dashed var(--oc-line-2);
+    border-radius: 10px;
+    color: var(--oc-ink-3);
+    font-size: 12.5px;
+    text-align: center;
+}
+
+/* ---------- the sign-off panel ---------- */
+
+.root-page .ta-entry-final {
+    scroll-snap-align: start;
+    min-height: calc(100dvh - 45px);
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+}
+
+.root-page .ta-final {
+    width: min(560px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px;
+    border: 1px solid var(--oc-line);
+    border-radius: 12px;
+    background: var(--oc-surface);
+}
+
+.root-page .ta-final h2 {
+    margin: 0;
+    font-size: 17px;
+    color: var(--oc-ink);
+}
+
+.root-page .ta-final-note {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--oc-ink-3);
+    line-height: 1.55;
+}
+
+.root-page .ta-final-progress {
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--oc-good);
+}
+
+.root-page .ta-ledger {
+    display: flex;
+    gap: 10px;
+    margin: 0;
+}
+
+.root-page .ta-ledger div {
+    flex: 1 1 0;
+    padding: 9px 11px;
+    border: 1px solid var(--oc-line);
+    border-radius: 9px;
+    background: var(--oc-field);
+}
+
+.root-page .ta-ledger dt {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--oc-ink-3);
+}
+
+.root-page .ta-ledger dd {
+    margin: 2px 0 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--oc-ink);
+}
+
+.root-page .ta-ledger-total { border-color: var(--oc-tide); }
+
+.root-page .ta-field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.root-page .ta-field-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--oc-ink-2);
+}
+
+.root-page .ta-field-label em {
+    font-style: normal;
+    font-weight: 500;
+    color: var(--oc-ink-3);
+}
+
+.root-page .ta-field textarea {
+    width: 100%;
+    padding: 9px 11px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-field);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 13px;
+    resize: vertical;
+}
+
+.root-page .ta-approve {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 16px;
+    border: 1px solid var(--oc-good);
+    border-radius: 9px;
+    background: var(--oc-good-soft);
+    color: var(--oc-good);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.root-page .ta-approve:hover:not([disabled]) {
+    background: var(--oc-good);
+    color: var(--oc-abyss);
+}
+
+.root-page .ta-approve[disabled] {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.root-page .ta-approve kbd {
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid currentColor;
+    background: transparent;
+    color: inherit;
+    opacity: 0.8;
+}
+
+/* The form is a courier, not a component: every input in it is written by
+   JavaScript at submit time. */
+.root-page .ta-form { display: none; }
+
+/* ---------- narrow screens ---------- */
+
+/* Below this the two halves stack, and an entry can't be a fixed viewport
+   height any more — it grows to fit and the column stops snapping, because
+   snapping to something taller than the screen strands its bottom half. */
+@media (max-width: 1100px) {
+    .root-page .ta-scroll { scroll-snap-type: none; }
+
+    .root-page .ta-entry.is-open { height: auto; }
+
+    .root-page .ta-entry-body { flex-direction: column; }
+
+    .root-page .ta-recordings,
+    .root-page .ta-journal {
+        flex: 0 0 auto;
+        overflow-y: visible;
+    }
+
+    .root-page .ta-gutter {
+        flex: 0 0 1px;
+        height: 1px;
+    }
+}

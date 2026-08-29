@@ -5,21 +5,26 @@
 {% block title %}T1 &middot; {{ ship.project.title }}{% endblock %}
 
 {% block subject_title %}{{ ship.project.title }}{% endblock %}
-{% block subject_byline %}@{{ owner.name }} &middot; {{ subject.approved_display }} &middot; waiting {{ age_display }}{% endblock %}
+{% block subject_byline %}by <a href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener">{{ owner.name }}</a> &middot; {{ subject.approved_display }}{% endblock %}
 
 {% block topbar_actions %}
-    <a class="rv-btn" href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener" data-key="u">Owner<kbd>U</kbd></a>
+    <a class="rv-btn" href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener" data-key="u">See User<kbd>U</kbd></a>
     {% if ship.project.printablesUrl %}
         <a class="rv-btn" href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer noopener" data-key="p">Printables<kbd>P</kbd></a>
+        <button type="button" class="rv-btn" data-copy="{{ ship.project.printablesUrl }}" data-key="c">Copy<kbd>C</kbd></button>
     {% endif %}
+    {% if ship.project.editor_model_url %}
+        <a class="rv-btn" href="{{ ship.project.editor_model_display_url }}" target="_blank" rel="noreferrer noopener" data-key="m">Model<kbd>M</kbd></a>
+    {% endif %}
+    <button type="button" class="rv-btn" data-key="n" data-toggle-notes>Notes<kbd>N</kbd></button>
 {% endblock %}
 
 {% block shortcut_rows %}
-    <dt><kbd>A</kbd></dt><dd>Approve &mdash; sends the ship to T2</dd>
-    <dt><kbd>R</kbd></dt><dd>Reject</dd>
-    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Approve, from inside a text box</dd>
-    <dt><kbd>F</kbd></dt><dd>Jump to Feedback</dd>
-    <dt><kbd>I</kbd></dt><dd>Jump to Internal notes</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>P</kbd></dt><dd>Approve &mdash; sends the ship to T2</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>E</kbd></dt><dd>Reject (focuses Feedback when it's empty)</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Submit the current draft</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>J</kbd></dt><dd>Focus Internal reason</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>F</kbd></dt><dd>Focus Feedback</dd>
     <dt><kbd>U</kbd></dt><dd>Open the owner's profile</dd>
     <dt><kbd>P</kbd></dt><dd>Open the Printables listing</dd>
     <dt><kbd>M</kbd></dt><dd>Open the editor model</dd>
@@ -28,42 +33,42 @@
 
 {% block evidence %}
     {% include "root/_rv_overview.html" %}
-    {% include "root/_rv_journals.html" with journal_empty="No journal entries. How did this happen?" %}
+    {% include "root/_rv_checks.html" %}
     {% include "root/_rv_history.html" %}
+    {% include "root/_rv_journals.html" with journal_empty="No journal entries. How did this happen?" %}
 {% endblock %}
 
 {% block decision %}
 <form class="rv-form" method="POST"
       action="{% url 't1_decision' ship.id %}{% if skip_value %}?skip={{ skip_value }}{% endif %}">
     {% csrf_token %}
-    <h2 class="rv-form-title">T1 decision</h2>
+    <h2 class="rv-form-title">Submit Review</h2>
     <p class="rv-form-note">Approving moves this ship into the T2 queue. Either way the
         shipper and you are both pinged in the review checkpoint channel.</p>
 
-    {% include "root/_rv_checks.html" %}
+    <label class="rv-field">
+        <span class="rv-field-label">Internal reason <em>(not shown to user)</em><kbd>&#8984;J</kbd></span>
+        <textarea name="internal_notes" id="rv-internal" data-mod-focus="j" rows="4" maxlength="1000" required
+                  placeholder="Justify your decision, for whoever picks this up next."></textarea>
+        <span class="rv-counter" data-counter-for="rv-internal" data-max="1000"></span>
+    </label>
 
     <label class="rv-field">
-        <span class="rv-field-label">Feedback <em>public</em><kbd>F</kbd></span>
-        <textarea name="feedback" id="rv-feedback" data-focus="f" rows="4" maxlength="1000" required
+        <span class="rv-field-label">Feedback <em>(shown to user)</em><kbd>&#8984;F</kbd></span>
+        <textarea name="feedback" id="rv-feedback" data-mod-focus="f" rows="4" maxlength="1000" required
                   placeholder="What the shipper is told about this decision."></textarea>
         <span class="rv-counter" data-counter-for="rv-feedback" data-max="1000"></span>
     </label>
 
-    <label class="rv-field">
-        <span class="rv-field-label">Internal notes <em>reviewers only</em><kbd>I</kbd></span>
-        <textarea name="internal_notes" id="rv-internal" data-focus="i" rows="3" maxlength="1000" required
-                  placeholder="Why, for whoever picks this up next."></textarea>
-        <span class="rv-counter" data-counter-for="rv-internal" data-max="1000"></span>
-    </label>
-
     <div class="rv-verdicts">
         <button type="submit" name="approved" value="approved" class="rv-verdict rv-verdict-good"
-                data-key="a" data-primary {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
-            Approve<kbd>A</kbd>
+                data-mod-key="p" data-primary {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            Approve<kbd>&#8984;P</kbd>
         </button>
         <button type="submit" name="approved" value="denied" class="rv-verdict rv-verdict-bad"
-                data-key="r" {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
-            Reject<kbd>R</kbd>
+                data-mod-key="e" data-requires="#rv-feedback"
+                {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            Reject<kbd>&#8984;E</kbd>
         </button>
     </div>
     {% if ship.project.locked %}

@@ -4,8 +4,9 @@ from django.db import IntegrityError, transaction
 from django.urls import reverse
 
 from ..models import (
-	AuditLog, Journal, Ship, TimelapseRemoval, TimelapseReview, first_overlap,
-	format_timecode, parse_timecode, tracked_to_video, video_to_tracked,
+	AuditLog, Journal, LookoutSession, Ship, TimelapseAnnotation,
+	TimelapseRemoval, TimelapseReview, first_overlap, format_timecode,
+	parse_timecode, tracked_to_video, video_to_tracked,
 )
 from ..views.admin.timelapse_review import _locked_pending_lapses
 from .base import (
@@ -19,6 +20,20 @@ from .base import (
 	make_user,
 	message_texts,
 )
+
+
+def describe_all(project, text="watched it, the time is real"):
+	"""A description for every Lookout the project has waiting.
+
+	Every recording in a pass needs one before the view will take the pass, so
+	a test about ranges would otherwise be a test about descriptions. This says
+	"all of them are described" in one line, and the tests that are *about*
+	descriptions override or drop entries from it.
+	"""
+	sessions = LookoutSession.objects.filter(
+		journal__project=project, journal__timelapse_review__isnull=True
+	)
+	return {f"description_{session.id}": text for session in sessions}
 
 
 class TimecodeTests(BaseTestCase):
@@ -238,6 +253,7 @@ class TimelapseDecisionTests(BaseTestCase):
 			"removal_start": [r[1] for r in ranges],
 			"removal_end": [r[2] for r in ranges],
 			"removal_reason": [r[3] for r in ranges],
+			**describe_all(project),
 		}
 		data.update(extra)
 		return self.client.post(reverse("timelapse_decision", args=[project.id]), data)
@@ -330,6 +346,7 @@ class TimelapseDecisionTests(BaseTestCase):
 			"removal_start": [""],
 			"removal_end": [""],
 			"removal_reason": [""],
+			**describe_all(self.project),
 		})
 		self.assertTrue(TimelapseReview.objects.exists())
 		self.assertFalse(TimelapseRemoval.objects.exists())
@@ -368,10 +385,94 @@ class TimelapseDecisionTests(BaseTestCase):
 			[lapse.id for lapse in response.context["projects"][0].lapses], [later.id]
 		)
 
-	def test_justification_is_required(self):
-		response = self._decide(internal_notes="")
-		self.assertIn("needs a justification", " ".join(message_texts(response)))
+	def test_notes_on_the_pass_are_optional(self):
+		"""The per-Lookout descriptions carry the account; these are extra."""
+		self._decide(internal_notes="")
+
+		review = TimelapseReview.objects.get()
+		self.assertEqual(review.internal_notes, "")
+		self.assertEqual(review.annotations.count(), 1)
+
+	def test_every_lookout_needs_a_description(self):
+		response = self.client.post(
+			reverse("timelapse_decision", args=[self.project.id]),
+			{"internal_notes": "reviewed"},
+		)
+		self.assertIn(
+			"needs a description", " ".join(message_texts(response))
+		)
 		self.assertFalse(TimelapseReview.objects.exists())
+
+	def test_a_blank_description_is_not_a_description(self):
+		response = self._decide(**{f"description_{self.session.id}": "   "})
+		self.assertIn("needs a description", " ".join(message_texts(response)))
+		self.assertFalse(TimelapseReview.objects.exists())
+
+	def test_descriptions_are_kept_against_the_recording_they_describe(self):
+		second = make_timelapse(self.project, journal=self.journal, minutes=30)
+		self._decide(**{
+			f"description_{self.session.id}": "modelled the bracket throughout",
+			f"description_{second.id}": "same session, second half",
+		})
+
+		review = TimelapseReview.objects.get()
+		self.assertEqual(
+			{a.session_id: a.description for a in review.annotations.all()},
+			{
+				self.session.id: "modelled the bracket throughout",
+				second.id: "same session, second half",
+			},
+		)
+
+	def test_an_over_long_description_is_refused(self):
+		response = self._decide(**{f"description_{self.session.id}": "x" * 501})
+		# Named by the entry it is on, which is what the reviewer is looking at.
+		self.assertIn(
+			f'description on "{self.journal.title}" is too long',
+			" ".join(message_texts(response)),
+		)
+		self.assertFalse(TimelapseReview.objects.exists())
+
+	def test_a_lapse_with_no_footage_needs_no_description(self):
+		"""There is nothing to describe, and nothing to pay for either."""
+		bare = make_journal(self.project, time_spent=0)
+		bare.timelapses.all().delete()
+
+		self._decide()
+
+		self.assertEqual(
+			set(TimelapseReview.objects.values_list("journal_id", flat=True)),
+			{self.journal.id, bare.id},
+		)
+		self.assertEqual(TimelapseAnnotation.objects.count(), 1)
+
+	def test_a_lapse_that_arrived_mid_pass_is_left_for_the_next_one(self):
+		"""The form has no description for it, and an undescribed sign-off sticks.
+
+		The queue re-offers what it hasn't seen; nothing re-offers a review that
+		was already written. So a lapse journalled after the page was rendered
+		stays queued rather than being signed off blind.
+		"""
+		from ..views.admin import timelapse_review as view
+
+		latecomer = make_journal(self.project, time_spent=30)
+		locked = view._locked_pending_lapses(self.project)
+		with patch.object(view, "_pending_lapses", return_value=[self.journal]), \
+				patch.object(view, "_locked_pending_lapses", return_value=locked):
+			self._decide()
+
+		self.assertEqual(
+			list(TimelapseReview.objects.values_list("journal_id", flat=True)),
+			[self.journal.id],
+		)
+		self.assertFalse(latecomer.timelapse_reviewed)
+
+	def test_descriptions_reach_the_audit_log(self):
+		self._decide(**{f"description_{self.session.id}": "real work, no gaps"})
+		log = AuditLog.objects.get(action="timelapse_review")
+		self.assertEqual(
+			log.metadata["descriptions"][str(self.session.id)], "real work, no gaps"
+		)
 
 	def test_nothing_is_sent_to_the_shipper(self):
 		with patch("atlantis_site.views.helpers.send_slack_dm") as dm:
@@ -398,6 +499,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 			"removal_start": [r[1] for r in ranges],
 			"removal_end": [r[2] for r in ranges],
 			"removal_reason": [r[3] for r in ranges],
+			**describe_all(project),
 		})
 
 	def _assert_rejected(self, response, fragment):

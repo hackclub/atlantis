@@ -66,45 +66,54 @@
     border-bottom: 1px solid var(--oc-line);
 }
 
-.root-page .rv-nav,
-.root-page .rv-actions,
-.root-page .rv-where {
+/* Two groups: what you do with the queue on the left, what you open in
+   another tab on the right. The subject sits between them on one line rather
+   than stacked, so the bar stays one row deep at any width that matters. */
+.root-page .rv-topbar-left,
+.root-page .rv-topbar-right {
     display: flex;
     align-items: center;
-    gap: 6px;
-    flex-shrink: 0;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-width: 0;
 }
 
-.root-page .rv-actions {
+.root-page .rv-topbar-right {
     margin-left: auto;
-    flex-wrap: wrap;
     justify-content: flex-end;
 }
 
-.root-page .rv-subject {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    flex: 1 1 220px;
-    line-height: 1.25;
+.root-page .rv-sep {
+    width: 1px;
+    height: 22px;
+    background: var(--oc-line-2);
+    flex-shrink: 0;
 }
 
 .root-page .rv-subject-title {
     font-weight: 600;
-    font-size: 14.5px;
+    font-size: 14px;
     color: var(--oc-ink);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 34ch;
 }
 
 .root-page .rv-subject-byline {
-    font-size: 12px;
+    font-size: 12.5px;
     color: var(--oc-ink-3);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.root-page .rv-subject-byline a {
+    color: var(--oc-ink-2);
+    text-decoration: none;
+}
+
+.root-page .rv-subject-byline a:hover { text-decoration: underline; }
 
 .root-page .rv-queue-tag {
     display: inline-block;
@@ -179,8 +188,7 @@
     outline-offset: 2px;
 }
 
-.root-page .rv-btn[disabled],
-.root-page .rv-btn-off {
+.root-page .rv-btn[disabled] {
     opacity: 0.45;
     cursor: not-allowed;
 }
@@ -209,6 +217,23 @@
     color: var(--oc-bad-strong);
 }
 
+/* A button that is a way out rather than a way on: present, not pressing. */
+.root-page .rv-btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-btn-ghost:hover:not([disabled]) {
+    background: var(--oc-surface-2);
+    border-color: var(--oc-line-2);
+}
+
+.root-page .rv-btn-sm {
+    padding: 3px 9px;
+    font-size: 12px;
+}
+
 .root-page .rv-btn-icon {
     display: inline-flex;
     align-items: center;
@@ -225,6 +250,7 @@
    learned from the button rather than from a list nobody opens. */
 .root-page .rv kbd,
 .root-page .rq kbd,
+.root-page .ta kbd,
 .root-page .rv-shortcuts kbd {
     display: inline-block;
     min-width: 17px;
@@ -240,24 +266,6 @@
     text-align: center;
 }
 
-.root-page .rv-speed {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--oc-ink-3);
-}
-
-.root-page .rv-speed select {
-    padding: 4px 6px;
-    border: 1px solid var(--oc-line-2);
-    border-radius: 7px;
-    background: var(--oc-field);
-    color: var(--oc-ink);
-    font: inherit;
-    font-size: 12px;
-}
-
 /* ---------- banners and messages ---------- */
 
 .root-page .rv-banner {
@@ -270,6 +278,12 @@
 .root-page .rv-banner-warn {
     background: var(--oc-warn-soft);
     color: var(--oc-warn);
+}
+
+/* Said once, quietly: a fact about the page rather than a problem with it. */
+.root-page .rv-banner-quiet {
+    background: var(--oc-surface-2);
+    color: var(--oc-ink-3);
 }
 
 .root-page .rv-banner a {
@@ -292,9 +306,13 @@
 
 .root-page .rv-body {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 384px;
+    grid-template-columns: minmax(0, 1fr) 1px 340px;
     flex: 1;
     min-height: 0;
+}
+
+.root-page .rv-divider {
+    background: var(--oc-line);
 }
 
 .root-page .rv-evidence,
@@ -322,7 +340,6 @@
 
 .root-page .rv-decision {
     padding: 14px 16px 40px;
-    border-left: 1px solid var(--oc-line);
     background: var(--oc-bg);
 }
 
@@ -405,11 +422,173 @@
 
 /* ---------- overview ---------- */
 
-.root-page .rv-overview-head {
+.root-page .rv-panel-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: 16px;
+}
+
+.root-page .rv-panel-head-text {
+    min-width: 0;
+}
+
+.root-page .rv-title-id {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--oc-ink-3);
+}
+
+/* One line of everything that isn't a number: who, when, what with, how long
+   they have been waiting. Pipes rather than bullets, like Fallout's. */
+.root-page .rv-facts {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-fact-owner {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--oc-ink);
+    text-decoration: none;
+}
+
+.root-page .rv-fact-owner:hover { text-decoration: underline; }
+
+.root-page .rv-fact-sep {
+    color: var(--oc-line-2);
+}
+
+.root-page .rv-fact-strong { color: var(--oc-ink-2); }
+
+.root-page .rv-avatar-sm {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+}
+
+/* The banded rows under the head. Each one is a hairline-separated strip that
+   runs the full width of the panel, so the panel reads as a record rather
+   than as three more cards. */
+.root-page .rv-band {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 14px -15px -15px;
+    padding: 9px 15px;
+    border-top: 1px solid var(--oc-line);
+}
+
+.root-page .rv-band + .rv-band {
+    margin-top: 0;
+}
+
+.root-page .rv-band-stats,
+.root-page .rv-band-links {
+    align-items: stretch;
+    gap: 0;
+}
+
+.root-page .rv-band-stats > div,
+.root-page .rv-band-links > div {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0 14px;
+}
+
+.root-page .rv-band-stats > div:first-child,
+.root-page .rv-band-links > div:first-child {
+    padding-left: 0;
+}
+
+.root-page .rv-band-stats > div + div,
+.root-page .rv-band-links > div + div {
+    border-left: 1px solid var(--oc-line);
+}
+
+.root-page .rv-band-stats dt,
+.root-page .rv-band-label {
+    margin: 0 0 2px;
+    font-size: 11.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-band-stats dd {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--oc-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-band-unit {
+    margin-left: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-band-sub {
+    margin-top: 2px !important;
+    font-size: 11.5px !important;
+    font-weight: 400 !important;
+    color: var(--oc-ink-3) !important;
+}
+
+.root-page .rv-band-link {
+    display: block;
+    font-size: 12px;
+    color: var(--oc-tide-2);
+    text-decoration: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.root-page .rv-band-link:hover { text-decoration: underline; }
+.root-page .rv-band-link.is-no { color: var(--oc-bad); }
+
+/* Where the ship stands at every other tier. The first question a reviewer
+   asks, answered before they scroll the history for it. */
+.root-page .rv-band-siblings {
+    flex-wrap: wrap;
+}
+
+.root-page .rv-band-siblings .rv-band-label { margin: 0; }
+
+.root-page .rv-sibling {
+    padding: 2px 7px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 5px;
+    background: var(--oc-shallow);
+    color: var(--oc-ink-3);
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.root-page .rv-sibling-approved {
+    border-color: var(--oc-good);
+    background: var(--oc-good-soft);
+    color: var(--oc-good);
+}
+
+.root-page .rv-sibling-returned {
+    border-color: var(--oc-warn);
+    background: var(--oc-warn-soft);
+    color: var(--oc-warn);
+}
+
+.root-page .rv-sibling-rejected {
+    border-color: var(--oc-bad);
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad);
 }
 
 .root-page .rv-title {
@@ -426,13 +605,6 @@
 .root-page .rv-title a:hover {
     color: var(--oc-tide-2);
     text-decoration: underline;
-}
-
-.root-page .rv-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin: 0;
 }
 
 .root-page .rv-chip {
@@ -495,64 +667,6 @@
     line-height: 1.6;
 }
 
-.root-page .rv-internal-note {
-    padding: 9px 12px;
-    border: 1px solid var(--oc-sand-line);
-    border-radius: 9px;
-    background: var(--oc-sand);
-    color: var(--oc-sand-ink);
-    font-size: 13px;
-}
-
-.root-page .rv-stat-strip {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-    gap: 1px;
-    margin: 14px 0;
-    padding: 0;
-    background: var(--oc-line);
-    border: 1px solid var(--oc-line);
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-.root-page .rv-stat-strip > div {
-    padding: 9px 12px;
-    background: var(--oc-surface);
-}
-
-.root-page .rv-stat-strip dt {
-    font-size: 10.5px;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--oc-ink-3);
-}
-
-.root-page .rv-stat-strip dd {
-    margin: 2px 0 0;
-    font-size: 17px;
-    font-weight: 600;
-    color: var(--oc-ink);
-    font-variant-numeric: tabular-nums;
-}
-
-.root-page .rv-stat-strip .rv-stat-sub {
-    font-size: 11.5px;
-    font-weight: 400;
-    color: var(--oc-ink-3);
-}
-
-.root-page .rv-owner {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 9px 0;
-    border-top: 1px solid var(--oc-line);
-    font-size: 13px;
-    color: var(--oc-ink-3);
-}
-
 .root-page .rv-avatar {
     width: 22px;
     height: 22px;
@@ -560,25 +674,71 @@
     object-fit: cover;
 }
 
-.root-page .rv-owner-name {
-    color: var(--oc-tide);
-    text-decoration: none;
-    font-weight: 600;
-}
-
-.root-page .rv-owner-name:hover {
-    text-decoration: underline;
-}
-
-.root-page .rv-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding-top: 12px;
-    border-top: 1px solid var(--oc-line);
-}
-
 /* ---------- the journal timeline ---------- */
+
+.root-page .rv-entry-byline {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 11.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-entry-clock {
+    font-variant-numeric: tabular-nums;
+}
+
+/* One box per Lookout, carrying the sentence the timelapse reviewer wrote
+   about it. This is what replaced embedding the video here: somebody has
+   already watched it, and their reading of it is the useful artefact. The
+   link is still there for the times the sentence isn't enough. */
+.root-page .rv-rec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.root-page .rv-rec {
+    padding: 8px 10px;
+    border: 1px solid var(--oc-line);
+    border-radius: 8px;
+    background: var(--oc-field);
+}
+
+.root-page .rv-rec-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 0 0 5px;
+    font-size: 11.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .rv-rec-time {
+    color: var(--oc-ink-2);
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-rec-open {
+    margin-left: auto;
+    color: var(--oc-tide-2);
+    text-decoration: none;
+}
+
+.root-page .rv-rec-open:hover { text-decoration: underline; }
+
+.root-page .rv-rec-note {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--oc-ink-2);
+}
+
+.root-page .is-quiet { color: var(--oc-ink-3); }
+.root-page .rv-rec-note.is-quiet { font-style: italic; }
 
 .root-page .rv-timeline {
     display: flex;
@@ -619,20 +779,13 @@
 
 .root-page .rv-entry-head {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
+    flex-direction: column;
+    gap: 4px;
 }
 
 .root-page .rv-entry-head h3 {
     margin: 0;
     font-size: 14.5px;
-}
-
-.root-page .rv-entry-meta {
-    font-size: 12px;
-    color: var(--oc-ink-3);
 }
 
 .root-page .rv-entry-media {
@@ -656,38 +809,8 @@
     border-radius: 8px;
 }
 
-.root-page .rv-lapses {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.root-page .rv-lapse {
-    margin: 0;
-    width: 220px;
-}
-
-.root-page .rv-lapse video {
-    width: 100%;
-    border-radius: 8px;
-    border: 1px solid var(--oc-line);
-    background: #000;
-}
-
-.root-page .rv-lapse figcaption {
-    margin-top: 4px;
-    font-size: 11.5px;
-    color: var(--oc-ink-3);
-}
-
 .root-page .rv-lapse-empty {
     margin: 8px 0 0;
-    font-size: 12.5px;
-}
-
-.root-page .rv-entry-foot {
-    margin: 10px 0 0;
     font-size: 12.5px;
 }
 
@@ -699,6 +822,17 @@
 }
 
 /* ---------- history ---------- */
+
+/* Feedback and the internal reason are two different audiences, so they get
+   two labelled blocks rather than one paragraph with a prefix. */
+.root-page .rv-history-field-block {
+    margin-top: 7px;
+}
+
+.root-page .rv-history-field-block p {
+    margin: 0;
+}
+
 
 .root-page .rv-comment-form {
     display: flex;
@@ -740,36 +874,24 @@
 
 /* Reviewer-only notes keep the warm cast they have everywhere else, so an
    internal comment can never read as something the owner has seen. */
-.root-page .rv-history-comment {
-    background: var(--oc-sand);
-    border-color: var(--oc-sand-line);
-    border-left-color: var(--oc-sand-ink);
-    color: var(--oc-sand-ink);
-}
-
 .root-page .rv-history-head {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
     flex-wrap: wrap;
     margin-bottom: 5px;
 }
 
 .root-page .rv-history-label {
-    font-weight: 700;
+    font-weight: 600;
     font-size: 12px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    color: var(--oc-ink-2);
 }
 
 .root-page .rv-history-byline {
+    margin-left: auto;
     font-size: 11.5px;
     color: var(--oc-ink-3);
-}
-
-.root-page .rv-history-comment .rv-history-byline {
-    color: #b6a37f;
 }
 
 .root-page .rv-history-item p {
@@ -778,12 +900,8 @@
 }
 
 .root-page .rv-history-field {
-    display: inline-block;
-    min-width: 74px;
     color: var(--oc-ink-3);
     font-size: 11.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
 }
 
 .root-page .rv-history-verdict {
@@ -865,20 +983,23 @@
 .root-page .rv-field-label {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    flex-wrap: wrap;
+    gap: 5px;
+    font-size: 12px;
+    font-weight: 500;
     color: var(--oc-ink-2);
 }
 
 .root-page .rv-field-label em {
     font-style: normal;
     font-weight: 400;
-    text-transform: none;
-    letter-spacing: 0;
     color: var(--oc-ink-3);
+}
+
+/* The keycap goes to the far end of the label row rather than trailing the
+   words, so labels of different lengths line their hints up. */
+.root-page .rv-field-label kbd {
+    margin-left: auto;
 }
 
 .root-page .rv-field-label kbd {
@@ -934,69 +1055,60 @@
 
 /* ---------- preflight ---------- */
 
-.root-page .rv-checks {
-    border: 1px solid var(--oc-line);
-    border-radius: 9px;
-    background: var(--oc-bg);
-    overflow: hidden;
-}
-
-.root-page .rv-checks > summary {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 7px 11px;
-    cursor: pointer;
-    list-style: none;
-}
-
-.root-page .rv-checks > summary::-webkit-details-marker {
-    display: none;
-}
-
-.root-page .rv-checks-title {
-    flex: 1;
-    font-size: 11.5px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: var(--oc-ink-2);
-}
-
-.root-page .rv-checks-tally {
-    display: flex;
-    gap: 3px;
-}
-
-.root-page .rv-tally {
-    min-width: 19px;
-    padding: 1px 5px;
+/* The collapsed summary carries the whole verdict: the worst level found, then
+   the fail/warn/pass tally. A reviewer who sees "Pass 0/0/9" never opens it. */
+.root-page .rv-level {
+    padding: 1px 7px;
     border-radius: 5px;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
-    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.root-page .rv-level-fail { background: var(--oc-bad-soft); color: var(--oc-bad); }
+.root-page .rv-level-warn { background: var(--oc-warn-soft); color: var(--oc-warn); }
+.root-page .rv-level-pass { background: var(--oc-good-soft); color: var(--oc-good); }
+
+.root-page .rv-tally-row {
+    color: var(--oc-ink-3);
     font-variant-numeric: tabular-nums;
 }
 
-.root-page .rv-tally-fail {
-    background: var(--oc-bad-soft);
-    color: var(--oc-bad);
+.root-page .rv-card-checks .rv-card-summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
 }
 
-.root-page .rv-tally-warn {
-    background: var(--oc-warn-soft);
-    color: var(--oc-warn);
+/* The passes are the answer "nothing to see here". Printing nine of them above
+   the two that matter buries the two, so they fold away. */
+.root-page .rv-passed {
+    margin-top: 10px;
 }
 
-.root-page .rv-tally-pass {
-    background: var(--oc-good-soft);
-    color: var(--oc-good);
-}
-
-.root-page .rv-tally-zero {
-    background: var(--oc-shallow);
+.root-page .rv-passed > summary {
+    cursor: pointer;
+    font-size: 12px;
     color: var(--oc-ink-3);
+    list-style: none;
 }
+
+.root-page .rv-passed > summary::-webkit-details-marker { display: none; }
+.root-page .rv-passed > summary:hover { color: var(--oc-ink-2); }
+.root-page .rv-passed .rv-check-list { margin-top: 6px; }
+
+/* Read as one figure — "0/2/4" — rather than three badges. The level chip
+   beside it already carries the weight; these are just the counts. */
+.root-page .rv-tally {
+    font-size: 11.5px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rv-tally-fail { color: var(--oc-bad); }
+.root-page .rv-tally-warn { color: var(--oc-warn); }
+.root-page .rv-tally-pass { color: var(--oc-good); }
 
 .root-page .rv-check-list {
     margin: 0;
@@ -1118,11 +1230,6 @@
     line-height: 1.45;
 }
 
-.root-page .rv-removal-summary {
-    margin: 0;
-    font-size: 12.5px;
-    color: var(--oc-ink-2);
-}
 
 /* ---------- the decision buttons ---------- */
 
@@ -1206,225 +1313,6 @@
     background: transparent;
     color: inherit;
     opacity: 0.75;
-}
-
-/* ============================================================
-   Lookout removal editor
-   ============================================================ */
-
-/* A lapse card holds every Lookout recorded for that entry; the pass holds
-   every unreviewed lapse on the project. Both levels carry a running total so
-   a reviewer can collapse what they are done with. */
-.root-page .rv-lapse-cut {
-    flex-shrink: 0;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--oc-bad);
-    font-variant-numeric: tabular-nums;
-}
-
-.root-page .rv-lookout + .rv-lookout {
-    margin-top: 18px;
-    padding-top: 18px;
-    border-top: 1px solid var(--oc-line);
-}
-
-.root-page .rv-lookout-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin: 0 0 8px;
-    font-size: 12.5px;
-    color: var(--oc-ink-3);
-}
-
-.root-page .rv-lookout-head strong {
-    color: var(--oc-ink);
-    font-size: 13.5px;
-}
-
-/* The box's shape is pinned, and that matters: preload="none" means no
-   metadata until the reviewer presses play, so a video sized only by width
-   sits at the 300x150 default and then snaps to its intrinsic height mid-page,
-   lurching everything under it. aspect-ratio fixes the height up front and
-   object-fit letterboxes whatever shape the recording turns out to be.
-   Capped by width rather than height so eight of them still scroll sanely. */
-.root-page .rv-lookout-video {
-    display: block;
-    width: 100%;
-    max-width: 780px;
-    aspect-ratio: 16 / 9;
-    height: auto;
-    object-fit: contain;
-    border-radius: 9px;
-    border: 1px solid var(--oc-line);
-    background: var(--oc-abyss);
-}
-
-.root-page .rv-cut-bar {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 11px;
-}
-
-.root-page .rv-cut-total {
-    margin-left: auto;
-    font-size: 12.5px;
-    color: var(--oc-ink-3);
-    font-variant-numeric: tabular-nums;
-}
-
-.root-page .rv-cut-hint {
-    margin: 8px 0 0;
-    font-size: 11.5px;
-    line-height: 1.5;
-    color: var(--oc-ink-3);
-}
-
-.root-page .rv-removal-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 11px;
-}
-
-.root-page .rv-removal-row {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 9px 10px;
-    border: 1px solid var(--oc-line-2);
-    border-radius: 9px;
-    background: var(--oc-bg);
-}
-
-.root-page .rv-removal-bad {
-    border-color: var(--oc-bad-line);
-    background: var(--oc-bad-soft);
-}
-
-.root-page .rv-removal-range-inputs {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-
-.root-page .rv-removal-row input[type="text"] {
-    box-sizing: border-box;
-    padding: 6px 9px;
-    border: 1px solid var(--oc-line-2);
-    border-radius: 7px;
-    background: var(--oc-field);
-    color: var(--oc-ink);
-    font: inherit;
-    font-size: 13px;
-}
-
-.root-page .rv-removal-range-inputs input[name="removal_start"],
-.root-page .rv-removal-range-inputs input[name="removal_end"] {
-    width: 78px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    text-align: center;
-}
-
-.root-page .rv-removal-row input[name="removal_reason"] {
-    width: 100%;
-}
-
-.root-page .rv-removal-dash {
-    color: var(--oc-ink-3);
-}
-
-.root-page .rv-removal-cost {
-    margin-left: auto;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--oc-bad);
-    font-variant-numeric: tabular-nums;
-}
-
-.root-page .rv-removal-record {
-    margin: 11px 0 0;
-    padding: 0;
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-}
-
-.root-page .rv-removal-record li {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 7px 10px;
-    border: 1px solid var(--oc-line);
-    border-radius: 8px;
-    background: var(--oc-bg);
-    font-size: 12.5px;
-}
-
-.root-page .rv-removal-range {
-    color: var(--oc-ink-3);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    font-size: 11.5px;
-}
-
-.root-page .rv-removal-reason {
-    flex-basis: 100%;
-    color: var(--oc-ink-2);
-}
-
-/* Lapses on this project that were already ruled on. Read-only, and below the
-   pass being made: it is context for the decision, not part of it. */
-.root-page .rv-reviewed {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.root-page .rv-reviewed-item {
-    padding: 10px 12px;
-    border: 1px solid var(--oc-line);
-    border-radius: 9px;
-    background: var(--oc-bg);
-}
-
-.root-page .rv-reviewed-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
-.root-page .rv-reviewed-title {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: var(--oc-ink);
-}
-
-.root-page .rv-reviewed-meta {
-    margin: 4px 0 0;
-    font-size: 12.5px;
-    color: var(--oc-ink-2);
-}
-
-.root-page .rv-reviewed-note {
-    margin: 6px 0 0;
-    padding: 7px 10px;
-    border-radius: 8px;
-    background: var(--oc-sand);
-    border: 1px solid var(--oc-sand-line);
-    color: var(--oc-sand-ink);
-    font-size: 12.5px;
-    line-height: 1.5;
 }
 
 /* ============================================================
@@ -1908,9 +1796,32 @@
         overflow: visible;
     }
 
+    /* The hairline between the columns has nothing to divide once they stack;
+       the decision panel grows its own top border instead. */
+    .root-page .rv-divider {
+        display: none;
+    }
+
     .root-page .rv-decision {
-        border-left: none;
         border-top: 1px solid var(--oc-line);
+    }
+
+    /* The banded rows in the overview stack too — four stat columns at 700px
+       are four columns of nothing. */
+    .root-page .rv-band-stats,
+    .root-page .rv-band-links {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .root-page .rv-band-stats > div,
+    .root-page .rv-band-links > div {
+        padding: 0;
+    }
+
+    .root-page .rv-band-stats > div + div,
+    .root-page .rv-band-links > div + div {
+        border-left: none;
     }
 }
 
@@ -1919,8 +1830,10 @@
         padding: 8px 12px;
     }
 
-    .root-page .rv-subject {
-        order: 10;
+    /* The subject wraps onto its own row before the buttons do, so the two
+       groups of controls stay together at the width where one row stops fitting. */
+    .root-page .rv-subject-title,
+    .root-page .rv-subject-byline {
         flex-basis: 100%;
     }
 

@@ -33,7 +33,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from ...models import (
-    Journal, LookoutSession, Project, Ship, T1, T2, T3, TimelapseReview,
+    Journal, LookoutSession, Project, Ship, T1, T2, T3, TimelapseAnnotation,
+    TimelapseReview,
 )
 from ..helpers import (
     approved_minutes_for_journals, display_name, format_minutes,
@@ -294,7 +295,11 @@ def age_bucket(created_at, sla_days):
 
 
 def age_display(created_at):
-    """Compact wait, in the largest unit that isn't a lie: `4d`, `7h`, `12m`."""
+    """Compact wait, in the largest unit that isn't a lie: `4d`, `7h`, `12m`.
+
+    Reads as a duration wherever it lands, including mid-sentence — so
+    something that has only just arrived is `<1m` rather than a word.
+    """
     seconds = max((timezone.now() - created_at).total_seconds(), 0)
     if seconds >= 86400:
         return f"{int(seconds // 86400)}d"
@@ -302,7 +307,7 @@ def age_display(created_at):
         return f"{int(seconds // 3600)}h"
     if seconds >= 60:
         return f"{int(seconds // 60)}m"
-    return "new"
+    return "<1m"
 
 
 def decorate_rows(queue_key, items):
@@ -568,6 +573,127 @@ def ship_snapshot(ship):
             1 for journal in ship_journals if not journal.timelapse_reviewed
         ),
     }
+
+
+def sibling_reviews(ship):
+    """Where this ship stands at each tier, as one row of badges.
+
+    The question a reviewer asks first and used to answer by scrolling the
+    history: has anyone else looked at this, and what did they say. Only the
+    latest pass per tier — a ship that went round the loop has older ones, and
+    those are the history's business, not this row's.
+    """
+    tiers = []
+    latest_t1 = ship.t1_reviews.order_by("-reviewed_at", "-id").first()
+    tiers.append({
+        "label": "T1",
+        "state": "" if latest_t1 is None else ("approved" if latest_t1.approved else "rejected"),
+        "reviewer": display_name(latest_t1.reviewer) if latest_t1 else "",
+    })
+
+    latest_t2 = ship.t2_reviews.order_by("-reviewed_at", "-id").first()
+    tiers.append({
+        "label": "T2",
+        "state": "" if latest_t2 is None else (
+            "approved" if latest_t2.decision == T2.Decision.APPROVE else "returned"
+        ),
+        "reviewer": display_name(latest_t2.reviewer) if latest_t2 else "",
+    })
+
+    latest_t3 = ship.t3_reviews.order_by("-reviewed_at", "-id").first()
+    tiers.append({
+        "label": "T3",
+        "state": "" if latest_t3 is None else (
+            "approved" if latest_t3.decision == T3.Decision.APPROVE else "returned"
+        ),
+        "reviewer": display_name(latest_t3.reviewer) if latest_t3 else "",
+    })
+    return tiers
+
+
+def journal_stats(journals):
+    """The shape of the log, for the journal card's collapsed summary.
+
+    How many entries, how long in total, and how evenly spread — a project
+    logged in five even sittings and one logged in one nineteen-hour entry
+    are different-looking claims, and this is where the difference shows
+    without opening the card.
+
+    Approved minutes rather than tracked, everywhere: tracked is what the
+    shipper's clock said, approved is what the timelapse reviewer let stand,
+    and it is the second one every tier below them is deciding about. Expects
+    journals from annotate_recordings(), whose prefetch it reads.
+    """
+    journals = list(journals)
+    each = sorted(journal.review_approved_minutes for journal in journals)
+    total = sum(each)
+    return {
+        "count": len(journals),
+        "total": total,
+        "total_display": format_minutes(total),
+        "average_display": format_minutes(total // len(each)) if each else format_minutes(0),
+        "low_display": format_minutes(each[0] if each else 0),
+        "high_display": format_minutes(each[-1] if each else 0),
+    }
+
+
+def annotate_recordings(journals):
+    """Hang the timelapse reviewer's own words on each piece of footage.
+
+    A T1/T2/T3 reviewer reading a journal wants to know what somebody who
+    actually watched the Lookout thought of it. Without this they would have to
+    open the internal review to find out, which is a page most of them can't
+    reach — so the description travels with the recording instead.
+
+    The prefetch is load-bearing, not an optimisation: the description is hung
+    on the session *objects*, and without a populated cache every later
+    `journal.timelapses.all()` — the template's included — is a fresh query
+    returning fresh objects that never saw it.
+
+    The rest of the annotation is the same idea applied to time. Journal and
+    LookoutSession both expose tracked/removed/approved as properties that
+    aggregate on read, which is one or two queries every time a template
+    touches one; over a page that lists every entry and every recording under
+    it that is hundreds. So the same numbers are computed once here, off the
+    prefetched rows, under `review_` names the templates use instead.
+    """
+    if hasattr(journals, "prefetch_related"):
+        journals = (
+            journals
+            .select_related("timelapse_review")
+            .prefetch_related("timelapses", "timelapses__removals")
+        )
+    journals = list(journals)
+
+    sessions = {}
+    for journal in journals:
+        for session in journal.timelapses.all():
+            sessions[session.id] = session
+
+    descriptions = dict(
+        TimelapseAnnotation.objects
+        .filter(session_id__in=sessions)
+        .values_list("session_id", "description")
+    ) if sessions else {}
+
+    for journal in journals:
+        tracked = removed = 0
+        for session in journal.timelapses.all():
+            session.review_description = descriptions.get(session.id, "")
+            session.review_removed_seconds = sum(
+                removal.duration_seconds for removal in session.removals.all()
+            )
+            session.review_approved_display = format_minutes(
+                max((session.tracked_seconds or 0) - session.review_removed_seconds, 0) // 60
+            )
+            tracked += session.tracked_seconds or 0
+            removed += session.review_removed_seconds
+
+        journal.review_tracked_display = format_minutes(tracked // 60)
+        journal.review_removed_seconds = removed
+        journal.review_approved_minutes = max(tracked - removed, 0) // 60
+        journal.review_approved_display = format_minutes(journal.review_approved_minutes)
+    return journals
 
 
 def preflight_checks(ship, subject, owner, has_make=None):

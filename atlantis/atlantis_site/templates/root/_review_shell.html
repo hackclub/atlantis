@@ -2,21 +2,28 @@
 {% load static %}
 
 {% comment %}
-The reviewer shell: one screen, three fixed parts, nothing that scrolls out of
-reach.
+The reviewer shell, laid out the way Fallout's build review is: one screen,
+three fixed parts, nothing that scrolls out of reach.
 
   ┌ top bar ─────────────────────────────────────────────────┐
-  │ back · skip · where you are · what you're looking at      │
+  │ end session · skip │ what you're looking at │ open in tab  │
   ├────────────────────────────────┬──────────────────────────┤
-  │ evidence (scrolls on its own)  │ decision (always visible) │
+  │ cards (scroll on their own)    │ the decision (always up) │
   └────────────────────────────────┴──────────────────────────┘
 
 Both columns own their scrolling, so the decision panel can't be scrolled away
 from the thing it is a decision about — the single change that stops a reviewer
 paging up and down between reading and deciding.
 
-Pages extend this and fill `evidence` and `decision`. Everything the shell
-needs beyond that comes from queue.review_context().
+The evidence column is a stack of collapsible cards, numbered 1…9 in the order
+they appear; the rail is 320px of form. Pages extend this and fill `evidence`
+and `decision`. Everything the shell needs beyond that comes from
+queue.review_context().
+
+Keys follow Fallout's: bare letters open things (E, S, U, P, M, C, N), and
+anything that writes a decision wants Cmd/Ctrl with it (⌘P approve, ⌘E return,
+⌘J internal reason, ⌘F feedback, ⌘↵ submit whatever is primary). A decision is
+not something to reach by mistyping.
 {% endcomment %}
 
 {% block body_class %} review-shell{% endblock %}
@@ -25,19 +32,19 @@ needs beyond that comes from queue.review_context().
 {% block content %}
 <div class="rv rv-accent-{{ queue_accent }}">
     <header class="rv-topbar">
-        <div class="rv-nav">
-            <a class="rv-btn" href="{{ queue_dash_url }}" data-key="e" title="Back to the {{ queue_label|lower }} desk">
-                Desk<kbd>E</kbd>
-            </a>
+        <div class="rv-topbar-left">
+            <a class="rv-btn" href="{{ queue_dash_url }}" data-key="e"
+               title="Back to the {{ queue_label|lower }} desk">End Session<kbd>E</kbd></a>
             {% if claim_held %}
-                <a class="rv-btn" href="{{ skip_url }}" data-key="s" title="Leave this one and open the next">
-                    Skip<kbd>S</kbd>
-                </a>
+                <a class="rv-btn rv-btn-ghost" href="{{ skip_url }}" data-key="s"
+                   title="Leave this one and open the next">Skip<kbd>S</kbd></a>
             {% endif %}
-        </div>
 
-        <div class="rv-where">
+            <span class="rv-sep" role="presentation"></span>
+
             <span class="rv-queue-tag">{{ queue_short }}</span>
+            <span class="rv-subject-title">{% block subject_title %}{% endblock %}</span>
+            <span class="rv-subject-byline">{% block subject_byline %}{% endblock %}</span>
             {% if queue_position %}
                 <span class="rv-position" title="{{ queue_remaining }} still waiting behind this one">
                     <strong>{{ queue_position }}</strong> / {{ queue_total }}
@@ -47,14 +54,9 @@ needs beyond that comes from queue.review_context().
             {% endif %}
         </div>
 
-        <div class="rv-subject">
-            <span class="rv-subject-title">{% block subject_title %}{% endblock %}</span>
-            <span class="rv-subject-byline">{% block subject_byline %}{% endblock %}</span>
-        </div>
-
-        <div class="rv-actions">
+        <div class="rv-topbar-right">
             {% block topbar_actions %}{% endblock %}
-            <button type="button" class="rv-btn rv-btn-icon" data-key="?" data-shortcut-help
+            <button type="button" class="rv-btn rv-btn-icon" data-shortcut-help
                     title="Keyboard shortcuts">?</button>
         </div>
     </header>
@@ -89,6 +91,7 @@ needs beyond that comes from queue.review_context().
         <main class="rv-evidence" id="rv-evidence">
             {% block evidence %}{% endblock %}
         </main>
+        <div class="rv-divider" role="presentation"></div>
         <aside class="rv-decision">
             {% block decision %}{% endblock %}
         </aside>
@@ -98,14 +101,15 @@ needs beyond that comes from queue.review_context().
 <dialog class="rv-shortcuts" id="rv-shortcuts">
     <h2>Keyboard shortcuts</h2>
     <dl>
-        <dt><kbd>E</kbd></dt><dd>Back to the {{ queue_label|lower }} desk</dd>
-        {% if claim_held %}<dt><kbd>S</kbd></dt><dd>Skip — open the next one without deciding</dd>{% endif %}
         {% block shortcut_rows %}{% endblock %}
-        <dt><kbd>1</kbd>&hellip;<kbd>9</kbd></dt><dd>Open / close the numbered panels</dd>
+        <dt><kbd>S</kbd></dt><dd>{% if claim_held %}Skip &mdash; open the next one without deciding{% else %}Skip (nothing claimed here){% endif %}</dd>
+        <dt><kbd>E</kbd></dt><dd>End session &mdash; back to the {{ queue_label|lower }} desk</dd>
+        <dt><kbd>N</kbd></dt><dd>Toggle the history and reviewer notes</dd>
+        <dt><kbd>1</kbd>&hellip;<kbd>9</kbd></dt><dd>Toggle the numbered cards</dd>
         <dt><kbd>?</kbd></dt><dd>This list</dd>
         <dt><kbd>Esc</kbd></dt><dd>Close this list</dd>
     </dl>
-    <form method="dialog"><button class="rv-btn">Close</button></form>
+    <form method="dialog"><button class="rv-btn">Got it</button></form>
 </dialog>
 
 <script src="{% static 'atlantis_site/review.js' %}"

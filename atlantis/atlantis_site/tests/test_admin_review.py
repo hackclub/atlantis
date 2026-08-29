@@ -4,9 +4,12 @@ from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
 
-from ..models import AuditLog, InternalComment, Ship, T1, T2, T3
+from ..models import (
+	AuditLog, InternalComment, Ship, T1, T2, T3, TimelapseAnnotation,
+)
 from .base import (
 	BaseTestCase,
+	approve_timelapse,
 	grant_perms,
 	make_journal,
 	make_project,
@@ -516,6 +519,75 @@ class FraudReviewProjectTests(BaseTestCase):
 		)
 		response = self.client.get(reverse("fraud_review_project", args=[ship.id]))
 		self.assertEqual(response.context["total_time"], 0)
+
+
+class ReviewPageEvidenceTests(BaseTestCase):
+	"""What the project review pages put in front of a reviewer."""
+
+	def setUp(self):
+		super().setUp()
+		self.reviewer = grant_perms(make_user("t1rev"), "t1_review")
+		self.client.force_login(self.reviewer)
+		self.project = make_project(make_user("author"), shippable=True)
+		self.ship = make_ship(self.project, journal_minutes=(60,))
+		self.journal = self.ship.journals.get()
+		self.session = self.journal.timelapses.get()
+
+	def _page(self):
+		return self.client.get(reverse("review_project", args=[self.ship.id]))
+
+	def test_the_lookout_description_travels_with_the_recording(self):
+		"""What the Lookout reviewer wrote is why the video isn't embedded here.
+
+		It is hung on the session objects the page renders, which only works if
+		they are the prefetched ones — a fresh `timelapses.all()` in the
+		template would quietly drop it and show "no description" instead.
+		"""
+		TimelapseAnnotation.objects.create(
+			review=self.journal.timelapse_review,
+			session=self.session,
+			description="Modelled the bracket start to finish, no gaps.",
+		)
+
+		response = self._page()
+		self.assertContains(response, "Modelled the bracket start to finish, no gaps.")
+		self.assertNotContains(response, "No description from Lookout review")
+
+	def test_a_recording_nobody_described_says_so(self):
+		self.assertContains(self._page(), "No description from Lookout review")
+
+	def test_the_page_says_where_the_ship_stands_at_every_tier(self):
+		T1.objects.create(
+			ship=self.ship, reviewer=self.reviewer,
+			feedback="ok", internal_notes="ok", approved=True,
+		)
+		tiers = {tier["label"]: tier for tier in self._page().context["siblings"]}
+
+		self.assertEqual(tiers["T1"]["state"], "approved")
+		self.assertEqual(tiers["T1"]["reviewer"], "t1rev")
+		self.assertEqual(tiers["T2"]["state"], "")
+		self.assertEqual(tiers["T3"]["state"], "")
+
+	def test_only_the_latest_pass_per_tier_is_shown(self):
+		"""A ship round the loop has older passes; those are the history's job."""
+		for approved in (True, False):
+			T1.objects.create(
+				ship=self.ship, reviewer=self.reviewer,
+				feedback="", internal_notes="", approved=approved,
+			)
+		tiers = {tier["label"]: tier for tier in self._page().context["siblings"]}
+		self.assertEqual(tiers["T1"]["state"], "rejected")
+
+	def test_the_journal_summary_counts_approved_time_not_tracked(self):
+		# Signed off, or the ship is held out of T1 and there is no page to read.
+		approve_timelapse(make_journal(self.project, ship=self.ship, time_spent=120))
+		stats = self._page().context["journal_stats"]
+
+		self.assertEqual(stats["count"], 2)
+		self.assertEqual(stats["total_display"], "3h 0m")
+		self.assertEqual(stats["average_display"], "1h 30m")
+		self.assertEqual(stats["low_display"], "1h 0m")
+		self.assertEqual(stats["high_display"], "2h 0m")
 
 
 class InternalCommentTests(BaseTestCase):

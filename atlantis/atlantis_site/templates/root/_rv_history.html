@@ -1,17 +1,28 @@
 {% comment %}
-Every decision and internal note this project has already collected, plus the
-box for adding one. Open by default when there is something in it: a ship that
-has been round the loop before is exactly the one where the last reviewer's
-reasoning matters, and a reviewer should not have to go looking for it.
+Previous reviews and reviewer notes, in Fallout's shape: the collapsed summary
+is a row of verdict badges, so a ship that has been round the loop says so
+before it is opened, and the body is one block per decision with the feedback
+and the internal reason under it.
+
+Open by default when there is anything in it. A ship that has been round the
+loop before is exactly the one where the last reviewer's reasoning matters,
+and a reviewer should not have to go looking for it.
 
 expects: ship, review_history
 {% endcomment %}
-<details class="rv-card" data-card="history" {% if review_history %}open{% endif %}>
+<details class="rv-card" data-card="history" data-notes {% if review_history %}open{% endif %}>
     <summary>
-        <span class="rv-card-title">History</span>
+        <span class="rv-card-title">Previous Reviews</span>
         <span class="rv-card-summary">
             {% if review_history %}
-                {{ review_history|length }} entr{{ review_history|length|pluralize:"y,ies" }} &mdash; earlier decisions and internal notes
+                {% for event in review_history %}
+                    {% if event.type == "t1" %}
+                        <span class="rv-sibling rv-sibling-{% if event.review.approved %}approved{% else %}rejected{% endif %}">T1</span>
+                    {% elif event.type == "t2" %}
+                        <span class="rv-sibling rv-sibling-{% if event.review.decision == 'A' %}approved{% else %}returned{% endif %}">T2</span>
+                    {% endif %}
+                {% endfor %}
+                {{ review_history|length }} entr{{ review_history|length|pluralize:"y,ies" }}
             {% else %}
                 nothing yet &mdash; first time through
             {% endif %}
@@ -22,15 +33,27 @@ expects: ship, review_history
         <form action="{% url 'add_internal_comment' ship.id %}" method="POST" class="rv-comment-form">
             {% csrf_token %}
             <textarea name="text" rows="2" maxlength="1000" required
-                      placeholder="Internal comment &mdash; reviewers only, takes no review action"></textarea>
-            <button type="submit" class="rv-btn">Add comment</button>
+                      placeholder="Reviewer note &mdash; internal, takes no review action"></textarea>
+            <button type="submit" class="rv-btn">Add note</button>
         </form>
 
         <ol class="rv-history">
             {% for event in review_history %}
                 <li class="rv-history-item rv-history-{{ event.type }}">
                     <div class="rv-history-head">
-                        <span class="rv-history-label">{{ event.label }}</span>
+                        {% if event.type == "t1" %}
+                            <span class="rv-sibling rv-sibling-{% if event.review.approved %}approved{% else %}rejected{% endif %}">
+                                {% if event.review.approved %}approved{% else %}rejected{% endif %}
+                            </span>
+                            <span class="rv-history-label">T1</span>
+                        {% elif event.type == "t2" %}
+                            <span class="rv-sibling rv-sibling-{% if event.review.decision == 'A' %}approved{% else %}returned{% endif %}">
+                                {{ event.review.get_decision_display|lower }}
+                            </span>
+                            <span class="rv-history-label">T2</span>
+                        {% else %}
+                            <span class="rv-history-label">{{ event.label }}</span>
+                        {% endif %}
                         <span class="rv-history-byline">
                             {{ event.actor }} &middot; {{ event.at|date:"M j, Y, g:i a" }}
                             {% if event.other_ship %}&middot; left on ship #{{ event.comment.ship_id }}{% endif %}
@@ -39,17 +62,26 @@ expects: ship, review_history
                     {% if event.type == "comment" %}
                         <p>{{ event.comment.text|linebreaksbr }}</p>
                     {% elif event.type == "t1" %}
-                        <p class="rv-history-verdict">
-                            {% if event.review.approved %}<span class="is-yes">Approved</span>{% else %}<span class="is-no">Rejected</span>{% endif %}
-                        </p>
-                        <p><span class="rv-history-field">Feedback</span> {{ event.review.feedback }}</p>
-                        <p><span class="rv-history-field">Internal</span> {{ event.review.internal_notes }}</p>
+                        <div class="rv-history-field-block">
+                            <p class="rv-history-field">Feedback</p>
+                            <p>{{ event.review.feedback|default:"—" }}</p>
+                        </div>
+                        <div class="rv-history-field-block">
+                            <p class="rv-history-field">Internal reason</p>
+                            <p class="is-quiet">{{ event.review.internal_notes|default:"—" }}</p>
+                        </div>
                     {% elif event.type == "t2" %}
-                        <p class="rv-history-verdict">{{ event.review.get_decision_display }}
-                            {% if event.review.deductions %}&middot; <span class="is-no">&minus;{{ event.review.deductions }} min</span>{% endif %}
-                        </p>
-                        <p><span class="rv-history-field">Feedback</span> {{ event.review.feedback }}</p>
-                        <p><span class="rv-history-field">Justification</span> {{ event.review.justification }}</p>
+                        {% if event.review.deductions %}
+                            <p class="rv-history-verdict is-no">&minus;{{ event.review.deductions }} min deducted</p>
+                        {% endif %}
+                        <div class="rv-history-field-block">
+                            <p class="rv-history-field">Feedback</p>
+                            <p>{{ event.review.feedback|default:"—" }}</p>
+                        </div>
+                        <div class="rv-history-field-block">
+                            <p class="rv-history-field">Justification</p>
+                            <p class="is-quiet">{{ event.review.justification|default:"—" }}</p>
+                        </div>
                     {% endif %}
                 </li>
             {% empty %}

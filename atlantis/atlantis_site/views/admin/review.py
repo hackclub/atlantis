@@ -15,8 +15,9 @@ from ...models import (
 from ...submissions import build_override_justification, submit_ship
 from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, layers_for_minutes, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, rate_limit, safe_redirect_back
 from .queue import (
-    QUEUES, dash_context, decorate_rows, go_to_next, owner_snapshot, parse_skip,
-    preflight_checks, review_context, ship_snapshot,
+    QUEUES, annotate_recordings, dash_context, decorate_rows, go_to_next,
+    journal_stats, owner_snapshot, parse_skip, preflight_checks, review_context,
+    ship_snapshot, sibling_reviews,
 )
 
 INTERNAL_COMMENT_MAX_LENGTH = 1000
@@ -137,7 +138,7 @@ def review_project(request, ship_id):
     if not ship.timelapse_cleared:
         messages.error(request, TIMELAPSE_PENDING_MESSAGE)
         return redirect("review_dash")
-    journals = ship.project.journals.order_by('-id')
+    journals = annotate_recordings(ship.project.journals.order_by('-id'))
     timeline = build_journal_timeline(journals, ship.project.ships.all())
     try:
         hasMake = bool(get_model_info(ship.project.printablesUrl.split('/model/')[1].split('-')[0])["makesCount"])
@@ -155,6 +156,8 @@ def review_project(request, ship_id):
         "owner": owner,
         "logged_time": approved_minutes_for_journals(ship.project.journals.all()),
         "subject": subject,
+        "siblings": sibling_reviews(ship),
+        "journal_stats": journal_stats(journals),
         "preflight": preflight_checks(ship, subject, owner, has_make=hasMake),
         **review_context(request, "t1", ship, claimable=ship.status == Ship.ShipStatus.T1_QUEUE),
     })
@@ -240,7 +243,7 @@ def ysws_review_next(request):
 @check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def ysws_review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
-    journals = ship.project.journals.order_by('-id')
+    journals = annotate_recordings(ship.project.journals.order_by('-id'))
     timeline = build_journal_timeline(journals, ship.project.ships.all())
     # Ship-scoped, matching what t2_decision validates the deduction against —
     # the sidebar's pearl preview has to agree with the ceiling the POST
@@ -258,6 +261,8 @@ def ysws_review_project(request, ship_id):
         "pearls_per_hour": PEARLS_PER_HOUR,
         "owner": owner,
         "subject": subject,
+        "siblings": sibling_reviews(ship),
+        "journal_stats": journal_stats(journals),
         "preflight": preflight_checks(ship, subject, owner),
         **review_context(request, "t2", ship, claimable=ship.status == Ship.ShipStatus.T2_QUEUE),
     })
@@ -355,7 +360,7 @@ def fraud_review_next(request):
 @check_perms(["atlantis_site.organizer", "atlantis_site.t3_review"])
 def fraud_review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
-    journals = ship.project.journals.order_by('-id')
+    journals = annotate_recordings(ship.project.journals.order_by('-id'))
     timeline = build_journal_timeline(journals, ship.project.ships.all())
     logged_time = approved_minutes_for_journals(ship.journals.all())
 
@@ -386,6 +391,8 @@ def fraud_review_project(request, ship_id):
         "airtable_submission": AirtableSubmission.objects.filter(ship=ship).first(),
         "owner": owner,
         "subject": subject,
+        "siblings": sibling_reviews(ship),
+        "journal_stats": journal_stats(journals),
         "preflight": preflight_checks(ship, subject, owner),
         **review_context(request, "t3", ship, claimable=ship.status == Ship.ShipStatus.T3_QUEUE),
     })

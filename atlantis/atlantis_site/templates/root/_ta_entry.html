@@ -1,0 +1,208 @@
+{% comment %}
+One lapse, as one snap-height section: a header that collapses it, footage on
+the left, and on the right the journal entry that claims the time. Unreviewed
+lapses open with their editor; already-signed-off ones start collapsed and
+read-only, their recorded cuts drawn on the same timeline, so a reviewer
+deciding lapse seven can see what was ruled on lapse three.
+
+expects: lapse, index, editable, last; and from the page: description_max_length,
+removal_reasons
+{% endcomment %}
+<section class="ta-entry{% if not editable %} ta-entry-done{% endif %}"
+         data-entry data-entry-id="{{ lapse.id }}"
+         data-last="{{ last|yesno:'1,0' }}"
+         data-open="{{ editable|yesno:'1,0' }}">
+
+    <button type="button" class="ta-entry-head" data-entry-toggle aria-expanded="{{ editable|yesno:'true,false' }}">
+        <span class="ta-chevron" aria-hidden="true"></span>
+        {% if owner.avatar %}<img src="{{ owner.avatar }}" alt="" class="ta-avatar">{% endif %}
+        <span class="ta-entry-name">Entry {{ index }}</span>
+        <span class="ta-entry-date">{{ lapse.created_at|date:"M j, Y" }}</span>
+        <span class="ta-entry-clock">
+            <span class="ta-ico" aria-hidden="true">&#9201;</span>
+            <span data-entry-time>{{ lapse.tracked_label }}</span>
+        </span>
+        <span class="ta-entry-meta">&middot; {{ lapse.lookout_count }} recording{{ lapse.lookout_count|pluralize }}</span>
+        <span class="ta-entry-title">{{ lapse.title }}</span>
+        {% if editable %}
+            <span class="ta-badge ta-badge-done" data-entry-done hidden>Done</span>
+        {% else %}
+            <span class="ta-badge ta-badge-quiet">Signed off {{ lapse.timelapse_review.reviewed_at|date:"M j" }} &middot; {{ lapse.reviewer_name }}</span>
+        {% endif %}
+        {% if lapse.ship_id %}
+            <span class="ta-badge ta-badge-warn">On ship #{{ lapse.ship_id }}</span>
+        {% else %}
+            <span class="ta-badge ta-badge-quiet">Not shipped yet</span>
+        {% endif %}
+    </button>
+
+    <div class="ta-entry-body">
+        {# ---------------------------------------------------- left: footage #}
+        <div class="ta-recordings">
+            {% for session in lapse.timelapses.all %}
+                <div class="ta-rec" data-recording data-recording-id="{{ session.id }}">
+                    <div class="ta-video-wrap">
+                        <video class="ta-video" src="{{ session.video_url }}" poster="{{ session.thumbnail_url }}"
+                               controls preload="none" playsinline muted></video>
+                    </div>
+
+                    <div class="ta-rec-info">
+                        <span class="ta-rec-name">Lookout {{ forloop.counter }}</span>
+                        <span class="ta-badge ta-badge-lookout">Lookout</span>
+                        {% if session.activity_checked and session.inactive_percentage %}
+                            <span class="ta-badge {% if session.inactive_percentage > 30 %}ta-badge-bad{% else %}ta-badge-quiet{% endif %}"
+                                  title="{{ session.inactive_display }} of tracked time shows no change on screen">
+                                <span class="ta-ico" aria-hidden="true">&#9888;</span>{{ session.inactive_percentage|floatformat:0 }}% inactive
+                            </span>
+                        {% elif not session.activity_checked %}
+                            <span class="ta-badge ta-badge-quiet" title="The inactivity checker hasn't run over this video yet">not analysed</span>
+                        {% endif %}
+                        <span class="ta-rec-spacer"></span>
+                        <span class="ta-rec-duration">
+                            {{ session.tracked_display }}
+                            <span class="ta-rec-video-len">({{ session.video_duration_display }} video &middot; {{ session.screenshot_count }} shot{{ session.screenshot_count|pluralize }})</span>
+                        </span>
+                    </div>
+
+                    {# The timeline, both bars, drawn by lookout_review.js. #}
+                    <div class="ta-timeline-row">
+                        <div class="ta-timeline" data-timeline tabindex="0" role="slider"
+                             aria-label="Lookout {{ forloop.counter }} timeline"
+                             aria-valuemin="0" aria-valuemax="{{ session.video_seconds }}" aria-valuenow="0">
+                            <div class="ta-track ta-track-main" data-track-main>
+                                <div class="ta-preview" data-preview hidden></div>
+                            </div>
+                            <div class="ta-track ta-track-activity{% if session.activity_checked %} is-checked{% endif %}" data-track-activity></div>
+                            <div class="ta-cursor" data-cursor></div>
+                        </div>
+                        <div class="ta-legend" data-legend></div>
+                    </div>
+
+                    {% if editable %}
+                        <div class="ta-editor" data-editor>
+                            <div class="ta-editor-summary">
+                                <span>Approved: <strong data-rec-approved>{{ session.tracked_display }}</strong></span>
+                                <span class="is-no" data-rec-removed hidden></span>
+                            </div>
+
+                            <div class="ta-segments" data-segments></div>
+
+                            <div class="ta-editor-actions" data-add-row>
+                                <button type="button" class="rv-btn rv-btn-sm" data-open-add>
+                                    <svg class="ta-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="8" y1="12" x2="16" y2="12"/></svg>Remove Time
+                                </button>
+                                <button type="button" class="rv-btn rv-btn-sm" data-cut-here>Cut from here</button>
+                            </div>
+
+                            <div class="ta-add" data-add-form hidden>
+                                <p class="ta-add-title">Remove time range</p>
+                                <div class="ta-add-range">
+                                    <label>
+                                        <span>Start (min)</span>
+                                        <span class="ta-add-input">
+                                            <input type="number" min="0" max="{{ session.video_seconds }}" step="1" data-add-start value="0">
+                                            <button type="button" class="ta-crosshair" data-set-start title="Set to the player's current position"><svg class="ta-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg></button>
+                                        </span>
+                                    </label>
+                                    <span class="ta-add-dash">&ndash;</span>
+                                    <label>
+                                        <span>End (min)</span>
+                                        <span class="ta-add-input">
+                                            <input type="number" min="0" max="{{ session.video_seconds }}" step="1" data-add-end value="{{ session.video_seconds }}">
+                                            <button type="button" class="ta-crosshair" data-set-end title="Set to the player's current position"><svg class="ta-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg></button>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div class="ta-add-reason">
+                                    <input type="text" data-add-reason maxlength="{{ reason_max_length }}" placeholder="Reason&hellip;" autocomplete="off">
+                                    <details class="ta-presets">
+                                        <summary title="Common reasons">&#10022;</summary>
+                                        <ul>
+                                            {% for reason in removal_reasons %}
+                                                <li><button type="button" data-preset="{{ reason }}">{{ reason }}</button></li>
+                                            {% endfor %}
+                                        </ul>
+                                    </details>
+                                </div>
+                                <p class="ta-add-error is-no" data-add-error hidden></p>
+                                <div class="ta-add-actions">
+                                    <button type="button" class="rv-btn rv-btn-primary rv-btn-sm" data-add-confirm>Add</button>
+                                    <button type="button" class="rv-btn rv-btn-ghost rv-btn-sm" data-add-cancel>Cancel</button>
+                                </div>
+                            </div>
+
+                            <div class="ta-describe">
+                                <textarea data-description rows="2" maxlength="{{ description_max_length }}"
+                                          placeholder="1&ndash;2 line summary for downstream reviewers"></textarea>
+                                <button type="button" class="ta-save" data-save-recording>
+                                    <span class="ta-save-label" data-save-label>Save</span>
+                                    <kbd>&#8679;&crarr;</kbd>
+                                </button>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="ta-editor ta-editor-readonly">
+                            <div class="ta-editor-summary">
+                                <span>Approved: <strong>{{ session.review_approved_display }}</strong></span>
+                                {% if session.review_removed_seconds %}
+                                    <span class="is-no">&minus;{{ session.review_removed_display }} removed</span>
+                                {% endif %}
+                            </div>
+                            {% if session.review_removals %}
+                                <div class="ta-segments">
+                                    {% for removal in session.review_removals %}
+                                        <div class="ta-segment">
+                                            <span class="ta-segment-type">Removed</span>
+                                            <span class="ta-segment-range">{{ removal.video_range_display }}</span>
+                                            <span class="ta-segment-reason">{{ removal.reason }}</span>
+                                            <span class="ta-segment-cost">&minus;{{ removal.duration_display }}</span>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            {% if session.review_description %}
+                                <p class="ta-readonly-note">{{ session.review_description }}</p>
+                            {% else %}
+                                <p class="ta-readonly-note is-quiet">No description was recorded for this Lookout.</p>
+                            {% endif %}
+                        </div>
+                    {% endif %}
+                </div>
+            {% empty %}
+                <p class="ta-empty">No Lookout on this lapse &mdash; nothing to watch, and no time to remove.</p>
+            {% endfor %}
+        </div>
+
+        <div class="ta-gutter" role="presentation"></div>
+
+        {# --------------------------------------------------- right: journal #}
+        <div class="ta-journal">
+            <h3 class="ta-journal-title">{{ lapse.title }}</h3>
+            <p class="ta-journal-meta">
+                {{ lapse.created_at|date:"M j, Y, g:i a" }} &middot;
+                {{ lapse.tracked_label }} tracked
+                {% if not editable and lapse.timelapse_review.removed_seconds %}
+                    &middot; <span class="is-no">&minus;{{ lapse.timelapse_review.removed_display }}</span>
+                    &middot; <strong>{{ lapse.approved_display }} approved</strong>
+                {% endif %}
+            </p>
+            {% if not editable and lapse.timelapse_review.internal_notes %}
+                <p class="ta-journal-note"><span class="ta-field-label">Notes on the pass</span>{{ lapse.timelapse_review.internal_notes }}</p>
+            {% endif %}
+            {% if lapse.image_url %}
+                <a href="{{ lapse.image_display_url }}" target="_blank" rel="noreferrer noopener">
+                    <img src="{{ lapse.image_display_url }}" alt="{{ lapse.title }}" class="ta-journal-image" loading="lazy">
+                </a>
+            {% endif %}
+            {% if lapse.model_url %}
+                <div class="stl-viewer ta-journal-stl" data-stl-url="{{ lapse.model_display_url }}"></div>
+                <p class="ta-journal-meta">
+                    <a href="{{ lapse.model_display_url }}" target="_blank" rel="noreferrer noopener">Download the model</a>
+                </p>
+            {% endif %}
+            {% if not lapse.image_url and not lapse.model_url %}
+                <p class="ta-empty">No image or model on this entry.</p>
+            {% endif %}
+        </div>
+    </div>
+</section>

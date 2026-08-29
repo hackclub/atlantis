@@ -5,21 +5,26 @@
 {% block title %}T3 &middot; {{ ship.project.title }}{% endblock %}
 
 {% block subject_title %}{{ ship.project.title }}{% endblock %}
-{% block subject_byline %}@{{ owner.name }} &middot; {{ total_time }} min net &middot; waiting {{ age_display }}{% endblock %}
+{% block subject_byline %}by <a href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener">{{ owner.name }}</a> &middot; {{ total_time }} min net{% endblock %}
 
 {% block topbar_actions %}
-    <a class="rv-btn" href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener" data-key="u">Owner<kbd>U</kbd></a>
+    <a class="rv-btn" href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener" data-key="u">See User<kbd>U</kbd></a>
     {% if ship.project.printablesUrl %}
         <a class="rv-btn" href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer noopener" data-key="p">Printables<kbd>P</kbd></a>
+        <button type="button" class="rv-btn" data-copy="{{ ship.project.printablesUrl }}" data-key="c">Copy<kbd>C</kbd></button>
     {% endif %}
+    {% if ship.project.editor_model_url %}
+        <a class="rv-btn" href="{{ ship.project.editor_model_display_url }}" target="_blank" rel="noreferrer noopener" data-key="m">Model<kbd>M</kbd></a>
+    {% endif %}
+    <button type="button" class="rv-btn" data-key="n" data-toggle-notes>Notes<kbd>N</kbd></button>
 {% endblock %}
 
 {% block shortcut_rows %}
-    <dt><kbd>A</kbd></dt><dd>Approve &mdash; finalizes, pays pearls, sends the record to HQ</dd>
-    <dt><kbd>R</kbd></dt><dd>Return to T1</dd>
-    <dt><kbd>T</kbd></dt><dd>Return to T2</dd>
-    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Approve, from inside a text box</dd>
-    <dt><kbd>I</kbd></dt><dd>Jump to Internal notes</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>P</kbd></dt><dd>Approve &mdash; finalizes, pays pearls, sends the record to HQ</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>E</kbd></dt><dd>Return to T1</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>T</kbd></dt><dd>Return to T2</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Submit the current draft</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>J</kbd></dt><dd>Focus Internal notes</dd>
     <dt><kbd>U</kbd></dt><dd>Open the owner's profile</dd>
     <dt><kbd>P</kbd></dt><dd>Open the Printables listing</dd>
     <dt><kbd>M</kbd></dt><dd>Open the editor model</dd>
@@ -28,6 +33,8 @@
 
 {% block evidence %}
     {% include "root/_rv_overview.html" with show_lock=True %}
+    {% include "root/_rv_checks.html" %}
+    {% include "root/_rv_history.html" %}
 
     {% comment %}
     The exact text that goes to Airtable's override-hours justification, which
@@ -75,14 +82,13 @@
     </details>
 
     {% include "root/_rv_journals.html" with journal_empty="No journal entries. Go punish the people that reviewed this before u gng" %}
-    {% include "root/_rv_history.html" %}
 {% endblock %}
 
 {% block decision %}
 <form class="rv-form" method="POST"
       action="{% url 't3_decision' ship.id %}{% if skip_value %}?skip={{ skip_value }}{% endif %}">
     {% csrf_token %}
-    <h2 class="rv-form-title">T3 decision</h2>
+    <h2 class="rv-form-title">Submit Review</h2>
     <p class="rv-form-note">Approving is the end of the line: the ship is finalized, the
         pearls are paid, and the record goes to HQ. It can't be undone from here.</p>
 
@@ -92,11 +98,9 @@
         <div class="rv-ledger-total"><dt>Net</dt><dd>{{ total_time }} min</dd></div>
     </dl>
 
-    {% include "root/_rv_checks.html" %}
-
     <label class="rv-field">
-        <span class="rv-field-label">Internal notes <em>reviewers only</em><kbd>I</kbd></span>
-        <textarea name="internal_notes" id="rv-internal" data-focus="i" rows="3" maxlength="1000" required
+        <span class="rv-field-label">Internal notes <em>(not shown to user)</em><kbd>&#8984;J</kbd></span>
+        <textarea name="internal_notes" id="rv-internal" data-mod-focus="j" rows="4" maxlength="1000" required
                   placeholder="Why this is being finalized, returned, or paid at this rate."></textarea>
         <span class="rv-counter" data-counter-for="rv-internal" data-max="1000"></span>
     </label>
@@ -136,18 +140,18 @@
 
     <div class="rv-verdicts rv-verdicts-three">
         <button type="submit" name="decision" value="A" class="rv-verdict rv-verdict-good"
-                data-key="a" data-primary
+                data-mod-key="p" data-primary
                 data-confirm="Finalize this ship? The pearls are paid and the record goes to HQ. This can't be undone."
                 {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
-            Approve<kbd>A</kbd>
+            Approve<kbd>&#8984;P</kbd>
         </button>
         <button type="submit" name="decision" value="T2" class="rv-verdict rv-verdict-warn"
-                data-key="t" {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
-            To T2<kbd>T</kbd>
+                data-mod-key="t" {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            To T2<kbd>&#8984;T</kbd>
         </button>
         <button type="submit" name="decision" value="T1" class="rv-verdict rv-verdict-warn"
-                data-key="r" {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
-            To T1<kbd>R</kbd>
+                data-mod-key="e" {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            To T1<kbd>&#8984;E</kbd>
         </button>
     </div>
     {% if ship.project.locked %}

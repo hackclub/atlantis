@@ -1,19 +1,32 @@
 {% comment %}
-The build, in reverse order, with each entry's time accounted for on the entry
-itself. Lookout footage is embedded rather than linked: `preload="none"` means
-nothing but the poster frame loads until the reviewer presses play, so checking
-a lapse costs a click instead of a tab.
+The build, newest first, in Fallout's shape: a card whose collapsed summary is
+the shape of the log (how many entries, how long, how evenly), and whose body
+is one row per entry with its footage summarised beside it.
 
-expects: timeline, subject; optional: journal_empty
+Summarised, not embedded. A Lookout reviewer has already watched every one of
+these and written down what it showed; a T1/T2/T3 reviewer reading the journal
+wants that sentence, not an hour of video and the job of forming their own
+opinion of it. The link is still there for the times the sentence isn't enough.
+
+The `review_*` fields on each journal and session are the same tracked /
+removed / approved numbers their model properties expose, computed once by
+queue.annotate_recordings() instead of aggregating on every read — see there
+for why that matters on a page shaped like this one.
+
+expects: timeline, journal_stats, and journals from annotate_recordings();
+optional: journal_empty
 {% endcomment %}
 <details class="rv-card" data-card="journals" open>
     <summary>
         <span class="rv-card-title">Journal</span>
         <span class="rv-card-summary">
-            {{ subject.journals }} entr{{ subject.journals|pluralize:"y,ies" }} &middot;
-            {{ subject.approved_display }} approved
-            {% if subject.removed %}&middot; <span class="is-no">&minus;{{ subject.removed_display }} cut</span>{% endif %}
-            &middot; {{ subject.lookouts }} Lookout{{ subject.lookouts|pluralize }}
+            {% if journal_stats.count %}
+                Count: {{ journal_stats.count }} | Total: {{ journal_stats.total_display }} |
+                Avg: {{ journal_stats.average_display }} |
+                Range: {{ journal_stats.low_display }} &ndash; {{ journal_stats.high_display }}
+            {% else %}
+                nothing logged
+            {% endif %}
         </span>
         <span class="rv-card-key"></span>
     </summary>
@@ -29,49 +42,63 @@ expects: timeline, subject; optional: journal_empty
             {% else %}
                 <article class="rv-entry">
                     <header class="rv-entry-head">
-                        <h3>{{ event.journal.title }}</h3>
-                        <span class="rv-entry-meta">
-                            {{ event.journal.created_at|date:"M j, Y" }} &middot;
-                            {{ event.journal.tracked_display }} tracked
-                            {% if event.journal.removed_seconds %}
-                                &middot; <span class="is-no">&minus;{{ event.journal.removed_display }}</span>
-                                &middot; <strong>{{ event.journal.approved_display }} approved</strong>
-                            {% elif not event.journal.timelapse_reviewed %}
-                                &middot; <span class="is-no">lapse review pending</span>
+                        <span class="rv-entry-byline">
+                            {% if owner.avatar %}<img src="{{ owner.avatar }}" alt="" class="rv-avatar-sm">{% endif %}
+                            <span>{{ owner.name }}</span>
+                            <span class="rv-fact-sep">|</span>
+                            <span>{{ event.journal.created_at|date:"M j, Y" }}</span>
+                            <span class="rv-fact-sep">|</span>
+                            <span class="rv-entry-clock">
+                                {{ event.journal.review_tracked_display }}
+                                {% if event.journal.review_removed_seconds %}
+                                    <span class="is-no">&rarr; {{ event.journal.review_approved_display }}</span>
+                                {% endif %}
+                            </span>
+                            {% if event.journal.ship_id != ship.id %}
+                                <span class="rv-chip rv-chip-warn">Not part of this ship</span>
+                            {% endif %}
+                            {% if not event.journal.timelapse_reviewed %}
+                                <span class="rv-chip rv-chip-bad">lapse review pending</span>
                             {% endif %}
                         </span>
+                        <h3>{{ event.journal.title }}</h3>
                     </header>
 
-                    <div class="rv-entry-media">
-                        {% if event.journal.image_url %}
-                            <a href="{{ event.journal.image_display_url }}" target="_blank" rel="noreferrer noopener">
-                                <img src="{{ event.journal.image_display_url }}" alt="{{ event.journal.title }}" class="rv-entry-image" loading="lazy">
-                            </a>
-                        {% endif %}
-                        {% if event.journal.model_url %}
-                            <div class="stl-viewer rv-entry-stl" data-stl-url="{{ event.journal.model_display_url }}"></div>
-                        {% endif %}
-                    </div>
+                    {% if event.journal.timelapses.all %}
+                        <div class="rv-rec-grid">
+                            {% for session in event.journal.timelapses.all %}
+                                <div class="rv-rec">
+                                    <p class="rv-rec-head">
+                                        <span class="ta-badge ta-badge-lookout">Lookout</span>
+                                        <span class="rv-rec-time">{{ session.tracked_display }}</span>
+                                        {% if session.review_removed_seconds %}
+                                            <span class="is-no">&rarr; {{ session.review_approved_display }}</span>
+                                        {% endif %}
+                                        <a class="rv-rec-open" href="{{ session.video_url }}" target="_blank" rel="noreferrer noopener">watch</a>
+                                    </p>
+                                    {% if session.review_description %}
+                                        <p class="rv-rec-note">{{ session.review_description }}</p>
+                                    {% else %}
+                                        <p class="rv-rec-note is-quiet">No description from Lookout review.</p>
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="rv-lapse-empty is-no">No timelapse attached &mdash; no verifiable time.</p>
+                    {% endif %}
 
-                    <div class="rv-lapses">
-                        {% for timelapse in event.journal.timelapses.all %}
-                            <figure class="rv-lapse">
-                                <video src="{{ timelapse.video_url }}" poster="{{ timelapse.thumbnail_url }}" controls preload="none"></video>
-                                <figcaption>
-                                    {{ timelapse.tracked_display }} tracked
-                                    {% if timelapse.removed_seconds %}&middot; <span class="is-no">&minus;{{ timelapse.removed_display }}</span>{% endif %}
-                                    &middot; <a href="{{ timelapse.video_url }}" target="_blank" rel="noreferrer noopener">open</a>
-                                </figcaption>
-                            </figure>
-                        {% empty %}
-                            <p class="rv-lapse-empty is-no">No timelapse attached &mdash; no verifiable time.</p>
-                        {% endfor %}
-                    </div>
-
-                    {% if event.journal.model_url %}
-                        <p class="rv-entry-foot">
-                            <a href="{{ event.journal.model_display_url }}" target="_blank" rel="noreferrer noopener">Download STL</a>
-                        </p>
+                    {% if event.journal.image_url or event.journal.model_url %}
+                        <div class="rv-entry-media">
+                            {% if event.journal.image_url %}
+                                <a href="{{ event.journal.image_display_url }}" target="_blank" rel="noreferrer noopener">
+                                    <img src="{{ event.journal.image_display_url }}" alt="{{ event.journal.title }}" class="rv-entry-image" loading="lazy">
+                                </a>
+                            {% endif %}
+                            {% if event.journal.model_url %}
+                                <div class="stl-viewer rv-entry-stl" data-stl-url="{{ event.journal.model_display_url }}"></div>
+                            {% endif %}
+                        </div>
                     {% endif %}
                 </article>
             {% endif %}

@@ -113,9 +113,9 @@ is ever sent to the browser — the token only leaves the server in an `Authoriz
 
 `Optional - Override Hours Spent Justification` is the field HQ reads as the unified
 justification, so it carries the whole audit trail: the T2 reviewer's justification
-verbatim, then every Lookout on the ship, the ranges timelapse review cut out of each one,
-and the reason given for each cut. T3 reviewers see exactly that text on the fraud review
-page before they approve.
+verbatim, then every Lookout on the ship — what the timelapse reviewer said each one
+showed, the ranges they cut out of it, and the reason given for each cut. T3 reviewers see
+exactly that text on the fraud review page before they approve.
 
 submissions are once-per-ship — the `AirtableSubmission` row is claimed in the database
 before the request goes out, so a retried finalization cannot make a second record. one
@@ -129,6 +129,29 @@ a submission whose request went out but never came back is *not* retried automat
 that's the one case where retrying would duplicate a record. the command names those so
 somebody can check the table by hand, and `/admin` lets an organizer resolve one by pasting
 the record id in or setting the status back to failed.
+
+### inactivity detection (ffmpeg)
+
+the Lookout review page draws a second track under each recording's timeline showing the
+stretches where nothing on screen changed — the screen somebody walked away from, the
+tutorial left playing, the half hour of an idle editor. it's advisory: it never removes
+time by itself, it only says where to look, and every deduction is still a range a
+reviewer drew with a reason attached.
+
+it's one ffmpeg pass per video (sample at 1fps, subtract consecutive frames, ask
+`blackframe` which of the differences are black), so **ffmpeg has to be on PATH** — on
+macOS `brew install ffmpeg`, on debian `apt install ffmpeg`. run it on a timer:
+
+```
+python manage.py check_timelapse_activity            # everything not yet analysed
+python manage.py check_timelapse_activity --limit 20
+python manage.py check_timelapse_activity --project 7 --force
+```
+
+a session whose video couldn't be fetched or read is left *unchecked* rather than recorded
+as clean, so the next run picks it up again — the review page draws "not analysed" and
+"no inactivity found" differently on purpose, because they aren't the same claim. nothing
+in the review is blocked by a session that has never been analysed.
 
 ### launching server/docker
 - run `python -m venv .venv`

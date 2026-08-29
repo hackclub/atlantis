@@ -8,11 +8,18 @@
  *
  *   - anything with `data-key="x"` is clickable by pressing x,
  *   - anything with `data-focus="x"` is focusable by pressing x,
+ *   - anything with `data-mod-key="x"` is clickable by pressing Cmd/Ctrl+x,
+ *   - anything with `data-mod-focus="x"` is focusable by pressing Cmd/Ctrl+x,
  *   - the primary decision is one Cmd/Ctrl+Enter away from inside any text box,
  *   - and `?` shows the reviewer what all of that is.
  *
+ * The split is deliberate. Bare letters *open* things — the owner's profile,
+ * the Printables listing, the next item — and are safe to press by accident.
+ * Anything that writes a decision wants Cmd/Ctrl held down with it, so a
+ * verdict is never one stray keystroke away.
+ *
  * Single-letter keys never fire while the reviewer is typing (Escape gets them
- * back), and modified keys are left to the browser apart from the one we take.
+ * back); modified ones fire anywhere, because they don't collide with prose.
  *
  * Everything degrades: with JavaScript off, every shortcut here has a real
  * link or button behind it, the panels are <details> that still open, and the
@@ -103,13 +110,41 @@
         return document.querySelector('[data-focus="' + key.replace(/"/g, '') + '"]');
     }
 
+    function modTarget(key) {
+        return document.querySelector('[data-mod-key="' + key.replace(/"/g, '') + '"]:not([disabled])');
+    }
+
+    function modFocusTarget(key) {
+        return document.querySelector('[data-mod-focus="' + key.replace(/"/g, '') + '"]');
+    }
+
+    /*
+     * A decision button may name a field it can't be pressed without —
+     * "Reject" without feedback is not a decision, it's a shrug. When that
+     * field is empty the shortcut puts the cursor in it instead of firing,
+     * which is the thing the reviewer was going to have to do anyway.
+     */
+    function firePrerequisite(button) {
+        var selector = button.dataset.requires;
+        if (!selector) return false;
+        var field = document.querySelector(selector);
+        if (!field || field.value.trim()) return false;
+        field.focus();
+        toast('Write the feedback first — it goes to the shipper.', 'bad');
+        return true;
+    }
+
     function primaryButton() {
-        return document.querySelector('.rv-form [data-primary]:not([disabled])');
+        // Anywhere on the page: the reviewer shell keeps its decision in an
+        // .rv-form, the Lookout page keeps its submit in the top bar, and both
+        // mean the same thing — the one action Cmd/Ctrl+Enter performs.
+        return document.querySelector('[data-primary]:not([disabled])');
     }
 
     function submitPrimary() {
         var button = primaryButton();
         if (!button || !button.form) return false;
+        if (firePrerequisite(button)) return true;
         // requestSubmit, not submit(): it runs the form's own validation and
         // carries the button's name/value, which is what names the decision.
         button.form.requestSubmit(button);
@@ -136,6 +171,27 @@
             if (submitPrimary()) event.preventDefault();
             return;
         }
+
+        // The modified family: decisions and the fields they're written in.
+        // These fire from inside a textarea, which is where a reviewer is
+        // sitting when they finish writing and want to submit.
+        if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+            var modKey = event.key.toLowerCase();
+            var focusable = modFocusTarget(modKey);
+            if (focusable) {
+                event.preventDefault();
+                focusable.focus();
+                if (focusable.select) focusable.select();
+                return;
+            }
+            var decision = modTarget(modKey);
+            if (decision) {
+                event.preventDefault();
+                if (!firePrerequisite(decision)) decision.click();
+            }
+            return;
+        }
+
         if (event.metaKey || event.ctrlKey || event.altKey) return;
         if (dialog && dialog.open) return;
 
@@ -164,11 +220,11 @@
             return;
         }
 
-        var focusable = focusTarget(key);
-        if (focusable) {
+        var plainFocusable = focusTarget(key);
+        if (plainFocusable) {
             event.preventDefault();
-            focusable.focus();
-            if (focusable.select) focusable.select();
+            plainFocusable.focus();
+            if (plainFocusable.select) plainFocusable.select();
             return;
         }
 
@@ -226,6 +282,24 @@
             };
             field.addEventListener('input', render);
             render();
+        });
+    }
+
+    /*
+     * "Notes" is a button in the top bar and a card in the column, because the
+     * reviewer notes and the previous decisions are the same conversation and
+     * splitting them into a panel and a history would mean reading both.
+     */
+    function setupNotes() {
+        var button = document.querySelector('[data-toggle-notes]');
+        var card = document.querySelector('[data-notes]');
+        if (!button || !card) return;
+        button.addEventListener('click', function () {
+            card.open = !card.open;
+            if (!card.open) return;
+            card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            var box = card.querySelector('textarea');
+            if (box) box.focus();
         });
     }
 
@@ -396,6 +470,7 @@
         setupCards();
         setupForms();
         setupCounters();
+        setupNotes();
         setupCopy();
         setupPayout();
         setupHeartbeat();

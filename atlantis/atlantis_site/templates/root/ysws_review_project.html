@@ -5,22 +5,27 @@
 {% block title %}T2 &middot; {{ ship.project.title }}{% endblock %}
 
 {% block subject_title %}{{ ship.project.title }}{% endblock %}
-{% block subject_byline %}@{{ owner.name }} &middot; {{ subject.approved_display }} &middot; waiting {{ age_display }}{% endblock %}
+{% block subject_byline %}by <a href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener">{{ owner.name }}</a> &middot; {{ subject.approved_display }}{% endblock %}
 
 {% block topbar_actions %}
-    <a class="rv-btn" href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener" data-key="u">Owner<kbd>U</kbd></a>
+    <a class="rv-btn" href="{% url 'user_profile' owner.user.id %}" target="_blank" rel="noreferrer noopener" data-key="u">See User<kbd>U</kbd></a>
     {% if ship.project.printablesUrl %}
         <a class="rv-btn" href="{{ ship.project.printablesUrl }}" target="_blank" rel="noreferrer noopener" data-key="p">Printables<kbd>P</kbd></a>
+        <button type="button" class="rv-btn" data-copy="{{ ship.project.printablesUrl }}" data-key="c">Copy<kbd>C</kbd></button>
     {% endif %}
+    {% if ship.project.editor_model_url %}
+        <a class="rv-btn" href="{{ ship.project.editor_model_display_url }}" target="_blank" rel="noreferrer noopener" data-key="m">Model<kbd>M</kbd></a>
+    {% endif %}
+    <button type="button" class="rv-btn" data-key="n" data-toggle-notes>Notes<kbd>N</kbd></button>
 {% endblock %}
 
 {% block shortcut_rows %}
-    <dt><kbd>A</kbd></dt><dd>Approve &mdash; sends the ship to fraud review</dd>
-    <dt><kbd>R</kbd></dt><dd>Return to T1</dd>
-    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Approve, from inside a text box</dd>
-    <dt><kbd>F</kbd></dt><dd>Jump to Feedback</dd>
-    <dt><kbd>I</kbd></dt><dd>Jump to the Airtable justification</dd>
-    <dt><kbd>D</kbd></dt><dd>Jump to Deductions</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>P</kbd></dt><dd>Approve &mdash; sends the ship to fraud review</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>E</kbd></dt><dd>Return to T1 (focuses Feedback when it's empty)</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Submit the current draft</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>J</kbd></dt><dd>Focus the Airtable justification</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>F</kbd></dt><dd>Focus Feedback</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>D</kbd></dt><dd>Focus Deductions</dd>
     <dt><kbd>U</kbd></dt><dd>Open the owner's profile</dd>
     <dt><kbd>P</kbd></dt><dd>Open the Printables listing</dd>
     <dt><kbd>M</kbd></dt><dd>Open the editor model</dd>
@@ -29,32 +34,31 @@
 
 {% block evidence %}
     {% include "root/_rv_overview.html" with show_lock=True %}
-    {% include "root/_rv_journals.html" with journal_empty="No journal entries. How did this happen?" %}
+    {% include "root/_rv_checks.html" %}
     {% include "root/_rv_history.html" %}
+    {% include "root/_rv_journals.html" with journal_empty="No journal entries. How did this happen?" %}
 {% endblock %}
 
 {% block decision %}
 <form class="rv-form" method="POST"
       action="{% url 't2_decision' ship.id %}{% if skip_value %}?skip={{ skip_value }}{% endif %}">
     {% csrf_token %}
-    <h2 class="rv-form-title">T2 decision</h2>
+    <h2 class="rv-form-title">Submit Review</h2>
     <p class="rv-form-note">Approving sends the ship to fraud review. Deductions come off
         this ship's logged time before pearls are worked out.</p>
 
-    {% include "root/_rv_checks.html" %}
-
     <label class="rv-field">
-        <span class="rv-field-label">Feedback <em>public</em><kbd>F</kbd></span>
-        <textarea name="feedback" id="rv-feedback" data-focus="f" rows="4" maxlength="1000" required
-                  placeholder="What the shipper is told about this decision."></textarea>
-        <span class="rv-counter" data-counter-for="rv-feedback" data-max="1000"></span>
+        <span class="rv-field-label">Airtable justification <em>(not shown to user)</em><kbd>&#8984;J</kbd></span>
+        <textarea name="justification" id="rv-internal" data-mod-focus="j" rows="4" maxlength="1000"
+                  placeholder="Why the hours sent to HQ are what they are."></textarea>
+        <span class="rv-counter" data-counter-for="rv-internal" data-max="1000"></span>
     </label>
 
     <label class="rv-field">
-        <span class="rv-field-label">Airtable justification <em>private</em><kbd>I</kbd></span>
-        <textarea name="justification" id="rv-internal" data-focus="i" rows="3" maxlength="1000"
-                  placeholder="Why the hours sent to HQ are what they are."></textarea>
-        <span class="rv-counter" data-counter-for="rv-internal" data-max="1000"></span>
+        <span class="rv-field-label">Feedback <em>(shown to user)</em><kbd>&#8984;F</kbd></span>
+        <textarea name="feedback" id="rv-feedback" data-mod-focus="f" rows="4" maxlength="1000" required
+                  placeholder="What the shipper is told about this decision."></textarea>
+        <span class="rv-counter" data-counter-for="rv-feedback" data-max="1000"></span>
     </label>
 
     {% comment %}
@@ -63,8 +67,8 @@
     an over-large deduction anyway.
     {% endcomment %}
     <label class="rv-field rv-field-inline">
-        <span class="rv-field-label">Deductions <em>minutes</em><kbd>D</kbd></span>
-        <input type="number" name="deductions" id="rv-deductions" data-focus="d" min="0" step="1" placeholder="0"
+        <span class="rv-field-label">Deductions <em>minutes</em><kbd>&#8984;D</kbd></span>
+        <input type="number" name="deductions" id="rv-deductions" data-mod-focus="d" min="0" step="1" placeholder="0"
                data-payout-input>
     </label>
 
@@ -80,12 +84,13 @@
 
     <div class="rv-verdicts">
         <button type="submit" name="decision" value="A" class="rv-verdict rv-verdict-good"
-                data-key="a" data-primary {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
-            Approve<kbd>A</kbd>
+                data-mod-key="p" data-primary {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            Approve<kbd>&#8984;P</kbd>
         </button>
         <button type="submit" name="decision" value="T1" class="rv-verdict rv-verdict-warn"
-                data-key="r" {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
-            Return to T1<kbd>R</kbd>
+                data-mod-key="e" data-requires="#rv-feedback"
+                {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            Return to T1<kbd>&#8984;E</kbd>
         </button>
     </div>
     {% if ship.project.locked %}
