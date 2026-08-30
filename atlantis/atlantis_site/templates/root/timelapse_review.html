@@ -48,7 +48,7 @@
                             <td>
                                 <a class="rq-project" href="{% url 'timelapse_review_project' project.id %}">{{ project.title }}</a>
                                 <span class="rq-desc">
-                                    {{ project.lapse_count }} lapse{{ project.lapse_count|pluralize }} &middot;
+                                    {{ project.lapse_count }} journal{{ project.lapse_count|pluralize }} &middot;
                                     {{ project.lookout_count }} timelapse{{ project.lookout_count|pluralize }}
                                 </span>
                             </td>

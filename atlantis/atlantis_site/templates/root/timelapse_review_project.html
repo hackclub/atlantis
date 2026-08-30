@@ -113,12 +113,6 @@
             <div data-removal-inputs></div>
         </form>
 
-        {% comment %}
-        The sign-off panel. It is the last thing in the pass but not the last
-        thing in the column: a reviewer who wants to submit shouldn't have to
-        scroll past every entry to reach it, so Submit (and Cmd+Enter) raises
-        it over the page instead, with the notes field already focused.
-        {% endcomment %}
         <dialog class="ta-final-dialog" id="ta-final" aria-labelledby="ta-final-title">
             <div class="ta-final">
                 <h2 id="ta-final-title">Sign off {{ lapse_count }} {{ lapse_count|pluralize:"entry,entries" }}</h2>
