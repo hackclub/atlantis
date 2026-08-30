@@ -218,7 +218,6 @@ def t1_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    messages.success(request, f'Successfully reviewed project "{ship.project.title}" with approved = {approved}!')
     # Straight on to the next ship in the queue rather than back to the desk:
     # the desk is a place to start from, not somewhere to pass through between
     # every review.
@@ -338,7 +337,6 @@ def t2_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    messages.success(request, f'Successfully reviewed project "{ship.project.title}" with decision {decision} and a deduction of {deductions} minutes!')
     return go_to_next(request, "t2", parse_skip(request) + [ship.id])
 
 @staff_member_required
@@ -487,11 +485,6 @@ def t3_decision(request, ship_id):
         "airtable_error": submission.error if submission else "",
     })
 
-    outcome = (
-        f" — {payout_layers} pearls at a {payout_multiplier}x multiplier"
-        if decision == T3.Decision.APPROVE else ""
-    )
-    messages.success(request, f"Sucessfully reviewed project '{ship.project.title}' with decision {decision}{outcome}")
     if submission:
         report_submission(request, submission)
     return go_to_next(request, "t3", parse_skip(request) + [ship.id])
