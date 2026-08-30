@@ -9,12 +9,6 @@
     {% include "root/_messages_admin.html" %}
     {% include "root/_rv_queue_header.html" with blurb="Internal only. Shippers are never told a lapse was reviewed, how much time came off it, or why. A project can't reach T1 until every one of its lapses is signed off here — but it can still ship while it waits." %}
 
-    {% comment %}
-    One row per project, in the order "Start reviewing" walks them. The lapses
-    themselves aren't listed: a sitting covers the project's whole pass, so the
-    row a reviewer picks is the project, and the counts under its name are all
-    the queue needs to say about what's inside it.
-    {% endcomment %}
     <section class="rq-section">
         <div class="rq-section-head">
             <h2 class="rq-section-title">

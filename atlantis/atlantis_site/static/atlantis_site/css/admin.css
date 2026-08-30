@@ -598,6 +598,10 @@
     background: var(--oc-shallow);
     border: 1px solid var(--oc-line);
     box-sizing: border-box;
+    /* The canvas is sized to this box, but a viewer that mounts while its entry
+       is collapsed has nothing to measure until it opens — clip rather than let
+       a stale canvas spill over the card. */
+    overflow: hidden;
 }
 
 /* ---------- audit log ---------- */
