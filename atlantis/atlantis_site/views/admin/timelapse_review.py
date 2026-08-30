@@ -68,10 +68,6 @@ REMOVAL_REASONS = [
 # now a whole project rather than a single lapse.
 MAX_REMOVALS = 200
 
-# How many of a project's lapses the desk lists under it before it stops and
-# says how many more there are. The desk is a queue, not the review page.
-DESK_LAPSE_PREVIEW = 5
-
 
 class RemovalError(Exception):
     """A posted range we refuse to record. The message is shown to the reviewer."""
@@ -356,12 +352,12 @@ def _reviewed_lapses(project):
 @staff_member_required
 @check_perms(TIMELAPSE_REVIEW_PERMS)
 def timelapse_review_dash(request):
-    """The desk: one row per project, its waiting lapses listed underneath."""
-    projects = decorate_rows("lookout", QUEUES["lookout"].pending())
-    for project in projects:
-        project.preview_lapses = project.lapses[:DESK_LAPSE_PREVIEW]
-        project.more_lapses = project.lapse_count - len(project.preview_lapses)
+    """The desk: one row per project, counting the lapses waiting on it.
 
+    The lapses aren't listed row by row — a sitting covers the project's whole
+    pass, so the queue's job is to name the project and say how much is in it.
+    """
+    projects = decorate_rows("lookout", QUEUES["lookout"].pending())
     waiting_lapses = sum(project.lapse_count for project in projects)
     return render(request, "root/timelapse_review.html", {
         "projects": projects,

@@ -262,13 +262,6 @@ class LookoutQueueTests(BaseTestCase):
 		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
 		self.assertEqual([lapse.id for lapse in row.lapses], [first.id, second.id])
 
-	def test_the_desk_lists_a_few_lapses_and_counts_the_rest(self):
-		for day in range(8):
-			self._lapse(self.project, 8 - day)
-		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
-		self.assertEqual(len(row.preview_lapses), 5)
-		self.assertEqual(row.more_lapses, 3)
-
 	def test_an_unshipped_project_is_on_the_desk(self):
 		"""A journal has a project long before it has a ship."""
 		journal = make_journal(self.project)

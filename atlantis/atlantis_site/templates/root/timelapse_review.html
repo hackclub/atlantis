@@ -10,10 +10,10 @@
     {% include "root/_rv_queue_header.html" with blurb="Internal only. Shippers are never told a lapse was reviewed, how much time came off it, or why. A project can't reach T1 until every one of its lapses is signed off here — but it can still ship while it waits." %}
 
     {% comment %}
-    One row per project, in the order "Start reviewing" walks them, with the
-    lapses waiting on it listed underneath. Opening any of them opens the same
-    page — the project's whole pass — so the nested list is here to say what
-    the sitting involves, not to be navigated into.
+    One row per project, in the order "Start reviewing" walks them. The lapses
+    themselves aren't listed: a sitting covers the project's whole pass, so the
+    row a reviewer picks is the project, and the counts under its name are all
+    the queue needs to say about what's inside it.
     {% endcomment %}
     <section class="rq-section">
         <div class="rq-section-head">
@@ -29,7 +29,7 @@
         {% include "root/_rv_queue_summary.html" %}
 
         <div class="rq-table-wrap">
-            <table class="rq-table rq-table-grouped">
+            <table class="rq-table">
                 <thead>
                     <tr>
                         <th class="rq-col-num">#</th>
@@ -41,8 +41,8 @@
                         <th>Flags</th>
                     </tr>
                 </thead>
-                {% for project in projects %}
-                    <tbody class="rq-group">
+                <tbody>
+                    {% for project in projects %}
                         <tr class="rq-row" tabindex="0" data-href="{% url 'timelapse_review_project' project.id %}">
                             <td class="rq-col-num">{{ project.queue_index }}</td>
                             <td>
@@ -76,40 +76,10 @@
                                 {% endif %}
                             </td>
                         </tr>
-                        {% for lapse in project.preview_lapses %}
-                            <tr class="rq-subrow">
-                                <td></td>
-                                <td colspan="2">
-                                    <span class="rq-sub-title">{{ lapse.title }}</span>
-                                    <span class="rq-quiet">
-                                        {{ lapse.created_at|date:"M j" }} &middot;
-                                        {% if lapse.lookout_count %}
-                                            {{ lapse.lookout_count }} timelapse{{ lapse.lookout_count|pluralize }}
-                                        {% else %}
-                                            <span class="is-no">no footage</span>
-                                        {% endif %}
-                                    </span>
-                                </td>
-                                <td class="rq-num rq-quiet">{{ lapse.tracked_label }}</td>
-                                <td></td>
-                                <td><span class="rv-age-{{ lapse.age_bucket }}">{{ lapse.age_display }}</span></td>
-                                <td></td>
-                            </tr>
-                        {% endfor %}
-                        {% if project.more_lapses %}
-                            <tr class="rq-subrow">
-                                <td></td>
-                                <td colspan="6" class="rq-quiet">
-                                    and {{ project.more_lapses }} more lapse{{ project.more_lapses|pluralize }} on this project
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                {% empty %}
-                    <tbody>
+                    {% empty %}
                         <tr><td colspan="7" class="rq-empty">Nothing awaiting timelapse review.</td></tr>
-                    </tbody>
-                {% endfor %}
+                    {% endfor %}
+                </tbody>
             </table>
         </div>
     </section>
