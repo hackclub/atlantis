@@ -69,6 +69,19 @@ class FfmpegOutputTests(BaseTestCase):
 		total, inactive = activity.parse_output("frame=   12 fps=0.0\n")
 		self.assertEqual((total, inactive), (12, []))
 
+	def test_reads_the_length_off_the_input_header(self):
+		"""Truncated, so it agrees with the clock in the reviewer's player."""
+		log = "  Duration: 00:01:10.93, start: 0.000000, bitrate: 120 kb/s\n"
+		self.assertEqual(activity.parse_duration(log), 70)
+
+	def test_a_length_over_an_hour_is_read_whole(self):
+		log = "  Duration: 02:03:04.00, start: 0.000000\n"
+		self.assertEqual(activity.parse_duration(log), 2 * 3600 + 3 * 60 + 4)
+
+	def test_a_log_without_a_duration_reports_none_rather_than_zero(self):
+		"""Unknown is not "empty" — a zero here would wipe the timeline."""
+		self.assertIsNone(activity.parse_duration("frame=   12 fps=0.0\n"))
+
 	def test_short_runs_are_dropped(self):
 		"""One idle minute is normal; two in a row is a gap worth drawing."""
 		log = (
@@ -102,6 +115,7 @@ class ActivityStorageTests(BaseTestCase):
 			"total_frames": 61,
 			"inactive_percentage": 6.7,
 			"segments": [{"start": 10, "end": 14, "duration": 4}],
+			"video_seconds": 61,
 		}
 		with patch.object(activity, "check_session", return_value=result):
 			activity.check_and_store(self.session)
@@ -114,6 +128,23 @@ class ActivityStorageTests(BaseTestCase):
 		# Four video seconds is four recorded minutes.
 		self.assertEqual(self.session.inactive_seconds, 4)
 		self.assertEqual(self.session.inactive_display, "4:00")
+		# The pass is the only thing that ever measures the video, so what it
+		# read is what the review page draws its timeline against from here.
+		self.assertEqual(self.session.measured_video_seconds, 61)
+		self.assertEqual(self.session.video_seconds, 61)
+
+	def test_a_pass_that_could_not_read_a_length_leaves_the_estimate_alone(self):
+		for unusable in (None, 0):
+			with self.subTest(video_seconds=unusable):
+				result = {**activity.empty_result(), "video_seconds": unusable}
+				with patch.object(activity, "check_session", return_value=result):
+					activity.check_and_store(self.session)
+
+				self.session.refresh_from_db()
+				self.assertIsNone(self.session.measured_video_seconds)
+				self.assertEqual(
+					self.session.video_seconds, self.session.estimated_video_seconds
+				)
 
 	def test_a_check_that_could_not_run_leaves_the_session_unchecked(self):
 		"""Unreadable is not the same claim as clean, so nothing is written."""

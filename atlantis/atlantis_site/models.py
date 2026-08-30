@@ -608,6 +608,10 @@ class LookoutSession(models.Model):
 	# compiled video's own timeline — the one the reviewer scrubs.
 	inactive_segments = models.JSONField(default=list, blank=True)
 	activity_checked_at = models.DateTimeField(null=True, blank=True)
+	# How long the compiled video actually runs, read off the file itself by
+	# the activity check. Null until something has measured it; until then the
+	# length is estimated from what Lookout reported (see video_seconds).
+	measured_video_seconds = models.IntegerField(null=True, blank=True)
 
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
@@ -655,13 +659,36 @@ class LookoutSession(models.Model):
 		return f"{base}/api/media/{self.session_id}/thumbnail.jpg"
 
 	@property
+	def estimated_video_seconds(self):
+		"""How long the compiled video runs, going by what Lookout reported.
+
+		One confirmed screenshot is one second of output, so the shot count is
+		the length. Tracked time is not: a session can hold screenshots it was
+		never credited for — a capture Lookout refused, one taken while the
+		clock wasn't running, the bucket a session opens with — and every one
+		of those is still a frame in the video. Deriving the length from
+		tracked time alone made the page claim a video shorter than the one
+		the reviewer was watching, which put the tail of it out of reach.
+
+		The tracked-derived figure stays on as a floor, for a session whose
+		shot count never synced.
+		"""
+		return max(
+			self.screenshot_count or 0,
+			tracked_to_video(self.tracked_seconds or 0),
+		)
+
+	@property
 	def video_seconds(self):
 		"""How long the compiled video runs, in its own sped-up timeline.
 
 		This is the timeline a timelapse reviewer's ranges are read in — see
-		TRACKED_SECONDS_PER_VIDEO_SECOND.
+		TRACKED_SECONDS_PER_VIDEO_SECOND. Measured off the video where the
+		activity check has been over it, estimated where it hasn't.
 		"""
-		return tracked_to_video(self.tracked_seconds or 0)
+		if self.measured_video_seconds is not None:
+			return self.measured_video_seconds
+		return self.estimated_video_seconds
 
 	@property
 	def video_duration_display(self):

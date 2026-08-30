@@ -69,6 +69,8 @@ FILTER_COMPLEX = (
 
 _BLACKFRAME_RE = re.compile(r"\[Parsed_blackframe.*?\]\s*frame:(\d+)\s+pblack:(\d+)")
 _PROGRESS_RE = re.compile(r"frame=\s*(\d+)")
+# ffmpeg's own line about the input, e.g. "Duration: 00:01:10.93, start: ...".
+_DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d{2}):(\d{2})(?:\.(\d+))?")
 
 
 class ActivityCheckError(Exception):
@@ -81,6 +83,7 @@ def empty_result():
         "total_frames": 0,
         "inactive_percentage": 0.0,
         "segments": [],
+        "video_seconds": None,
     }
 
 
@@ -180,6 +183,21 @@ def parse_output(output):
     return (max(totals) if totals else 0), inactive
 
 
+def parse_duration(output):
+    """The video's length in whole seconds, off ffmpeg's own header, or None.
+
+    Truncated rather than rounded, because that is what a player's clock shows
+    and the review page is read against the player: a 70.9-second video ends at
+    1:10 there, and a page that called it 1:11 would be wrong in the direction
+    of offering a reviewer a second that isn't in the footage.
+    """
+    match = _DURATION_RE.search(output)
+    if not match:
+        return None
+    hours, minutes, seconds, _ = match.groups()
+    return int(hours) * 3600 + int(minutes) * 60 + int(seconds)
+
+
 def collapse_into_segments(indices):
     """Runs of consecutive frame indices, as {start, end, duration} seconds.
 
@@ -213,9 +231,14 @@ def analyse_file(path):
     if output is None:
         return empty_result()
 
+    # The length is worth having even off a pass that found nothing to say
+    # about activity: it is the only measurement anyone takes of the compiled
+    # video, and the review page draws its timeline against it.
+    duration = parse_duration(output)
+
     total_frames, inactive = parse_output(output)
     if total_frames < 1:
-        return empty_result()
+        return {**empty_result(), "video_seconds": duration}
 
     segments = [
         segment for segment in collapse_into_segments(inactive)
@@ -228,6 +251,7 @@ def analyse_file(path):
         "total_frames": total_frames + 1,
         "inactive_percentage": round(inactive_frames / total_frames * 100, 1),
         "segments": segments,
+        "video_seconds": duration,
     }
 
 
@@ -265,11 +289,18 @@ def check_and_store(session):
     session.inactive_percentage = result["inactive_percentage"]
     session.inactive_segments = result["segments"]
     session.activity_checked_at = timezone.now()
+    # Only ever an improvement on the estimate: a pass that couldn't read a
+    # length, or read one no compiled lapse has, leaves the session's own
+    # alone rather than replacing a workable guess with nothing.
+    measured = result.get("video_seconds")
+    if measured is not None and int(measured) >= 1:
+        session.measured_video_seconds = int(measured)
     session.save(update_fields=[
         "inactive_frame_count",
         "inactive_percentage",
         "inactive_segments",
         "activity_checked_at",
+        "measured_video_seconds",
         "updated_at",
     ])
     return result

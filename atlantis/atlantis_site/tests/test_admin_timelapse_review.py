@@ -84,6 +84,46 @@ class TimecodeTests(BaseTestCase):
 		self.assertEqual(first_overlap([(30, 60), (0, 40)]), (30, 60))
 
 
+class VideoLengthTests(BaseTestCase):
+	"""How long the page says a compiled video runs.
+
+	The reviewer reads this against the clock in the player, so anything it
+	claims that the player contradicts is a bug — and a length short of the
+	real one also puts the tail of the footage out of reach of a cut.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.project = make_project(make_user("author"), shippable=True)
+
+	def test_length_comes_from_the_screenshots_not_the_credited_time(self):
+		"""One shot is one second of video, credited or not."""
+		session = make_timelapse(self.project, minutes=65, screenshot_count=71)
+		self.assertEqual(session.video_seconds, 71)
+		self.assertEqual(session.video_duration_display, "1:11")
+
+	def test_a_session_whose_count_never_synced_falls_back_to_tracked_time(self):
+		session = make_timelapse(self.project, minutes=65, screenshot_count=0)
+		self.assertEqual(session.video_seconds, 65)
+
+	def test_a_measured_length_beats_both_estimates(self):
+		"""Once something has read the file, the estimate stops being used."""
+		session = make_timelapse(self.project, minutes=65, screenshot_count=71)
+		session.measured_video_seconds = 70
+		session.save(update_fields=["measured_video_seconds"])
+
+		self.assertEqual(session.video_seconds, 70)
+		self.assertEqual(session.video_duration_display, "1:10")
+
+	def test_a_shorter_measurement_is_still_the_one_that_counts(self):
+		"""The file is the authority, even when it undercuts both estimates."""
+		session = make_timelapse(self.project, minutes=65, screenshot_count=71)
+		session.measured_video_seconds = 12
+		session.save(update_fields=["measured_video_seconds"])
+
+		self.assertEqual(session.video_seconds, 12)
+
+
 class TimelapseReviewAccessControlTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()
@@ -559,6 +599,30 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 	def test_whole_lookout_may_be_removed(self):
 		self._post([(self.session, "0:00", "1:00", "screen recording of someone else")])
 		self.assertEqual(self.journal.approved_seconds, 0)
+
+	def test_a_cut_may_reach_the_end_of_footage_lookout_never_credited(self):
+		"""The video is as long as the screenshots, not as the credited time.
+
+		A session can hold shots it was never credited for, and every one of
+		them is still a second of footage. Working the length out from tracked
+		time alone put the tail of the video past the end of the timeline, and
+		a cut a reviewer could see was refused as running past the end.
+		"""
+		journal = make_journal(self.project, time_spent=0)
+		session = make_timelapse(self.project, journal=journal, minutes=65)
+		session.screenshot_count = 71
+		session.save(update_fields=["screenshot_count"])
+
+		self.assertEqual(session.video_seconds, 71)
+		self._post([(session, "1:00", "1:10", "screensaver")])
+
+		removal = TimelapseRemoval.objects.get()
+		self.assertEqual(removal.start_seconds, 60 * 60)
+		# Nothing past the credited time comes off the shipper, though: the end
+		# is clamped, so ten seconds of footage costs the five minutes that are
+		# left rather than the ten it would claim.
+		self.assertEqual(removal.end_seconds, 65 * 60)
+		self.assertEqual(removal.duration_seconds, 5 * 60)
 
 	def test_the_last_second_of_video_cannot_remove_untracked_time(self):
 		"""A session's tracked time is whole minutes minus its first bucket.

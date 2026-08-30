@@ -148,6 +148,11 @@ python manage.py check_timelapse_activity --limit 20
 python manage.py check_timelapse_activity --project 7 --force
 ```
 
+the same pass also records how long the video actually runs, which is what the review
+page draws its timeline against — before anything has measured one, the length is
+estimated from the session's screenshot count (one shot is one second of footage), so
+`--force` over already-analysed sessions is worth a run to replace those estimates.
+
 a session whose video couldn't be fetched or read is left *unchecked* rather than recorded
 as clean, so the next run picks it up again — the review page draws "not analysed" and
 "no inactivity found" differently on purpose, because they aren't the same claim. nothing

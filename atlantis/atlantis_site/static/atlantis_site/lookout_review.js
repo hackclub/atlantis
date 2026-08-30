@@ -621,10 +621,52 @@
         });
     }
 
+    /*
+     * The length the page was served is an estimate: Lookout reports credited
+     * time and a screenshot count, not a duration, and neither is quite the
+     * video. So the player is asked for the real one the moment it knows it,
+     * and everything measured against the video — the timeline's scale, the
+     * far end of a cut, the length in the header — is redrawn to agree with
+     * the clock the reviewer is actually reading.
+     */
+    function applyMeasuredLength(rec, duration) {
+        if (!isFinite(duration)) return;
+        // Truncated, like the player's own clock: a video running 70.9 seconds
+        // ends at 1:10 there, and offering a cut to 1:11 would be offering a
+        // second the footage doesn't have.
+        var measured = Math.floor(duration);
+        if (measured < 1 || measured === rec.videoSeconds) return;
+        rec.videoSeconds = measured;
+
+        var length = rec.el.querySelector('[data-rec-video-len]');
+        if (length) length.textContent = formatTimecode(measured);
+
+        var timeline = rec.el.querySelector('[data-timeline]');
+        if (timeline) timeline.setAttribute('aria-valuemax', String(measured));
+        ['[data-add-start]', '[data-add-end]'].forEach(function (selector) {
+            var input = rec.el.querySelector(selector);
+            if (input) input.max = String(measured);
+        });
+
+        // The activity track is drawn once and then left alone; its bars are
+        // placed as a fraction of the length, so they have to be placed again.
+        var activity = rec.el.querySelector('[data-track-activity]');
+        if (activity) {
+            delete activity.dataset.drawn;
+            activity.innerHTML = '';
+        }
+        renderRecording(rec);
+    }
+
     function wireVideo(rec) {
         var video = rec.el.querySelector('.ta-video');
         if (!video) return;
         rec.video = video;
+        video.addEventListener('loadedmetadata', function () {
+            applyMeasuredLength(rec, video.duration);
+        });
+        // Metadata a cached player already had, which fires no event.
+        if (video.readyState >= 1) applyMeasuredLength(rec, video.duration);
         var frame = 0;
         function tick() {
             if (Math.abs(video.currentTime - rec.currentTime) > 0.02) {

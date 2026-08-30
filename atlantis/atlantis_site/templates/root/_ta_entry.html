@@ -42,8 +42,11 @@ removal_reasons
             {% for session in lapse.timelapses.all %}
                 <div class="ta-rec" data-recording data-recording-id="{{ session.id }}">
                     <div class="ta-video-wrap">
+                        {# preload="metadata": the page's timeline is drawn against the
+                           video's length, and the player is the only thing that knows it
+                           exactly. Everything before the metadata lands is an estimate. #}
                         <video class="ta-video" src="{{ session.video_url }}" poster="{{ session.thumbnail_url }}"
-                               controls preload="none" playsinline muted></video>
+                               controls preload="metadata" playsinline muted></video>
                     </div>
 
                     <div class="ta-rec-info">
@@ -60,7 +63,7 @@ removal_reasons
                         <span class="ta-rec-spacer"></span>
                         <span class="ta-rec-duration">
                             {{ session.tracked_display }}
-                            <span class="ta-rec-video-len">({{ session.video_duration_display }} video &middot; {{ session.screenshot_count }} shot{{ session.screenshot_count|pluralize }})</span>
+                            <span class="ta-rec-video-len">(<span data-rec-video-len>{{ session.video_duration_display }}</span> video &middot; {{ session.screenshot_count }} shot{{ session.screenshot_count|pluralize }})</span>
                         </span>
                     </div>
 
