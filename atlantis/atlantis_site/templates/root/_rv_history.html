@@ -1,15 +1,3 @@
-{% comment %}
-Previous reviews and reviewer notes, in Fallout's shape: the collapsed summary
-is a row of verdict badges, so a ship that has been round the loop says so
-before it is opened, and the body is one block per decision with the feedback
-and the internal reason under it.
-
-Open by default when there is anything in it. A ship that has been round the
-loop before is exactly the one where the last reviewer's reasoning matters,
-and a reviewer should not have to go looking for it.
-
-expects: ship, review_history
-{% endcomment %}
 <details class="rv-card" data-card="history" data-notes {% if review_history %}open{% endif %}>
     <summary>
         <span class="rv-card-title">Previous Reviews</span>

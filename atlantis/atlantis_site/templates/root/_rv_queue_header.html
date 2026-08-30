@@ -1,14 +1,3 @@
-{% comment %}
-The head of a desk, in Fallout's shape: a plain title over a row of stat cards.
-No panel around it — the cards are the header, and a box around a box reads as
-chrome rather than as information.
-
-Each card is one number and the direction it has moved in three days. A number
-without a direction is a fact you can't act on: 4.1d means nothing until you
-know it was 5.2d on Tuesday.
-
-expects: queue_label, queue_short, stat_cards; optional: blurb
-{% endcomment %}
 <header class="rq-header">
     <h1 class="rq-title">
         <span class="rv-queue-tag rv-accent-{{ queue_accent }}">{{ queue_short }}</span>

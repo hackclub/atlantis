@@ -1,14 +1,3 @@
-{% comment %}
-The shape of the queue, on one line: how big it is, how long its oldest item
-has waited, how much of it is past the SLA, and how much of it you have
-cleared today.
-
-A line rather than the four cards this used to be. The cards above are the
-metrics a desk is judged on over days; these are facts about the list directly
-below, and they belong next to it.
-
-expects: queue_stats
-{% endcomment %}
 <p class="rq-summary">
     {% for stat in queue_stats %}
         <span class="rq-summary-item{% if stat.tone %} rq-summary-{{ stat.tone }}{% endif %}">

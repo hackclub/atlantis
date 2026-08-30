@@ -1,31 +1,6 @@
 {% extends 'root/_base_root.html' %}
 {% load static %}
 
-{% comment %}
-The reviewer shell, laid out the way Fallout's build review is: one screen,
-three fixed parts, nothing that scrolls out of reach.
-
-  ┌ top bar ─────────────────────────────────────────────────┐
-  │ end session · skip │ what you're looking at │ open in tab  │
-  ├────────────────────────────────┬──────────────────────────┤
-  │ cards (scroll on their own)    │ the decision (always up) │
-  └────────────────────────────────┴──────────────────────────┘
-
-Both columns own their scrolling, so the decision panel can't be scrolled away
-from the thing it is a decision about — the single change that stops a reviewer
-paging up and down between reading and deciding.
-
-The evidence column is a stack of collapsible cards, numbered 1…9 in the order
-they appear; the rail is 320px of form. Pages extend this and fill `evidence`
-and `decision`. Everything the shell needs beyond that comes from
-queue.review_context().
-
-Keys follow Fallout's: bare letters open things (E, S, U, P, M, C, N), and
-anything that writes a decision wants Cmd/Ctrl with it (⌘P approve, ⌘E return,
-⌘J internal reason, ⌘F feedback, ⌘↵ submit whatever is primary). A decision is
-not something to reach by mistyping.
-{% endcomment %}
-
 {% block body_class %} review-shell{% endblock %}
 {% block nav %}{% endblock %}
 

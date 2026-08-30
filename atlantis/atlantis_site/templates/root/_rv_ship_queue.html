@@ -1,16 +1,3 @@
-{% comment %}
-The pending table the three ship desks share, in Fallout's shape: a section
-heading carrying the count and the one button that starts the work, then the
-queue itself.
-
-Oldest first, because that is the order the queue should be worked; the row a
-reviewer wants is the top one, and "Start reviewing" opens it for them so they
-never have to choose. Rows are whole-row links (see review.js) and walkable
-with j / k / Enter, so clearing a queue costs one keystroke per item rather
-than a hunt for the right small blue link.
-
-expects: ships, queue, queue_plural, pending_count, start_url, empty_text
-{% endcomment %}
 <section class="rq-section">
     <div class="rq-section-head">
         <h2 class="rq-section-title">

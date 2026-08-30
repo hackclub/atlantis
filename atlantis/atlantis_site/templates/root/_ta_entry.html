@@ -1,13 +1,3 @@
-{% comment %}
-One lapse, as one snap-height section: a header that collapses it, footage on
-the left, and on the right the journal entry that claims the time. Unreviewed
-lapses open with their editor; already-signed-off ones start collapsed and
-read-only, their recorded cuts drawn on the same timeline, so a reviewer
-deciding lapse seven can see what was ruled on lapse three.
-
-expects: lapse, index, editable, last; and from the page: description_max_length,
-removal_reasons
-{% endcomment %}
 <section class="ta-entry{% if not editable %} ta-entry-done{% endif %}"
          data-entry data-entry-id="{{ lapse.id }}"
          data-last="{{ last|yesno:'1,0' }}"
@@ -37,14 +27,10 @@ removal_reasons
     </button>
 
     <div class="ta-entry-body">
-        {# ---------------------------------------------------- left: footage #}
         <div class="ta-recordings">
             {% for session in lapse.timelapses.all %}
                 <div class="ta-rec" data-recording data-recording-id="{{ session.id }}">
                     <div class="ta-video-wrap">
-                        {# preload="metadata": the page's timeline is drawn against the
-                           video's length, and the player is the only thing that knows it
-                           exactly. Everything before the metadata lands is an estimate. #}
                         <video class="ta-video" src="{{ session.video_url }}" poster="{{ session.thumbnail_url }}"
                                controls preload="metadata" playsinline muted></video>
                     </div>
@@ -67,7 +53,6 @@ removal_reasons
                         </span>
                     </div>
 
-                    {# The timeline, both bars, drawn by lookout_review.js. #}
                     <div class="ta-timeline-row">
                         <div class="ta-timeline" data-timeline tabindex="0" role="slider"
                              aria-label="Timelapse {{ forloop.counter }} timeline"
@@ -178,7 +163,6 @@ removal_reasons
 
         <div class="ta-gutter" role="presentation"></div>
 
-        {# --------------------------------------------------- right: journal #}
         <div class="ta-journal">
             <h3 class="ta-journal-title">{{ lapse.title }}</h3>
             <p class="ta-journal-meta">

@@ -1,14 +1,3 @@
-{% comment %}
-Preflight, in Fallout's shape: a card whose collapsed summary is the worst
-level found and a fail/warn/pass tally, and whose body leads with the things
-that need looking at. The passes are folded away behind a link — they are the
-answer "nothing to see here", and printing twelve of them above the two that
-matter buries the two.
-
-Nothing here blocks a decision. It only says where to look first.
-
-expects: preflight
-{% endcomment %}
 <details class="rv-card rv-card-checks" data-card="preflight" {% if preflight.failed or preflight.warned %}open{% endif %}>
     <summary>
         <span class="rv-card-title">Preflight Checks</span>

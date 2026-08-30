@@ -1,21 +1,3 @@
-{% comment %}
-The build, newest first, in Fallout's shape: a card whose collapsed summary is
-the shape of the log (how many entries, how long, how evenly), and whose body
-is one row per entry with its footage summarised beside it.
-
-Summarised, not embedded. A Lookout reviewer has already watched every one of
-these and written down what it showed; a T1/T2/T3 reviewer reading the journal
-wants that sentence, not an hour of video and the job of forming their own
-opinion of it. The link is still there for the times the sentence isn't enough.
-
-The `review_*` fields on each journal and session are the same tracked /
-removed / approved numbers their model properties expose, computed once by
-queue.annotate_recordings() instead of aggregating on every read — see there
-for why that matters on a page shaped like this one.
-
-expects: timeline, journal_stats, and journals from annotate_recordings();
-optional: journal_empty
-{% endcomment %}
 <details class="rv-card" data-card="journals" open>
     <summary>
         <span class="rv-card-title">Journal</span>
