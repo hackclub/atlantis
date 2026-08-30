@@ -5,9 +5,14 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
+# ffmpeg is the inactivity checker: one pass per compiled Lookout video, so
+# neither check_timelapse_activity nor the check a new journal kicks off can
+# run at all without it on PATH. --no-install-recommends keeps that to the
+# codecs and leaves out the desktop stack apt would otherwise drag in.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

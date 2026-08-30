@@ -20,7 +20,7 @@ import mimetypes
 from ...models import (
     Project, Ship, Journal, LookoutSession, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
 )
-from ... import lookout
+from ... import activity, lookout
 from .timelapse import _apply_session_payload
 from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
@@ -593,6 +593,16 @@ def create_journal(request, project_id):
             model_url=model_key
         )
         available.update(journal=journal)
+
+        # The timelapse reviewer who eventually opens this entry needs the
+        # inactivity track drawn under each recording, and drawing it is an
+        # ffmpeg pass per video — minutes of work, and no reviewer is here
+        # yet. Hand it to a worker thread once the attachment is committed,
+        # so the thread reads rows that are actually there. Nothing about the
+        # entry depends on it: a check that doesn't happen leaves the
+        # recording unanalysed, which the review page says plainly.
+        attached = sorted(timelapse_ids)
+        transaction.on_commit(lambda: activity.check_sessions_in_background(attached))
 
     notify_followers(
         request,

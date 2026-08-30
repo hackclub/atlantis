@@ -8,13 +8,15 @@ the parts that can be wrong in a way nobody notices.
 
 from unittest.mock import patch
 
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from .. import activity
-from ..models import LookoutSession
+from ..models import Journal, LookoutSession
 from .base import (
-	BaseTestCase, grant_perms, make_journal, make_project, make_user,
+	BaseTestCase, grant_perms, image_upload, make_journal, make_project,
+	make_timelapse, make_user, stl_upload,
 )
 
 
@@ -197,3 +199,158 @@ class ActivityOnTheReviewPageTests(BaseTestCase):
 		)
 		self.assertEqual(response.context["recording_count"], 1)
 		self.assertEqual(response.context["unchecked_count"], 1)
+
+
+class CheckBatchTests(BaseTestCase):
+	"""Which sessions a batch actually picks up.
+
+	The batch is what both callers go through — the management command's sweep
+	and the check a new journal kicks off — so what it declines to re-analyse
+	is the part worth pinning down.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.project = make_project(make_user("shipper"), shippable=True)
+
+	def test_only_unanalysed_finished_sessions_are_picked_up(self):
+		fresh = make_timelapse(self.project, minutes=60)
+		already = make_timelapse(self.project, minutes=60)
+		LookoutSession.objects.filter(pk=already.pk).update(
+			activity_checked_at=timezone.now()
+		)
+		compiling = make_timelapse(
+			self.project, minutes=60, status=LookoutSession.Status.COMPILING
+		)
+
+		with patch.object(activity, "check_and_store") as store:
+			activity.check_sessions([fresh.pk, already.pk, compiling.pk])
+
+		self.assertEqual(
+			[call.args[0].pk for call in store.call_args_list], [fresh.pk]
+		)
+
+	def test_a_session_outside_the_batch_is_left_alone(self):
+		mine = make_timelapse(self.project, minutes=60)
+		theirs = make_timelapse(self.project, minutes=60)
+
+		with patch.object(activity, "check_and_store") as store:
+			activity.check_sessions([mine.pk])
+
+		self.assertEqual([call.args[0].pk for call in store.call_args_list], [mine.pk])
+		theirs.refresh_from_db()
+		self.assertFalse(theirs.activity_checked)
+
+	def test_a_video_that_could_not_be_read_leaves_the_session_unchecked(self):
+		"""So the next sweep tries it again instead of calling it clean."""
+		session = make_timelapse(self.project, minutes=60)
+
+		with patch.object(activity, "check_session", return_value=None):
+			activity.check_sessions([session.pk])
+
+		session.refresh_from_db()
+		self.assertFalse(session.activity_checked)
+
+
+class BackgroundCheckTests(BaseTestCase):
+	"""The worker thread a request hands the batch to.
+
+	`check_sessions` is patched out throughout: what matters here is whether
+	the thread reaches it at all, and the real one would want ffmpeg and a
+	database connection this thread has no business opening.
+	"""
+
+	def _run(self, session_ids, ffmpeg=True):
+		with patch.object(activity, "ffmpeg_available", return_value=ffmpeg):
+			with patch.object(activity, "check_sessions") as batch:
+				thread = activity.check_sessions_in_background(session_ids)
+				if thread is not None:
+					thread.join(timeout=10)
+					self.assertFalse(thread.is_alive())
+		return thread, batch
+
+	def test_the_batch_runs_on_the_thread(self):
+		thread, batch = self._run([7, 9])
+		self.assertIsNotNone(thread)
+		batch.assert_called_once_with([7, 9])
+
+	def test_an_empty_batch_starts_no_thread(self):
+		thread, batch = self._run([])
+		self.assertIsNone(thread)
+		batch.assert_not_called()
+
+	def test_without_ffmpeg_nothing_is_analysed_and_nothing_is_marked(self):
+		"""Missing ffmpeg has to look like "not analysed", not like "clean"."""
+		thread, batch = self._run([7], ffmpeg=False)
+		self.assertIsNotNone(thread)
+		batch.assert_not_called()
+
+	def test_a_thread_that_blows_up_does_not_take_anything_with_it(self):
+		with patch.object(activity, "ffmpeg_available", return_value=True):
+			with patch.object(activity, "check_sessions", side_effect=RuntimeError("boom")):
+				thread = activity.check_sessions_in_background([7])
+				thread.join(timeout=10)
+		self.assertFalse(thread.is_alive())
+
+
+@override_settings(ALLOW_JOURNALING=True)
+class CheckOnJournalCreationTests(BaseTestCase):
+	"""A new journal is what schedules the check on the footage it attaches."""
+
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("journaler")
+		self.project = make_project(self.user)
+		self.client.force_login(self.user)
+
+	def _create(self, timelapses):
+		return self.client.post(
+			reverse("create_journal", args=[self.project.id]),
+			{
+				"timelapses": [str(pk) for pk in timelapses],
+				"title": "Progress update",
+				"image": image_upload(),
+				"STL": stl_upload(),
+			},
+		)
+
+	def test_creating_a_journal_schedules_its_recordings(self):
+		first = make_timelapse(self.project, minutes=60)
+		second = make_timelapse(self.project, minutes=30)
+
+		with patch.object(activity, "check_sessions_in_background") as scheduled:
+			with self.captureOnCommitCallbacks(execute=True):
+				self._create([first.pk, second.pk])
+
+		self.assertEqual(Journal.objects.count(), 1)
+		scheduled.assert_called_once_with(sorted([first.pk, second.pk]))
+
+	def test_footage_left_off_the_journal_is_not_scheduled(self):
+		attached = make_timelapse(self.project, minutes=60)
+		make_timelapse(self.project, minutes=60)
+
+		with patch.object(activity, "check_sessions_in_background") as scheduled:
+			with self.captureOnCommitCallbacks(execute=True):
+				self._create([attached.pk])
+
+		scheduled.assert_called_once_with([attached.pk])
+
+	def test_a_rejected_journal_schedules_nothing(self):
+		"""No entry, no footage attached, nothing to analyse."""
+		timelapse = make_timelapse(self.project, minutes=60)
+
+		with patch.object(activity, "check_sessions_in_background") as scheduled:
+			with self.captureOnCommitCallbacks(execute=True):
+				response = self.client.post(
+					reverse("create_journal", args=[self.project.id]),
+					{
+						"timelapses": [str(timelapse.pk)],
+						"title": "",
+						"image": image_upload(),
+						"STL": stl_upload(),
+					},
+				)
+
+		self.assertEqual(response.status_code, 302)
+		self.assertEqual(Journal.objects.count(), 0)
+		scheduled.assert_not_called()

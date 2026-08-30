@@ -140,7 +140,18 @@ reviewer drew with a reason attached.
 
 it's one ffmpeg pass per video (sample at 1fps, subtract consecutive frames, ask
 `blackframe` which of the differences are black), so **ffmpeg has to be on PATH** — on
-macOS `brew install ffmpeg`, on debian `apt install ffmpeg`. run it on a timer:
+macOS `brew install ffmpeg`, on debian `apt install ffmpeg`. the docker image installs it,
+so a containerised deploy needs nothing extra.
+
+**it runs itself when somebody creates a journal.** the entry's Lookouts are analysed on a
+worker thread the moment the attachment commits — a pass is minutes of ffmpeg and nobody's
+browser waits for it, so the request returns straight away and the footage is usually
+already analysed by the time a reviewer opens it. at most `MAX_CONCURRENT_CHECKS`
+(`activity.py`) videos are in flight at once, so a rush of journals queues instead of
+forking an ffmpeg per submission.
+
+the command is the catch-up for everything that hook missed — footage from before it
+existed, a video the site couldn't reach, a worker restarted mid-pass:
 
 ```
 python manage.py check_timelapse_activity            # everything not yet analysed
@@ -156,7 +167,9 @@ estimated from the session's screenshot count (one shot is one second of footage
 a session whose video couldn't be fetched or read is left *unchecked* rather than recorded
 as clean, so the next run picks it up again — the review page draws "not analysed" and
 "no inactivity found" differently on purpose, because they aren't the same claim. nothing
-in the review is blocked by a session that has never been analysed.
+in the review is blocked by a session that has never been analysed, and that's what makes
+the background hook safe to lose: a check that never finished is a session still waiting
+for the command, not one recorded as clean.
 
 ### launching server/docker
 - run `python -m venv .venv`

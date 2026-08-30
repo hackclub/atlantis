@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import tempfile
+import threading
 
 import requests
 
@@ -304,3 +305,84 @@ def check_and_store(session):
         "updated_at",
     ])
     return result
+
+
+# How many videos the site will analyse at once when a check comes off a web
+# request. There is no queue to hand these to, so this is the whole of the
+# backpressure: a pass is minutes of CPU, and a burst of journal creations
+# should wait its turn rather than fork one ffmpeg per submission.
+MAX_CONCURRENT_CHECKS = 2
+
+_check_slots = threading.BoundedSemaphore(MAX_CONCURRENT_CHECKS)
+
+
+def check_sessions(session_ids):
+    """Analyse every one of these sessions that hasn't been analysed yet.
+
+    Takes ids rather than instances because the caller is usually on another
+    thread by the time this runs: the rows are re-read here, so a session the
+    management command reached in the meantime is left alone rather than
+    paying for a second ffmpeg pass over the same video.
+    """
+    from .models import LookoutSession
+
+    sessions = LookoutSession.objects.filter(
+        id__in=session_ids,
+        status=LookoutSession.Status.COMPLETE,
+        activity_checked_at__isnull=True,
+    ).order_by("id")
+
+    for session in sessions:
+        if check_and_store(session) is None:
+            logger.warning(
+                "Activity check could not read session %s (%s); it stays "
+                "unchecked and check_timelapse_activity will retry it",
+                session.id, session.session_id,
+            )
+
+
+def _check_and_disconnect(session_ids):
+    """The worker thread's body. Never raises — nothing is there to catch it."""
+    from django.db import connections
+
+    try:
+        if not ffmpeg_available():
+            logger.warning(
+                "Activity check skipped for sessions %s: ffmpeg is not on "
+                "PATH. Nothing was marked checked, so installing it and "
+                "running check_timelapse_activity catches these up.",
+                session_ids,
+            )
+            return
+        with _check_slots:
+            check_sessions(session_ids)
+    except Exception:
+        logger.exception("Activity check thread died on sessions %s", session_ids)
+    finally:
+        # Django hands every thread its own connection and this one is about
+        # to end; without this the worker leaks one back to Postgres per run.
+        connections.close_all()
+
+
+def check_sessions_in_background(session_ids):
+    """Start a thread that checks these sessions. Returns it, or None.
+
+    A check is a video download and an ffmpeg pass — minutes, not
+    milliseconds — so it cannot run inside the request that triggers it.
+    Nobody waits on the thread and nothing depends on it finishing: a session
+    it never reached, or died in the middle of, is simply still unchecked,
+    which the review page draws honestly and the next
+    check_timelapse_activity run sweeps up.
+    """
+    session_ids = list(session_ids)
+    if not session_ids:
+        return None
+
+    thread = threading.Thread(
+        target=_check_and_disconnect,
+        args=(session_ids,),
+        name=f"activity-check-{session_ids[0]}",
+        daemon=True,
+    )
+    thread.start()
+    return thread
