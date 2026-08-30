@@ -237,25 +237,25 @@ def time_audit_show(request, review_id):
         return redirect(reverse("time_audit_next"))
 
     # Get ALL journals for this project that have LookoutSessions (timelapses)
-    # Split into unreviewed (new entries) and reviewed (previous entries)
+    # in chronological order. Include existing annotations from the review.
     all_journals_with_sessions = Journal.objects.filter(
         project=project,
         timelapses__isnull=False
     ).distinct().prefetch_related("timelapses").order_by("created_at", "id")
 
+    # Get annotations from the review
+    annotations = review.annotations or {"recordings": {}}
     reviewed_journal_ids = set(review.reviewed_journal_ids or [])
-    unreviewed_journals = [j for j in all_journals_with_sessions if j.id not in reviewed_journal_ids]
-    reviewed_journals = [j for j in all_journals_with_sessions if j.id in reviewed_journal_ids]
 
-    new_entries = [serialize_ta_journal_entry(j, request) for j in unreviewed_journals]
-    previous_entries = [serialize_ta_journal_entry(j, request) for j in reviewed_journals]
+    # Serialize all journals with their annotations
+    all_entries = [serialize_ta_journal_entry(j, request, annotations) for j in all_journals_with_sessions]
 
     props = {
         "mode": "ship",
         "review": serialize_review_detail(review),
         "project": serialize_ta_project_context(project, request),
-        "new_entries": new_entries,
-        "previous_entries": previous_entries,
+        "new_entries": all_entries,
+        "previous_entries": [],
         "reviewer_notes": serialize_reviewer_notes(
             ReviewerNote.objects.filter(project=project).select_related("author")[:100]
         ),
@@ -505,7 +505,18 @@ def time_audit_update(request, review_id):
             if request.GET.get("skip"):
                 url += "?" + urlencode({"skip": request.GET["skip"]})
             return HttpResponseRedirect(url)
-        return redirect(reverse("time_audit_next"))
+        # Find next pending review directly to avoid double redirect
+        skip_ids = request.GET.get("skip", "")
+        skip = [int(s) for s in skip_ids.split(",") if s.strip().isdigit()]
+        if review.id not in skip:
+            skip.append(review.id)
+        next_review = _get_reviews_with_unreviewed_timelapses(status_filter="pending").exclude(id__in=skip).order_by("created_at", "id").first()
+        if next_review:
+            url = reverse("time_audit_show", args=[next_review.id])
+            if skip:
+                url += "?" + urlencode({"skip": ",".join(str(s) for s in skip)})
+            return HttpResponseRedirect(url)
+        return HttpResponseRedirect(reverse("time_audit_index"))
 
     return JsonResponse({"ok": True})
 

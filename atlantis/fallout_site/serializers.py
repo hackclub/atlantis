@@ -42,10 +42,10 @@ def _recording_duration(session):  # lookoutsession
     return session.tracked_seconds or 0
 
 
-def serialize_ta_recording(session, request):
+def serialize_ta_recording(session, request, annotations=None):
     """A `ReviewRecording` for one LookoutSession."""
     base = _lookout_base(request)
-    return {
+    recording = {
         "id": session.id,
         "type": "LookoutTimelapse",
         "duration": _recording_duration(session),
@@ -56,9 +56,18 @@ def serialize_ta_recording(session, request):
         "playback_url": f"{base}/{session.session_id}/video.mp4",
         "thumbnail_url": f"{base}/{session.session_id}/thumbnail.jpg",
     }
+    # Add existing annotations for this recording
+    if annotations and "recordings" in annotations:
+        rec_annotations = annotations["recordings"].get(str(session.id))
+        if rec_annotations:
+            recording["description"] = rec_annotations.get("description", "")
+            recording["stretch_multiplier"] = rec_annotations.get("stretch_multiplier", 1)
+            recording["segments"] = rec_annotations.get("segments", [])
+            recording["reviewer_id"] = rec_annotations.get("reviewer_id")
+    return recording
 
 
-def serialize_ta_journal_entry(journal, request):
+def serialize_ta_journal_entry(journal, request, annotations=None):
     """Mirror of Fallout's serialize_ta_journal_entry.
 
     The Atlantis journal has no free-text content; its title and image ARE the
@@ -73,7 +82,7 @@ def serialize_ta_journal_entry(journal, request):
         "author_avatar": _avatar(journal.project.owner, request),
         "created_at": journal.created_at.strftime("%b %d, %Y"),
         "created_at_iso": journal.created_at.isoformat(),
-        "recordings": [serialize_ta_recording(s, request) for s in sessions],
+        "recordings": [serialize_ta_recording(s, request, annotations) for s in sessions],
         "total_duration": sum(_recording_duration(s) for s in sessions),
         "in_ship": True,  # Always true since we're reviewing all project journals
     }

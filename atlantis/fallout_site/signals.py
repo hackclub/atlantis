@@ -33,5 +33,6 @@ def create_or_update_time_audit_review(sender, instance, created, **kwargs):
         TimeAuditReview.Status.RETURNED,
         TimeAuditReview.Status.REJECTED,
     ):
+        # Keep existing reviewed_journal_ids but don't include the new journal
         review.status = TimeAuditReview.Status.PENDING
         review.save(update_fields=["status", "updated_at"])
