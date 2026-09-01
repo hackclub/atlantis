@@ -1,7 +1,7 @@
-"""Run inactivity detection over compiled Lookout footage.
+"""Run inactivity detection over compiled Lapse footage.
 
-Meant to be run on a timer, the way submit_airtable is. Every complete session
-gets one pass; a session whose video couldn't be fetched or read is left
+Meant to be run on a timer, the way submit_airtable is. Every attached recording
+gets one pass; one whose video couldn't be fetched or read is left
 unchecked so the next run tries it again, rather than being recorded as clean.
 
     python manage.py check_timelapse_activity            # everything unchecked
@@ -13,16 +13,16 @@ unchecked so the next run tries it again, rather than being recorded as clean.
 from django.core.management.base import BaseCommand, CommandError
 
 from ... import activity
-from ...models import LookoutSession
+from ...models import Timelapse
 
 
 class Command(BaseCommand):
-    help = "Analyse compiled Lookout videos for stretches where nothing changes."
+    help = "Analyse compiled Lapse videos for stretches where nothing changes."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--session", type=int, action="append", default=[],
-            help="Check only this LookoutSession id. Repeatable.",
+            help="Check only this Timelapse id. Repeatable.",
         )
         parser.add_argument(
             "--project", type=int,
@@ -44,9 +44,7 @@ class Command(BaseCommand):
                 "pass per video and cannot run without it."
             )
 
-        sessions = LookoutSession.objects.filter(
-            status=LookoutSession.Status.COMPLETE
-        )
+        sessions = Timelapse.objects.all()
         if options["session"]:
             sessions = sessions.filter(id__in=options["session"])
         if options["project"]:
@@ -69,14 +67,14 @@ class Command(BaseCommand):
             if result is None:
                 failed += 1
                 self.stderr.write(
-                    f"session {session.id} ({session.session_id}): "
+                    f"timelapse {session.id} ({session.lapse_id}): "
                     "video unreadable, left unchecked"
                 )
                 continue
             checked += 1
             segments = len(result["segments"])
             self.stdout.write(
-                f"session {session.id} ({session.session_id}): "
+                f"timelapse {session.id} ({session.lapse_id}): "
                 f"{result['inactive_percentage']}% inactive across "
                 f"{segments} segment{'' if segments == 1 else 's'}"
             )

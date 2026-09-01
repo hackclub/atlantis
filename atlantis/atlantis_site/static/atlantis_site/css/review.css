@@ -704,7 +704,7 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* One box per Lookout, carrying the sentence the timelapse reviewer wrote
+/* One box per timelapse, carrying the sentence the timelapse reviewer wrote
    about it. This is what replaced embedding the video here: somebody has
    already watched it, and their reading of it is the useful artefact. The
    link is still there for the times the sentence isn't enough. */

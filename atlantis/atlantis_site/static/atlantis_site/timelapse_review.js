@@ -1,5 +1,5 @@
 /*
- * The Lookout annotation editor.
+ * The timelapse annotation editor.
  *
  * A timelapse reviewer's job is to watch footage, say what it shows, and mark
  * the stretches of it that don't count. This file is the second and third
@@ -16,7 +16,7 @@
  * removes anything by itself — it only says where to look, and a deduction
  * nobody typed a reason for is a deduction nobody can defend later.
  *
- * Units. Lookout stitches one recorded minute into one second of compiled
+ * Units. Lapse stitches one recorded minute into one second of compiled
  * video, so every offset here is in *video seconds* — the only timeline a
  * reviewer can see — and one of them is worth sixty tracked seconds. The
  * numeric inputs are labelled "min" for that reason: they are video seconds,
@@ -30,7 +30,7 @@
     'use strict';
 
     var TRACKED_PER_VIDEO_SECOND = 60;
-    var RATE_KEY = 'lookout_playback_rate';
+    var RATE_KEY = 'timelapse_playback_rate';
     var RATES = [0.5, 1, 1.5, 2, 3, 4];
     /* How close to a key point a drawn edge has to land before it snaps to it:
      * the wider of 1.5% of the video and three seconds. Below that it just
@@ -52,7 +52,7 @@
 
     var form = document.getElementById('timelapse-review-form');
     var finalDialog = document.getElementById('ta-final');
-    var draftKey = 'lookout-draft:' + payload.projectId;
+    var draftKey = 'timelapse-draft:' + payload.projectId;
 
     /* A key that means something on the page must not mean it mid-sentence. */
     function isTyping(el) {
@@ -622,9 +622,10 @@
     }
 
     /*
-     * The length the page was served is an estimate: Lookout reports credited
-     * time and a screenshot count, not a duration, and neither is quite the
-     * video. So the player is asked for the real one the moment it knows it,
+     * The length the page was served is derived: Lapse reports the recorded
+     * time that went into a timelapse, and sixty of those seconds is one
+     * second of video, which is close but not the file's own duration. So the
+     * player is asked for the real one the moment it knows it,
      * and everything measured against the video — the timeline's scale, the
      * far end of a cut, the length in the header — is redrawn to agree with
      * the clock the reviewer is actually reading.
@@ -741,11 +742,11 @@
 
         if (!(end > start)) return fail('That range has to end after it starts.');
         if (end > rec.videoSeconds) {
-            return fail('That range runs past the end of this Lookout (' +
+            return fail('That range runs past the end of this timelapse (' +
                 formatTimecode(rec.videoSeconds) + ' of video).');
         }
         if (!reason) return fail('Every removed range needs a reason.');
-        if (overlaps(rec, start, end)) return fail('That range overlaps one already on this Lookout.');
+        if (overlaps(rec, start, end)) return fail('That range overlaps one already on this timelapse.');
 
         rec.segments.push({ start: start, end: end, reason: reason });
         rec.pendingCut = null;
@@ -852,7 +853,7 @@
      */
     function saveRecording(rec) {
         if (!rec.description.trim()) {
-            if (window.rvToast) window.rvToast('Describe this Lookout before saving it.', 'bad');
+            if (window.rvToast) window.rvToast('Describe this timelapse before saving it.', 'bad');
             return false;
         }
         rec.saved = true;
@@ -930,7 +931,7 @@
 
     /*
      * The editor's state, written out as the wire format the view parses: four
-     * parallel lists of ranges, plus one description per Lookout.
+     * parallel lists of ranges, plus one description per timelapse.
      */
     function serialise() {
         var host = form.querySelector('[data-removal-inputs]');

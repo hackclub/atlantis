@@ -1,0 +1,34 @@
+{% comment %}
+The Lapse picker, laid over the book rather than on a page of its own.
+
+Deliberately empty markup: lapse_picker.js fills the list from the Lapse API
+when the popup is first opened and again on every refresh, so a timelapse
+published while this page has been sitting open can still be taped in. It finds
+everything by id, so keep these in step with that script.
+{% endcomment %}
+<div class="slip slip--wide" id="slip-lapses" hidden>
+    <div class="lapse-picker" id="lapse-picker"
+         data-url="{{ lapse_timelapses_url }}"
+         data-connect="{% url 'lapse_connect' %}"
+         data-next="{% url 'project_detail' project.id %}"
+         data-csrf="{{ csrf_token }}">
+        <div class="lapse-head">
+            <h2>Which timelapses?</h2>
+            <span class="lapse-handle" id="lapse-account" hidden></span>
+            <button type="button" class="ink-btn" id="lapse-refresh">refresh</button>
+        </div>
+        <p>
+            A lapse logs the time from the recordings you attach to it, and each one
+            can only be used once. Record them on
+            <a href="https://lapse.hackclub.com" target="_blank" rel="noreferrer noopener">lapse.hackclub.com</a>
+            &mdash; hit refresh once you've published a new one.
+        </p>
+
+        <div class="lapse-status" id="lapse-status" hidden></div>
+        <ul class="lapse-list" id="lapse-list"></ul>
+
+        <div class="slip-actions">
+            <button type="button" data-close>Done</button>
+        </div>
+    </div>
+</div>

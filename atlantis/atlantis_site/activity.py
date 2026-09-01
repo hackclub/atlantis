@@ -1,4 +1,4 @@
-"""Inactivity detection over a compiled Lookout video.
+"""Inactivity detection over a compiled Lapse video.
 
 A timelapse is sixty times faster than the session it was stitched from, so a
 reviewer scrubbing one is looking for the stretches where nothing happens —
@@ -17,7 +17,7 @@ second track so the reviewer knows where to look; every deduction is still a
 range a person typed, with a reason attached. A checker that quietly removed
 time would be a checker nobody could argue with.
 
-Units: the sample rate is one frame per video second, and Lookout stitches one
+Units: the sample rate is one frame per video second, and Lapse stitches one
 recorded minute into one second of video, so one segment second is one tracked
 minute. Segment offsets are in the video's own timeline — the same timeline
 the reviewer's ranges are read in.
@@ -257,13 +257,13 @@ def analyse_file(path):
 
 
 def check_session(session):
-    """Analyse one LookoutSession's compiled video. Never raises.
+    """Analyse one Timelapse's compiled video. Never raises.
 
     Returns the result dict; an empty one means the video couldn't be read,
     which is reported the same way as "nothing found" would be to the caller
     but is not written to the session by check_and_store.
     """
-    path = download_video(session.video_url)
+    path = download_video(session.playback_url)
     if path is None:
         return None
     try:
@@ -324,20 +324,19 @@ def check_sessions(session_ids):
     management command reached in the meantime is left alone rather than
     paying for a second ffmpeg pass over the same video.
     """
-    from .models import LookoutSession
+    from .models import Timelapse
 
-    sessions = LookoutSession.objects.filter(
+    sessions = Timelapse.objects.filter(
         id__in=session_ids,
-        status=LookoutSession.Status.COMPLETE,
         activity_checked_at__isnull=True,
     ).order_by("id")
 
     for session in sessions:
         if check_and_store(session) is None:
             logger.warning(
-                "Activity check could not read session %s (%s); it stays "
+                "Activity check could not read timelapse %s (%s); it stays "
                 "unchecked and check_timelapse_activity will retry it",
-                session.id, session.session_id,
+                session.id, session.lapse_id,
             )
 
 

@@ -5,18 +5,21 @@ from django.test import override_settings
 from django.urls import reverse
 
 from ..hca import IdentityUnavailable
-from ..models import Journal, LookoutSession, Project, Ship
+from ..models import Journal, Project, Ship, Timelapse
 from .base import (
 	VALID_EDITOR_LINK,
 	VALID_PRINTABLES_URL,
 	BaseTestCase,
+	connect_lapse,
 	grant_perms,
 	image_upload,
+	lapse_payload,
 	make_journal,
 	make_project,
 	make_ship,
 	make_timelapse,
 	make_user,
+	patch_lapse,
 	message_texts,
 	stl_upload,
 )
@@ -209,8 +212,9 @@ class ProjectDetailTests(BaseTestCase):
 		response = self._detail(project)
 		self.assertTrue(response.context["is_owner"])
 		body = response.content.decode()
-		for name in ("ship_project", "edit_project", "delete_project", "create_journal", "start_timelapse"):
+		for name in ("ship_project", "edit_project", "delete_project", "create_journal"):
 			self.assertIn(reverse(name, args=[project.id]), body)
+		self.assertIn(reverse("lapse_connect"), body)
 
 	def test_can_ship_when_all_requirements_met(self):
 		project = make_project(self.user, shippable=True)
@@ -368,8 +372,9 @@ class ProjectDetailVisitorTests(BaseTestCase):
 		self.assertFalse(response.context["is_owner"])
 		body = response.content.decode()
 		for name in ("ship_project", "edit_project", "delete_project", "update_project_image",
-					 "update_editor_model", "create_journal", "start_timelapse"):
+					 "update_editor_model", "create_journal"):
 			self.assertNotIn(reverse(name, args=[project.id]), body)
+		self.assertNotIn(reverse("lapse_connect"), body)
 
 	def test_visitor_is_offered_the_follow_button(self):
 		project = make_project(self.owner)
@@ -391,12 +396,13 @@ class ProjectDetailVisitorTests(BaseTestCase):
 		self.client.force_login(self.owner)
 		self.assertContains(self._detail(project), "thin walls, reprint it")
 
-	def test_visitor_sees_no_lookouts_of_their_own_or_the_owners(self):
+	def test_visitor_gets_no_picker_of_their_own_or_the_owners(self):
 		project = make_project(self.owner)
 		make_timelapse(project, minutes=60)
+		connect_lapse(self.owner)
 		response = self._detail(project)
-		self.assertEqual(list(response.context["pickable_timelapses"]), [])
-		self.assertEqual(list(response.context["unfinished_timelapses"]), [])
+		self.assertIsNone(response.context["lapse_account"])
+		self.assertFalse(response.context["lapse_connected"])
 
 
 @override_settings(ALLOW_JOURNALING=True)
@@ -406,11 +412,13 @@ class CreateJournalTests(BaseTestCase):
 		self.user = make_user("journaler")
 		self.project = make_project(self.user)
 		self.client.force_login(self.user)
+		connect_lapse(self.user)
+		self.published = [lapse_payload("aaa", minutes=60)]
 
-	def _create(self, project=None, timelapses=None, **overrides):
+	def _create(self, project=None, timelapses=None, published=None, **overrides):
 		project = project or self.project
 		if timelapses is None:
-			timelapses = [str(make_timelapse(project, minutes=60).pk)]
+			timelapses = ["aaa"]
 		data = {
 			"timelapses": timelapses,
 			"title": "Progress update",
@@ -419,7 +427,10 @@ class CreateJournalTests(BaseTestCase):
 		}
 		data.update(overrides)
 		data = {k: v for k, v in data.items() if v is not None}
-		return self.client.post(reverse("create_journal", args=[project.id]), data)
+		with patch_lapse(self.published if published is None else published):
+			return self.client.post(
+				reverse("create_journal", args=[project.id]), data
+			)
 
 	def test_get_redirects_without_creating(self):
 		response = self.client.get(reverse("create_journal", args=[self.project.id]))
@@ -451,6 +462,7 @@ class CreateJournalTests(BaseTestCase):
 		organizer = grant_perms(make_user("organizer"), "organizer")
 		project = make_project(organizer)
 		self.client.force_login(organizer)
+		connect_lapse(organizer)
 		self._create(project=project)
 		self.assertEqual(Journal.objects.count(), 1)
 
@@ -468,54 +480,96 @@ class CreateJournalTests(BaseTestCase):
 		response = self._create(timelapses=[])
 		self.assertEqual(Journal.objects.count(), 0)
 		self.assertIn(
-			"Attach at least one finished Lookout to your lapse!",
+			"Attach at least one Lapse timelapse to your lapse!",
 			message_texts(response),
 		)
 
-	def test_rejects_non_integer_timelapse_ids(self):
-		response = self._create(timelapses=["abc"])
+	def test_requires_a_connected_lapse_account(self):
+		self.user.lapse_account.delete()
+		response = self._create()
 		self.assertEqual(Journal.objects.count(), 0)
-		self.assertIn("Invalid Lookout selection.", message_texts(response))
+		self.assertIn(
+			"Connect your Lapse account before taping in a lapse.",
+			message_texts(response),
+		)
 
 	def test_time_is_the_sum_of_attached_timelapses(self):
-		ids = [
-			str(make_timelapse(self.project, minutes=90).pk),
-			str(make_timelapse(self.project, minutes=45).pk),
-		]
-		self._create(timelapses=ids)
+		"""And it is read from Lapse, not from anything the form carried."""
+		self._create(
+			timelapses=["aaa", "bbb"],
+			published=[lapse_payload("aaa", minutes=90), lapse_payload("bbb", minutes=45)],
+		)
 		self.assertEqual(Journal.objects.get().tracked_minutes, 135)
 
-	def test_rejects_unfinished_timelapse(self):
-		timelapse = make_timelapse(
-			self.project, minutes=60, status=LookoutSession.Status.ACTIVE
-		)
-		self._create(timelapses=[str(timelapse.pk)])
+	def test_the_posted_duration_is_ignored(self):
+		"""Tracked time turns into money, so the form never gets a say in it."""
+		self._create(timelapses=["aaa"], duration="999999", trackedSeconds="999999")
+		self.assertEqual(Timelapse.objects.get().tracked_seconds, 60 * 60)
+
+	def test_rejects_a_timelapse_that_is_not_on_the_account(self):
+		self._create(timelapses=["not-mine"])
 		self.assertEqual(Journal.objects.count(), 0)
 
-	def test_rejects_timelapse_from_another_project(self):
-		other = make_project(self.user, title="Other")
-		timelapse = make_timelapse(other, minutes=60)
-		self._create(timelapses=[str(timelapse.pk)])
+	def test_rejects_a_timelapse_still_processing(self):
+		self._create(published=[lapse_payload("aaa", playbackUrl=None)])
 		self.assertEqual(Journal.objects.count(), 0)
 
-	def test_rejects_another_users_timelapse(self):
-		timelapse = make_timelapse(
-			self.project, minutes=60, owner=make_user("stranger")
-		)
-		self._create(timelapses=[str(timelapse.pk)])
+	def test_rejects_a_timelapse_that_failed_processing(self):
+		self._create(published=[lapse_payload("aaa", visibility="FAILED_PROCESSING")])
 		self.assertEqual(Journal.objects.count(), 0)
+
+	def test_rejects_the_same_timelapse_twice_in_one_lapse(self):
+		response = self._create(timelapses=["aaa", "aaa"])
+		self.assertEqual(Journal.objects.count(), 0)
+		self.assertIn(
+			"That selection has the same timelapse in it twice.",
+			message_texts(response),
+		)
 
 	def test_cannot_reuse_an_already_attached_timelapse(self):
-		timelapse = make_timelapse(self.project, minutes=60)
-		self._create(timelapses=[str(timelapse.pk)])
+		self._create()
 		self.assertEqual(Journal.objects.count(), 1)
 
 		# Clear the create_journal rate limit so the reuse guard is what's tested.
 		cache.clear()
-		response = self._create(timelapses=[str(timelapse.pk)])
+		response = self._create()
 		self.assertEqual(Journal.objects.count(), 1)
 		self.assertIn(
-			"One or more of those Lookouts can't be attached. Refresh and try again.",
+			"One of those timelapses is already taped into a lapse.",
+			message_texts(response),
+		)
+
+	def test_a_race_on_the_same_footage_is_refused_not_crashed(self):
+		"""The unique constraint is the backstop when the check above loses a race.
+
+		Two lapses taped in at once can both pass the "already attached" read and
+		then collide on the insert. The second one has to come back as a sentence
+		rather than a 500, and it must not leave half a lapse behind.
+		"""
+		make_timelapse(self.project, lapse_id="aaa")
+		# Blind the pre-check, which is what a concurrent request would do.
+		with patch(
+			"atlantis_site.views.client.projects._already_attached", return_value=set()
+		):
+			response = self._create()
+
+		self.assertEqual(response.status_code, 302)
+		self.assertEqual(Journal.objects.count(), 0)
+		self.assertEqual(Timelapse.objects.count(), 1)
+		self.assertIn(
+			"One of those timelapses is already taped into a lapse.",
+			message_texts(response),
+		)
+
+	def test_footage_taped_into_another_book_cannot_be_reused_either(self):
+		"""The unique constraint is on the recording, not on the project."""
+		other = make_project(self.user, title="Other")
+		self._create(project=other)
+		cache.clear()
+		response = self._create()
+		self.assertEqual(Journal.objects.count(), 1)
+		self.assertIn(
+			"One of those timelapses is already taped into a lapse.",
 			message_texts(response),
 		)
 
@@ -1128,15 +1182,17 @@ class FollowerNotificationTests(BaseTestCase):
 
 	@patch("atlantis_site.views.client.projects.notify_followers")
 	def test_journal_creation_notifies_followers(self, mock_notify):
-		self.client.post(
-			reverse("create_journal", args=[self.project.id]),
-			{
-				"timelapses": [str(make_timelapse(self.project, minutes=60).pk)],
-				"title": "Update",
-				"image": image_upload(),
-				"STL": stl_upload(),
-			},
-		)
+		connect_lapse(self.project.owner)
+		with patch_lapse([lapse_payload("aaa", minutes=60)]):
+			self.client.post(
+				reverse("create_journal", args=[self.project.id]),
+				{
+					"timelapses": ["aaa"],
+					"title": "Update",
+					"image": image_upload(),
+					"STL": stl_upload(),
+				},
+			)
 		self.assertEqual(Journal.objects.count(), 1)
 		mock_notify.assert_called_once()
 		args = mock_notify.call_args.args

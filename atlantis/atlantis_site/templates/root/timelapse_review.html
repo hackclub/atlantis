@@ -43,7 +43,7 @@
                                 <a class="rq-project" href="{% url 'timelapse_review_project' project.id %}">{{ project.title }}</a>
                                 <span class="rq-desc">
                                     {{ project.lapse_count }} journal{{ project.lapse_count|pluralize }} &middot;
-                                    {{ project.lookout_count }} timelapse{{ project.lookout_count|pluralize }}
+                                    {{ project.timelapse_count }} timelapse{{ project.timelapse_count|pluralize }}
                                 </span>
                             </td>
                             <td class="rq-owner">{{ project.owner.hackclub_profile.slack_username }}</td>

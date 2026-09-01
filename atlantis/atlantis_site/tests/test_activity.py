@@ -13,10 +13,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .. import activity
-from ..models import Journal, LookoutSession
+from ..models import Journal, Timelapse, tracked_to_video
 from .base import (
-	BaseTestCase, grant_perms, image_upload, make_journal, make_project,
-	make_timelapse, make_user, stl_upload,
+	BaseTestCase, connect_lapse, grant_perms, image_upload, lapse_payload,
+	make_journal, make_project, make_timelapse, make_user, patch_lapse,
+	stl_upload,
 )
 
 
@@ -145,7 +146,8 @@ class ActivityStorageTests(BaseTestCase):
 				self.session.refresh_from_db()
 				self.assertIsNone(self.session.measured_video_seconds)
 				self.assertEqual(
-					self.session.video_seconds, self.session.estimated_video_seconds
+					self.session.video_seconds,
+					tracked_to_video(self.session.tracked_seconds),
 				)
 
 	def test_a_check_that_could_not_run_leaves_the_session_unchecked(self):
@@ -177,7 +179,7 @@ class ActivityOnTheReviewPageTests(BaseTestCase):
 		return response.context["payload"]
 
 	def test_segments_reach_the_editor_in_video_seconds(self):
-		LookoutSession.objects.filter(pk=self.session.pk).update(
+		Timelapse.objects.filter(pk=self.session.pk).update(
 			inactive_segments=[{"start": 10, "end": 14, "duration": 4}],
 			inactive_percentage=6.7,
 			activity_checked_at=timezone.now(),
@@ -213,18 +215,15 @@ class CheckBatchTests(BaseTestCase):
 		super().setUp()
 		self.project = make_project(make_user("shipper"), shippable=True)
 
-	def test_only_unanalysed_finished_sessions_are_picked_up(self):
+	def test_only_unanalysed_timelapses_are_picked_up(self):
 		fresh = make_timelapse(self.project, minutes=60)
 		already = make_timelapse(self.project, minutes=60)
-		LookoutSession.objects.filter(pk=already.pk).update(
+		Timelapse.objects.filter(pk=already.pk).update(
 			activity_checked_at=timezone.now()
-		)
-		compiling = make_timelapse(
-			self.project, minutes=60, status=LookoutSession.Status.COMPILING
 		)
 
 		with patch.object(activity, "check_and_store") as store:
-			activity.check_sessions([fresh.pk, already.pk, compiling.pk])
+			activity.check_sessions([fresh.pk, already.pk])
 
 		self.assertEqual(
 			[call.args[0].pk for call in store.call_args_list], [fresh.pk]
@@ -302,55 +301,55 @@ class CheckOnJournalCreationTests(BaseTestCase):
 		self.user = make_user("journaler")
 		self.project = make_project(self.user)
 		self.client.force_login(self.user)
+		connect_lapse(self.user)
+		# Two published on the shipper's account; which of them a given test
+		# tapes in is what it is actually about.
+		self.published = [
+			lapse_payload("aaa", minutes=60),
+			lapse_payload("bbb", minutes=30),
+		]
 
-	def _create(self, timelapses):
-		return self.client.post(
-			reverse("create_journal", args=[self.project.id]),
-			{
-				"timelapses": [str(pk) for pk in timelapses],
-				"title": "Progress update",
-				"image": image_upload(),
-				"STL": stl_upload(),
-			},
-		)
+	def _create(self, lapse_ids, title="Progress update"):
+		with patch_lapse(self.published):
+			return self.client.post(
+				reverse("create_journal", args=[self.project.id]),
+				{
+					"timelapses": list(lapse_ids),
+					"title": title,
+					"image": image_upload(),
+					"STL": stl_upload(),
+				},
+			)
 
 	def test_creating_a_journal_schedules_its_recordings(self):
-		first = make_timelapse(self.project, minutes=60)
-		second = make_timelapse(self.project, minutes=30)
-
 		with patch.object(activity, "check_sessions_in_background") as scheduled:
 			with self.captureOnCommitCallbacks(execute=True):
-				self._create([first.pk, second.pk])
+				self._create(["aaa", "bbb"])
 
 		self.assertEqual(Journal.objects.count(), 1)
-		scheduled.assert_called_once_with(sorted([first.pk, second.pk]))
+		# The rows are written by the attach, so their ids only exist now.
+		attached = sorted(
+			Timelapse.objects.values_list("pk", flat=True)
+		)
+		self.assertEqual(len(attached), 2)
+		scheduled.assert_called_once_with(attached)
 
 	def test_footage_left_off_the_journal_is_not_scheduled(self):
-		attached = make_timelapse(self.project, minutes=60)
-		make_timelapse(self.project, minutes=60)
-
 		with patch.object(activity, "check_sessions_in_background") as scheduled:
 			with self.captureOnCommitCallbacks(execute=True):
-				self._create([attached.pk])
+				self._create(["aaa"])
 
+		attached = Timelapse.objects.get(lapse_id="aaa")
+		self.assertEqual(Timelapse.objects.count(), 1)
 		scheduled.assert_called_once_with([attached.pk])
 
 	def test_a_rejected_journal_schedules_nothing(self):
 		"""No entry, no footage attached, nothing to analyse."""
-		timelapse = make_timelapse(self.project, minutes=60)
-
 		with patch.object(activity, "check_sessions_in_background") as scheduled:
 			with self.captureOnCommitCallbacks(execute=True):
-				response = self.client.post(
-					reverse("create_journal", args=[self.project.id]),
-					{
-						"timelapses": [str(timelapse.pk)],
-						"title": "",
-						"image": image_upload(),
-						"STL": stl_upload(),
-					},
-				)
+				response = self._create(["aaa"], title="")
 
 		self.assertEqual(response.status_code, 302)
 		self.assertEqual(Journal.objects.count(), 0)
+		self.assertEqual(Timelapse.objects.count(), 0)
 		scheduled.assert_not_called()

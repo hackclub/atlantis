@@ -1,6 +1,6 @@
 # Local development only — NOT installed in production.
 # Enables `manage.py runserver_plus` to serve HTTPS on localhost, which is
-# required for the Lookout recorder (getDisplayMedia needs a secure context).
+# handy when a service will only redirect back to an https origin.
 #
 # Setup (once):
 #   pip install -r requirements-dev.txt

@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/desk.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/book.css' %}">
-    {% if is_owner %}<link rel="stylesheet" href="{% static 'atlantis_site/css/lookout.css' %}">{% endif %}
+    {% if is_owner %}<link rel="stylesheet" href="{% static 'atlantis_site/css/lapse.css' %}">{% endif %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
 </head>
 <body data-mode="book">
@@ -144,10 +144,15 @@
                             </span>
                         {% endif %}
                         {% if not project.locked %}
-                            <form action="{% url 'start_timelapse' project.id %}" method="post" id="start-lookout">
-                                {% csrf_token %}
-                                <button type="submit" class="ink-btn">record a lookout</button>
-                            </form>
+                            {% if lapse_connected %}
+                                <a class="ink-btn" href="https://lapse.hackclub.com" target="_blank" rel="noreferrer noopener">record on lapse</a>
+                            {% else %}
+                                <form action="{% url 'lapse_connect' %}" method="post">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="next" value="{% url 'project_detail' project.id %}">
+                                    <button type="submit" class="ink-btn">connect lapse</button>
+                                </form>
+                            {% endif %}
                             <span class="minor-icons">
                             <button type="button" class="icon-btn js-slip" data-slip="slip-edit" title="edit" aria-label="Edit project">
                                 {# a pencil cut the same way as the bin: outlined barrel, banded ferrule, solid nib #}
@@ -188,16 +193,9 @@
                                         <input class="compose-title" type="text" name="title" maxlength="100" placeholder="what did you do?" form="new-lapse" required>
 
                                         <div class="compose-line">
-                                            <button type="button" class="picker-btn js-slip" data-slip="slip-lookouts">
-                                                <span id="picker-summary">pick lookouts</span><span class="picker-caret">&#9662;</span>
+                                            <button type="button" class="picker-btn js-slip" data-slip="slip-lapses">
+                                                <span id="picker-summary">pick timelapses</span><span class="picker-caret">&#9662;</span>
                                             </button>
-                                            {% if lookout_status %}
-                                                {% if lookout_status.url %}
-                                                    <a class="chip chip--busy" href="{{ lookout_status.url }}" data-record title="pick it back up">{{ lookout_status.label }}&hellip;</a>
-                                                {% else %}
-                                                    <span class="chip chip--dead" title="this one couldn't be turned into a video">{{ lookout_status.label }}</span>
-                                                {% endif %}
-                                            {% endif %}
                                         </div>
 
                                         <div class="compose-line">
@@ -328,52 +326,7 @@
             </form>
         </div>
 
-        <div class="slip" id="slip-lookouts" hidden>
-            <h2>Which Lookouts?</h2>
-            <p>A lapse logs the time from the recordings you attach to it, and each one can only be used once.</p>
-            <ul class="lookout-list">
-                {% for timelapse in pickable_timelapses %}
-                    <li>
-                        <label>
-                            <input type="checkbox" name="timelapses" value="{{ timelapse.pk }}" data-seconds="{{ timelapse.tracked_seconds }}" form="new-lapse">
-                            <strong>{{ timelapse.tracked_display }}</strong>
-                            <span class="dim">
-                                recorded {{ timelapse.created_at|date:"M j, g:i A" }}{% if not timelapse.tracked_seconds %} &middot; nothing on the clock{% endif %}
-                            </span>
-                        </label>
-                        <a href="{{ timelapse.video_url }}" target="_blank" rel="noreferrer noopener">watch</a>
-                    </li>
-                {% empty %}
-                    <li class="dim">Nothing finished yet &mdash; hit &ldquo;record a lookout&rdquo; on the facing page.</li>
-                {% endfor %}
-            </ul>
-
-            {% if unfinished_timelapses %}
-                <h3 class="lookout-heading">still going</h3>
-                <ul class="lookout-list">
-                    {% for timelapse in unfinished_timelapses %}
-                        <li>
-                            <span class="lookout-when">
-                                <strong>{{ timelapse.tracked_display }}</strong>
-                                <span class="dim">started {{ timelapse.created_at|date:"M j, g:i A" }}</span>
-                            </span>
-                            {% if timelapse.is_recordable %}
-                                <a href="{% url 'record_timelapse' timelapse.pk %}" data-record>pick it back up</a>
-                            {% elif timelapse.is_processing %}
-                                <a href="{% url 'record_timelapse' timelapse.pk %}" data-record>building&hellip;</a>
-                            {% else %}
-                                <span class="warn">failed</span>
-                            {% endif %}
-                        </li>
-                    {% endfor %}
-                </ul>
-            {% endif %}
-            <div class="slip-actions">
-                <button type="button" data-close>Done</button>
-            </div>
-        </div>
-
-        {% include "atlantis_site/_lookout_slip.html" %}
+        {% include "atlantis_site/_lapse_picker.html" %}
         {% endif %}
 
         <div class="slip slip--wide" id="slip-zoom" hidden>
@@ -391,6 +344,7 @@
     {% include "atlantis_site/_book_script.html" %}
 
     {% if is_owner %}
+    <script src="{% static 'atlantis_site/lapse_picker.js' %}"></script>
     <script>
         // ---- the dashed boxes take a dropped image ----
         (function () {
@@ -440,37 +394,37 @@
         // ---- the new lapse, written in the space it will occupy ----
         (function () {
             const form = document.getElementById('new-lapse');
-            const boxes = Array.from(document.querySelectorAll('input[name="timelapses"]'));
             const note = document.getElementById('compose-note');
             const summary = document.getElementById('picker-summary');
             const photo = document.getElementById('compose-photo');
             const stlName = document.getElementById('stl-name');
             if (!form || !note) return;
 
+            function picked() {
+                return window.AtlantisLapsePicker
+                    ? window.AtlantisLapsePicker.selected()
+                    : [];
+            }
+
             function update() {
-                let seconds = 0;
-                let count = 0;
-                boxes.forEach((box) => {
-                    if (!box.checked) return;
-                    seconds += parseInt(box.dataset.seconds || '0', 10);
-                    count += 1;
-                });
+                const chosen = picked();
+                const seconds = chosen.reduce((total, item) => total + item.seconds, 0);
                 note.classList.remove('is-invalid');
                 note.textContent = '';
                 if (!summary) return;
                 const button = summary.closest('.picker-btn');
-                if (!count) {
-                    summary.textContent = 'pick lookouts';
+                if (!chosen.length) {
+                    summary.textContent = 'pick timelapses';
                     if (button) button.classList.remove('is-set');
                     return;
                 }
                 const hours = Math.floor(seconds / 3600);
                 const minutes = Math.floor((seconds % 3600) / 60);
-                summary.textContent = hours + 'h ' + minutes + 'm from ' + count;
+                summary.textContent = hours + 'h ' + minutes + 'm from ' + chosen.length;
                 if (button) button.classList.add('is-set');
             }
 
-            boxes.forEach((box) => box.addEventListener('change', update));
+            if (window.AtlantisLapsePicker) window.AtlantisLapsePicker.onChange(update);
             update();
 
             // The dashed frame becomes the photo once one is chosen.
@@ -493,83 +447,32 @@
             }
 
             form.addEventListener('submit', (e) => {
-                if (boxes.some((box) => box.checked)) return;
+                if (picked().length) return;
                 e.preventDefault();
                 note.classList.add('is-invalid');
-                note.textContent = boxes.length
-                    ? 'pick a lookout first'
-                    : 'record a lookout first';
+                // "Pick one" and "you haven't got one" are different problems and
+                // the second one isn't solved on this page. A picker nobody has
+                // opened yet is the first problem, not the second.
+                const none = window.AtlantisLapsePicker
+                    && window.AtlantisLapsePicker.nothingToPick();
+                note.textContent = none
+                    ? 'record one on lapse first'
+                    : 'pick a timelapse first';
             });
         })();
     </script>
 
-    <script src="{% static 'atlantis_site/lookout_recorder.js' %}"></script>
     <script>
-        // ---- the recorder, laid over the book instead of a page of its own ----
+        // ---- the timelapse picker, laid over the book instead of a page of its own ----
         (function () {
-            const root = document.getElementById('lookout-recorder');
-            const startForm = document.getElementById('start-lookout');
-            if (!root || !window.AtlantisLookout) return;
-            const csrf = root.dataset.csrf;
-
-            function show(opener) {
-                if (opener) window.atlantisSlip.setOpener(opener);
-                window.atlantisSlip.open('slip-record');
-            }
-
-            // One trip for the session's config, then the recorder takes the
-            // slip over. It opens first, on a clean slate, so the click lands
-            // somewhere while the server answers.
-            async function mount(url, method, opener) {
-                window.AtlantisLookout.standby();
-                show(opener);
-                let payload = null;
-                let res;
-                try {
-                    res = await fetch(url, {
-                        method: method || 'GET',
-                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRFToken': csrf },
-                    });
-                    payload = await res.json().catch(() => null);
-                } catch (e) {
-                    window.AtlantisLookout.fail("Couldn't reach the server: " + e.message);
-                    return;
-                }
-                if (!res.ok || !payload || !payload.ok) {
-                    window.AtlantisLookout.fail(
-                        (payload && payload.error) || 'Could not open that recording (HTTP ' + res.status + ').'
-                    );
-                    return;
-                }
-                payload.csrfToken = csrf;
-                window.AtlantisLookout.boot(payload);
-            }
-
-            if (startForm) {
-                startForm.addEventListener('submit', (e) => {
-                    e.preventDefault();
-                    const button = startForm.querySelector('button');
-                    // A recording already going gets reopened — starting a second
-                    // session on top of it would strand the first one.
-                    if (window.AtlantisLookout.liveSessionPk()) {
-                        show(button);
-                        return;
-                    }
-                    mount(startForm.action, 'POST', button);
-                });
-            }
-
-            // Every link to a session — the chip, the list of unfinished ones —
-            // opens it here rather than navigating.
-            document.addEventListener('click', (e) => {
-                const link = e.target.closest('a[data-record]');
-                if (!link) return;
-                e.preventDefault();
-                mount(link.href, 'GET', link);
+            const root = document.getElementById('lapse-picker');
+            if (!root || !window.AtlantisLapsePicker) return;
+            window.AtlantisLapsePicker.boot({
+                url: root.dataset.url,
+                connectUrl: root.dataset.connect,
+                nextUrl: root.dataset.next,
+                csrfToken: root.dataset.csrf,
             });
-
-            // Sent here by an old recorder link, or by a no-JS start.
-            if (root.dataset.open) mount(root.dataset.open, 'GET', null);
         })();
     </script>
     {% endif %}

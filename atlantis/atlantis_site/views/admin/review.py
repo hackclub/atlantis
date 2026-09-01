@@ -383,7 +383,7 @@ def fraud_review_project(request, ship_id):
         "multiplier_step": PAYOUT_MULTIPLIER_STEP,
         "multiplier_default": PAYOUT_MULTIPLIER_DEFAULT,
         # Airtable's override-hours justification: the T2 reviewer's words,
-        # then every Lookout on the ship with the ranges cut from it and why.
+        # then every timelapse on the ship with the ranges cut from it and why.
         # Nothing else shows a T3 reviewer the timelapse review in full.
         "override_justification": build_override_justification(ship),
         "airtable_submission": AirtableSubmission.objects.filter(ship=ship).first(),

@@ -56,9 +56,17 @@ AIRTABLE_API_BASE_URL = os.environ.get("AIRTABLE_API_BASE_URL", "https://api.air
 # human later, so this is the SigV4 maximum of 7 days.
 AIRTABLE_URL_EXPIRE_SECONDS = int(os.environ.get("AIRTABLE_URL_EXPIRE_SECONDS", 7 * 24 * 60 * 60))
 
-LOOKOUT_TOKEN = os.environ["LOOKOUT_TOKEN"]
-LOOKOUT_BASE_URL = os.environ.get("LOOKOUT_BASE_URL", "https://lookout.hackclub.com")
-LOOKOUT_APP_NAME = os.environ.get("LOOKOUT_APP_NAME", "Atlantis")
+# Lapse (lapse.hackclub.com), where shippers record their timelapses. The
+# client is public and authorizes with PKCE, so there is no secret to keep: the
+# code verifier is what proves the token call came from the browser we sent.
+LAPSE_CLIENT_ID = os.environ.get("LAPSE_CLIENT_ID", "")
+LAPSE_API_BASE_URL = os.environ.get("LAPSE_API_BASE_URL", "https://api.lapse.hackclub.com/api")
+LAPSE_WEB_BASE_URL = os.environ.get("LAPSE_WEB_BASE_URL", "https://lapse.hackclub.com")
+# Registered with Lapse and matched exactly on both the authorize and the token
+# call, so it is not something a deployment can vary freely — it is the projects
+# list, which picks the authorization back up and returns the shipper to the
+# book they started from.
+LAPSE_REDIRECT_URI = os.environ.get("LAPSE_REDIRECT_URI", "https://atlantis.hackclub.com/projects/")
 
 STORAGES = {
     "default": {

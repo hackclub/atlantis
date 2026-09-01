@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Sum
 from django.http import Http404
 
-from ...models import Journal, LookoutSession, Ship
+from ...models import Journal, Ship, Timelapse
 
 # The one list of guides: the scroll rail in _guides_base.html renders it, and
 # guide_detail() will only serve a slug that appears here. Adding a guide means
@@ -83,7 +83,7 @@ def user_profile(request, user_id):
     ship_count = Ship.objects.filter(project__in=projects).count()
     # Tracked, not approved: approved/removed seconds come from timelapse
     # review, which is internal and never shown back to the person it's about.
-    tracked_seconds = LookoutSession.objects.filter(project__in=projects).aggregate(
+    tracked_seconds = Timelapse.objects.filter(project__in=projects).aggregate(
         total=Sum("tracked_seconds")
     )["total"] or 0
 

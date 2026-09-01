@@ -24,9 +24,13 @@ urlpatterns = [
     path("projects/<int:project_id>/ship/", ship_project, name="ship_project"),
     path("projects/<int:project_id>/follow/", follow_project, name="follow_project"),
     path("projects/<int:project_id>/unfollow/", unfollow_project, name="unfollow_project"),
-    path("projects/<int:project_id>/timelapse/start/", start_timelapse, name="start_timelapse"),
-    path("timelapse/<int:session_pk>/record/", record_timelapse, name="record_timelapse"),
-    path("timelapse/<int:session_pk>/sync/", sync_timelapse, name="sync_timelapse"),
+    # The picker's live list. Hit when it opens and again on every refresh.
+    path("projects/<int:project_id>/timelapses/", lapse_timelapses, name="lapse_timelapses"),
+    # Starting an authorization. There is no route for finishing one: the
+    # redirect URI registered with Lapse is the projects list, which picks the
+    # code up itself.
+    path("lapse/connect/", lapse_connect, name="lapse_connect"),
+    path("lapse/disconnect/", lapse_disconnect, name="lapse_disconnect"),
     path("media/<path:key>", serve_media, name="serve_media"),
     path("explore/", explore, name="explore"),
     path("shop/", shop, name="shop"),

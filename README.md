@@ -40,8 +40,46 @@ AIRTABLE_PAT = AIRTABLE_PERSONAL_ACCESS_TOKEN_GOES_HERE
 AIRTABLE_BASE_ID = appXXXXXXXXXXXXXX
 AIRTABLE_TABLE_ID = tblXXXXXXXXXXXXXX
 
-LOOKOUT_TOKEN = LOOKOUT_API_KEY_GOES_HERE
+LAPSE_CLIENT_ID = LAPSE_OAUTH_CLIENT_ID_GOES_HERE
+LAPSE_REDIRECT_URI = https://atlantis.hackclub.com/projects/
 ```
+
+### lapse
+
+time is never typed in. a shipper records their CAD on [lapse](https://lapse.hackclub.com),
+publishes there, and the picker on the book reads their published timelapses back over the
+[lapse api](https://api.lapse.hackclub.com/docs) so they can tape one into a lapse.
+
+`LAPSE_CLIENT_ID` is an oauth2 app on lapse with the `timelapse:read`, `snapshot:read` and
+`user:read` scopes. it's a **public** client — authorization is pkce (`S256`), so there is
+no client secret to configure and nothing secret goes in the browser but a hash.
+
+`LAPSE_REDIRECT_URI` has to match what's registered on lapse *exactly*, on both the
+authorize and the token call. it's registered as the projects list, so there is no callback
+route of its own: `projects` picks the code up when it sees one, and the book the shipper
+started from is remembered in their session rather than round-tripped through lapse. for
+local development, register a second app whose redirect uri is `http://localhost:8000/projects/`
+and point `LAPSE_REDIRECT_URI` at it.
+
+two things about the api are worth knowing before touching `lapse.py`:
+
+- **a failed call still comes back HTTP 200**, with `{"ok": false, "error": ..., "message": ...}`.
+  the envelope is what says whether a call worked, so that's what's checked.
+- **a timelapse's `duration` is *recorded* seconds, not the length of the video.** the
+  compiled video runs sixty times faster — the api reports `720` for a video that is twelve
+  seconds long — which is the same ratio the review desks already read footage in
+  (`TRACKED_SECONDS_PER_VIDEO_SECOND`). so `duration` lands on `tracked_seconds` unchanged
+  and the video timeline is derived from it. reading it as a video length would multiply
+  every shipper's hours by sixty.
+
+there's no refresh grant on the token endpoint — `/auth/token` accepts `authorization_code`
+and nothing else — so an expired token can't be renewed behind the shipper's back. the
+picker notices and asks them to reconnect.
+
+the durations the picker draws are for the shipper's benefit only. when a lapse is actually
+written, `create_journal` re-reads the footage from the api and takes the tracked time off
+*that*: the form only ever sends a list of ids, because tracked time is what turns into
+hours and then into money.
 
 ### hack club auth
 this is for the `HCA_CLIENT_ID`, `HCA_CLIENT_SECRET`, and `HCA_CALLBACK_URI` fields! the process for getting these is quite simple, just:
@@ -113,7 +151,7 @@ is ever sent to the browser — the token only leaves the server in an `Authoriz
 
 `Optional - Override Hours Spent Justification` is the field HQ reads as the unified
 justification, so it carries the whole audit trail: the T2 reviewer's justification
-verbatim, then every Lookout on the ship — what the timelapse reviewer said each one
+verbatim, then every timelapse on the ship — what the timelapse reviewer said each one
 showed, the ranges they cut out of it, and the reason given for each cut. T3 reviewers see
 exactly that text on the fraud review page before they approve.
 
@@ -132,7 +170,7 @@ the record id in or setting the status back to failed.
 
 ### inactivity detection (ffmpeg)
 
-the Lookout review page draws a second track under each recording's timeline showing the
+the timelapse review page draws a second track under each recording's timeline showing the
 stretches where nothing on screen changed — the screen somebody walked away from, the
 tutorial left playing, the half hour of an idle editor. it's advisory: it never removes
 time by itself, it only says where to look, and every deduction is still a range a
@@ -143,7 +181,7 @@ it's one ffmpeg pass per video (sample at 1fps, subtract consecutive frames, ask
 macOS `brew install ffmpeg`, on debian `apt install ffmpeg`. the docker image installs it,
 so a containerised deploy needs nothing extra.
 
-**it runs itself when somebody creates a journal.** the entry's Lookouts are analysed on a
+**it runs itself when somebody creates a journal.** the entry's timelapses are analysed on a
 worker thread the moment the attachment commits — a pass is minutes of ffmpeg and nobody's
 browser waits for it, so the request returns straight away and the footage is usually
 already analysed by the time a reviewer opens it. at most `MAX_CONCURRENT_CHECKS`

@@ -9,7 +9,7 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from ..models import (
-    AuditLog, InternalComment, Journal, LookoutSession, TimelapseRemoval,
+    AuditLog, InternalComment, Journal, Timelapse, TimelapseRemoval,
     PAYOUT_MULTIPLIER_DEFAULT, PEARLS_PER_HOUR, detect_editor
 )
 from ..hca import (
@@ -89,7 +89,7 @@ def layers_for_minutes(minutes, multiplier=PAYOUT_MULTIPLIER_DEFAULT):
     return int(layers.quantize(Decimal("1"), rounding=ROUND_HALF_EVEN))
 
 def tracked_seconds_for_journals(journals):
-    return LookoutSession.objects.filter(journal__in=journals).aggregate(
+    return Timelapse.objects.filter(journal__in=journals).aggregate(
         total=Sum("tracked_seconds")
     )["total"] or 0
 

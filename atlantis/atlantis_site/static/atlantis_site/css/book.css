@@ -334,9 +334,7 @@ textarea {
 
 /* ---------- buttons ---------- */
 
-/* .tl-btn is the recorder's own name for the same pill; see lookout.css. */
-.ink-btn,
-.tl-btn {
+.ink-btn {
     padding: 0.14em 0.9em 0.26em;
     border: 0.07em solid #9C7F4F;
     border-radius: 999px;
@@ -346,37 +344,24 @@ textarea {
 }
 
 .ink-btn:hover:not(:disabled),
-.ink-btn:focus-visible:not(:disabled),
-.tl-btn:hover:not(:disabled),
-.tl-btn:focus-visible:not(:disabled) {
+.ink-btn:focus-visible:not(:disabled) {
     background-color: #FFFBF0;
 }
 
-.ink-btn:disabled,
-.tl-btn:disabled {
+.ink-btn:disabled {
     border-color: #BCA986;
     color: var(--ink-faint);
     cursor: not-allowed;
 }
 
-/* The recorder's buttons carry real labels, so they are set at a readable
-   size rather than the page's. */
-.tl-btn {
-    color: var(--ink);
-    font-size: clamp(16px, 1.3vw, 20px);
-}
-
-.ink-btn--strong,
-.tl-btn--primary {
+.ink-btn--strong {
     border-color: #6B4A24;
     background-color: #6B4A24;
     color: #FBEFD6;
 }
 
 .ink-btn--strong:hover:not(:disabled),
-.ink-btn--strong:focus-visible:not(:disabled),
-.tl-btn--primary:hover:not(:disabled),
-.tl-btn--primary:focus-visible:not(:disabled) {
+.ink-btn--strong:focus-visible:not(:disabled) {
     background-color: #55391A;
     color: #FBEFD6;
 }
@@ -810,18 +795,6 @@ a.ink-btn {
     color: var(--ink-danger);
 }
 
-.chip--busy {
-    border-style: dashed;
-    color: var(--ink-link);
-    text-decoration: none;
-}
-
-.chip--dead {
-    border-color: rgba(163, 60, 43, 0.5);
-    color: var(--ink-danger);
-    cursor: default;
-}
-
 /* ---------- slips laid on the book ---------- */
 
 .slip-layer {
@@ -942,7 +915,7 @@ a.ink-btn {
     background-color: #8A3023;
 }
 
-.lookout-list {
+.lapse-list {
     margin: 0 0 4px;
     padding: 0;
     list-style: none;
@@ -950,7 +923,7 @@ a.ink-btn {
     overflow-y: auto;
 }
 
-.lookout-list li {
+.lapse-list li {
     display: flex;
     align-items: center;
     gap: 12px;
@@ -959,44 +932,58 @@ a.ink-btn {
     font-size: clamp(16px, 1.35vw, 21px);
 }
 
-.lookout-list label {
+.lapse-list label {
     display: flex;
     flex: 1;
-    align-items: baseline;
+    align-items: center;
     gap: 10px;
     margin: 0;
     cursor: pointer;
 }
 
-.lookout-list input {
+.lapse-list input {
     width: 1em;
     height: 1em;
     accent-color: #6B4A24;
 }
 
-.lookout-list strong {
-    min-width: 4.2em;
-    font-weight: 400;
-    white-space: nowrap;
-}
-
-.lookout-list a {
+.lapse-list a {
     color: var(--ink-link);
     white-space: nowrap;
 }
 
-.lookout-when {
-    display: flex;
-    flex: 1;
-    align-items: baseline;
-    gap: 10px;
+/* A row that can't be picked is still listed: somebody hunting for a recording
+   that isn't offered is owed the reason it isn't. */
+.lapse-list .is-blocked {
+    opacity: 0.55;
 }
 
-.lookout-heading {
-    margin: 14px 0 2px;
+.lapse-list .is-blocked label {
+    cursor: default;
+}
+
+.lapse-thumb {
+    width: 4.4em;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    border: 1px solid var(--paper-edge);
+    border-radius: 3px;
+    background-color: #E8DCC0;
+}
+
+.lapse-body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.lapse-name {
     font-weight: 400;
-    font-size: clamp(17px, 1.5vw, 23px);
-    color: var(--ink-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .zoom-media {
