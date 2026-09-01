@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.files.storage import default_storage
 from django.db import transaction
-from django.db.models import Sum
+from django.db.models import Exists, OuterRef, Sum
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
@@ -379,8 +379,16 @@ def project_detail(request, project_id):
             ship_disabled_reason = "You need to upload a screenshot of your project before you can ship."
         elif ship_pending:
             ship_disabled_reason = "Your most recent ship must be finalized or rejected before you can reship."
-        elif not project.journals.exists() and not can_bypass_ship_requirements(user):
-            ship_disabled_reason = "You need at least one lapse before you can ship."
+        # The gate ship_project actually enforces: shipping claims the journals
+        # it carries, so what's left to ship is the lapses no ship has taken
+        # yet. Counting every lapse ever written would light the button up
+        # after a rejection and then bounce the post.
+        elif not project.journals.filter(ship__isnull=True).exists() and not can_bypass_ship_requirements(user):
+            ship_disabled_reason = (
+                "You need a new lapse before you can reship."
+                if latest_ship
+                else "You need at least one lapse before you can ship."
+            )
         else:
             can_ship = True
 
@@ -480,7 +488,11 @@ def explore(request):
     profile = request.user.hackclub_profile
 
     projects_unlocked = Project.objects.filter(deleted=False).exclude(locked=True)
-    projects = projects_unlocked.exclude(owner=request.user)
+    # An empty book is nothing to browse: a project only reaches the shelf once
+    # its owner has written at least one lapse into it.
+    projects = projects_unlocked.exclude(owner=request.user).filter(
+        Exists(Journal.objects.filter(project=OuterRef("pk")))
+    )
 
     return render(request, "atlantis_site/explore.html", {'profile': profile, 'projects': projects})
 
@@ -656,7 +668,15 @@ def ship_project(request, project_id):
         messages.error(request, "You cannot reship until your most recent ship has been finalized or rejected.")
         return redirect("project_detail", project_id=project_id)
 
-    if not bypass_requirements:
+    # A rejected ship is finished work a reviewer sent back, and the fix it
+    # asks for is usually minutes rather than hours. Holding the retry to the
+    # same fresh-time gate as a voluntary reship would make small corrections
+    # unshippable, so the retry answers to the journal requirement alone.
+    retrying_rejection = (
+        latest_ship is not None and latest_ship.status == Ship.ShipStatus.REJECTED
+    )
+
+    if not bypass_requirements and not retrying_rejection:
         unassigned_time = tracked_minutes_for_journals(unassigned_journals)
         if latest_ship:
             if unassigned_time <= 120:

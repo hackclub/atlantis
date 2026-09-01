@@ -247,11 +247,25 @@ class ProjectDetailTests(BaseTestCase):
 		self.assertFalse(response.context["can_ship"])
 		self.assertIn("finalized or rejected", response.context["ship_disabled_reason"])
 
-	def test_can_reship_after_rejection(self):
+	def test_can_reship_after_rejection_once_a_new_lapse_exists(self):
+		project = make_project(self.user, shippable=True)
+		make_ship(project, status=Ship.ShipStatus.REJECTED)
+		make_journal(project, time_spent=5)
+		response = self._detail(project)
+		self.assertTrue(response.context["can_ship"])
+		self.assertEqual(response.context["ship_disabled_reason"], "")
+
+	def test_cannot_reship_after_rejection_without_a_new_lapse(self):
+		"""The rejected ship owns every lapse, so the button must stay dark.
+
+		Offering it would only bounce the post on ship_project's own
+		unassigned-journal gate.
+		"""
 		project = make_project(self.user, shippable=True)
 		make_ship(project, status=Ship.ShipStatus.REJECTED)
 		response = self._detail(project)
-		self.assertTrue(response.context["can_ship"])
+		self.assertFalse(response.context["can_ship"])
+		self.assertIn("new lapse", response.context["ship_disabled_reason"])
 
 	def test_time_spent_totals_journals(self):
 		project = make_project(self.user)
@@ -292,12 +306,32 @@ class ExploreTests(BaseTestCase):
 	def test_excludes_own_locked_and_deleted_projects(self):
 		other = make_user("other")
 		visible = make_project(other, title="Visible")
-		make_project(other, title="Locked", locked=True)
-		make_project(other, title="Deleted", deleted=True)
-		make_project(self.user, title="Mine")
+		make_journal(visible)
+		make_journal(make_project(other, title="Locked", locked=True))
+		make_journal(make_project(other, title="Deleted", deleted=True))
+		make_journal(make_project(self.user, title="Mine"))
 
 		response = self.client.get(reverse("explore"))
 		self.assertEqual(list(response.context["projects"]), [visible])
+
+	def test_excludes_projects_with_no_journals(self):
+		other = make_user("other")
+		make_project(other, title="Empty")
+		written_in = make_project(other, title="Written in")
+		make_journal(written_in)
+
+		response = self.client.get(reverse("explore"))
+		self.assertEqual(list(response.context["projects"]), [written_in])
+
+	def test_lists_a_project_once_however_many_journals_it_has(self):
+		other = make_user("other")
+		busy = make_project(other, title="Busy")
+		make_journal(busy)
+		make_journal(busy)
+		make_journal(busy)
+
+		response = self.client.get(reverse("explore"))
+		self.assertEqual(list(response.context["projects"]), [busy])
 
 
 class ProjectDetailVisitorTests(BaseTestCase):
@@ -630,6 +664,23 @@ class ShipProjectTests(BaseTestCase):
 		self.assertEqual(Ship.objects.count(), 1)
 		self.assertIn(
 			"Can't ship again without at least 2 hours of work!", message_texts(response)
+		)
+
+	def test_reship_after_rejection_skips_the_two_hour_requirement(self):
+		make_ship(self.project, status=Ship.ShipStatus.REJECTED)
+		new_journal = make_journal(self.project, time_spent=5)
+		self._ship()
+		self.assertEqual(Ship.objects.count(), 2)
+		new_ship = Ship.objects.order_by("-id").first()
+		new_journal.refresh_from_db()
+		self.assertEqual(new_journal.ship, new_ship)
+
+	def test_reship_after_rejection_still_needs_a_new_journal(self):
+		make_ship(self.project, status=Ship.ShipStatus.REJECTED)
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 1)
+		self.assertIn(
+			"Your project must have at least one journal to be shipped", message_texts(response)
 		)
 
 	def test_reship_with_121_new_minutes_succeeds(self):
