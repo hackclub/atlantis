@@ -14,7 +14,7 @@ from ..airtable import (
 from ..hca import AddressUnavailable, IdentityUnavailable, extract_birthdate
 from ..models import AirtableSubmission, AuditLog, Ship, T2, T3
 from ..submissions import (
-	FIELDS, LAPSE_HEADING, NotFinalized, build_fields,
+	FIELDS, LOOKOUT_HEADING, NotFinalized, build_fields,
 	build_override_justification, pending_ships, submit_ship,
 )
 from .base import (
@@ -198,11 +198,11 @@ class JustificationTests(BaseTestCase):
 	def test_t2_justification_opens_it_verbatim(self):
 		text = build_override_justification(self.ship)
 		self.assertTrue(text.startswith("Solid build, hours check out."))
-		self.assertLess(text.index("Solid build"), text.index(LAPSE_HEADING))
+		self.assertLess(text.index("Solid build"), text.index(LOOKOUT_HEADING))
 
-	def test_lapse_link_removed_range_and_reason_are_appended(self):
+	def test_lookout_link_removed_range_and_reason_are_appended(self):
 		text = build_override_justification(self.ship)
-		self.assertIn(self.session.watch_url, text)
+		self.assertIn(self.session.video_url, text)
 		self.assertIn("5:00-30:00", text)
 		self.assertIn("idle, nothing on screen", text)
 		self.assertIn(self.journal.title, text)
@@ -217,25 +217,25 @@ class JustificationTests(BaseTestCase):
 			decision=T3.Decision.APPROVE, payout_time=95, airtable_time=95,
 		)
 		text = build_override_justification(self.ship)
-		self.assertIn("Tracked by Lapse: 2h 0m", text)
+		self.assertIn("Tracked by Lookout: 2h 0m", text)
 		self.assertIn("Removed in internal timelapse review: 0h 25m", text)
 		self.assertIn("Deducted by T2 review: 0h 10m", text)
 		self.assertIn("Submitted hours: 1.6", text)
 
-	def test_timelapses_with_nothing_removed_are_still_listed(self):
+	def test_lookouts_with_nothing_removed_are_still_listed(self):
 		journal = make_journal(self.project, ship=self.ship, time_spent=0)
 		session = make_timelapse(self.project, journal=journal, minutes=30)
 		approve_timelapse(journal)
 
 		text = build_override_justification(self.ship)
-		self.assertIn(session.watch_url, text)
+		self.assertIn(session.video_url, text)
 		self.assertIn("nothing removed", text)
 
 	def test_a_ship_with_no_t2_review_still_gets_the_audit(self):
 		self.ship.t2_reviews.all().delete()
 		text = build_override_justification(self.ship)
-		self.assertTrue(text.startswith(LAPSE_HEADING))
-		self.assertIn(self.session.watch_url, text)
+		self.assertTrue(text.startswith(LOOKOUT_HEADING))
+		self.assertIn(self.session.video_url, text)
 
 	def test_latest_t2_justification_is_the_one_quoted(self):
 		T2.objects.create(
@@ -554,7 +554,7 @@ class T3FinalizationSubmitsTests(BaseTestCase):
 
 class FraudReviewJustificationVisibilityTests(BaseTestCase):
 	"""A T3 reviewer has to be able to read the whole justification — T2's words,
-	the Lapse links, the removed ranges and the reasons — before approving."""
+	the Lookout links, the removed ranges and the reasons — before approving."""
 
 	def setUp(self):
 		super().setUp()
@@ -579,7 +579,7 @@ class FraudReviewJustificationVisibilityTests(BaseTestCase):
 		self.assertContains(response, "Checked against the lapses.")
 		self.assertContains(response, "modelling something else")
 		self.assertContains(response, "0:00-10:00")
-		self.assertContains(response, self.session.watch_url)
+		self.assertContains(response, self.session.video_url)
 		self.assertEqual(
 			response.context["override_justification"],
 			build_override_justification(self.ship),

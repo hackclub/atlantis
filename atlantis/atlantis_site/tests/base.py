@@ -7,16 +7,14 @@ from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
-from django.utils import timezone
 
 from cryptography.fernet import Fernet
 from PIL import Image
 
 from ..models import (
-	Journal, LapseAccount, Profile, Project, Ship, Timelapse, TimelapseRemoval,
+	Journal, LookoutSession, Profile, Project, Ship, TimelapseRemoval,
 	TimelapseReview,
 )
-from .. import lapse
 
 User = get_user_model()
 
@@ -93,23 +91,16 @@ _timelapse_seq = itertools.count(1)
 
 
 def make_timelapse(project, journal=None, minutes=60, owner=None, **kwargs):
-	"""Create an attached Lapse timelapse — the only source of tracked time.
-
-	`minutes` is recorded time, which is what Lapse's `duration` reports and
-	what tracked_seconds is kept in. The compiled video is a sixtieth of it.
-	"""
+	"""Create a finished Lookout session — the only source of tracked time."""
 	n = next(_timelapse_seq)
 	defaults = {
-		"lapse_id": f"lapse-{n}",
-		"name": f"Timelapse {n}",
-		"playback_url": f"https://lookout.hackclub.com/api/media/{n}/video.mp4",
+		"session_id": f"session-{n}",
+		"token": f"token-{n}",
+		"status": LookoutSession.Status.COMPLETE,
 		"tracked_seconds": minutes * 60,
-		# Set, like the attach sets it — Meta.ordering reads this column, so a
-		# fixture that left it null would order differently from production.
-		"recorded_at": timezone.now(),
 	}
 	defaults.update(kwargs)
-	return Timelapse.objects.create(
+	return LookoutSession.objects.create(
 		project=project,
 		owner=owner if owner is not None else project.owner,
 		journal=journal,
@@ -117,81 +108,10 @@ def make_timelapse(project, journal=None, minutes=60, owner=None, **kwargs):
 	)
 
 
-def connect_lapse(user, **kwargs):
-	"""Give a user a working Lapse connection.
-
-	The token is a real Fernet round-trip through save_token, so anything that
-	reads account.access_token or checks is_expired behaves as it would in
-	production rather than against a stub.
-	"""
-	account = LapseAccount(
-		user=user,
-		lapse_user_id=f"lapse-user-{user.pk}",
-		handle=user.username[:16],
-		display_name=user.username[:24],
-	)
-	account.save_token({
-		"access_token": f"test-token-{user.pk}",
-		"expires_in": 3600,
-		"token_type": "Bearer",
-		"scope": " ".join(lapse.SCOPES),
-	})
-	for field, value in kwargs.items():
-		setattr(account, field, value)
-	account.save()
-	return account
-
-
-def lapse_payload(lapse_id, minutes=60, **overrides):
-	"""One published timelapse, shaped the way the Lapse API returns it.
-
-	`duration` is recorded seconds — that is what the API means by it, and the
-	attach reads tracked time straight off it.
-	"""
-	owner = {
-		"id": "lapse-owner",
-		"createdAt": 1785382273371,
-		"handle": "shipper",
-		"displayName": "Shipper",
-		"profilePictureUrl": "https://example.com/pfp.png",
-		"bio": "",
-		"urls": [],
-		"hackatimeId": None,
-		"slackId": None,
-	}
-	payload = {
-		"id": lapse_id,
-		"name": f"Timelapse {lapse_id}",
-		"description": "",
-		"visibility": "PUBLIC",
-		"createdAt": 1788226165685,
-		"owner": owner,
-		"comments": [],
-		"playbackUrl": f"https://lookout.hackclub.com/api/media/{lapse_id}/video.mp4",
-		"thumbnailUrl": f"https://lookout.hackclub.com/api/media/{lapse_id}/thumbnail.jpg",
-		"duration": minutes * 60,
-		"isDraft": False,
-	}
-	payload.update(overrides)
-	return payload
-
-
-def patch_lapse(timelapses):
-	"""Stand in for the shipper's published timelapses on Lapse.
-
-	Patched on the module rather than on either importer, so the picker and the
-	attach both see the same account.
-	"""
-	return patch(
-		"atlantis_site.lapse.fetch_published_timelapses",
-		return_value=list(timelapses),
-	)
-
-
 def make_journal(project, ship=None, time_spent=60, **kwargs):
 	"""Create a journal entry whose time comes from an attached timelapse.
 
-	`time_spent` is in minutes and is realised as a Lapse timelapse, since
+	`time_spent` is in minutes and is realised as a Lookout session, since
 	journals have no self-reported time of their own.
 	"""
 	defaults = {

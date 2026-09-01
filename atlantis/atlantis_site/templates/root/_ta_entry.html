@@ -12,7 +12,7 @@
             <span class="ta-ico" aria-hidden="true">&#9201;</span>
             <span data-entry-time>{{ lapse.tracked_label }}</span>
         </span>
-        <span class="ta-entry-meta">&middot; {{ lapse.timelapse_count }} recording{{ lapse.timelapse_count|pluralize }}</span>
+        <span class="ta-entry-meta">&middot; {{ lapse.lookout_count }} recording{{ lapse.lookout_count|pluralize }}</span>
         <span class="ta-entry-title">{{ lapse.title }}</span>
         {% if editable %}
             <span class="ta-badge ta-badge-done" data-entry-done hidden>Done</span>
@@ -31,13 +31,13 @@
             {% for session in lapse.timelapses.all %}
                 <div class="ta-rec" data-recording data-recording-id="{{ session.id }}">
                     <div class="ta-video-wrap">
-                        <video class="ta-video" src="{{ session.playback_url }}" poster="{{ session.thumbnail_url }}"
+                        <video class="ta-video" src="{{ session.video_url }}" poster="{{ session.thumbnail_url }}"
                                controls preload="metadata" playsinline muted></video>
                     </div>
 
                     <div class="ta-rec-info">
                         <span class="ta-rec-name">Timelapse {{ forloop.counter }}</span>
-                        <span class="ta-badge ta-badge-lapse">Timelapse</span>
+                        <span class="ta-badge ta-badge-lookout">Timelapse</span>
                         {% if session.activity_checked and session.inactive_percentage %}
                             <span class="ta-badge {% if session.inactive_percentage > 30 %}ta-badge-bad{% else %}ta-badge-quiet{% endif %}"
                                   title="{{ session.inactive_display }} of tracked time shows no change on screen">
@@ -49,7 +49,7 @@
                         <span class="ta-rec-spacer"></span>
                         <span class="ta-rec-duration">
                             {{ session.tracked_display }}
-                            <span class="ta-rec-video-len">(<span data-rec-video-len>{{ session.video_duration_display }}</span> video)</span>
+                            <span class="ta-rec-video-len">(<span data-rec-video-len>{{ session.video_duration_display }}</span> video &middot; {{ session.screenshot_count }} shot{{ session.screenshot_count|pluralize }})</span>
                         </span>
                     </div>
 
@@ -151,13 +151,13 @@
                             {% if session.review_description %}
                                 <p class="ta-readonly-note">{{ session.review_description }}</p>
                             {% else %}
-                                <p class="ta-readonly-note is-quiet">No description was recorded for this timelapse.</p>
+                                <p class="ta-readonly-note is-quiet">No description was recorded for this Lookout.</p>
                             {% endif %}
                         </div>
                     {% endif %}
                 </div>
             {% empty %}
-                <p class="ta-empty">No timelapse on this lapse &mdash; nothing to watch, and no time to remove.</p>
+                <p class="ta-empty">No Lookout on this lapse &mdash; nothing to watch, and no time to remove.</p>
             {% endfor %}
         </div>
 

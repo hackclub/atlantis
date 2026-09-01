@@ -4,7 +4,7 @@ from django.db import IntegrityError, transaction
 from django.urls import reverse
 
 from ..models import (
-	AuditLog, Journal, Ship, Timelapse, TimelapseAnnotation,
+	AuditLog, Journal, LookoutSession, Ship, TimelapseAnnotation,
 	TimelapseRemoval, TimelapseReview, first_overlap, format_timecode,
 	parse_timecode, tracked_to_video, video_to_tracked,
 )
@@ -23,14 +23,14 @@ from .base import (
 
 
 def describe_all(project, text="watched it, the time is real"):
-	"""A description for every timelapse the project has waiting.
+	"""A description for every Lookout the project has waiting.
 
 	Every recording in a pass needs one before the view will take the pass, so
 	a test about ranges would otherwise be a test about descriptions. This says
 	"all of them are described" in one line, and the tests that are *about*
 	descriptions override or drop entries from it.
 	"""
-	sessions = Timelapse.objects.filter(
+	sessions = LookoutSession.objects.filter(
 		journal__project=project, journal__timelapse_review__isnull=True
 	)
 	return {f"description_{session.id}": text for session in sessions}
@@ -96,20 +96,19 @@ class VideoLengthTests(BaseTestCase):
 		super().setUp()
 		self.project = make_project(make_user("author"), shippable=True)
 
-	def test_length_is_derived_from_the_recorded_time(self):
-		"""One recorded minute is one second of video."""
-		session = make_timelapse(self.project, minutes=65)
+	def test_length_comes_from_the_screenshots_not_the_credited_time(self):
+		"""One shot is one second of video, credited or not."""
+		session = make_timelapse(self.project, minutes=65, screenshot_count=71)
+		self.assertEqual(session.video_seconds, 71)
+		self.assertEqual(session.video_duration_display, "1:11")
+
+	def test_a_session_whose_count_never_synced_falls_back_to_tracked_time(self):
+		session = make_timelapse(self.project, minutes=65, screenshot_count=0)
 		self.assertEqual(session.video_seconds, 65)
-		self.assertEqual(session.video_duration_display, "1:05")
 
-	def test_a_part_minute_of_tracking_still_occupies_a_whole_second(self):
-		"""Rounded up: a length that rounded down would cut the tail off."""
-		session = make_timelapse(self.project, minutes=0, tracked_seconds=65 * 60 + 30)
-		self.assertEqual(session.video_seconds, 66)
-
-	def test_a_measured_length_beats_the_derived_one(self):
-		"""Once something has read the file, the derived length stops being used."""
-		session = make_timelapse(self.project, minutes=65)
+	def test_a_measured_length_beats_both_estimates(self):
+		"""Once something has read the file, the estimate stops being used."""
+		session = make_timelapse(self.project, minutes=65, screenshot_count=71)
 		session.measured_video_seconds = 70
 		session.save(update_fields=["measured_video_seconds"])
 
@@ -117,8 +116,8 @@ class VideoLengthTests(BaseTestCase):
 		self.assertEqual(session.video_duration_display, "1:10")
 
 	def test_a_shorter_measurement_is_still_the_one_that_counts(self):
-		"""The file is the authority, even when it undercuts the derived length."""
-		session = make_timelapse(self.project, minutes=65)
+		"""The file is the authority, even when it undercuts both estimates."""
+		session = make_timelapse(self.project, minutes=65, screenshot_count=71)
 		session.measured_video_seconds = 12
 		session.save(update_fields=["measured_video_seconds"])
 
@@ -340,7 +339,7 @@ class TimelapseDecisionTests(BaseTestCase):
 		self.assertEqual(journal.removed_seconds, 15 * 60)
 		self.assertEqual(journal.approved_seconds, (120 - 15) * 60)
 
-	def test_multiple_ranges_across_multiple_timelapses(self):
+	def test_multiple_ranges_across_multiple_lookouts(self):
 		second = make_timelapse(self.project, journal=self.journal, minutes=30)
 		self._decide(ranges=[
 			(self.session, "0:05", "0:30", "afk"),
@@ -431,14 +430,14 @@ class TimelapseDecisionTests(BaseTestCase):
 		)
 
 	def test_notes_on_the_pass_are_optional(self):
-		"""The per-timelapse descriptions carry the account; these are extra."""
+		"""The per-Lookout descriptions carry the account; these are extra."""
 		self._decide(internal_notes="")
 
 		review = TimelapseReview.objects.get()
 		self.assertEqual(review.internal_notes, "")
 		self.assertEqual(review.annotations.count(), 1)
 
-	def test_every_timelapse_needs_a_description(self):
+	def test_every_lookout_needs_a_description(self):
 		response = self.client.post(
 			reverse("timelapse_decision", args=[self.project.id]),
 			{"internal_notes": "reviewed"},
@@ -580,7 +579,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 		])
 		self.assertEqual(TimelapseRemoval.objects.count(), 2)
 
-	def test_same_range_on_different_timelapses_is_not_an_overlap(self):
+	def test_same_range_on_different_lookouts_is_not_an_overlap(self):
 		second = make_timelapse(self.project, journal=self.journal, minutes=30)
 		self._post([
 			(self.session, "0:00", "0:10", "afk"),
@@ -592,27 +591,27 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 		"""The guard against a negative adjusted duration.
 
 		An hour of tracking compiles to a minute of video, so 1:30 on the
-		player is footage this timelapse doesn't have.
+		player is footage this Lookout doesn't have.
 		"""
 		response = self._post([(self.session, "0:00", "1:30", "everything")])
-		self._assert_rejected(response, "runs past the end of that timelapse's video")
+		self._assert_rejected(response, "runs past the end of that Lookout's video")
 
-	def test_whole_timelapse_may_be_removed(self):
+	def test_whole_lookout_may_be_removed(self):
 		self._post([(self.session, "0:00", "1:00", "screen recording of someone else")])
 		self.assertEqual(self.journal.approved_seconds, 0)
 
-	def test_a_cut_may_reach_the_end_of_footage_beyond_the_credited_time(self):
-		"""The measured file is the timeline, even where it outruns the credit.
+	def test_a_cut_may_reach_the_end_of_footage_lookout_never_credited(self):
+		"""The video is as long as the screenshots, not as the credited time.
 
-		A video that measures longer than the recorded time implies still has
-		those seconds in it, and a reviewer can see them. Refusing a cut they
-		can watch — because the derived length said the video ended earlier —
-		put the tail of the footage out of reach.
+		A session can hold shots it was never credited for, and every one of
+		them is still a second of footage. Working the length out from tracked
+		time alone put the tail of the video past the end of the timeline, and
+		a cut a reviewer could see was refused as running past the end.
 		"""
 		journal = make_journal(self.project, time_spent=0)
 		session = make_timelapse(self.project, journal=journal, minutes=65)
-		session.measured_video_seconds = 71
-		session.save(update_fields=["measured_video_seconds"])
+		session.screenshot_count = 71
+		session.save(update_fields=["screenshot_count"])
 
 		self.assertEqual(session.video_seconds, 71)
 		self._post([(session, "1:00", "1:10", "screensaver")])
@@ -656,16 +655,16 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 		response = self._post([(self.session, "five minutes", "0:30", "afk")])
 		self._assert_rejected(response, "couldn't read that range")
 
-	def test_a_timelapse_on_a_sibling_lapse_is_part_of_the_same_pass(self):
+	def test_a_lookout_on_a_sibling_lapse_is_part_of_the_same_pass(self):
 		"""The pass covers the project, so its other waiting lapses are in scope."""
 		other = make_journal(self.project, time_spent=60)
 		self._post([(other.timelapses.get(), "0:05", "0:30", "afk")])
 		self.assertEqual(TimelapseRemoval.objects.get().review.journal, other)
 
-	def test_timelapse_from_another_project_rejected(self):
+	def test_lookout_from_another_project_rejected(self):
 		elsewhere = make_journal(make_project(make_user("stranger")), time_spent=60)
 		response = self._post([(elsewhere.timelapses.get(), "0:05", "0:30", "afk")])
-		self._assert_rejected(response, "isn't on a timelapse attached to this project")
+		self._assert_rejected(response, "isn't on a Lookout attached to this project")
 
 	def test_mismatched_row_lengths_rejected(self):
 		response = self.client.post(reverse("timelapse_decision", args=[self.project.id]), {

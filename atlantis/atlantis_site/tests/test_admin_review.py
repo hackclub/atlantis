@@ -536,8 +536,8 @@ class ReviewPageEvidenceTests(BaseTestCase):
 	def _page(self):
 		return self.client.get(reverse("review_project", args=[self.ship.id]))
 
-	def test_the_timelapse_description_travels_with_the_recording(self):
-		"""What the timelapse reviewer wrote is why the video isn't embedded here.
+	def test_the_lookout_description_travels_with_the_recording(self):
+		"""What the Lookout reviewer wrote is why the video isn't embedded here.
 
 		It is hung on the session objects the page renders, which only works if
 		they are the prefetched ones — a fresh `timelapses.all()` in the
@@ -551,10 +551,10 @@ class ReviewPageEvidenceTests(BaseTestCase):
 
 		response = self._page()
 		self.assertContains(response, "Modelled the bracket start to finish, no gaps.")
-		self.assertNotContains(response, "No description from timelapse review")
+		self.assertNotContains(response, "No description from Lookout review")
 
 	def test_a_recording_nobody_described_says_so(self):
-		self.assertContains(self._page(), "No description from timelapse review")
+		self.assertContains(self._page(), "No description from Lookout review")
 
 	def test_the_page_says_where_the_ship_stands_at_every_tier(self):
 		T1.objects.create(

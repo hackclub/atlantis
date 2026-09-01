@@ -1,5 +1,5 @@
 /* ============================================================
-   The timelapse review page (.ta-*).
+   The Lookout review page (.ta-*).
 
    Fallout's time-audit layout, in Atlantis' oceanic admin palette: a fixed top
    bar over one snapping column of entries, each entry a full viewport with
@@ -132,7 +132,7 @@
     font-weight: 500;
 }
 
-.root-page .ta-badge-lapse {
+.root-page .ta-badge-lookout {
     border-color: var(--oc-tide);
     background: var(--oc-tide-soft);
     color: var(--oc-tide-2);

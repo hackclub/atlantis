@@ -1,5 +1,4 @@
 import os
-from datetime import timedelta
 from decimal import Decimal
 from urllib.parse import urlparse
 
@@ -8,7 +7,6 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.urls import reverse
-from django.utils import timezone
 
 
 # What an hour of approved work is worth before the T3 reviewer's multiplier.
@@ -74,7 +72,7 @@ def detect_editor(value):
 	return detect_editor_from_link(value)
 
 
-# Timecodes. Timelapse reviewers cut time out of a recording by naming a range of
+# Timecodes. Timelapse reviewers cut time out of a Lookout by naming a range of
 # it ("0:05-0:30"), so these are the two halves of that: what a reviewer types
 # and what we show back.
 def format_timecode(seconds):
@@ -112,9 +110,9 @@ def parse_timecode(value):
 	return total
 
 
-# Lapse stitches one recorded minute into exactly one second of the compiled
-# video: the API reports a timelapse's `duration` — its recorded time — as 720
-# for a video that runs twelve seconds. A reviewer scrubbing that video is
+# Lookout stitches one recorded minute of a session into exactly one second of
+# the compiled video (its worker: "every capture unit (one recorded minute)
+# becomes exactly one second of output"). A reviewer scrubbing that video is
 # reading a timeline sped up sixty times, so 0:56-1:11 on the player is fifteen
 # *minutes* of tracked time, not fifteen seconds. Reviewers type video offsets,
 # because that is all they can see; we store tracked ones, because that is what
@@ -556,23 +554,17 @@ class Journal(models.Model):
 		minutes = self.removed_seconds // 60
 		return f"{minutes // 60}h {minutes % 60}m"
 
-# lapse timelapses, taped into a lapse here
-class Timelapse(models.Model):
-	"""One published Lapse recording, attached to a lapse in this book.
+# lookout timelapse recording sessions
+class LookoutSession(models.Model):
+	class Status(models.TextChoices):
+		PENDING = "pending", "Pending"
+		ACTIVE = "active", "Active"
+		PAUSED = "paused", "Paused"
+		STOPPED = "stopped", "Stopped"
+		COMPILING = "compiling", "Compiling"
+		COMPLETE = "complete", "Complete"
+		FAILED = "failed", "Failed"
 
-	A row exists only once its owner has attached it. Until then a timelapse is
-	nothing of ours — it is a recording sitting in their account on Lapse, and
-	the picker fetches those live so work published a minute ago can be taped
-	in without waiting on anything here. What gets copied down is what the
-	review desks need to stand behind the hours long after: the id its
-	permalink is built from, the name it was published under, the length, and
-	the video to scrub.
-
-	`tracked_seconds` is Lapse's `duration`, unconverted. That field is
-	*recorded* time and not the length of the compiled video — the API reports
-	720 for a video that runs twelve seconds — which is the same sixty-to-one
-	the reviewers already read footage in. See TRACKED_SECONDS_PER_VIDEO_SECOND.
-	"""
 	project = models.ForeignKey(
 		Project,
 		on_delete=models.CASCADE,
@@ -591,27 +583,20 @@ class Timelapse(models.Model):
 		blank=True
 	)
 
-	# Lapse's own id for the recording. Unique across the table, and that
-	# constraint is load-bearing: it is what stops one piece of footage being
-	# taped into two lapses and paid for twice.
-	lapse_id = models.CharField(max_length=64, unique=True)
-	# What the shipper published it as. Carried so a reviewer and HQ see the
-	# same title the shipper does, rather than an opaque id.
-	name = models.CharField(max_length=120, blank=True, default="")
+	session_id = models.CharField(max_length=64, unique=True)
+	token = models.CharField(max_length=128, unique=True)
 
-	# The compiled video, straight off Lapse. It redirects to signed storage
-	# that expires, so it is good for playing and for the activity pass, and
-	# not for writing down anywhere permanent — watch_url is the permalink.
-	playback_url = models.URLField(max_length=500, blank=True, default="")
-	thumbnail_url = models.URLField(max_length=500, blank=True, default="")
+	status = models.CharField(
+		max_length=16,
+		choices=Status.choices,
+		default=Status.PENDING,
+	)
 
-	# When Lapse says it was recorded, which is not created_at: that is when it
-	# was taped in here, and the two can be days apart.
-	recorded_at = models.DateTimeField(null=True, blank=True)
-
-	# Lapse's `duration` verbatim. Never self-reported and never computed from
-	# anything the browser sent: the attach re-reads it from the API.
 	tracked_seconds = models.IntegerField(default=0)
+	total_active_seconds = models.IntegerField(default=0)
+	screenshot_count = models.IntegerField(default=0)
+
+	heartbeats_forwarded = models.BooleanField(default=False)
 
 	# What the activity checker found in the compiled video: stretches where
 	# nothing on screen changed. Advisory only — it is drawn under the player
@@ -625,28 +610,38 @@ class Timelapse(models.Model):
 	activity_checked_at = models.DateTimeField(null=True, blank=True)
 	# How long the compiled video actually runs, read off the file itself by
 	# the activity check. Null until something has measured it; until then the
-	# length is derived from the tracked time Lapse reported.
+	# length is estimated from what Lookout reported (see video_seconds).
 	measured_video_seconds = models.IntegerField(null=True, blank=True)
 
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
 	class Meta:
-		ordering = ["-recorded_at", "-created_at"]
+		ordering = ["-created_at"]
 
 	def __str__(self):
-		return f"Timelapse {self.lapse_id} for project {self.project_id}"
+		return f"Timelapse {self.session_id} ({self.status}) for project {self.project_id}"
 
 	@property
-	def watch_url(self):
-		"""The page on Lapse where this recording lives.
+	def is_recordable(self):
+		return self.status in (
+			self.Status.PENDING,
+			self.Status.ACTIVE,
+			self.Status.PAUSED,
+		)
 
-		The link that goes to anyone reading the ship later — a reviewer here,
-		HQ in Airtable. Built rather than stored because playback_url expires
-		and this does not.
-		"""
-		from .lapse import watch_url
-		return watch_url(self.lapse_id)
+	@property
+	def is_complete(self):
+		return self.status == self.Status.COMPLETE
+
+	@property
+	def is_processing(self):
+		"""Recording is over but Lookout hasn't produced the video yet."""
+		return self.status in (self.Status.STOPPED, self.Status.COMPILING)
+
+	@property
+	def is_attachable(self):
+		return self.is_complete and self.journal_id is None
 
 	@property
 	def tracked_display(self):
@@ -654,17 +649,46 @@ class Timelapse(models.Model):
 		return f"{total // 3600}h {(total % 3600) // 60}m"
 
 	@property
+	def video_url(self):
+		base = settings.LOOKOUT_BASE_URL.rstrip("/")
+		return f"{base}/api/media/{self.session_id}/video.mp4"
+
+	@property
+	def thumbnail_url(self):
+		base = settings.LOOKOUT_BASE_URL.rstrip("/")
+		return f"{base}/api/media/{self.session_id}/thumbnail.jpg"
+
+	@property
+	def estimated_video_seconds(self):
+		"""How long the compiled video runs, going by what Lookout reported.
+
+		One confirmed screenshot is one second of output, so the shot count is
+		the length. Tracked time is not: a session can hold screenshots it was
+		never credited for — a capture Lookout refused, one taken while the
+		clock wasn't running, the bucket a session opens with — and every one
+		of those is still a frame in the video. Deriving the length from
+		tracked time alone made the page claim a video shorter than the one
+		the reviewer was watching, which put the tail of it out of reach.
+
+		The tracked-derived figure stays on as a floor, for a session whose
+		shot count never synced.
+		"""
+		return max(
+			self.screenshot_count or 0,
+			tracked_to_video(self.tracked_seconds or 0),
+		)
+
+	@property
 	def video_seconds(self):
 		"""How long the compiled video runs, in its own sped-up timeline.
 
 		This is the timeline a timelapse reviewer's ranges are read in — see
 		TRACKED_SECONDS_PER_VIDEO_SECOND. Measured off the video where the
-		activity check has been over it, derived from the tracked time Lapse
-		reported where it hasn't.
+		activity check has been over it, estimated where it hasn't.
 		"""
 		if self.measured_video_seconds is not None:
 			return self.measured_video_seconds
-		return tracked_to_video(self.tracked_seconds or 0)
+		return self.estimated_video_seconds
 
 	@property
 	def video_duration_display(self):
@@ -694,9 +718,9 @@ class Timelapse(models.Model):
 
 	@property
 	def activity_checked(self):
-		"""True once the inactivity pass has run over this recording's video.
+		"""True once the inactivity pass has run over this session's video.
 
-		Distinct from "found nothing": an unchecked recording is drawn as
+		Distinct from "found nothing": an unchecked session is drawn as
 		unanalysed, a checked one with no segments is drawn as clean, and the
 		reviewer is owed the difference.
 		"""
@@ -715,78 +739,9 @@ class Timelapse(models.Model):
 		return format_timecode(video_to_tracked(self.inactive_seconds))
 
 
-class LapseAccount(models.Model):
-	"""A shipper's connection to their Lapse account.
-
-	One per user, created when they come back through the authorize page. The
-	token is the whole point of the row: it is what the picker reads their
-	published timelapses with, and it is stored the way the HCA token is —
-	encrypted at rest, never rendered, never sent anywhere but Lapse.
-
-	There is no refresh grant on the Lapse token endpoint, so an expired token
-	cannot be renewed behind the shipper's back. `is_expired` is what lets the
-	book say "reconnect" before a request fails instead of after.
-	"""
-	user = models.OneToOneField(
-		settings.AUTH_USER_MODEL,
-		on_delete=models.CASCADE,
-		related_name="lapse_account"
-	)
-
-	# Who Lapse says the token belongs to. Shown in the picker so a shipper
-	# with two accounts can see which one they connected.
-	lapse_user_id = models.CharField(max_length=64, blank=True, default="")
-	handle = models.CharField(max_length=64, blank=True, default="")
-	display_name = models.CharField(max_length=64, blank=True, default="")
-	profile_picture_url = models.CharField(max_length=300, blank=True, default="")
-
-	# Fernet-encrypted JSON of the whole token response, same as Profile does
-	# with the HCA token.
-	encrypted_token = models.TextField(blank=True, default="")
-	expires_at = models.DateTimeField(null=True, blank=True)
-	scope = models.CharField(max_length=200, blank=True, default="")
-
-	connected_at = models.DateTimeField(auto_now_add=True)
-	updated_at = models.DateTimeField(auto_now=True)
-
-	def __str__(self):
-		return f"Lapse account {self.handle or self.lapse_user_id} for {self.user_id}"
-
-	def save_token(self, token):
-		"""Persist a token response and when it runs out.
-
-		`expires_in` is seconds from now. A minute is shaved off it so a token
-		that expires mid-request is treated as gone before it is used, rather
-		than failing a call the shipper then has to retry.
-		"""
-		from .crypto import encrypt_token
-		self.encrypted_token = encrypt_token(token)
-		self.scope = token.get("scope", "")
-		expires_in = token.get("expires_in")
-		self.expires_at = (
-			timezone.now() + timedelta(seconds=max(int(expires_in) - 60, 0))
-			if expires_in
-			else None
-		)
-
-	@property
-	def access_token(self):
-		from .crypto import decrypt_token
-		return (decrypt_token(self.encrypted_token) or {}).get("access_token", "")
-
-	@property
-	def is_expired(self):
-		return bool(self.expires_at and self.expires_at <= timezone.now())
-
-	@property
-	def is_usable(self):
-		return bool(self.access_token) and not self.is_expired
-
-
-
 # internal timelapse review
 class TimelapseReview(models.Model):
-	"""One reviewer's pass over the footage attached to a journal.
+	"""One reviewer's pass over the Lookout footage attached to a journal.
 
 	Strictly internal. Nothing here reaches the project owner: no notification
 	is sent, no page they can load renders it, and the time the reviewer cuts
@@ -806,7 +761,7 @@ class TimelapseReview(models.Model):
 	)
 
 	reviewed_at = models.DateTimeField(auto_now_add=True)
-	# Optional: the per-recording descriptions carry the account of what was
+	# Optional: the per-Lookout descriptions carry the account of what was
 	# watched, and this is the space for anything that spans the whole pass.
 	internal_notes = models.CharField(max_length=1000, blank=True)
 
@@ -836,16 +791,16 @@ class TimelapseReview(models.Model):
 
 
 class TimelapseAnnotation(models.Model):
-	"""What one reviewer wrote about one timelapse while signing it off.
+	"""What one reviewer wrote about one Lookout while signing it off.
 
 	A sentence or two, per piece of footage, for whoever reads this ship
 	downstream: what the recording shows, and whether the time in it looks
 	like the work it is claimed for. The reviewer writes one before the pass
-	can be submitted, which is the point — a recording nobody described is a
-	recording nobody watched.
+	can be submitted, which is the point — a Lookout nobody described is a
+	Lookout nobody watched.
 
 	Separate from TimelapseRemoval because a description is about a whole
-	recording and a removal is about a range of one; a timelapse with nothing
+	recording and a removal is about a range of one; a Lookout with nothing
 	cut from it still gets described.
 	"""
 	review = models.ForeignKey(
@@ -854,7 +809,7 @@ class TimelapseAnnotation(models.Model):
 		related_name="annotations"
 	)
 	session = models.ForeignKey(
-		Timelapse,
+		LookoutSession,
 		on_delete=models.CASCADE,
 		related_name="annotations"
 	)
@@ -875,7 +830,7 @@ class TimelapseAnnotation(models.Model):
 
 
 class TimelapseRemoval(models.Model):
-	"""A stretch of one timelapse the reviewer refused to pay for.
+	"""A stretch of one Lookout session the reviewer refused to pay for.
 
 	Offsets are into the session's tracked timeline, not into the compiled
 	video the reviewer read them off: the video runs sixty times faster (see
@@ -891,7 +846,7 @@ class TimelapseRemoval(models.Model):
 		related_name="removals"
 	)
 	session = models.ForeignKey(
-		Timelapse,
+		LookoutSession,
 		on_delete=models.CASCADE,
 		related_name="removals"
 	)

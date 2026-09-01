@@ -12,7 +12,7 @@ The override-hours justification is the whole audit trail. HQ reads Airtable's
 justification whenever we set one — so if the internal timelapse review cut time
 out of somebody's hours, the only place that ever becomes visible outside
 Atlantis is this field. The T2 reviewer's own words open it, verbatim; the
-timelapse reviewer's justification, the Lapse links, the removed ranges,
+timelapse reviewer's justification, the Lookout links, the removed ranges,
 and the reason each range was removed are appended below them.
 
 None of the shipper's personal data is stored. Their address and birthday come
@@ -56,7 +56,7 @@ FIELDS = {
 	"override_justification": "Optional - Override Hours Spent Justification",
 }
 
-LAPSE_HEADING = "[LAPSE TIMELAPSE AUDIT]"
+LOOKOUT_HEADING = "[LOOKOUT TIMELAPSE AUDIT]"
 
 
 class NotFinalized(Exception):
@@ -105,19 +105,15 @@ def download_url(value):
 		return default_storage.url(value)
 
 
-def build_lapse_audit(ship):
+def build_lookout_audit(ship):
 	"""The internal timelapse review of this ship, written out for HQ.
 
 	One block per journal: the reviewer's notes on the pass if they left any,
-	then every timelapse attached to it — what the reviewer said that recording
+	then every Lookout attached to it — what the reviewer said that recording
 	showed, and the ranges they refused to pay for with the reason for each.
-	Recordings with nothing removed are listed too: the links and the reviewer's
+	Lookouts with nothing removed are listed too: the links and the reviewer's
 	account of them are part of the evidence for the hours whether or not
 	anything was cut.
-
-	The links are Lapse permalinks. The playback URL the video streams from is a
-	signed redirect that stops working, and this field is read by HQ long after
-	the ship is closed, so the page is what goes in it.
 	"""
 	journals = list(
 		ship.journals.order_by("created_at").select_related("timelapse_review").prefetch_related(
@@ -139,10 +135,10 @@ def build_lapse_audit(ship):
 			for annotation in (review.annotations.all() if review else ())
 		}
 		if not sessions:
-			lines.append("  no timelapse attached")
+			lines.append("  no Lookout attached")
 		for session in sessions:
 			tracked += session.tracked_seconds or 0
-			lines.append(f"  {session.watch_url} ({session.tracked_display} tracked)")
+			lines.append(f"  {session.video_url} ({session.tracked_display} tracked)")
 			# What the reviewer said this recording showed. The removals below
 			# say what they took off it; this says what they watched.
 			if descriptions.get(session.id):
@@ -166,14 +162,14 @@ def build_lapse_audit(ship):
 	t3 = approving_t3(ship)
 
 	summary = [
-		f"Tracked by Lapse: {_display_hours(tracked // 60)}",
+		f"Tracked by Lookout: {_display_hours(tracked // 60)}",
 		f"Removed in internal timelapse review: {_display_hours(removed // 60)}",
 		f"Deducted by T2 review: {_display_hours(deductions)}",
 	]
 	if t3:
 		summary.append(f"Submitted hours: {_hours(t3.airtable_time)}")
 
-	return "\n".join([LAPSE_HEADING, *summary, "", *blocks]).strip()
+	return "\n".join([LOOKOUT_HEADING, *summary, "", *blocks]).strip()
 
 
 def build_override_justification(ship):
@@ -181,7 +177,7 @@ def build_override_justification(ship):
 
 	The T2 reviewer's justification comes first and is copied character for
 	character: it is their account of the hours, HQ reads this field as the
-	unified justification, and nothing here may edit or replace it. The Lapse
+	unified justification, and nothing here may edit or replace it. The Lookout
 	audit is appended below it.
 
 	The latest T2 review is the one quoted — it is the decision that stands, and
@@ -190,7 +186,7 @@ def build_override_justification(ship):
 	"""
 	t2 = latest_t2(ship)
 	original = (t2.justification if t2 else "").strip()
-	audit = build_lapse_audit(ship)
+	audit = build_lookout_audit(ship)
 	return "\n\n".join(part for part in (original, audit) if part)
 
 

@@ -1,43 +1,16 @@
 from django.contrib import admin
 
-from .models import AirtableSubmission, AuditLog, LapseAccount, Timelapse, TimelapseRemoval, TimelapseReview
+from .models import AirtableSubmission, AuditLog, LookoutSession, TimelapseRemoval, TimelapseReview
 
 
-@admin.register(Timelapse)
-class TimelapseAdmin(admin.ModelAdmin):
-    list_display = ("lapse_id", "name", "project", "owner", "tracked_seconds", "recorded_at", "created_at")
-    list_filter = ("created_at", "recorded_at")
-    search_fields = ("lapse_id", "name", "owner__username", "project__title")
-    # Everything here came from Lapse or from the attach; none of it is ours to
-    # rewrite, and tracked_seconds is what somebody gets paid on.
-    readonly_fields = (
-        "lapse_id", "name", "playback_url", "thumbnail_url", "recorded_at",
-        "tracked_seconds", "created_at", "updated_at",
-    )
+@admin.register(LookoutSession)
+class LookoutSessionAdmin(admin.ModelAdmin):
+    list_display = ("session_id", "project", "owner", "status", "tracked_seconds", "screenshot_count", "created_at")
+    list_filter = ("status", "created_at")
+    search_fields = ("session_id", "owner__username", "project__title")
+    # token is a secret credential — keep it out of the changelist.
+    readonly_fields = ("session_id", "token", "created_at", "updated_at")
     date_hierarchy = "created_at"
-
-
-@admin.register(LapseAccount)
-class LapseAccountAdmin(admin.ModelAdmin):
-    """The token column is deliberately absent from every list and form here.
-
-    It is a live credential to somebody else's Lapse account, and encrypted at
-    rest is only half the point — nothing should render it, admin included.
-    """
-    list_display = ("user", "handle", "display_name", "expires_at", "connected_at")
-    list_filter = ("connected_at",)
-    search_fields = ("user__username", "handle", "display_name", "lapse_user_id")
-    fields = (
-        "user", "lapse_user_id", "handle", "display_name",
-        "scope", "expires_at", "connected_at", "updated_at",
-    )
-    readonly_fields = fields
-
-    def has_add_permission(self, request):
-        return False
-
-    def has_change_permission(self, request, obj=None):
-        return False
 
 
 @admin.register(AuditLog)

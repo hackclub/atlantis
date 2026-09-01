@@ -51,17 +51,17 @@
                             {% for session in event.journal.timelapses.all %}
                                 <div class="rv-rec">
                                     <p class="rv-rec-head">
-                                        <span class="ta-badge ta-badge-lapse">Timelapse</span>
+                                        <span class="ta-badge ta-badge-lookout">Timelapse</span>
                                         <span class="rv-rec-time">{{ session.tracked_display }}</span>
                                         {% if session.review_removed_seconds %}
                                             <span class="is-no">&rarr; {{ session.review_approved_display }}</span>
                                         {% endif %}
-                                        <a class="rv-rec-open" href="{{ session.watch_url }}" target="_blank" rel="noreferrer noopener">watch</a>
+                                        <a class="rv-rec-open" href="{{ session.video_url }}" target="_blank" rel="noreferrer noopener">watch</a>
                                     </p>
                                     {% if session.review_description %}
                                         <p class="rv-rec-note">{{ session.review_description }}</p>
                                     {% else %}
-                                        <p class="rv-rec-note is-quiet">No description from timelapse review.</p>
+                                        <p class="rv-rec-note is-quiet">No description from Lookout review.</p>
                                     {% endif %}
                                 </div>
                             {% endfor %}

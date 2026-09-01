@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from django.core.cache import cache
 
-from ..models import Journal, Ship, T1, T2, T3, Timelapse, TimelapseReview
+from ..models import Journal, LookoutSession, Ship, T1, T2, T3, TimelapseReview
 from ..views.admin.queue import (
 	REVIEW_STAT_KEYS, age_bucket, age_display, all_reviews_page, claim_holder,
 	claim_review, next_item_id, percentile, release_claim, review_stats,
@@ -187,8 +187,8 @@ class DecisionAdvancesTests(BaseTestCase):
 		self.assertTrue(T1.objects.get(ship=ship).approved)
 
 
-class TimelapseQueueTests(BaseTestCase):
-	"""The timelapse queue holds projects, not lapses.
+class LookoutQueueTests(BaseTestCase):
+	"""The Lookout queue holds projects, not lapses.
 
 	Every lapse on a project is the same person recording the same build, so
 	the unit of work is the project: one page, one sitting, one decision.
@@ -201,12 +201,12 @@ class TimelapseQueueTests(BaseTestCase):
 		self.project = make_project(make_user("author"), shippable=True)
 
 	def _describe(self, project):
-		"""A description for every timelapse waiting on the project.
+		"""A description for every Lookout waiting on the project.
 
 		The decision view won't take a pass until each recording in it has one,
 		so a test about where "next" lands has to supply them.
 		"""
-		sessions = Timelapse.objects.filter(
+		sessions = LookoutSession.objects.filter(
 			journal__project=project, journal__timelapse_review__isnull=True
 		)
 		return {f"description_{session.id}": "watched it" for session in sessions}
@@ -252,7 +252,7 @@ class TimelapseQueueTests(BaseTestCase):
 
 		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
 		self.assertEqual(row.lapse_count, 2)
-		self.assertEqual(row.timelapse_count, 2)
+		self.assertEqual(row.lookout_count, 2)
 		self.assertEqual(row.tracked_label, "2h 0m")
 		self.assertEqual(row.held_ships, [ship.id])
 
@@ -308,7 +308,7 @@ class TimelapseQueueTests(BaseTestCase):
 		self.assertEqual(stats["Lapses"], "3")
 
 
-class TimelapseReviewPageTests(BaseTestCase):
+class LookoutReviewPageTests(BaseTestCase):
 	"""One page per project: everything waiting on it, and what came before."""
 
 	def setUp(self):
@@ -329,7 +329,7 @@ class TimelapseReviewPageTests(BaseTestCase):
 
 		self.assertEqual([lapse.id for lapse in context["pending"]], [first.id, second.id])
 		self.assertEqual(context["lapse_count"], 2)
-		self.assertEqual(context["timelapse_count"], 2)
+		self.assertEqual(context["lookout_count"], 2)
 		self.assertEqual(context["tracked_display"], "1h 30m")
 
 	def test_already_signed_off_lapses_are_shown_read_only(self):
@@ -454,14 +454,14 @@ class ClaimTests(BaseTestCase):
 		approve_timelapse(make_journal(self.project))
 		self.client.force_login(grant_perms(make_user("lapserev"), "timelapse_review"))
 		self.client.get(reverse("timelapse_review_project", args=[self.project.id]))
-		self.assertIsNone(claim_holder("timelapse", self.project.id))
+		self.assertIsNone(claim_holder("lookout", self.project.id))
 
 	def test_opening_a_project_pass_claims_the_project(self):
 		make_journal(self.project)
 		reviewer = grant_perms(make_user("lapserev2"), "timelapse_review")
 		self.client.force_login(reviewer)
 		self.client.get(reverse("timelapse_review_project", args=[self.project.id]))
-		self.assertEqual(claim_holder("timelapse", self.project.id)["user_id"], reviewer.id)
+		self.assertEqual(claim_holder("lookout", self.project.id)["user_id"], reviewer.id)
 
 	def test_release_is_a_no_op_without_a_claim(self):
 		self.assertFalse(release_claim(self.one))
@@ -574,7 +574,7 @@ class ReviewContextTests(BaseTestCase):
 		preflight = self.client.get(reverse("review_project", args=[ship.id])).context["preflight"]
 		labels = {check["label"]: check["state"] for check in preflight["checks"]}
 		self.assertEqual(labels["Printables listing"], "fail")
-		self.assertEqual(labels["Lapse footage"], "fail")
+		self.assertEqual(labels["Lookout footage"], "fail")
 		self.assertEqual(labels["Editor model"], "warn")
 		self.assertEqual(preflight["failed"], 2)
 
@@ -627,9 +627,9 @@ class DeskStatsTests(BaseTestCase):
 		return {card["key"]: card for card in review_stats(queue_key)}
 
 	def test_each_desk_carries_the_metrics_that_mean_something_there(self):
-		"""Timelapse review has no verdict to average, so it gets no ratio."""
-		self.assertEqual(REVIEW_STAT_KEYS["timelapse"], ["turnaround"])
-		self.assertNotIn("approval_ratio", REVIEW_STAT_KEYS["timelapse"])
+		"""Lookout review has no verdict to average, so it gets no ratio."""
+		self.assertEqual(REVIEW_STAT_KEYS["lookout"], ["turnaround"])
+		self.assertNotIn("approval_ratio", REVIEW_STAT_KEYS["lookout"])
 		self.assertIn("reship_ratio", REVIEW_STAT_KEYS["t1"])
 		self.assertIn("hours_pending", REVIEW_STAT_KEYS["t2"])
 
@@ -720,12 +720,12 @@ class AllReviewsTableTests(BaseTestCase):
 		self.assertEqual(t1_rows[0]["project"], "Tide Gauge")
 		self.assertEqual(t2_rows[0]["status"], "returned")
 
-	def test_a_timelapse_pass_is_reported_with_what_came_off_it(self):
+	def test_a_lookout_pass_is_reported_with_what_came_off_it(self):
 		journal = make_journal(self.project, time_spent=60)
 		approve_timelapse(journal, reviewer=self.reviewer,
 						  removals=[(journal.timelapses.get(), 0, 1500, "afk")])
 
-		_, rows = all_reviews_page("timelapse", 1)
+		_, rows = all_reviews_page("lookout", 1)
 		self.assertEqual(rows[0]["status"], "signed off")
 		self.assertEqual(rows[0]["note"], "−0h 25m")
 

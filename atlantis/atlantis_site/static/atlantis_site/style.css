@@ -19,6 +19,6 @@
 /* Reviewer desks and the reviewer shell. After admin.css so it can specialise
    the admin card/table rules; every selector is scoped to .root-page too. */
 @import url('css/review.css');
-/* The timelapse review page. After review.css because it leans on .rv-btn and
+/* The Lookout review page. After review.css because it leans on .rv-btn and
    the shortcut dialog; also scoped to .root-page. */
 @import url('css/timeaudit.css');
