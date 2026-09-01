@@ -17,6 +17,8 @@ row does *not* have is a real Lapse id, so `watch_url` on one points at a page
 that will not resolve. Everything written from here on gets both.
 """
 
+import uuid
+
 from django.conf import settings
 from django.db import migrations, models
 import django.db.models.deletion
@@ -47,11 +49,60 @@ def unbackfill_media(apps, schema_editor):
     """No-op. Going back drops these columns anyway."""
 
 
+def noop(apps, schema_editor):
+    """Forward direction of the rollback repair: nothing to do."""
+
+
+def repair_lookout_state(apps, schema_editor):
+    """Put enough back in the Lookout-only columns that a rollback boots.
+
+    Read this before relying on a rollback. The forward migration *drops*
+    `token`, `status` and `screenshot_count`; that data is gone from the
+    database and nothing here can bring it back. What this does is make the
+    reverse possible at all and leave the old code something coherent to run
+    on. If the real values matter, restore a backup taken before the deploy
+    instead — that is the only honest way to get them.
+
+    What each column becomes:
+
+    `token` — a fresh unique placeholder. It is what makes the reverse legal
+    (the column is UNIQUE NOT NULL, and a table of empty strings cannot satisfy
+    that), and it is deliberately not a plausible Lookout token: nothing should
+    be able to talk to Lookout with it and think it worked. Starting a *new*
+    recording still works, because that mints its own.
+
+    `status` — a recording that reached a journal was complete, so it is marked
+    complete and the hours on it keep working. One that never did cannot be
+    resumed with a token we no longer have, so it is marked failed rather than
+    left to look resumable and fail at the first click.
+
+    `screenshot_count` — one shot per recorded minute, which is the same figure
+    the old code fell back to when a count had never synced.
+    """
+    Timelapse = apps.get_model("atlantis_site", "Timelapse")
+    for row in Timelapse.objects.all().iterator():
+        Timelapse.objects.filter(pk=row.pk).update(
+            token=f"rolled-back-{uuid.uuid4().hex}",
+            status="complete" if row.journal_id else "failed",
+            screenshot_count=(row.tracked_seconds or 0) // 60,
+        )
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
         ("atlantis_site", "0058_lookoutsession_measured_video_seconds"),
+        # Not decorative. RenameModel makes Django rename the model's content
+        # type too, through an operation it injects into the plan itself. That
+        # operation reads ContentType out of the *historical* app state, and
+        # without this dependency the state it gets is the one from before
+        # contenttypes.0002 dropped `name` — so reversing this migration
+        # queries a column the database has not had for a decade and dies with
+        # "column django_content_type.name does not exist". Pinning the
+        # dependency puts the real ContentType in that state, which is what
+        # makes the rollback work.
+        ("contenttypes", "0002_remove_content_type_name"),
     ]
 
     operations = [
@@ -91,6 +142,19 @@ class Migration(migrations.Migration):
         migrations.RunPython(backfill_media, unbackfill_media),
         # Everything below this line was Lookout's alone: a session had a
         # lifecycle here because we drove it. A Lapse timelapse arrives finished.
+        #
+        # The next three operations exist as three, rather than one RemoveField,
+        # so that this migration can be rolled back on a database with rows in
+        # it. Reversed, they run bottom to top: the column comes back nullable,
+        # the repair fills it with unique values, and only then is it tightened
+        # to UNIQUE NOT NULL. Dropping `token` in one step would reverse into
+        # "column token contains null values" on any table that is not empty.
+        migrations.AlterField(
+            model_name="timelapse",
+            name="token",
+            field=models.CharField(blank=True, default="", max_length=128, null=True),
+        ),
+        migrations.RunPython(noop, repair_lookout_state),
         migrations.RemoveField(model_name="timelapse", name="token"),
         migrations.RemoveField(model_name="timelapse", name="status"),
         migrations.RemoveField(model_name="timelapse", name="screenshot_count"),
