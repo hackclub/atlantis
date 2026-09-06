@@ -46,6 +46,14 @@ EDITOR_FILE_EXTENSIONS = {
 	".fcstd": "FreeCAD",
 }
 
+# Every editor can also export a project as an archive, and some (Onshape,
+# multi-part Solidworks assemblies) only really travel that way. An archive
+# says "this is a source file" without saying which editor made it, so it maps
+# to no editor name — detect_editor stays honest and returns None for these.
+EDITOR_ARCHIVE_EXTENSIONS = {
+	".zip",
+}
+
 EDITOR_LINK_DOMAINS = {
 	"onshape.com": "Onshape",
 	"a360.co": "Fusion 360",
@@ -55,6 +63,18 @@ EDITOR_LINK_DOMAINS = {
 def detect_editor_from_filename(filename):
 	ext = os.path.splitext(filename)[1].lower()
 	return EDITOR_FILE_EXTENSIONS.get(ext)
+
+def is_editor_model_file(value):
+	"""Is this a filename or URL we accept as an editor source file?
+
+	Broader than detect_editor_from_filename: archives count even though they
+	don't name an editor.
+	"""
+	if not value:
+		return False
+	path = urlparse(value).path
+	ext = os.path.splitext(path)[1].lower()
+	return ext in EDITOR_ARCHIVE_EXTENSIONS or detect_editor_from_filename(path) is not None
 
 def detect_editor_from_link(url):
 	host = (urlparse(url).netloc or "").lower()
@@ -66,10 +86,7 @@ def detect_editor_from_link(url):
 def detect_editor(value):
 	if not value:
 		return None
-	ext = os.path.splitext(urlparse(value).path)[1].lower()
-	if ext in EDITOR_FILE_EXTENSIONS:
-		return EDITOR_FILE_EXTENSIONS[ext]
-	return detect_editor_from_link(value)
+	return detect_editor_from_filename(urlparse(value).path) or detect_editor_from_link(value)
 
 
 # Timecodes. Timelapse reviewers cut time out of a Lookout by naming a range of

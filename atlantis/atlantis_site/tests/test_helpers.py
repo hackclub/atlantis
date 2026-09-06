@@ -17,6 +17,7 @@ from ..models import (
 	detect_editor,
 	detect_editor_from_filename,
 	detect_editor_from_link,
+	is_editor_model_file,
 )
 from ..views import helpers
 from ..views.helpers import (
@@ -49,6 +50,16 @@ class EditorDetectionTests(TestCase):
 
 	def test_detect_editor_from_filename_is_case_insensitive(self):
 		self.assertEqual(detect_editor_from_filename("PART.F3D"), "Fusion 360")
+
+	def test_detect_editor_from_filename_ignores_archives(self):
+		# A .zip is an accepted upload, but it names no editor.
+		self.assertIsNone(detect_editor_from_filename("project.zip"))
+		self.assertTrue(is_editor_model_file("project.zip"))
+		self.assertTrue(is_editor_model_file("PROJECT.ZIP"))
+		self.assertTrue(is_editor_model_file("editor_models/abc123.zip"))
+		self.assertTrue(is_editor_model_file("part.f3d"))
+		self.assertFalse(is_editor_model_file("notes.txt"))
+		self.assertFalse(is_editor_model_file(""))
 
 	def test_detect_editor_from_filename_unknown(self):
 		self.assertIsNone(detect_editor_from_filename("model.stl"))
@@ -137,6 +148,8 @@ class UrlValidatorTests(TestCase):
 		self.assertTrue(is_valid_editor_model_url("editor_models/abc123.f3d"))
 		# A link to a supported editor.
 		self.assertTrue(is_valid_editor_model_url("https://cad.onshape.com/documents/abc123"))
+		# An uploaded archive — no editor name, but still a source file.
+		self.assertTrue(is_valid_editor_model_url("editor_models/abc123.zip"))
 
 	def test_invalid_editor_model_urls(self):
 		# Unknown host and no CAD extension.

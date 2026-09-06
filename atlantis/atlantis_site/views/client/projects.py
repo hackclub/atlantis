@@ -18,7 +18,7 @@ from datetime import timedelta
 import mimetypes
 
 from ...models import (
-    Project, Ship, Journal, LookoutSession, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, detect_editor_from_filename, detect_editor_from_link
+    Project, Ship, Journal, LookoutSession, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, EDITOR_ARCHIVE_EXTENSIONS, is_editor_model_file, detect_editor_from_link
 )
 from ... import activity, lookout
 from .timelapse import _apply_session_payload
@@ -234,8 +234,8 @@ def update_editor_model(request, project_id):
 
     if editor_model_file:
         if settings.ALLOW_JOURNALING:
-            if not detect_editor_from_filename(editor_model_file.name):
-                messages.error(request, f"Unsupported editor model file. Supported editors: {', '.join(ALLOWED_EDITORS)}.")
+            if not is_editor_model_file(editor_model_file.name):
+                messages.error(request, f"Unsupported editor model file. Supported editors: {', '.join(ALLOWED_EDITORS)}. You can also upload a .zip of your project files.")
                 return redirect("project_detail", project_id=project_id)
             
             if not validate_file_size(editor_model_file, 50):
@@ -474,7 +474,7 @@ def project_detail(request, project_id):
         "ship_disabled_reason": ship_disabled_reason,
         "printablesData": printablesData,
         "allowed_editors": ALLOWED_EDITORS,
-        "allowed_editor_extensions": ",".join(EDITOR_FILE_EXTENSIONS),
+        "allowed_editor_extensions": ",".join([*EDITOR_FILE_EXTENSIONS, *sorted(EDITOR_ARCHIVE_EXTENSIONS)]),
         "pickable_timelapses": attachable_timelapses,
         "unfinished_timelapses": unfinished_timelapses,
         "lookout_status": lookout_status,

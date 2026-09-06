@@ -298,7 +298,7 @@
 
         <div class="slip" id="slip-model" hidden>
             <h2>Editor file</h2>
-            <p>Your source model, from any of: {{ allowed_editors|join:", " }}.</p>
+            <p>Your source model, from any of: {{ allowed_editors|join:", " }}. If it doesn't fit in one file, upload a .zip of the project.</p>
             <form action="{% url 'update_editor_model' project.id %}" method="post" enctype="multipart/form-data">
                 {% csrf_token %}
                 <label>

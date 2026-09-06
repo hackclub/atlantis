@@ -975,6 +975,17 @@ class UpdateEditorModelTests(BaseTestCase):
 		self.assertTrue(self.project.editor_model_url.endswith(".f3d"))
 
 	@override_settings(ALLOW_JOURNALING=True)
+	def test_zip_file_upload_saved_to_storage(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		response = self._update(editor_model_file=SimpleUploadedFile("project.ZIP", b"PK\x03\x04"))
+		self.assertIn("Editor model updated successfully.", message_texts(response))
+		self.project.refresh_from_db()
+		self.assertTrue(self.project.editor_model_url.startswith("editor_models/"))
+		self.assertTrue(self.project.editor_model_url.endswith(".zip"))
+		# An archive doesn't say which editor made it.
+		self.assertIsNone(self.project.editor_name)
+
+	@override_settings(ALLOW_JOURNALING=True)
 	def test_unsupported_file_extension_rejected(self):
 		from django.core.files.uploadedfile import SimpleUploadedFile
 		response = self._update(editor_model_file=SimpleUploadedFile("part.stl", b"data"))

@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from ..models import (
     AuditLog, InternalComment, Journal, LookoutSession, TimelapseRemoval,
-    PAYOUT_MULTIPLIER_DEFAULT, PEARLS_PER_HOUR, detect_editor
+    PAYOUT_MULTIPLIER_DEFAULT, PEARLS_PER_HOUR, detect_editor, is_editor_model_file
 )
 from ..hca import (
     IdentityUnavailable, VERIFICATION_INELIGIBLE, VERIFICATION_PENDING,
@@ -523,7 +523,9 @@ def notify_followers(request, project, message):
             send_slack_dm(content, profile.slack_id)
     
 def is_valid_editor_model_url(value):
-    return detect_editor(value) is not None
+    # An archive names no editor, so detect_editor can't vouch for it — but a
+    # .zip upload is still a source file we accept.
+    return detect_editor(value) is not None or is_editor_model_file(value)
 
 def validate_file_size(file, max_mb):
     return file.size <= max_mb * 1024 * 1024
