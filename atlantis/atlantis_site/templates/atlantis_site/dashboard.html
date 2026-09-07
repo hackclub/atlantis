@@ -37,9 +37,10 @@
             <span class="item-label-frame"><span class="item-label">projects</span></span>
         </a>
 
-        <span class="item" id="item-map" aria-disabled="true" aria-label="Printer selection is locked">
+        <a class="item" id="item-map" href="{% url 'printer_select' %}" aria-label="Pick your printer">
             <img src="{% static 'atlantis_site/assets/img/dashboard/map.png' %}" alt="">
-        </span>
+            <span class="item-label-frame"><span class="item-label">printers</span></span>
+        </a>
     </nav>
 
     <a class="hud" id="hud-profile" href="{% url 'user_profile' user.id %}">

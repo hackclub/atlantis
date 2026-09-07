@@ -1,0 +1,50 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ track.name }}</title>
+    {% include '_favicon.html' %}
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/printer.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
+</head>
+<body>
+    {% include 'atlantis_site/_banner.html' %}
+
+    <div class="printer-page">
+        <header class="chart-bar">
+            <div class="chart-row">
+                <a class="chart-back" href="{% url 'printer_select' %}">&larr; all charts</a>
+
+                <div class="chart-pearls" title="{{ profile.layers }} pearls">
+                    <span><img src="{% static 'atlantis_site/assets/img/dashboard/pearl.png' %}" alt="Pearls:"></span>
+                    {{ profile.layers }}
+                </div>
+            </div>
+
+            <h1 class="chart-heading">{{ track.name }}</h1>
+        </header>
+        <div class="chart-stage">
+            <div id="chart">
+                <img id="chart-map"
+                     src="{% static 'atlantis_site/assets/img/printer/map_'|add:track.slug|add:'.png' %}"
+                     alt="{{ track.name }}'s {{ track.unit }}, drawn as {{ track.creature }}: {{ track.printers|length }} stars joined into a tree of upgrades.">
+
+                {% for printer in track.printers %}
+                    <div class="star" style="--x: {{ printer.x }}%; --y: {{ printer.y }}%"
+                         tabindex="0" role="img"
+                         aria-label="{{ printer.name }}, {{ printer.cost }}">
+                        <img src="{% static 'atlantis_site/assets/img/printer/star.png' %}" alt="">
+                        <span class="star-tip" aria-hidden="true">
+                            {{ printer.name }}
+                            <span class="star-cost">{{ printer.cost }}</span>
+                        </span>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</body>
+</html>
