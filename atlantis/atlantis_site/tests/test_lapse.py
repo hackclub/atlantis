@@ -28,7 +28,7 @@ LAPSE_SETTINGS = {
 	"LAPSE_CLIENT_SECRET": "scs_test",
 	"LAPSE_API_BASE_URL": "https://api.lapse.test/api",
 	"LAPSE_WEB_BASE_URL": "https://lapse.test",
-	"LAPSE_REDIRECT_URI": "https://atlantis.test/lapse/callback/",
+	"LAPSE_REDIRECT_URI": "https://atlantis.test/lapse/callback",
 }
 
 
@@ -89,6 +89,27 @@ class LapseClientTests(BaseTestCase):
 		# The three scopes the app is registered for, space-separated.
 		self.assertIn("scope=timelapse%3Aread+snapshot%3Aread+user%3Aread", url)
 		self.assertNotIn(verifier, url, "the verifier must never travel through the browser")
+
+	def test_the_same_redirect_uri_goes_to_both_authorize_and_token(self):
+		"""OAuth2 matches it character for character across the two calls.
+
+		Lapse checks it at the token step and answers a mismatch with a 500
+		rather than `invalid_grant`, so a stray trailing slash here surfaces as
+		an unexplained server error. Nothing may derive this per-call.
+		"""
+		import urllib.parse
+
+		url = lapse.authorize_url("state", "challenge")
+		query = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+		on_authorize = query["redirect_uri"][0]
+
+		token = {"access_token": "at", "expires_in": 3600, "token_type": "Bearer", "scope": "x"}
+		with patch("atlantis_site.lapse.requests.post", return_value=FakeResponse(token)) as post:
+			lapse.exchange_code("c", "v")
+		on_token = post.call_args.kwargs["json"]["redirect_uri"]
+
+		self.assertEqual(on_authorize, on_token)
+		self.assertEqual(on_authorize, "https://atlantis.test/lapse/callback")
 
 	def test_pkce_challenge_is_the_unpadded_base64url_sha256_of_the_verifier(self):
 		import base64, hashlib
@@ -199,7 +220,7 @@ class LapseClientTests(BaseTestCase):
 		self.assertEqual(body["grant_type"], "authorization_code")
 		self.assertEqual(body["code"], "the-code")
 		self.assertEqual(body["code_verifier"], "the-verifier")
-		self.assertEqual(body["redirect_uri"], "https://atlantis.test/lapse/callback/")
+		self.assertEqual(body["redirect_uri"], "https://atlantis.test/lapse/callback")
 
 
 @override_settings(**LAPSE_SETTINGS)
@@ -239,6 +260,24 @@ class LapseAuthorizationTests(BaseTestCase):
 
 	def _start(self, **data):
 		return self.client.post(reverse("lapse_connect"), data)
+
+	def test_the_callback_answers_on_both_spellings_of_its_url(self):
+		"""Whichever form is registered with Lapse has to land here directly.
+
+		Falling back on APPEND_SLASH would answer with a 301 and bounce the
+		browser again while it is carrying the authorization code.
+		"""
+		from django.urls import resolve
+
+		for path in ("/lapse/callback", "/lapse/callback/"):
+			with self.subTest(path=path):
+				self.assertEqual(resolve(path).view_name, "lapse_callback")
+
+		for path in ("/lapse/callback", "/lapse/callback/"):
+			with self.subTest(path=path, request=True):
+				response = self.client.get(path, {"error": "access_denied"})
+				self.assertEqual(response.status_code, 302, "must not 301 first")
+				self.assertEqual(response["Location"], reverse("projects"))
 
 	def test_connect_redirects_to_lapse_and_keeps_the_verifier_server_side(self):
 		response = self._start()

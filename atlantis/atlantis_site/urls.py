@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, re_path
 
 from .views.admin import *
 from .views.client import *
@@ -28,7 +28,10 @@ urlpatterns = [
     # opens and again on every refresh.
     path("projects/<int:project_id>/timelapses/", lapse_timelapses, name="lapse_timelapses"),
     path("lapse/connect/", lapse_connect, name="lapse_connect"),
-    path("lapse/callback/", lapse_callback, name="lapse_callback"),
+    # Both spellings, so whichever one is registered with Lapse lands here
+    # directly. Leaning on APPEND_SLASH instead would answer the callback with
+    # a 301 and bounce the browser once more while it is carrying the code.
+    re_path(r"^lapse/callback/?$", lapse_callback, name="lapse_callback"),
     path("lapse/disconnect/", lapse_disconnect, name="lapse_disconnect"),
     # Lookout — legacy. Kept so sessions already in flight can be resumed and
     # footage already recorded can still be attached; see views/client/timelapse.py.

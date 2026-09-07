@@ -68,12 +68,17 @@ LAPSE_CLIENT_ID = os.environ.get("LAPSE_CLIENT_ID", "")
 LAPSE_CLIENT_SECRET = os.environ.get("LAPSE_CLIENT_SECRET", "")
 LAPSE_API_BASE_URL = os.environ.get("LAPSE_API_BASE_URL", "https://api.lapse.hackclub.com/api")
 LAPSE_WEB_BASE_URL = os.environ.get("LAPSE_WEB_BASE_URL", "https://lapse.hackclub.com")
-# Where Lapse sends the browser back with an authorization code. Sent on both
-# the authorize and the token call and must match between them, so it is one
-# setting rather than something built per request — a dev pointing at localhost
-# sets it, and everyone else gets the deployed callback.
+# Where Lapse sends the browser back with an authorization code.
+#
+# This has to match the URI registered on the Lapse app *exactly*, character for
+# character — a trailing slash is a different URI. It is sent on both the
+# authorize and the token call, and Lapse checks it at the token step; a
+# mismatch there comes back as a 500 rather than the `invalid_grant` a normal
+# OAuth2 server would answer with, so there is nothing in the response to tell
+# you that is what went wrong. Hence one setting, no trailing slash, and the
+# route below accepts both forms so the browser lands either way.
 LAPSE_REDIRECT_URI = os.environ.get(
-    "LAPSE_REDIRECT_URI", "https://atlantis.hackclub.com/lapse/callback/"
+    "LAPSE_REDIRECT_URI", "https://atlantis.hackclub.com/lapse/callback"
 )
 
 # Lookout (lookout.hackclub.com) — legacy. Superseded by Lapse and kept working
