@@ -56,9 +56,38 @@ AIRTABLE_API_BASE_URL = os.environ.get("AIRTABLE_API_BASE_URL", "https://api.air
 # human later, so this is the SigV4 maximum of 7 days.
 AIRTABLE_URL_EXPIRE_SECONDS = int(os.environ.get("AIRTABLE_URL_EXPIRE_SECONDS", 7 * 24 * 60 * 60))
 
-LOOKOUT_TOKEN = os.environ["LOOKOUT_TOKEN"]
+# Lapse (lapse.hackclub.com), where shippers record their timelapses. This is
+# the way time is logged now: nothing is recorded here, and the picker on the
+# book reads back what somebody published on their own Lapse account.
+#
+# The client authorizes with PKCE, so the code verifier is what proves the token
+# call came from the browser we sent. The secret is optional and unused by the
+# documented token grant — it is read here only so a deployment that has one set
+# doesn't have to unset it.
+LAPSE_CLIENT_ID = os.environ.get("LAPSE_CLIENT_ID", "")
+LAPSE_CLIENT_SECRET = os.environ.get("LAPSE_CLIENT_SECRET", "")
+LAPSE_API_BASE_URL = os.environ.get("LAPSE_API_BASE_URL", "https://api.lapse.hackclub.com/api")
+LAPSE_WEB_BASE_URL = os.environ.get("LAPSE_WEB_BASE_URL", "https://lapse.hackclub.com")
+# Where Lapse sends the browser back with an authorization code. Sent on both
+# the authorize and the token call and must match between them, so it is one
+# setting rather than something built per request — a dev pointing at localhost
+# sets it, and everyone else gets the deployed callback.
+LAPSE_REDIRECT_URI = os.environ.get(
+    "LAPSE_REDIRECT_URI", "https://atlantis.hackclub.com/lapse/callback/"
+)
+
+# Lookout (lookout.hackclub.com) — legacy. Superseded by Lapse and kept working
+# for recordings already in flight and the hours already logged from them; see
+# the legacy drawer on the project page. The token is optional now, because a
+# deployment that never touches Lookout again shouldn't be held up by it.
+LOOKOUT_TOKEN = os.environ.get("LOOKOUT_TOKEN", "")
 LOOKOUT_BASE_URL = os.environ.get("LOOKOUT_BASE_URL", "https://lookout.hackclub.com")
 LOOKOUT_APP_NAME = os.environ.get("LOOKOUT_APP_NAME", "Atlantis")
+# Whether a shipper can still start a *new* Lookout recording. Everything else
+# about Lookout — resuming a live session, attaching finished footage, watching
+# and reviewing what is already attached — stays on regardless, so turning this
+# off retires the old recorder without stranding anything recorded on it.
+LOOKOUT_ALLOW_NEW = os.environ.get("LOOKOUT_ALLOW_NEW", "True") == "True"
 
 STORAGES = {
     "default": {

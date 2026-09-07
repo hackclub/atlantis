@@ -1,0 +1,178 @@
+/* The timelapse picker, dressed for the book: the tabs, the Lapse rows
+   lapse_picker.js builds, and the legacy pane's few extras — in paper and ink
+   rather than the admin palette. Loaded after book.css, which it shares its
+   buttons, its slip and its palette with; the plain row list (.lookout-list)
+   lives there, next to the rest of the slip styles, and both panes use it. */
+
+.tl-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.tl-head h2 {
+    margin: 0;
+    flex: 1;
+}
+
+.tl-handle {
+    color: var(--ink-soft);
+    font-size: clamp(15px, 1.2vw, 19px);
+}
+
+/* ---- the two tabs ------------------------------------------------------
+   Which recorder the footage came off. Lapse is first and opens first; the
+   ordering is the recommendation, and the tags underline it for anyone who
+   arrives here out of habit rather than reading. */
+.tl-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 10px 0 0;
+    border-bottom: 1px solid var(--paper-edge);
+}
+
+.tl-tab {
+    appearance: none;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 7px;
+    padding: 6px 14px;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    border-radius: 5px 5px 0 0;
+    background: none;
+    font: inherit;
+    font-size: clamp(16px, 1.3vw, 21px);
+    color: var(--ink-soft);
+    cursor: pointer;
+    /* Sits on the rule the tab strip draws, so the open tab can cover it. */
+    margin-bottom: -1px;
+}
+
+.tl-tab:hover,
+.tl-tab:focus-visible {
+    color: var(--ink);
+}
+
+.tl-tab.is-on {
+    border-color: var(--paper-edge);
+    background: var(--paper);
+    color: var(--ink);
+}
+
+/* The badge Fallout puts on its ribbons, read the other way round: here Lapse
+   is the live recorder and Lookout is the one being retired. */
+.tl-tag {
+    font-size: 0.62em;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    color: var(--ink-link);
+    white-space: nowrap;
+}
+
+.tl-tag--legacy {
+    color: var(--ink-faint);
+}
+
+.tl-pane[hidden] {
+    display: none;
+}
+
+.tl-blurb {
+    margin: 12px 0 4px;
+}
+
+.tl-blurb--legacy {
+    color: var(--ink-soft);
+}
+
+.tl-refresh {
+    margin-left: 6px;
+    vertical-align: baseline;
+}
+
+.tl-subhead {
+    margin: 14px 0 2px;
+    font-size: clamp(16px, 1.3vw, 21px);
+    color: var(--ink-soft);
+}
+
+.tl-legacy-start {
+    margin-top: 12px;
+}
+
+/* ---- one Lapse row -----------------------------------------------------
+   Richer than a Lookout row because Lapse gives it more to say: a shipper
+   names and publishes these, so the name and the thumbnail are how they
+   recognise the one they just made. */
+.tl-row .tl-thumb {
+    width: 68px;
+    height: 38px;
+    object-fit: cover;
+    border: 1px solid var(--paper-edge);
+    border-radius: 3px;
+    flex: none;
+}
+
+.tl-row label {
+    align-items: center;
+}
+
+.tl-body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.tl-name {
+    font-weight: 400;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* A row that can't be picked is still listed — somebody hunting for footage
+   that is missing is owed the reason — but it must not look available. */
+.tl-row.is-blocked {
+    opacity: 0.55;
+}
+
+.tl-row.is-blocked label {
+    cursor: default;
+}
+
+/* ---- the one status line ----------------------------------------------
+   Used for everything the list can't say itself: loading, an empty account, a
+   Lapse that won't answer, and the prompt to connect one. */
+.tl-status {
+    margin: 10px 0 2px;
+    color: var(--ink-soft);
+    font-size: clamp(16px, 1.3vw, 20px);
+}
+
+.tl-status p {
+    margin: 0 0 8px;
+}
+
+.tl-status.is-bad {
+    color: var(--ink-danger);
+}
+
+.tl-status.is-quiet {
+    color: var(--ink-faint);
+}
+
+/* The connect prompt is a form, not a sentence: it stands in for the list
+   rather than sitting under it, so it gets the room to. */
+.tl-status.is-connect {
+    padding: 14px 16px;
+    border: 1px dashed var(--paper-edge);
+    border-radius: 4px;
+    color: var(--ink);
+}

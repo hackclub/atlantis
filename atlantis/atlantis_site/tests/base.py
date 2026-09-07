@@ -7,12 +7,13 @@ from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from cryptography.fernet import Fernet
 from PIL import Image
 
 from ..models import (
-	Journal, LookoutSession, Profile, Project, Ship, TimelapseRemoval,
+	Journal, Timelapse, Profile, Project, Ship, TimelapseRemoval,
 	TimelapseReview,
 )
 
@@ -90,17 +91,40 @@ def make_project(owner, shippable=False, **kwargs):
 _timelapse_seq = itertools.count(1)
 
 
-def make_timelapse(project, journal=None, minutes=60, owner=None, **kwargs):
-	"""Create a finished Lookout session — the only source of tracked time."""
+def make_timelapse(project, journal=None, minutes=60, owner=None, source=None, **kwargs):
+	"""Create a finished recording — the only source of tracked time.
+
+	Defaults to Lapse, which is how time is logged now. Pass
+	`source=Timelapse.Source.LOOKOUT` (or use make_lookout) for the legacy
+	recorder; the two need different identifying columns filled in, which is
+	what this sorts out so callers don't have to.
+	"""
 	n = next(_timelapse_seq)
-	defaults = {
-		"session_id": f"session-{n}",
-		"token": f"token-{n}",
-		"status": LookoutSession.Status.COMPLETE,
+	source = source or Timelapse.Source.LAPSE
+	if source == Timelapse.Source.LOOKOUT:
+		defaults = {
+			"session_id": f"session-{n}",
+			"token": f"token-{n}",
+		}
+	else:
+		defaults = {
+			"lapse_id": f"lapse-{n}",
+			"name": f"Timelapse {n}",
+			"playback_url": f"https://cdn.example.com/lapse/{n}.mp4",
+			"lapse_thumbnail_url": f"https://cdn.example.com/lapse/{n}.jpg",
+		}
+	defaults.update({
+		"source": source,
+		# Both arrive complete: a Lapse row is only ever written at the attach,
+		# and a Lookout row has to have finished to be attachable.
+		"status": Timelapse.Status.COMPLETE,
 		"tracked_seconds": minutes * 60,
-	}
+		# Set on both, the way both real code paths do — see the comment on
+		# Timelapse.recorded_at for why leaving it null would misorder things.
+		"recorded_at": timezone.now(),
+	})
 	defaults.update(kwargs)
-	return LookoutSession.objects.create(
+	return Timelapse.objects.create(
 		project=project,
 		owner=owner if owner is not None else project.owner,
 		journal=journal,
@@ -108,10 +132,18 @@ def make_timelapse(project, journal=None, minutes=60, owner=None, **kwargs):
 	)
 
 
+def make_lookout(project, journal=None, minutes=60, owner=None, **kwargs):
+	"""Create a legacy Lookout session."""
+	return make_timelapse(
+		project, journal=journal, minutes=minutes, owner=owner,
+		source=Timelapse.Source.LOOKOUT, **kwargs,
+	)
+
+
 def make_journal(project, ship=None, time_spent=60, **kwargs):
 	"""Create a journal entry whose time comes from an attached timelapse.
 
-	`time_spent` is in minutes and is realised as a Lookout session, since
+	`time_spent` is in minutes and is realised as a Lapse timelapse, since
 	journals have no self-reported time of their own.
 	"""
 	defaults = {

@@ -3,7 +3,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.files.storage import default_storage
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Sum
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -13,14 +13,16 @@ from django.http import FileResponse, Http404
 
 from botocore.exceptions import ClientError
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
+import logging
 import mimetypes
 
 from ...models import (
-    Project, Ship, Journal, LookoutSession, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, EDITOR_ARCHIVE_EXTENSIONS, is_editor_model_file, detect_editor_from_link
+    Project, Ship, Journal, Timelapse, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, EDITOR_ARCHIVE_EXTENSIONS, is_editor_model_file, detect_editor_from_link
 )
-from ... import activity, lookout
+from ... import activity, lapse, lookout
+from .lapse import account_for
 from .timelapse import _apply_session_payload
 from ..helpers import (
     is_valid_printables_url, get_model_info, validate_file_size,
@@ -31,12 +33,49 @@ from ..helpers import (
 
 import os
 
-def _attachable_timelapses(project, user, ids=None):
-    """Finished Lookouts the user can still attach to a new lapse."""
-    qs = LookoutSession.objects.filter(
+logger = logging.getLogger(__name__)
+
+
+def _recorded_at(created_at):
+    """Lapse's `createdAt`, which is epoch milliseconds, as a datetime.
+
+    Milliseconds rather than the seconds the format usually means: the API
+    returns 1788226165685 for a timelapse recorded in 2026. Read as seconds
+    that lands fifty thousand years out, so the unit matters.
+    """
+    if not created_at:
+        return None
+    try:
+        return datetime.fromtimestamp(int(created_at) / 1000, tz=dt_timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
+def _already_attached(user, lapse_ids):
+    """Which of these Lapse recordings this user has already taped in.
+
+    Across every book of theirs, not just this one: the same footage paid for
+    twice is the thing the unique constraint on lapse_id exists to stop, and
+    catching it here is what turns that into a sentence rather than a 500.
+    """
+    return set(
+        Timelapse.objects.filter(
+            owner=user, source=Timelapse.Source.LAPSE, lapse_id__in=lapse_ids
+        ).values_list("lapse_id", flat=True)
+    )
+
+
+def _attachable_lookouts(project, user, ids=None):
+    """Finished Lookouts the user can still attach to a new lapse.
+
+    Legacy. New time comes off Lapse; this is what keeps footage recorded
+    before the switch — and anything still mid-recording on it — attachable.
+    """
+    qs = Timelapse.objects.filter(
         project=project,
         owner=user,
-        status=LookoutSession.Status.COMPLETE,
+        source=Timelapse.Source.LOOKOUT,
+        status=Timelapse.Status.COMPLETE,
         journal__isnull=True,
     )
     if ids is not None:
@@ -56,7 +95,10 @@ def _refresh_lookouts(sessions):
     stale_before = timezone.now() - LOOKOUT_REFRESH_AFTER
     asked = 0
     for session in sessions:
-        if session.is_complete or session.status == LookoutSession.Status.FAILED:
+        # A Lapse row has no session id to ask about, and arrives finished.
+        if not session.is_lookout:
+            continue
+        if session.is_complete or session.status == Timelapse.Status.FAILED:
             continue
         if session.updated_at > stale_before or asked >= LOOKOUT_REFRESH_LIMIT:
             continue
@@ -115,7 +157,7 @@ def projects(request):
     # Every book cover shows tracked time, so total it for all of them in one
     # query rather than one per book.
     tracked_seconds = dict(
-        LookoutSession.objects.filter(journal__project__in=projects)
+        Timelapse.objects.filter(journal__project__in=projects)
         .order_by()  # Meta.ordering would otherwise land in the GROUP BY
         .values_list("journal__project")
         .annotate(total=Sum("tracked_seconds"))
@@ -415,18 +457,36 @@ def project_detail(request, project_id):
     for ship in ships:
         ship.latest_feedback = get_latest_feedback(ship) if is_owner else ""
 
-    # Likewise the Lookouts: they are the owner's recordings, and nobody else
-    # has anything to attach them to.
+    # Likewise the recordings: they are the owner's, and nobody else has
+    # anything to attach them to.
+    #
+    # The Lapse half of this is deliberately thin. Its picker loads over XHR
+    # rather than from here, so a timelapse published while the book is open is
+    # one refresh button away instead of a page reload — all the page needs to
+    # know is whether there is a connection for it to read.
+    lapse_account = account_for(user) if is_owner else None
+    lapse_connected = bool(lapse_account and lapse_account.is_usable)
+    lapse_expired = bool(lapse_account and not lapse_account.is_usable)
+
+    # The Lookout half is the legacy drawer, and it *is* rendered here: it is a
+    # finite list of rows we already hold, and there is no live service call to
+    # make for it beyond refreshing anything still recording.
     attachable_timelapses = []
     unfinished_timelapses = []
     lookout_status = None
     record_session_url = ""
+    has_lookout_history = False
 
     if is_owner:
-        timelapses = list(project.timelapses.filter(owner=user).select_related("journal"))
+        timelapses = list(
+            project.timelapses.filter(
+                owner=user, source=Timelapse.Source.LOOKOUT
+            ).select_related("journal")
+        )
+        has_lookout_history = bool(timelapses)
         _refresh_lookouts(timelapses)
         # Re-read after the refresh: one of them may have just finished.
-        attachable_timelapses = list(_attachable_timelapses(project, user))
+        attachable_timelapses = list(_attachable_lookouts(project, user))
         # Recordings that aren't ready to attach yet still need somewhere to be
         # picked back up from, so the book lists them alongside the picker.
         unfinished_timelapses = [
@@ -475,10 +535,24 @@ def project_detail(request, project_id):
         "printablesData": printablesData,
         "allowed_editors": ALLOWED_EDITORS,
         "allowed_editor_extensions": ",".join([*EDITOR_FILE_EXTENSIONS, *sorted(EDITOR_ARCHIVE_EXTENSIONS)]),
+        # Lapse — the way time is logged now.
+        "lapse_account": lapse_account,
+        "lapse_connected": lapse_connected,
+        "lapse_expired": lapse_expired,
+        "lapse_configured": lapse.is_configured(),
+        "lapse_web_url": settings.LAPSE_WEB_BASE_URL,
+        "lapse_timelapses_url": reverse("lapse_timelapses", args=[project.id]),
+        # Lookout — the legacy drawer.
         "pickable_timelapses": attachable_timelapses,
         "unfinished_timelapses": unfinished_timelapses,
         "lookout_status": lookout_status,
         "record_session_url": record_session_url,
+        "lookout_allow_new": settings.LOOKOUT_ALLOW_NEW and bool(settings.LOOKOUT_TOKEN),
+        # Whether to show the legacy drawer at all: somebody who has never
+        # touched Lookout is not owed a menu about it.
+        "show_lookout": has_lookout_history or (
+            settings.LOOKOUT_ALLOW_NEW and bool(settings.LOOKOUT_TOKEN)
+        ),
         "is_following": project.followers.filter(pk=user.pk).exists(),
         "follower_count": project.followers.count(),
     })
@@ -537,21 +611,73 @@ def create_journal(request, project_id):
         messages.error(request, "You cannot create a journal on a locked project.")
         return redirect("projects")
 
-    # Time is never self-reported — an entry's time is the sum of the Lookout
-    # timelapses attached to it, so at least one is required.
+    # Time is never self-reported — an entry's time is the sum of the recordings
+    # attached to it, so at least one is required. Two fields rather than one,
+    # because the two sources are named differently: Lapse sends its own opaque
+    # ids and Lookout sends row primary keys, and an id that happens to be all
+    # digits must not be able to pass for the other kind.
+    lapse_ids = [raw.strip() for raw in request.POST.getlist("lapse_timelapses") if raw.strip()]
     try:
-        timelapse_ids = {int(raw) for raw in request.POST.getlist("timelapses")}
+        lookout_ids = {int(raw) for raw in request.POST.getlist("lookout_timelapses")}
     except ValueError:
         messages.error(request, "Invalid Lookout selection.")
         return redirect("project_detail", project_id=project_id)
 
-    if not timelapse_ids:
-        messages.error(request, "Attach at least one finished Lookout to your lapse!")
+    if not lapse_ids and not lookout_ids:
+        messages.error(request, "Attach at least one timelapse to your lapse!")
         return redirect("project_detail", project_id=project_id)
 
-    if _attachable_timelapses(project, request.user, timelapse_ids).count() != len(timelapse_ids):
+    if len(set(lapse_ids)) != len(lapse_ids):
+        messages.error(request, "That selection has the same timelapse in it twice.")
+        return redirect("project_detail", project_id=project_id)
+
+    if lookout_ids and _attachable_lookouts(project, request.user, lookout_ids).count() != len(lookout_ids):
         messages.error(request, "One or more of those Lookouts can't be attached. Refresh and try again.")
         return redirect("project_detail", project_id=project_id)
+
+    # Read the Lapse footage back from Lapse rather than believing the form.
+    # What the browser sent is a list of ids and nothing else: the tracked time
+    # on each one is what turns into hours and then into money, so it comes
+    # from the API on the way in, every time.
+    selected_lapses = []
+    if lapse_ids:
+        account = account_for(request.user)
+        if account is None:
+            messages.error(request, "Connect your Lapse account before taping in a lapse.")
+            return redirect("project_detail", project_id=project_id)
+        if not account.is_usable:
+            # Worth its own sentence: reconnecting is a different action from
+            # connecting, and there is no refresh grant that could spare them it.
+            messages.error(request, "Your Lapse connection has expired. Reconnect and try again.")
+            return redirect("project_detail", project_id=project_id)
+
+        try:
+            published = lapse.fetch_published_timelapses(account.access_token)
+        except lapse.LapseAuthError:
+            # Refused by Lapse, whatever this side believed about the expiry.
+            # Dropping it is what turns the book back into a reconnect prompt.
+            account.forget_token()
+            messages.error(request, "Your Lapse connection has expired. Reconnect and try again.")
+            return redirect("project_detail", project_id=project_id)
+        except lapse.LapseError as exc:
+            logger.warning("Lapse fetch failed while taping in for user %s: %s", request.user.pk, exc)
+            messages.error(request, "Couldn't reach Lapse to check those timelapses. Try again in a moment.")
+            return redirect("project_detail", project_id=project_id)
+
+        by_id = {item.get("id"): item for item in published if item.get("id")}
+        for lapse_id in lapse_ids:
+            found = by_id.get(lapse_id)
+            # Not on the account, still processing, or processing failed. All
+            # three mean the same thing here: there is no footage to stand
+            # behind hours.
+            if not lapse.is_attachable(found):
+                messages.error(request, "One or more of those timelapses can't be attached. Refresh and try again.")
+                return redirect("project_detail", project_id=project_id)
+            selected_lapses.append(found)
+
+        if _already_attached(request.user, lapse_ids):
+            messages.error(request, "One of those timelapses is already taped into a lapse.")
+            return redirect("project_detail", project_id=project_id)
 
     title = request.POST.get("title", "").strip()
 
@@ -590,31 +716,70 @@ def create_journal(request, project_id):
 
     # Store the object keys (not URLs) — the bucket is private and served
     # through serve_media.
-    with transaction.atomic():
-        available = _attachable_timelapses(
-            project, request.user, timelapse_ids
-        ).select_for_update()
-        if available.count() != len(timelapse_ids):
-            messages.error(request, "One or more of those Lookouts can't be attached. Refresh and try again.")
-            return redirect("project_detail", project_id=project_id)
+    # The IntegrityError is caught outside the atomic block on purpose: a failed
+    # statement poisons the transaction, so nothing may touch the database again
+    # inside it — messages included. Letting it out is what rolls the journal
+    # back with it.
+    try:
+        with transaction.atomic():
+            # Locked before the journal is written, so two lapses taped in at
+            # once can't both claim the same Lookout.
+            available = _attachable_lookouts(
+                project, request.user, lookout_ids
+            ).select_for_update() if lookout_ids else Timelapse.objects.none()
+            if lookout_ids and available.count() != len(lookout_ids):
+                messages.error(request, "One or more of those Lookouts can't be attached. Refresh and try again.")
+                return redirect("project_detail", project_id=project_id)
 
-        journal = Journal.objects.create(
-            project=project,
-            title=title,
-            image_url=image_key,
-            model_url=model_key
-        )
-        available.update(journal=journal)
+            journal = Journal.objects.create(
+                project=project,
+                title=title,
+                image_url=image_key,
+                model_url=model_key
+            )
 
-        # The timelapse reviewer who eventually opens this entry needs the
-        # inactivity track drawn under each recording, and drawing it is an
-        # ffmpeg pass per video — minutes of work, and no reviewer is here
-        # yet. Hand it to a worker thread once the attachment is committed,
-        # so the thread reads rows that are actually there. Nothing about the
-        # entry depends on it: a check that doesn't happen leaves the
-        # recording unanalysed, which the review page says plainly.
-        attached = sorted(timelapse_ids)
-        transaction.on_commit(lambda: activity.check_sessions_in_background(attached))
+            # Lookout rows already exist — this recording happened here — so
+            # attaching one is pointing it at the journal.
+            attached = sorted(lookout_ids)
+            if lookout_ids:
+                available.update(journal=journal)
+
+            # A Lapse row is written at the attach: until now the timelapse was
+            # nothing of ours, just a recording sitting in somebody's account.
+            for item in selected_lapses:
+                row = Timelapse.objects.create(
+                    project=project,
+                    owner=request.user,
+                    journal=journal,
+                    source=Timelapse.Source.LAPSE,
+                    lapse_id=item["id"],
+                    name=(item.get("name") or "")[:120],
+                    playback_url=item.get("playbackUrl") or "",
+                    lapse_thumbnail_url=item.get("thumbnailUrl") or "",
+                    recorded_at=_recorded_at(item.get("createdAt")),
+                    # Lapse's `duration` is recorded seconds, already in the
+                    # unit this column is kept in. See the Timelapse docstring.
+                    tracked_seconds=int(item.get("duration") or 0),
+                    # It arrived finished; there was no lifecycle to watch.
+                    status=Timelapse.Status.COMPLETE,
+                )
+                attached.append(row.id)
+
+            # The timelapse reviewer who eventually opens this entry needs the
+            # inactivity track drawn under each recording, and drawing it is an
+            # ffmpeg pass per video — minutes of work, and no reviewer is here
+            # yet. Hand it to a worker thread once the attachment is committed,
+            # so the thread reads rows that are actually there. Nothing about the
+            # entry depends on it: a check that doesn't happen leaves the
+            # recording unanalysed, which the review page says plainly.
+            checkable = sorted(attached)
+            transaction.on_commit(lambda: activity.check_sessions_in_background(checkable))
+    except IntegrityError:
+        # The unique constraint on lapse_id caught a race the check above
+        # couldn't: two lapses taped in at once, both naming the same footage.
+        # The rolled-back transaction took the journal with it.
+        messages.error(request, "One of those timelapses is already taped into a lapse.")
+        return redirect("project_detail", project_id=project_id)
 
     notify_followers(
         request,

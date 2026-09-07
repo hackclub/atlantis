@@ -4,7 +4,7 @@ from django.db import IntegrityError, transaction
 from django.urls import reverse
 
 from ..models import (
-	AuditLog, Journal, LookoutSession, Ship, TimelapseAnnotation,
+	AuditLog, Journal, Timelapse, Ship, TimelapseAnnotation,
 	TimelapseRemoval, TimelapseReview, first_overlap, format_timecode,
 	parse_timecode, tracked_to_video, video_to_tracked,
 )
@@ -16,6 +16,7 @@ from .base import (
 	make_journal,
 	make_project,
 	make_ship,
+	make_lookout,
 	make_timelapse,
 	make_user,
 	message_texts,
@@ -30,7 +31,7 @@ def describe_all(project, text="watched it, the time is real"):
 	"all of them are described" in one line, and the tests that are *about*
 	descriptions override or drop entries from it.
 	"""
-	sessions = LookoutSession.objects.filter(
+	sessions = Timelapse.objects.filter(
 		journal__project=project, journal__timelapse_review__isnull=True
 	)
 	return {f"description_{session.id}": text for session in sessions}
@@ -98,17 +99,17 @@ class VideoLengthTests(BaseTestCase):
 
 	def test_length_comes_from_the_screenshots_not_the_credited_time(self):
 		"""One shot is one second of video, credited or not."""
-		session = make_timelapse(self.project, minutes=65, screenshot_count=71)
+		session = make_lookout(self.project, minutes=65, screenshot_count=71)
 		self.assertEqual(session.video_seconds, 71)
 		self.assertEqual(session.video_duration_display, "1:11")
 
 	def test_a_session_whose_count_never_synced_falls_back_to_tracked_time(self):
-		session = make_timelapse(self.project, minutes=65, screenshot_count=0)
+		session = make_lookout(self.project, minutes=65, screenshot_count=0)
 		self.assertEqual(session.video_seconds, 65)
 
 	def test_a_measured_length_beats_both_estimates(self):
 		"""Once something has read the file, the estimate stops being used."""
-		session = make_timelapse(self.project, minutes=65, screenshot_count=71)
+		session = make_lookout(self.project, minutes=65, screenshot_count=71)
 		session.measured_video_seconds = 70
 		session.save(update_fields=["measured_video_seconds"])
 
@@ -117,7 +118,7 @@ class VideoLengthTests(BaseTestCase):
 
 	def test_a_shorter_measurement_is_still_the_one_that_counts(self):
 		"""The file is the authority, even when it undercuts both estimates."""
-		session = make_timelapse(self.project, minutes=65, screenshot_count=71)
+		session = make_lookout(self.project, minutes=65, screenshot_count=71)
 		session.measured_video_seconds = 12
 		session.save(update_fields=["measured_video_seconds"])
 
@@ -594,7 +595,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 		player is footage this Lookout doesn't have.
 		"""
 		response = self._post([(self.session, "0:00", "1:30", "everything")])
-		self._assert_rejected(response, "runs past the end of that Lookout's video")
+		self._assert_rejected(response, "runs past the end of that recording's video")
 
 	def test_whole_lookout_may_be_removed(self):
 		self._post([(self.session, "0:00", "1:00", "screen recording of someone else")])
@@ -609,7 +610,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 		a cut a reviewer could see was refused as running past the end.
 		"""
 		journal = make_journal(self.project, time_spent=0)
-		session = make_timelapse(self.project, journal=journal, minutes=65)
+		session = make_lookout(self.project, journal=journal, minutes=65)
 		session.screenshot_count = 71
 		session.save(update_fields=["screenshot_count"])
 
@@ -664,7 +665,7 @@ class TimelapseRemovalValidationTests(BaseTestCase):
 	def test_lookout_from_another_project_rejected(self):
 		elsewhere = make_journal(make_project(make_user("stranger")), time_spent=60)
 		response = self._post([(elsewhere.timelapses.get(), "0:05", "0:30", "afk")])
-		self._assert_rejected(response, "isn't on a Lookout attached to this project")
+		self._assert_rejected(response, "isn't on a recording attached to this project")
 
 	def test_mismatched_row_lengths_rejected(self):
 		response = self.client.post(reverse("timelapse_decision", args=[self.project.id]), {

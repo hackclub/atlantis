@@ -12,7 +12,7 @@
             <span class="ta-ico" aria-hidden="true">&#9201;</span>
             <span data-entry-time>{{ lapse.tracked_label }}</span>
         </span>
-        <span class="ta-entry-meta">&middot; {{ lapse.lookout_count }} recording{{ lapse.lookout_count|pluralize }}</span>
+        <span class="ta-entry-meta">&middot; {{ lapse.recording_count }} recording{{ lapse.recording_count|pluralize }}</span>
         <span class="ta-entry-title">{{ lapse.title }}</span>
         {% if editable %}
             <span class="ta-badge ta-badge-done" data-entry-done hidden>Done</span>
@@ -37,7 +37,7 @@
 
                     <div class="ta-rec-info">
                         <span class="ta-rec-name">Timelapse {{ forloop.counter }}</span>
-                        <span class="ta-badge ta-badge-lookout">Timelapse</span>
+                        <span class="ta-badge ta-badge-{{ session.source }}">{{ session.get_source_display }}</span>
                         {% if session.activity_checked and session.inactive_percentage %}
                             <span class="ta-badge {% if session.inactive_percentage > 30 %}ta-badge-bad{% else %}ta-badge-quiet{% endif %}"
                                   title="{{ session.inactive_display }} of tracked time shows no change on screen">

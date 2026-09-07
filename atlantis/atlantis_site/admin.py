@@ -1,16 +1,56 @@
 from django.contrib import admin
 
-from .models import AirtableSubmission, AuditLog, LookoutSession, TimelapseRemoval, TimelapseReview
+from .models import (
+    AirtableSubmission, AuditLog, LapseAccount, Timelapse, TimelapseRemoval,
+    TimelapseReview,
+)
 
 
-@admin.register(LookoutSession)
-class LookoutSessionAdmin(admin.ModelAdmin):
-    list_display = ("session_id", "project", "owner", "status", "tracked_seconds", "screenshot_count", "created_at")
-    list_filter = ("status", "created_at")
-    search_fields = ("session_id", "owner__username", "project__title")
-    # token is a secret credential — keep it out of the changelist.
-    readonly_fields = ("session_id", "token", "created_at", "updated_at")
+@admin.register(Timelapse)
+class TimelapseAdmin(admin.ModelAdmin):
+    list_display = (
+        "external_id", "source", "name", "project", "owner", "status",
+        "tracked_seconds", "created_at",
+    )
+    list_filter = ("source", "status", "created_at")
+    search_fields = ("lapse_id", "session_id", "name", "owner__username", "project__title")
+    # None of this is ours to rewrite: it came from Lapse or from Lookout, and
+    # tracked_seconds is what somebody gets paid on. `token` is a live Lookout
+    # credential, so it is kept off the changelist as well as off the form.
+    readonly_fields = (
+        "source", "lapse_id", "session_id", "name", "playback_url",
+        "lapse_thumbnail_url", "recorded_at", "tracked_seconds",
+        "screenshot_count", "total_active_seconds", "created_at", "updated_at",
+    )
+    exclude = ("token",)
     date_hierarchy = "created_at"
+
+    @admin.display(description="ID", ordering="lapse_id")
+    def external_id(self, obj):
+        return obj.external_id
+
+
+@admin.register(LapseAccount)
+class LapseAccountAdmin(admin.ModelAdmin):
+    """The token column is deliberately absent from every list and form here.
+
+    It is a live credential to somebody else's Lapse account, and encrypted at
+    rest is only half the point — nothing should render it, admin included.
+    """
+    list_display = ("user", "handle", "display_name", "expires_at", "connected_at")
+    list_filter = ("connected_at",)
+    search_fields = ("user__username", "handle", "display_name", "lapse_user_id")
+    fields = (
+        "user", "lapse_user_id", "handle", "display_name",
+        "scope", "expires_at", "connected_at", "updated_at",
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(AuditLog)

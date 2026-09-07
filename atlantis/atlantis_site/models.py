@@ -1,4 +1,5 @@
 import os
+from datetime import timedelta
 from decimal import Decimal
 from urllib.parse import urlparse
 
@@ -7,6 +8,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.conf import settings
 from django.urls import reverse
+from django.utils import timezone
 
 
 # What an hour of approved work is worth before the T3 reviewer's multiplier.
@@ -89,8 +91,8 @@ def detect_editor(value):
 	return detect_editor_from_filename(urlparse(value).path) or detect_editor_from_link(value)
 
 
-# Timecodes. Timelapse reviewers cut time out of a Lookout by naming a range of
-# it ("0:05-0:30"), so these are the two halves of that: what a reviewer types
+# Timecodes. Timelapse reviewers cut time out of a recording by naming a range
+# of it ("0:05-0:30"), so these are the two halves of that: what a reviewer types
 # and what we show back.
 def format_timecode(seconds):
 	"""Seconds as h:mm:ss, or m:ss when it's under an hour."""
@@ -127,9 +129,10 @@ def parse_timecode(value):
 	return total
 
 
-# Lookout stitches one recorded minute of a session into exactly one second of
-# the compiled video (its worker: "every capture unit (one recorded minute)
-# becomes exactly one second of output"). A reviewer scrubbing that video is
+# Both recorders stitch one recorded minute into exactly one second of the
+# compiled video — Lookout's worker: "every capture unit (one recorded minute)
+# becomes exactly one second of output", and Lapse reports a `duration` of 720
+# for a video that runs twelve. A reviewer scrubbing that video is
 # reading a timeline sped up sixty times, so 0:56-1:11 on the player is fifteen
 # *minutes* of tracked time, not fifteen seconds. Reviewers type video offsets,
 # because that is all they can see; we store tracked ones, because that is what
@@ -571,8 +574,38 @@ class Journal(models.Model):
 		minutes = self.removed_seconds // 60
 		return f"{minutes // 60}h {minutes % 60}m"
 
-# lookout timelapse recording sessions
-class LookoutSession(models.Model):
+# a piece of recorded footage, attached to a lapse and paid out on
+class Timelapse(models.Model):
+	"""One recording backing a lapse's hours, from Lapse or from Lookout.
+
+	Two things produced these and only one still does. A Lapse timelapse is
+	recorded and published on lapse.hackclub.com and taped in here afterwards,
+	so its row exists only once the shipper has attached it. A Lookout session
+	was recorded *by this site* — we opened it, drove it and waited for a video
+	— so its row exists from the moment recording starts and moves through a
+	status lifecycle. `source` says which, and it is the only thing that should
+	ever be branched on.
+
+	They share a table because everything downstream of the attach treats them
+	identically: the tracked time on one is the tracked time on the other, and
+	the internal timelapse review annotates and cuts time from both through the
+	same TimelapseAnnotation and TimelapseRemoval rows. Splitting them would
+	have meant an exclusive-arc foreign key on the audit trail that decides
+	payouts, which is a bad trade for a discriminator column.
+
+	`tracked_seconds` is the one number that turns into money, and it is never
+	self-reported from either source: for Lapse it is the API's `duration`
+	verbatim, re-read at attach time; for Lookout it is what Lookout's internal
+	API reported. Note that Lapse's `duration` is *recorded* time and not the
+	length of the compiled video — the API reports 720 for a video that runs
+	twelve seconds — which is the same sixty-to-one the reviewers already read
+	footage in. See TRACKED_SECONDS_PER_VIDEO_SECOND.
+	"""
+
+	class Source(models.TextChoices):
+		LAPSE = "lapse", "Lapse"
+		LOOKOUT = "lookout", "Lookout (legacy)"
+
 	class Status(models.TextChoices):
 		PENDING = "pending", "Pending"
 		ACTIVE = "active", "Active"
@@ -600,20 +633,58 @@ class LookoutSession(models.Model):
 		blank=True
 	)
 
-	session_id = models.CharField(max_length=64, unique=True)
-	token = models.CharField(max_length=128, unique=True)
+	# Which recorder this came off. Defaults to Lapse because that is the only
+	# one that can produce a new row through the book; a Lookout row is created
+	# by the legacy recorder, which sets this explicitly.
+	source = models.CharField(
+		max_length=16,
+		choices=Source.choices,
+		default=Source.LAPSE,
+	)
 
+	# ---- Lapse ----------------------------------------------------------
+	# Lapse's own id for the recording, and empty on a Lookout row. Unique
+	# where set, and that constraint is load-bearing: it is what stops one
+	# piece of footage being taped into two lapses and paid for twice.
+	lapse_id = models.CharField(max_length=64, blank=True, default="")
+	# What the shipper published it as. Carried so a reviewer and HQ see the
+	# same title the shipper does, rather than an opaque id.
+	name = models.CharField(max_length=120, blank=True, default="")
+	# The compiled video, straight off Lapse's `playbackUrl`. Durable: it is a
+	# stable URL that 302s to storage signed at request time, so it keeps
+	# working long after the attach and a stored copy does not go stale.
+	# Empty on a Lookout row, whose video is built from its session id instead.
+	playback_url = models.URLField(max_length=500, blank=True, default="")
+	lapse_thumbnail_url = models.URLField(max_length=500, blank=True, default="")
+	# When the footage was recorded, which for a Lapse row is not created_at:
+	# that is when it was taped in here, and the two can be days apart. A
+	# Lookout row sets this to when recording started, where the two really
+	# were the same moment — filled in on both so `ordering` below means one
+	# thing. Postgres sorts nulls first on a descending sort, so leaving it
+	# empty on half the table would file the legacy footage as the newest.
+	recorded_at = models.DateTimeField(null=True, blank=True)
+
+	# ---- Lookout (legacy) -----------------------------------------------
+	# Empty on a Lapse row. `token` is a live credential to Lookout that the
+	# browser recorder drives the session with; it is never rendered anywhere
+	# but into that recorder's own config, and never on a page anyone else
+	# can load.
+	session_id = models.CharField(max_length=64, blank=True, default="")
+	token = models.CharField(max_length=128, blank=True, default="")
+	# Only ever moves on a Lookout row: we drove that recording, so we watched
+	# it through pending -> active -> compiling -> complete. A Lapse timelapse
+	# arrives finished and is written COMPLETE at the attach.
 	status = models.CharField(
 		max_length=16,
 		choices=Status.choices,
 		default=Status.PENDING,
 	)
-
-	tracked_seconds = models.IntegerField(default=0)
 	total_active_seconds = models.IntegerField(default=0)
 	screenshot_count = models.IntegerField(default=0)
-
 	heartbeats_forwarded = models.BooleanField(default=False)
+
+	# ---- shared ---------------------------------------------------------
+	tracked_seconds = models.IntegerField(default=0)
 
 	# What the activity checker found in the compiled video: stretches where
 	# nothing on screen changed. Advisory only — it is drawn under the player
@@ -627,21 +698,71 @@ class LookoutSession(models.Model):
 	activity_checked_at = models.DateTimeField(null=True, blank=True)
 	# How long the compiled video actually runs, read off the file itself by
 	# the activity check. Null until something has measured it; until then the
-	# length is estimated from what Lookout reported (see video_seconds).
+	# length is estimated per source (see video_seconds).
 	measured_video_seconds = models.IntegerField(null=True, blank=True)
 
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
 	class Meta:
-		ordering = ["-created_at"]
+		# Recorded-first, so a page reads in the order the work happened rather
+		# than the order it was taped in. created_at is the tiebreak, and the
+		# fallback for anything Lapse gave no usable timestamp for.
+		ordering = ["-recorded_at", "-created_at"]
+		constraints = [
+			# Conditional rather than a plain unique=True, because the column
+			# is empty on every row from the other source and Postgres would
+			# otherwise let exactly one of them exist.
+			models.UniqueConstraint(
+				fields=["lapse_id"],
+				condition=~models.Q(lapse_id=""),
+				name="timelapse_lapse_id_unique",
+			),
+			models.UniqueConstraint(
+				fields=["session_id"],
+				condition=~models.Q(session_id=""),
+				name="timelapse_session_id_unique",
+			),
+			models.UniqueConstraint(
+				fields=["token"],
+				condition=~models.Q(token=""),
+				name="timelapse_token_unique",
+			),
+			# A row has to be identifiable on the service it came from, or
+			# nothing can re-read it later to check the hours behind it.
+			models.CheckConstraint(
+				condition=(
+					(models.Q(source="lapse") & ~models.Q(lapse_id=""))
+					| (models.Q(source="lookout") & ~models.Q(session_id=""))
+				),
+				name="timelapse_source_has_id",
+			),
+		]
 
 	def __str__(self):
-		return f"Timelapse {self.session_id} ({self.status}) for project {self.project_id}"
+		return f"{self.get_source_display()} timelapse {self.external_id} for project {self.project_id}"
+
+	# ---- which recorder --------------------------------------------------
+	@property
+	def is_lapse(self):
+		return self.source == self.Source.LAPSE
 
 	@property
+	def is_lookout(self):
+		return self.source == self.Source.LOOKOUT
+
+	@property
+	def external_id(self):
+		"""However the service that recorded this names it."""
+		return self.lapse_id if self.is_lapse else self.session_id
+
+	# ---- lifecycle -------------------------------------------------------
+	# Only a Lookout row is ever anything but complete, but these are asked of
+	# both: the picker, the book and the review desk don't branch on source.
+	@property
 	def is_recordable(self):
-		return self.status in (
+		"""Still being recorded, and so resumable. Never true of a Lapse row."""
+		return self.is_lookout and self.status in (
 			self.Status.PENDING,
 			self.Status.ACTIVE,
 			self.Status.PAUSED,
@@ -657,43 +778,77 @@ class LookoutSession(models.Model):
 		return self.status in (self.Status.STOPPED, self.Status.COMPILING)
 
 	@property
+	def is_failed(self):
+		return self.status == self.Status.FAILED
+
+	@property
 	def is_attachable(self):
 		return self.is_complete and self.journal_id is None
 
+	# ---- links -----------------------------------------------------------
+	@property
+	def watch_url(self):
+		"""Where a person goes to watch this.
+
+		The link that goes to anyone reading the ship later — a reviewer here,
+		HQ in Airtable — so it is a page a human can open rather than a bare
+		file. For Lapse that is the timelapse's permalink, which also carries
+		its name, its owner and its comments; for Lookout it is the compiled
+		mp4, which is all that service ever offered.
+		"""
+		if self.is_lapse:
+			from .lapse import watch_url
+			return watch_url(self.lapse_id)
+		return self.video_url
+
+	@property
+	def video_url(self):
+		"""The video file itself, for a <video> element or the activity pass."""
+		if self.is_lapse:
+			return self.playback_url
+		base = settings.LOOKOUT_BASE_URL.rstrip("/")
+		return f"{base}/api/media/{self.session_id}/video.mp4"
+
+	@property
+	def thumbnail_url(self):
+		if self.is_lapse:
+			return self.lapse_thumbnail_url
+		base = settings.LOOKOUT_BASE_URL.rstrip("/")
+		return f"{base}/api/media/{self.session_id}/thumbnail.jpg"
+
+	@property
+	def display_name(self):
+		"""What to call this recording on a page. Lookout never named its own."""
+		return self.name or f"{self.get_source_display()} recording"
+
+	# ---- time ------------------------------------------------------------
 	@property
 	def tracked_display(self):
 		total = self.tracked_seconds or 0
 		return f"{total // 3600}h {(total % 3600) // 60}m"
 
 	@property
-	def video_url(self):
-		base = settings.LOOKOUT_BASE_URL.rstrip("/")
-		return f"{base}/api/media/{self.session_id}/video.mp4"
-
-	@property
-	def thumbnail_url(self):
-		base = settings.LOOKOUT_BASE_URL.rstrip("/")
-		return f"{base}/api/media/{self.session_id}/thumbnail.jpg"
-
-	@property
 	def estimated_video_seconds(self):
-		"""How long the compiled video runs, going by what Lookout reported.
+		"""How long the compiled video runs, going by what the service reported.
 
-		One confirmed screenshot is one second of output, so the shot count is
-		the length. Tracked time is not: a session can hold screenshots it was
-		never credited for — a capture Lookout refused, one taken while the
-		clock wasn't running, the bucket a session opens with — and every one
-		of those is still a frame in the video. Deriving the length from
-		tracked time alone made the page claim a video shorter than the one
-		the reviewer was watching, which put the tail of it out of reach.
+		For Lookout, one confirmed screenshot is one second of output, so the
+		shot count is the length. Tracked time is not: a session can hold
+		screenshots it was never credited for — a capture Lookout refused, one
+		taken while the clock wasn't running, the bucket a session opens with —
+		and every one of those is still a frame in the video. Deriving the
+		length from tracked time alone made the page claim a video shorter than
+		the one the reviewer was watching, which put the tail of it out of
+		reach. The tracked-derived figure stays on as a floor, for a session
+		whose shot count never synced.
 
-		The tracked-derived figure stays on as a floor, for a session whose
-		shot count never synced.
+		Lapse reports no shot count, and its `duration` is exactly the recorded
+		time the video is a sixty-times-faster rendering of, so the conversion
+		is the whole answer there.
 		"""
-		return max(
-			self.screenshot_count or 0,
-			tracked_to_video(self.tracked_seconds or 0),
-		)
+		tracked = tracked_to_video(self.tracked_seconds or 0)
+		if self.is_lapse:
+			return tracked
+		return max(self.screenshot_count or 0, tracked)
 
 	@property
 	def video_seconds(self):
@@ -735,9 +890,9 @@ class LookoutSession(models.Model):
 
 	@property
 	def activity_checked(self):
-		"""True once the inactivity pass has run over this session's video.
+		"""True once the inactivity pass has run over this recording's video.
 
-		Distinct from "found nothing": an unchecked session is drawn as
+		Distinct from "found nothing": an unchecked recording is drawn as
 		unanalysed, a checked one with no segments is drawn as clean, and the
 		reviewer is owed the difference.
 		"""
@@ -756,9 +911,111 @@ class LookoutSession(models.Model):
 		return format_timecode(video_to_tracked(self.inactive_seconds))
 
 
+class LapseAccount(models.Model):
+	"""A shipper's connection to their Lapse account.
+
+	One per user, created when they come back through the authorize page. The
+	token is the whole point of the row: it is what the picker reads their
+	published timelapses with, and it is stored the way the HCA token is —
+	encrypted at rest, never rendered, never sent anywhere but Lapse.
+
+	There is no refresh grant on the Lapse token endpoint, so an expired token
+	cannot be renewed behind the shipper's back. `is_expired` is what lets the
+	book say "reconnect" before a request fails instead of after.
+	"""
+	user = models.OneToOneField(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="lapse_account"
+	)
+
+	# Who Lapse says the token belongs to. Shown in the picker so a shipper
+	# with two accounts can see which one they connected.
+	lapse_user_id = models.CharField(max_length=64, blank=True, default="")
+	handle = models.CharField(max_length=64, blank=True, default="")
+	display_name = models.CharField(max_length=64, blank=True, default="")
+	profile_picture_url = models.CharField(max_length=300, blank=True, default="")
+
+	# Fernet-encrypted JSON of the whole token response, same as Profile does
+	# with the HCA token.
+	encrypted_token = models.TextField(blank=True, default="")
+	expires_at = models.DateTimeField(null=True, blank=True)
+	scope = models.CharField(max_length=200, blank=True, default="")
+
+	connected_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	def __str__(self):
+		return f"Lapse account {self.handle or self.lapse_user_id} for {self.user_id}"
+
+	def save_token(self, token):
+		"""Persist a token response and when it runs out.
+
+		The expiry comes out of the JWT wherever it has one, because that claim
+		is what Lapse enforces. `expires_in` sits beside it in the same response
+		and the two have been seen to disagree — a token arriving already
+		expired while `expires_in` still claimed an hour — and trusting the
+		wrong one leaves a shipper connected on paper and refused on every call.
+		`expires_in` stays as the fallback for a token that carries no readable
+		claim.
+
+		Either way a minute is shaved off, so a token that runs out mid-request
+		is treated as gone before it is used rather than failing a call the
+		shipper then has to retry.
+		"""
+		from .crypto import encrypt_token
+		from .lapse import token_expiry
+
+		self.encrypted_token = encrypt_token(token)
+		self.scope = token.get("scope", "")
+
+		margin = timedelta(seconds=60)
+		claimed = token_expiry(token.get("access_token", ""))
+		if claimed is not None:
+			self.expires_at = claimed - margin
+			return
+
+		expires_in = token.get("expires_in")
+		try:
+			seconds = int(expires_in)
+		except (TypeError, ValueError):
+			seconds = None
+		self.expires_at = (
+			timezone.now() + timedelta(seconds=max(seconds - 60, 0))
+			if seconds is not None
+			else None
+		)
+
+	def forget_token(self):
+		"""Drop a credential Lapse has refused, keeping the rest of the row.
+
+		Called when a request comes back rejected. Without it the connection
+		sits there looking usable and every call fails the same way; clearing
+		it is what turns the picker back into a "reconnect" prompt, which is
+		the one thing that actually fixes it. The handle and the connection
+		date stay, so the page can still say whose account it was.
+		"""
+		self.encrypted_token = ""
+		self.expires_at = timezone.now()
+		self.save(update_fields=["encrypted_token", "expires_at", "updated_at"])
+
+	@property
+	def access_token(self):
+		from .crypto import decrypt_token
+		return (decrypt_token(self.encrypted_token) or {}).get("access_token", "")
+
+	@property
+	def is_expired(self):
+		return bool(self.expires_at and self.expires_at <= timezone.now())
+
+	@property
+	def is_usable(self):
+		return bool(self.access_token) and not self.is_expired
+
+
 # internal timelapse review
 class TimelapseReview(models.Model):
-	"""One reviewer's pass over the Lookout footage attached to a journal.
+	"""One reviewer's pass over the footage attached to a journal.
 
 	Strictly internal. Nothing here reaches the project owner: no notification
 	is sent, no page they can load renders it, and the time the reviewer cuts
@@ -778,7 +1035,7 @@ class TimelapseReview(models.Model):
 	)
 
 	reviewed_at = models.DateTimeField(auto_now_add=True)
-	# Optional: the per-Lookout descriptions carry the account of what was
+	# Optional: the per-recording descriptions carry the account of what was
 	# watched, and this is the space for anything that spans the whole pass.
 	internal_notes = models.CharField(max_length=1000, blank=True)
 
@@ -808,16 +1065,16 @@ class TimelapseReview(models.Model):
 
 
 class TimelapseAnnotation(models.Model):
-	"""What one reviewer wrote about one Lookout while signing it off.
+	"""What one reviewer wrote about one recording while signing it off.
 
 	A sentence or two, per piece of footage, for whoever reads this ship
 	downstream: what the recording shows, and whether the time in it looks
 	like the work it is claimed for. The reviewer writes one before the pass
-	can be submitted, which is the point — a Lookout nobody described is a
-	Lookout nobody watched.
+	can be submitted, which is the point — a recording nobody described is a
+	recording nobody watched.
 
 	Separate from TimelapseRemoval because a description is about a whole
-	recording and a removal is about a range of one; a Lookout with nothing
+	recording and a removal is about a range of one; a recording with nothing
 	cut from it still gets described.
 	"""
 	review = models.ForeignKey(
@@ -826,7 +1083,7 @@ class TimelapseAnnotation(models.Model):
 		related_name="annotations"
 	)
 	session = models.ForeignKey(
-		LookoutSession,
+		Timelapse,
 		on_delete=models.CASCADE,
 		related_name="annotations"
 	)
@@ -847,7 +1104,7 @@ class TimelapseAnnotation(models.Model):
 
 
 class TimelapseRemoval(models.Model):
-	"""A stretch of one Lookout session the reviewer refused to pay for.
+	"""A stretch of one recording the reviewer refused to pay for.
 
 	Offsets are into the session's tracked timeline, not into the compiled
 	video the reviewer read them off: the video runs sixty times faster (see
@@ -863,7 +1120,7 @@ class TimelapseRemoval(models.Model):
 		related_name="removals"
 	)
 	session = models.ForeignKey(
-		LookoutSession,
+		Timelapse,
 		on_delete=models.CASCADE,
 		related_name="removals"
 	)

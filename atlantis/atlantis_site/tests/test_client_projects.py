@@ -5,7 +5,7 @@ from django.test import override_settings
 from django.urls import reverse
 
 from ..hca import IdentityUnavailable
-from ..models import Journal, LookoutSession, Project, Ship
+from ..models import Journal, Timelapse, Project, Ship
 from .base import (
 	VALID_EDITOR_LINK,
 	VALID_PRINTABLES_URL,
@@ -15,6 +15,7 @@ from .base import (
 	make_journal,
 	make_project,
 	make_ship,
+	make_lookout,
 	make_timelapse,
 	make_user,
 	message_texts,
@@ -393,7 +394,7 @@ class ProjectDetailVisitorTests(BaseTestCase):
 
 	def test_visitor_sees_no_lookouts_of_their_own_or_the_owners(self):
 		project = make_project(self.owner)
-		make_timelapse(project, minutes=60)
+		make_lookout(project, minutes=60)
 		response = self._detail(project)
 		self.assertEqual(list(response.context["pickable_timelapses"]), [])
 		self.assertEqual(list(response.context["unfinished_timelapses"]), [])
@@ -410,9 +411,9 @@ class CreateJournalTests(BaseTestCase):
 	def _create(self, project=None, timelapses=None, **overrides):
 		project = project or self.project
 		if timelapses is None:
-			timelapses = [str(make_timelapse(project, minutes=60).pk)]
+			timelapses = [str(make_lookout(project, minutes=60).pk)]
 		data = {
-			"timelapses": timelapses,
+			"lookout_timelapses": timelapses,
 			"title": "Progress update",
 			"image": image_upload(),
 			"STL": stl_upload(),
@@ -468,7 +469,7 @@ class CreateJournalTests(BaseTestCase):
 		response = self._create(timelapses=[])
 		self.assertEqual(Journal.objects.count(), 0)
 		self.assertIn(
-			"Attach at least one finished Lookout to your lapse!",
+			"Attach at least one timelapse to your lapse!",
 			message_texts(response),
 		)
 
@@ -479,34 +480,34 @@ class CreateJournalTests(BaseTestCase):
 
 	def test_time_is_the_sum_of_attached_timelapses(self):
 		ids = [
-			str(make_timelapse(self.project, minutes=90).pk),
-			str(make_timelapse(self.project, minutes=45).pk),
+			str(make_lookout(self.project, minutes=90).pk),
+			str(make_lookout(self.project, minutes=45).pk),
 		]
 		self._create(timelapses=ids)
 		self.assertEqual(Journal.objects.get().tracked_minutes, 135)
 
 	def test_rejects_unfinished_timelapse(self):
-		timelapse = make_timelapse(
-			self.project, minutes=60, status=LookoutSession.Status.ACTIVE
+		timelapse = make_lookout(
+			self.project, minutes=60, status=Timelapse.Status.ACTIVE
 		)
 		self._create(timelapses=[str(timelapse.pk)])
 		self.assertEqual(Journal.objects.count(), 0)
 
 	def test_rejects_timelapse_from_another_project(self):
 		other = make_project(self.user, title="Other")
-		timelapse = make_timelapse(other, minutes=60)
+		timelapse = make_lookout(other, minutes=60)
 		self._create(timelapses=[str(timelapse.pk)])
 		self.assertEqual(Journal.objects.count(), 0)
 
 	def test_rejects_another_users_timelapse(self):
-		timelapse = make_timelapse(
+		timelapse = make_lookout(
 			self.project, minutes=60, owner=make_user("stranger")
 		)
 		self._create(timelapses=[str(timelapse.pk)])
 		self.assertEqual(Journal.objects.count(), 0)
 
 	def test_cannot_reuse_an_already_attached_timelapse(self):
-		timelapse = make_timelapse(self.project, minutes=60)
+		timelapse = make_lookout(self.project, minutes=60)
 		self._create(timelapses=[str(timelapse.pk)])
 		self.assertEqual(Journal.objects.count(), 1)
 
@@ -1142,7 +1143,7 @@ class FollowerNotificationTests(BaseTestCase):
 		self.client.post(
 			reverse("create_journal", args=[self.project.id]),
 			{
-				"timelapses": [str(make_timelapse(self.project, minutes=60).pk)],
+				"lookout_timelapses": [str(make_lookout(self.project, minutes=60).pk)],
 				"title": "Update",
 				"image": image_upload(),
 				"STL": stl_upload(),

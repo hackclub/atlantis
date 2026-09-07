@@ -1,14 +1,33 @@
+"""Lookout — the legacy recorder, kept working for the footage already on it.
+
+Superseded by Lapse. Nothing here is the way a shipper is meant to log time any
+more: they record on lapse.hackclub.com and tape the result in (see
+views/client/lapse.py), and the book puts all of this behind a legacy drawer.
+
+It stays because retiring it outright would strand real work. Sessions that are
+mid-recording still resume, footage already compiled still attaches to a lapse,
+and every hour ever logged through it still reads and reviews exactly as before.
+`LOOKOUT_ALLOW_NEW` is the one switch: turning it off stops *new* recordings
+from starting and leaves everything else alone, which is how this gets retired
+for good once nothing is in flight.
+
+Every lookup here is scoped to `source=LOOKOUT`. A Lapse row lives in the same
+table and has no session id or token, so driving one through the recorder would
+be meaningless — and worse, `_recorder_config` would hand out an empty token.
+"""
+
 import logging
 
 from django.shortcuts import redirect, get_object_or_404
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.conf import settings
 from django.http import JsonResponse
 
-from ...models import Project, LookoutSession
+from ...models import Project, Timelapse
 from ... import lookout
 from ..helpers import rate_limit
 
@@ -53,6 +72,10 @@ def start_timelapse(request, project_id):
 	Only the project owner may record. The secret API key never leaves the
 	server; we store the returned token associated with the user/project so we
 	can look the session up later, then hand the popup its config.
+
+	This is the one entry point Lapse actually replaces, so it is the one thing
+	LOOKOUT_ALLOW_NEW can turn off. Resuming, attaching and reviewing are
+	deliberately not gated on it.
 	"""
 	project = get_object_or_404(Project, id=project_id, owner=request.user, deleted=False)
 
@@ -63,6 +86,12 @@ def start_timelapse(request, project_id):
 			return JsonResponse({"ok": False, "error": message}, status=status)
 		messages.error(request, message)
 		return redirect("project_detail", project_id=project_id)
+
+	if not settings.LOOKOUT_ALLOW_NEW or not settings.LOOKOUT_TOKEN:
+		return refuse(
+			"Lookout recording is closed — record on lapse.hackclub.com instead.",
+			status=410,
+		)
 
 	if project.locked:
 		return refuse("You cannot record a Lookout on a locked project.")
@@ -86,12 +115,18 @@ def start_timelapse(request, project_id):
 			status=502,
 		)
 
-	session = LookoutSession.objects.create(
+	session = Timelapse.objects.create(
 		project=project,
 		owner=request.user,
+		source=Timelapse.Source.LOOKOUT,
 		session_id=session_id,
 		token=token,
-		status=LookoutSession.Status.PENDING,
+		status=Timelapse.Status.PENDING,
+		# Recording starts now, so this is when the footage is from. Set
+		# explicitly rather than left null: it is what the table is ordered on,
+		# and a null would sort this row ahead of everything on a descending
+		# sort. See the Timelapse.recorded_at comment.
+		recorded_at=timezone.now(),
 	)
 	if _wants_json(request):
 		return JsonResponse(_recorder_config(session))
@@ -110,7 +145,9 @@ def record_timelapse(request, session_pk):
 	directly. This is the documented design — the client is untrusted and all
 	timing is validated server-side.
 	"""
-	session = get_object_or_404(LookoutSession, pk=session_pk, owner=request.user)
+	session = get_object_or_404(
+		Timelapse, pk=session_pk, owner=request.user, source=Timelapse.Source.LOOKOUT
+	)
 
 	if _wants_json(request):
 		return JsonResponse(_recorder_config(session))
@@ -120,7 +157,7 @@ def record_timelapse(request, session_pk):
 def _apply_session_payload(session, session_obj, tracked_seconds, screenshot_count):
 	"""Copy server-authoritative fields from a Lookout payload onto our model."""
 	status = (session_obj or {}).get("status")
-	if status in LookoutSession.Status.values:
+	if status in Timelapse.Status.values:
 		session.status = status
 	if tracked_seconds is not None:
 		session.tracked_seconds = int(tracked_seconds)
@@ -145,7 +182,9 @@ def sync_timelapse(request, session_pk):
 	always has the tamper-proof trackedSeconds for verification and display.
 	Uses the internal API by server-side session ID.
 	"""
-	session = get_object_or_404(LookoutSession, pk=session_pk, owner=request.user)
+	session = get_object_or_404(
+		Timelapse, pk=session_pk, owner=request.user, source=Timelapse.Source.LOOKOUT
+	)
 
 	try:
 		data = lookout.get_internal_session(session.session_id)

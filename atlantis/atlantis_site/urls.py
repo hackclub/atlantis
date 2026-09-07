@@ -24,6 +24,14 @@ urlpatterns = [
     path("projects/<int:project_id>/ship/", ship_project, name="ship_project"),
     path("projects/<int:project_id>/follow/", follow_project, name="follow_project"),
     path("projects/<int:project_id>/unfollow/", unfollow_project, name="unfollow_project"),
+    # Lapse, the way time is logged now. The picker's live list is hit when it
+    # opens and again on every refresh.
+    path("projects/<int:project_id>/timelapses/", lapse_timelapses, name="lapse_timelapses"),
+    path("lapse/connect/", lapse_connect, name="lapse_connect"),
+    path("lapse/callback/", lapse_callback, name="lapse_callback"),
+    path("lapse/disconnect/", lapse_disconnect, name="lapse_disconnect"),
+    # Lookout — legacy. Kept so sessions already in flight can be resumed and
+    # footage already recorded can still be attached; see views/client/timelapse.py.
     path("projects/<int:project_id>/timelapse/start/", start_timelapse, name="start_timelapse"),
     path("timelapse/<int:session_pk>/record/", record_timelapse, name="record_timelapse"),
     path("timelapse/<int:session_pk>/sync/", sync_timelapse, name="sync_timelapse"),

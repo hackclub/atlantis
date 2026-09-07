@@ -13,10 +13,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .. import activity
-from ..models import Journal, LookoutSession
+from ..models import Journal, Timelapse
 from .base import (
 	BaseTestCase, grant_perms, image_upload, make_journal, make_project,
-	make_timelapse, make_user, stl_upload,
+	make_lookout, make_timelapse, make_user, stl_upload,
 )
 
 
@@ -177,7 +177,7 @@ class ActivityOnTheReviewPageTests(BaseTestCase):
 		return response.context["payload"]
 
 	def test_segments_reach_the_editor_in_video_seconds(self):
-		LookoutSession.objects.filter(pk=self.session.pk).update(
+		Timelapse.objects.filter(pk=self.session.pk).update(
 			inactive_segments=[{"start": 10, "end": 14, "duration": 4}],
 			inactive_percentage=6.7,
 			activity_checked_at=timezone.now(),
@@ -216,11 +216,11 @@ class CheckBatchTests(BaseTestCase):
 	def test_only_unanalysed_finished_sessions_are_picked_up(self):
 		fresh = make_timelapse(self.project, minutes=60)
 		already = make_timelapse(self.project, minutes=60)
-		LookoutSession.objects.filter(pk=already.pk).update(
+		Timelapse.objects.filter(pk=already.pk).update(
 			activity_checked_at=timezone.now()
 		)
 		compiling = make_timelapse(
-			self.project, minutes=60, status=LookoutSession.Status.COMPILING
+			self.project, minutes=60, status=Timelapse.Status.COMPILING
 		)
 
 		with patch.object(activity, "check_and_store") as store:
@@ -307,7 +307,7 @@ class CheckOnJournalCreationTests(BaseTestCase):
 		return self.client.post(
 			reverse("create_journal", args=[self.project.id]),
 			{
-				"timelapses": [str(pk) for pk in timelapses],
+				"lookout_timelapses": [str(pk) for pk in timelapses],
 				"title": "Progress update",
 				"image": image_upload(),
 				"STL": stl_upload(),
@@ -315,8 +315,8 @@ class CheckOnJournalCreationTests(BaseTestCase):
 		)
 
 	def test_creating_a_journal_schedules_its_recordings(self):
-		first = make_timelapse(self.project, minutes=60)
-		second = make_timelapse(self.project, minutes=30)
+		first = make_lookout(self.project, minutes=60)
+		second = make_lookout(self.project, minutes=30)
 
 		with patch.object(activity, "check_sessions_in_background") as scheduled:
 			with self.captureOnCommitCallbacks(execute=True):
@@ -326,8 +326,8 @@ class CheckOnJournalCreationTests(BaseTestCase):
 		scheduled.assert_called_once_with(sorted([first.pk, second.pk]))
 
 	def test_footage_left_off_the_journal_is_not_scheduled(self):
-		attached = make_timelapse(self.project, minutes=60)
-		make_timelapse(self.project, minutes=60)
+		attached = make_lookout(self.project, minutes=60)
+		make_lookout(self.project, minutes=60)
 
 		with patch.object(activity, "check_sessions_in_background") as scheduled:
 			with self.captureOnCommitCallbacks(execute=True):
@@ -337,14 +337,14 @@ class CheckOnJournalCreationTests(BaseTestCase):
 
 	def test_a_rejected_journal_schedules_nothing(self):
 		"""No entry, no footage attached, nothing to analyse."""
-		timelapse = make_timelapse(self.project, minutes=60)
+		timelapse = make_lookout(self.project, minutes=60)
 
 		with patch.object(activity, "check_sessions_in_background") as scheduled:
 			with self.captureOnCommitCallbacks(execute=True):
 				response = self.client.post(
 					reverse("create_journal", args=[self.project.id]),
 					{
-						"timelapses": [str(timelapse.pk)],
+						"lookout_timelapses": [str(timelapse.pk)],
 						"title": "",
 						"image": image_upload(),
 						"STL": stl_upload(),

@@ -1,0 +1,125 @@
+{% comment %}
+The timelapse picker, laid over the book rather than on a page of its own.
+
+Two tabs, and the order is the point: Lapse is where work gets recorded now and
+opens first, Lookout is the recorder this site used to run and sits behind it
+marked legacy. Everything Lookout could ever do is still in that second tab —
+starting a recording, picking a live one back up, attaching finished footage —
+it is just no longer the thing the book puts in front of you.
+
+The Lapse pane is deliberately empty markup: lapse_picker.js fills it from the
+Lapse API when the popup is first opened and again on every refresh, so a
+timelapse published while this page has been sitting open can still be taped in.
+It finds everything by id, so keep these in step with that script. The Lookout
+pane is the opposite — a finite list of rows we already hold, rendered here.
+
+The checkboxes carry form="new-lapse" so they submit with the compose form even
+though this lives outside it in the DOM. The two panes post under different
+names (lapse_timelapses / lookout_timelapses) because the two sources are named
+differently — Lapse sends its own ids, Lookout sends row primary keys — and
+create_journal must never mistake one for the other.
+{% endcomment %}
+<div class="slip slip--wide" id="slip-timelapses" hidden>
+    <div class="tl-picker" id="lapse-picker"
+         data-url="{{ lapse_timelapses_url }}"
+         data-connect="{% url 'lapse_connect' %}"
+         data-next="{% url 'project_detail' project.id %}"
+         data-csrf="{{ csrf_token }}">
+
+        <div class="tl-head">
+            <h2>Which timelapses?</h2>
+            <span class="tl-handle" id="lapse-account" hidden></span>
+        </div>
+
+        <div class="tl-tabs" role="tablist" aria-label="Where your footage came from">
+            <button type="button" class="tl-tab is-on" role="tab" aria-selected="true"
+                    aria-controls="pane-lapse" data-pane="pane-lapse">
+                Lapse<span class="tl-tag">recommended</span>
+            </button>
+            {% if show_lookout %}
+                <button type="button" class="tl-tab" role="tab" aria-selected="false"
+                        aria-controls="pane-lookout" data-pane="pane-lookout">
+                    Lookout<span class="tl-tag tl-tag--legacy">legacy</span>
+                </button>
+            {% endif %}
+        </div>
+
+        <section class="tl-pane" id="pane-lapse" role="tabpanel">
+            <p class="tl-blurb">
+                A lapse logs the time from the recordings you attach to it, and each one
+                can only be used once. Record them on
+                <a href="{{ lapse_web_url }}" target="_blank" rel="noreferrer noopener">lapse.hackclub.com</a>,
+                publish, then hit refresh.
+                <button type="button" class="ink-btn tl-refresh" id="lapse-refresh">refresh</button>
+            </p>
+
+            <div class="tl-status" id="lapse-status" hidden></div>
+            <ul class="lookout-list tl-list" id="lapse-list"></ul>
+        </section>
+
+        {% if show_lookout %}
+            <section class="tl-pane" id="pane-lookout" role="tabpanel" hidden>
+                <p class="tl-blurb tl-blurb--legacy">
+                    Lookout recorded your screen from this site. Lapse has replaced it &mdash;
+                    {% if lookout_allow_new %}
+                        it still works, but new recordings belong on Lapse now.
+                    {% else %}
+                        it no longer starts new recordings.
+                    {% endif %}
+                    Anything you already recorded on it can still be taped in here.
+                </p>
+
+                <ul class="lookout-list">
+                    {% for timelapse in pickable_timelapses %}
+                        <li>
+                            <label>
+                                <input type="checkbox" name="lookout_timelapses" value="{{ timelapse.pk }}"
+                                       data-seconds="{{ timelapse.tracked_seconds }}" form="new-lapse">
+                                <strong>{{ timelapse.tracked_display }}</strong>
+                                <span class="dim">
+                                    recorded {{ timelapse.created_at|date:"M j, g:i A" }}{% if not timelapse.tracked_seconds %} &middot; nothing on the clock{% endif %}
+                                </span>
+                            </label>
+                            <a href="{{ timelapse.video_url }}" target="_blank" rel="noreferrer noopener">watch</a>
+                        </li>
+                    {% empty %}
+                        <li class="dim">Nothing finished on Lookout.</li>
+                    {% endfor %}
+                </ul>
+
+                {% if unfinished_timelapses %}
+                    <h3 class="tl-subhead">still going</h3>
+                    <ul class="lookout-list">
+                        {% for timelapse in unfinished_timelapses %}
+                            <li>
+                                <span class="lookout-when">
+                                    <strong>{{ timelapse.tracked_display }}</strong>
+                                    <span class="dim">started {{ timelapse.created_at|date:"M j, g:i A" }}</span>
+                                </span>
+                                {% if timelapse.is_recordable %}
+                                    <a href="{% url 'record_timelapse' timelapse.pk %}" data-record>pick it back up</a>
+                                {% elif timelapse.is_processing %}
+                                    <a href="{% url 'record_timelapse' timelapse.pk %}" data-record>building&hellip;</a>
+                                {% else %}
+                                    <span class="warn">failed</span>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+
+                {% if lookout_allow_new and not project.locked %}
+                    {# The old recorder, kept where it belongs: behind the legacy tab. #}
+                    <form action="{% url 'start_timelapse' project.id %}" method="post" id="start-lookout" class="tl-legacy-start">
+                        {% csrf_token %}
+                        <button type="submit" class="ink-btn">record a lookout anyway</button>
+                    </form>
+                {% endif %}
+            </section>
+        {% endif %}
+
+        <div class="slip-actions">
+            <button type="button" data-close>Done</button>
+        </div>
+    </div>
+</div>

@@ -12,7 +12,7 @@ The override-hours justification is the whole audit trail. HQ reads Airtable's
 justification whenever we set one — so if the internal timelapse review cut time
 out of somebody's hours, the only place that ever becomes visible outside
 Atlantis is this field. The T2 reviewer's own words open it, verbatim; the
-timelapse reviewer's justification, the Lookout links, the removed ranges,
+timelapse reviewer's justification, the timelapse links, the removed ranges,
 and the reason each range was removed are appended below them.
 
 None of the shipper's personal data is stored. Their address and birthday come
@@ -56,7 +56,7 @@ FIELDS = {
 	"override_justification": "Optional - Override Hours Spent Justification",
 }
 
-LOOKOUT_HEADING = "[LOOKOUT TIMELAPSE AUDIT]"
+TIMELAPSE_HEADING = "[TIMELAPSE AUDIT]"
 
 
 class NotFinalized(Exception):
@@ -105,15 +105,21 @@ def download_url(value):
 		return default_storage.url(value)
 
 
-def build_lookout_audit(ship):
+def build_timelapse_audit(ship):
 	"""The internal timelapse review of this ship, written out for HQ.
 
 	One block per journal: the reviewer's notes on the pass if they left any,
-	then every Lookout attached to it — what the reviewer said that recording
+	then every recording attached to it — what the reviewer said that recording
 	showed, and the ranges they refused to pay for with the reason for each.
-	Lookouts with nothing removed are listed too: the links and the reviewer's
+	Recordings with nothing removed are listed too: the links and the reviewer's
 	account of them are part of the evidence for the hours whether or not
 	anything was cut.
+
+	The links are permalinks: a Lapse timelapse's page, and for the legacy
+	Lookout footage the compiled video, which is all that service ever offered.
+	A Lapse `playbackUrl` deliberately does not go in here — it is a signed
+	redirect that stops working, and this field is read by HQ long after the
+	ship is closed.
 	"""
 	journals = list(
 		ship.journals.order_by("created_at").select_related("timelapse_review").prefetch_related(
@@ -135,10 +141,13 @@ def build_lookout_audit(ship):
 			for annotation in (review.annotations.all() if review else ())
 		}
 		if not sessions:
-			lines.append("  no Lookout attached")
+			lines.append("  no timelapse attached")
 		for session in sessions:
 			tracked += session.tracked_seconds or 0
-			lines.append(f"  {session.video_url} ({session.tracked_display} tracked)")
+			lines.append(
+				f"  [{session.get_source_display()}] {session.watch_url} "
+				f"({session.tracked_display} tracked)"
+			)
 			# What the reviewer said this recording showed. The removals below
 			# say what they took off it; this says what they watched.
 			if descriptions.get(session.id):
@@ -162,14 +171,14 @@ def build_lookout_audit(ship):
 	t3 = approving_t3(ship)
 
 	summary = [
-		f"Tracked by Lookout: {_display_hours(tracked // 60)}",
+		f"Tracked by timelapse: {_display_hours(tracked // 60)}",
 		f"Removed in internal timelapse review: {_display_hours(removed // 60)}",
 		f"Deducted by T2 review: {_display_hours(deductions)}",
 	]
 	if t3:
 		summary.append(f"Submitted hours: {_hours(t3.airtable_time)}")
 
-	return "\n".join([LOOKOUT_HEADING, *summary, "", *blocks]).strip()
+	return "\n".join([TIMELAPSE_HEADING, *summary, "", *blocks]).strip()
 
 
 def build_override_justification(ship):
@@ -177,7 +186,7 @@ def build_override_justification(ship):
 
 	The T2 reviewer's justification comes first and is copied character for
 	character: it is their account of the hours, HQ reads this field as the
-	unified justification, and nothing here may edit or replace it. The Lookout
+	unified justification, and nothing here may edit or replace it. The timelapse
 	audit is appended below it.
 
 	The latest T2 review is the one quoted — it is the decision that stands, and
@@ -186,7 +195,7 @@ def build_override_justification(ship):
 	"""
 	t2 = latest_t2(ship)
 	original = (t2.justification if t2 else "").strip()
-	audit = build_lookout_audit(ship)
+	audit = build_timelapse_audit(ship)
 	return "\n\n".join(part for part in (original, audit) if part)
 
 
