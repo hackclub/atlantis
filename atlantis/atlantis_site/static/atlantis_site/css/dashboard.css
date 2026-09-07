@@ -191,19 +191,6 @@ body {
     }
 }
 
-#item-map[aria-disabled="true"] {
-    cursor: not-allowed;
-}
-
-#item-map[aria-disabled="true"] img {
-    filter: grayscale(1) brightness(0.75);
-}
-
-#item-map[aria-disabled="true"]:hover,
-#item-map[aria-disabled="true"]:focus-visible {
-    scale: 1;
-}
-
 /* ---------- the corners ---------- */
 
 .hud {

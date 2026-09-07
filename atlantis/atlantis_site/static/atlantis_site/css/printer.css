@@ -1,0 +1,383 @@
+/* The chart room and the constellation charts it opens.
+   Linked straight from printer_select.html and printer_track.html rather than
+   through style.css, the same way dashboard.css is: these two are
+   art-directed, dark, and share nothing with the .page shell. */
+
+:root {
+    /* The maps' own background, sampled from their corners, so a chart sits
+       on the page with no seam around it. */
+    --deep: #000218;
+    --deep-lift: #050c2c;
+    --ink: #E5F2FC;
+    --ink-dim: #8fa8c9;
+    --gold: #FFD98A;
+    --rule: rgba(143, 168, 201, 0.22);
+}
+
+body {
+    margin: 0;
+    background-color: var(--deep);
+    color: var(--ink);
+    font-family: "Atlantis Hand", sans-serif;
+    /* The starfield behind everything: two faint pools of light, so the flat
+       backdrop reads as water rather than as an empty div. */
+    background-image:
+        radial-gradient(60% 45% at 18% 12%, rgba(27, 127, 196, 0.16), transparent 70%),
+        radial-gradient(55% 50% at 88% 88%, rgba(27, 127, 196, 0.11), transparent 70%);
+    background-attachment: fixed;
+}
+
+.printer-page {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(18px, 3vh, 40px);
+    min-height: 100vh;
+    min-height: 100dvh;
+    padding: clamp(18px, 3.4vh, 44px) clamp(16px, 3vw, 56px) clamp(24px, 4vh, 56px);
+}
+
+.printer-page *,
+.printer-page *::before,
+.printer-page *::after {
+    box-sizing: inherit;
+}
+
+/* ---------- the bar across the top ---------- */
+
+.chart-bar {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(6px, 0.9vh, 16px);
+}
+
+/* The way out and the pearl balance, one at each end above the heading. */
+.chart-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(10px, 1.6vw, 28px);
+}
+
+.chart-back {
+    color: var(--ink-dim);
+    font-size: clamp(16px, 1.5vw, 26px);
+    text-decoration: none;
+    transition: color 0.15s ease-out;
+}
+
+.chart-back:hover,
+.chart-back:focus-visible {
+    color: var(--ink);
+}
+
+.chart-heading {
+    margin: 0;
+    font-size: clamp(20px, 3.4vw, 54px);
+    font-weight: normal;
+    line-height: 1.05;
+}
+
+.chart-sub {
+    max-width: 64ch;
+    margin: 0;
+    color: var(--ink-dim);
+    font-size: clamp(15px, 1.3vw, 24px);
+    line-height: 1.45;
+}
+
+/* The pearl balance, cropped out of the dashboard's pearl sprite the same way
+   the dashboard's own counter is. */
+.chart-pearls {
+    display: flex;
+    align-items: center;
+    gap: clamp(4px, 0.5vw, 12px);
+    font-size: clamp(18px, 1.9vw, 34px);
+    white-space: nowrap;
+}
+
+.chart-pearls span {
+    position: relative;
+    width: clamp(24px, 2.4vw, 44px);
+    aspect-ratio: 1;
+    overflow: hidden;
+}
+
+.chart-pearls img {
+    position: absolute;
+    left: -55.541%;
+    top: -61.082%;
+    width: 270.185%;
+}
+
+/* ---------- the chart room: every track at once ---------- */
+
+.track-grid {
+    --gap: clamp(14px, 1.8vw, 30px);
+    --per-row: 3;
+
+    /* ---- fitting two rows of cards into what is left of the window ----
+       A card is a 2500x1462 map with two lines of text under it, so its
+       height follows its width. Three to a row and two rows deep, the grid
+       is 2 x (0.585 x cardWidth + textHeight) + gap tall, and cardWidth is
+       (gridWidth - 2 x gap) / 3 — which rearranges to
+           gridWidth = (heightAvailable - 2 x textHeight - 0.22 x gap) x 2.564
+       with 2.564 being 3 / (2 x 0.585). The card text is measured from the
+       same clamps it is set in, so the two cannot drift apart. --chrome is
+       the page padding plus the bar and the gap under it; the bar's height
+       follows the window's width while the padding follows its height, which
+       is why it is one fitted expression rather than a sum of the clamps. It
+       is deliberately a few pixels generous, so a slow-loading font cannot
+       tip the page into scrolling. */
+    --name-size: clamp(20px, 1.9vw, 34px);
+    --sub-size: clamp(14px, 1.2vw, 22px);
+    --pad-top: clamp(10px, 1.1vw, 18px);
+    --pad-bottom: clamp(12px, 1.4vw, 22px);
+    --card-text: calc(1.4 * (var(--name-size) + var(--sub-size))
+                      + var(--pad-top) + var(--pad-bottom));
+    --chrome: clamp(158px, calc(13vh + 6vw), 300px);
+
+    display: flex;
+    flex-wrap: wrap;
+    /* Five cards never fill three even rows, so the short last row centres
+       instead of hanging off to the left. */
+    justify-content: center;
+    gap: var(--gap);
+    width: 100%;
+    max-width: calc((100dvh - var(--chrome) - 2 * var(--card-text)
+                     - 0.22 * var(--gap)) * 2.564);
+    margin: 0 auto;
+    padding: 0;
+    list-style: none;
+}
+
+/* Sized rather than grown, so the two cards on the short row come out the
+   same width as the three above them instead of stretching to fill it. */
+.track-grid li {
+    flex: 0 1 calc((100% - (var(--per-row) - 1) * var(--gap)) / var(--per-row));
+}
+
+@media (max-width: 1080px) {
+    .track-grid {
+        --per-row: 2;
+    }
+}
+
+@media (max-width: 1080px) {
+    .track-grid {
+        /* Fewer, taller rows: let them scroll rather than shrink the maps to
+           fit a short window. */
+        max-width: none;
+    }
+}
+
+@media (max-width: 620px) {
+    .track-grid {
+        --per-row: 1;
+    }
+}
+
+.track-card {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    border-radius: clamp(10px, 1vw, 18px);
+    background-color: var(--deep-lift);
+    color: inherit;
+    text-decoration: none;
+    transition: border-color 0.18s ease-out, transform 0.18s ease-out, box-shadow 0.18s ease-out;
+}
+
+.track-card:hover,
+.track-card:focus-visible {
+    border-color: rgba(255, 217, 138, 0.55);
+    box-shadow: 0 0 0 1px rgba(255, 217, 138, 0.18), 0 12px 34px rgba(0, 2, 24, 0.75);
+    transform: translateY(-3px);
+    outline: none;
+}
+
+.track-card img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 2500 / 1462;
+    object-fit: cover;
+    transition: filter 0.18s ease-out, scale 0.18s ease-out;
+}
+
+.track-card:hover img,
+.track-card:focus-visible img {
+    filter: brightness(1.18);
+    scale: 1.03;
+}
+
+/* Exactly two lines: the name with its count out to the right, then the cost.
+   Fixed at two so a card's height is a plain function of its width, which is
+   what the height cap on .track-grid depends on. */
+.track-text {
+    display: flex;
+    flex-direction: column;
+    /* No gap: the two line boxes are roomy enough to separate themselves, and
+       leaving it out keeps --card-text an exact sum rather than one that has
+       to carry a correction. */
+    padding: var(--pad-top) clamp(12px, 1.3vw, 22px) var(--pad-bottom);
+}
+
+.track-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6em;
+    min-width: 0;
+}
+
+.track-name {
+    min-width: 0;
+    font-size: var(--name-size);
+    /* Atlantis Hand hangs its descenders a full 1.37em below the top of the
+       line box, so anything tighter than that drops the tail of Elegoo's g
+       onto the cost line underneath. */
+    line-height: 1.4;
+}
+
+.track-count {
+    flex: none;
+    color: var(--ink-dim);
+    font-size: var(--sub-size);
+}
+
+.track-meta {
+    color: var(--gold);
+    font-size: var(--sub-size);
+    line-height: 1.4;
+    opacity: 0.85;
+}
+
+/* Two lines, always. Left to wrap, the longest of these (Qidi's, at forty
+   characters) would take a third line on a narrow card and leave its
+   neighbours in the row padded out to match. Not clipped to go with it: an
+   overflow rule here trims the tails off this font's descenders, and these
+   five names are short enough that there is nothing to clip anyway. */
+.track-name,
+.track-count,
+.track-meta {
+    white-space: nowrap;
+}
+
+/* ---------- one track's chart, with a star per printer ---------- */
+
+.chart-stage {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+}
+
+#chart {
+    position: relative;
+    /* The stars are placed in percentages of this box, so it has to carry the
+       maps' exact ratio for them to land on the drawn dots. */
+    width: min(100%, 1480px, calc((100dvh - 17rem) * 2500 / 1462));
+    aspect-ratio: 2500 / 1462;
+    /* Lets a star size itself against the chart rather than the viewport, so
+       it stays in proportion at every width. */
+    container-type: inline-size;
+}
+
+#chart-map {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border-radius: clamp(8px, 0.8vw, 16px);
+}
+
+.star {
+    position: absolute;
+    left: var(--x);
+    top: var(--y);
+    translate: -50% -50%;
+    width: clamp(15px, 3.1cqw, 44px);
+    aspect-ratio: 396 / 408;
+    /* No outline of its own: the glow below is the focus cue. */
+    outline: none;
+}
+
+.star img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    filter: drop-shadow(0 0 0.5cqw rgba(255, 217, 138, 0.65));
+    transition: filter 0.15s ease-out, scale 0.15s ease-out;
+}
+
+.star:hover,
+.star:focus {
+    /* Over its neighbours, so the label is never cut in half by the next
+       star along. */
+    z-index: 2;
+}
+
+.star:hover img,
+.star:focus img {
+    filter: brightness(1.15) drop-shadow(0 0 1.4cqw rgba(255, 217, 138, 0.95));
+    scale: 1.22;
+}
+
+/* Always centred over its own star. The labels are short enough, and the
+   outermost stars far enough inside the frame, that even the longest one on
+   the widest track stays within the chart at every width. */
+.star-tip {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    translate: -50% 0;
+    margin-bottom: 0.5em;
+    padding: 0.15em 0.7em 0.3em;
+    border-radius: 0.6em;
+    background-color: rgba(0, 46, 79, 0.9);
+    font-size: clamp(13px, 2.1cqw, 26px);
+    line-height: 1.3;
+    text-align: center;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease-out;
+}
+
+.star:hover .star-tip,
+.star:focus .star-tip {
+    opacity: 1;
+}
+
+.star-cost {
+    display: block;
+    color: var(--gold);
+    font-size: 0.86em;
+}
+
+/* Nothing to hover with, so the stars carry their labels all the time. Only
+   from the width where the map is big enough for them not to collide. */
+@media (hover: none) and (min-width: 900px) {
+    .star-tip {
+        opacity: 1;
+    }
+}
+
+/* The maps are wide landscapes. Squeezed into a phone's width the whole tree
+   lands in about 350px and the stars sit on top of each other, so the chart
+   keeps a width it works at and the stage scrolls across to it. */
+@media (max-width: 780px) {
+    .chart-stage {
+        justify-content: flex-start;
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+    }
+
+    #chart {
+        flex: none;
+        width: 680px;
+    }
+}

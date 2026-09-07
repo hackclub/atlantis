@@ -2,7 +2,7 @@ from ...views.client.dashboard import index, dashboard
 from ...views.client.auth import login_view, auth_callback, logout_view
 from ...views.client.projects import projects, create_project, edit_project, update_editor_model, update_project_image, delete_project, project_detail, create_journal, ship_project, explore, follow_project, unfollow_project, serve_media
 from ...views.client.shop import shop, item_detail, order_page, order_item, view_own_address
-from ...views.client.misc import user_profile, guides, guide_detail, printer_select
+from ...views.client.misc import user_profile, guides, guide_detail, printer_select, printer_track
 from ...views.client.timelapse import start_timelapse, record_timelapse, sync_timelapse
 from ...views.client.lapse import lapse_connect, lapse_callback, lapse_disconnect, lapse_timelapses
 
@@ -11,7 +11,7 @@ __all__ = [
     "login_view", "auth_callback", "logout_view",
     "projects", "create_project", "edit_project", "update_editor_model", "update_project_image", "delete_project", "project_detail", "create_journal", "ship_project", "explore", "follow_project", "unfollow_project",
     "shop", "item_detail", "order_page", "order_item", "view_own_address",
-    "user_profile", "guides", "guide_detail", "printer_select",
+    "user_profile", "guides", "guide_detail", "printer_select", "printer_track",
     "start_timelapse", "record_timelapse", "sync_timelapse",
     "lapse_connect", "lapse_callback", "lapse_disconnect", "lapse_timelapses",
     "serve_media",

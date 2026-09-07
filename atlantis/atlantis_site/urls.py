@@ -12,6 +12,7 @@ urlpatterns = [
     path("guides/", guides, name="guides"),
     path("guides/<slug:slug>/", guide_detail, name="guide_detail"),
     path("printer-select/", printer_select, name="printer_select"),
+    path("printer-select/<slug:slug>/", printer_track, name="printer_track"),
     path("projects/", projects, name="projects"),
     path("projects/<int:project_id>/", project_detail, name="project_detail"),
     path("projects/<int:project_id>/journal", create_journal, name="create_journal"),

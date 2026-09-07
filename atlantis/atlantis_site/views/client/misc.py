@@ -5,6 +5,7 @@ from django.db.models import Sum
 from django.http import Http404
 
 from ...models import Journal, Timelapse, Ship
+from ...printers import tracks, track as find_track
 
 # The one list of guides: the scroll rail in _guides_base.html renders it, and
 # guide_detail() will only serve a slug that appears here. Adding a guide means
@@ -64,7 +65,26 @@ def guide_detail(request, slug):
 
 @login_required
 def printer_select(request):
-    return redirect("dashboard")
+    # The chart room: every track's constellation at once, each one a way in
+    # to the tree that printer_track() draws.
+    return render(request, "atlantis_site/printer_select.html", {
+        "profile": request.user.hackclub_profile,
+        "tracks": tracks(),
+    })
+
+
+@login_required
+def printer_track(request, slug):
+    # Same guard as guide_detail: the slug has to name a track we know, so a
+    # made-up one is a 404 rather than a blank map.
+    chosen = find_track(slug)
+    if chosen is None:
+        raise Http404("No such printer track")
+
+    return render(request, "atlantis_site/printer_track.html", {
+        "profile": request.user.hackclub_profile,
+        "track": chosen,
+    })
 
 @login_required
 def user_profile(request, user_id):

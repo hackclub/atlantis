@@ -1,7 +1,49 @@
-{% extends "atlantis_site/_base.html" %}
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pick your printer</title>
+    {% include '_favicon.html' %}
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/printer.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
+</head>
+<body>
+    {% include 'atlantis_site/_banner.html' %}
 
-{% block page_id %}printer-select{% endblock %}
-{% block title %}Pick your printer{% endblock %}
+    <div class="printer-page">
+        <header class="chart-bar">
+            <div class="chart-row">
+                <a class="chart-back" href="{% url 'dashboard' %}">&larr; back to deck</a>
 
-{% block content %}
-{% endblock %}
+                <div class="chart-pearls" title="{{ profile.layers }} pearls">
+                    <span><img src="{% static 'atlantis_site/assets/img/dashboard/pearl.png' %}" alt="Pearls:"></span>
+                    {{ profile.layers }}
+                </div>
+            </div>
+
+            <h1 class="chart-heading">Pick your printer</h1>
+        </header>
+
+        <ul class="track-grid">
+            {% for track in tracks %}
+                <li>
+                    <a class="track-card" href="{% url 'printer_track' track.slug %}">
+                        <img src="{% static 'atlantis_site/assets/img/printer/card_'|add:track.slug|add:'.webp' %}"
+                             alt="{{ track.name }}, drawn as {{ track.creature }}." loading="lazy">
+                        <span class="track-text">
+                            <span class="track-head">
+                                <span class="track-name">{{ track.name }}</span>
+                                <span class="track-count">{{ track.printers|length }} {{ track.unit }}</span>
+                            </span>
+                            <span class="track-meta">from {{ track.entry_cost }}</span>
+                        </span>
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>
