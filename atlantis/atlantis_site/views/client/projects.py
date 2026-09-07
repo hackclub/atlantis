@@ -843,14 +843,14 @@ def ship_project(request, project_id):
 
     if not bypass_requirements and not retrying_rejection:
         unassigned_time = tracked_minutes_for_journals(unassigned_journals)
-        if latest_ship:
-            if unassigned_time <= 120:
-                messages.error(request, "Can't ship again without at least 2 hours of work!")
-                return redirect("projects")
-        else:
-            if unassigned_time <= 180:
-                messages.error(request, "You must have atleast 3 hours of logged time before you can ship!")
-                return redirect("projects")
+        if unassigned_time <= 120:
+            messages.error(
+                request,
+                "Can't ship again without at least 2 hours of work!"
+                if latest_ship
+                else "You must have at least 2 hours of logged time before you can ship!",
+            )
+            return redirect("projects")
 
     with transaction.atomic():
         ship = Ship.objects.create(

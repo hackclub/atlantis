@@ -1212,7 +1212,7 @@ class ShopCategory(models.Model):
 
 class Item(models.Model):
 	name = models.CharField(max_length=60)
-	description = models.CharField(max_length=100)
+	description = models.CharField(max_length=500)
 	cost = models.PositiveIntegerField()
 	deleted = models.BooleanField(default=False)
 	imageUrl = models.URLField(max_length=2048, default="https://example.com")

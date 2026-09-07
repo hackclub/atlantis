@@ -574,17 +574,17 @@ class ShipProjectTests(BaseTestCase):
 		self.client.get(reverse("ship_project", args=[self.project.id]))
 		self.assertEqual(Ship.objects.count(), 0)
 
-	def test_first_ship_requires_more_than_180_minutes(self):
-		make_journal(self.project, time_spent=180)
+	def test_first_ship_requires_more_than_120_minutes(self):
+		make_journal(self.project, time_spent=120)
 		response = self._ship()
 		self.assertEqual(Ship.objects.count(), 0)
 		self.assertIn(
-			"You must have atleast 3 hours of logged time before you can ship!",
+			"You must have at least 2 hours of logged time before you can ship!",
 			message_texts(response),
 		)
 
-	def test_first_ship_with_181_minutes_succeeds(self):
-		journal = make_journal(self.project, time_spent=181)
+	def test_first_ship_with_121_minutes_succeeds(self):
+		journal = make_journal(self.project, time_spent=121)
 		response = self._ship()
 		self.assertIn(
 			f'Successfully shipped project "{self.project.title}"!', message_texts(response)
