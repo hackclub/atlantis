@@ -1,8 +1,8 @@
-"""Internal Lookout review.
+"""Internal timelapse review.
 
 Every journal lands in this queue when it's created and stays there until a
 reviewer signs it off, optionally cutting ranges of unearned time out of the
-Lookout footage first. The whole flow is invisible to the project owner:
+the footage first. The whole flow is invisible to the project owner:
 nothing here notifies them, nothing here renders on a page they can load, and a
 project still ships normally while its journals sit in the queue. What waiting
 does hold up is the regular (T1) review queue — see timelapse_cleared_ships.
@@ -10,11 +10,11 @@ does hold up is the regular (T1) review queue — see timelapse_cleared_ships.
 The unit of work is a *project*, not a journal. Every lapse on a project is the
 same person recording the same build, and judging them one at a time meant
 re-learning that context on every visit and paying a page load between each.
-One project is one page: all of its unreviewed lapses, all of their Lookouts,
+One project is one page: all of its unreviewed lapses, all of their recordings,
 one pass, one decision. The rows written are still one TimelapseReview per
 journal — that part of the record is unchanged.
 
-What a pass produces, per Lookout, is a description and any number of removed
+What a pass produces, per recording, is a description and any number of removed
 ranges. The description is required: a recording nobody wrote a line about is
 a recording nobody watched, and it is what a T1/T2/T3 reviewer reads instead of
 watching the hour again. The notes on the pass as a whole are optional — the
@@ -110,7 +110,7 @@ def _pending_lapses(project):
 def _parse_removals(request, sessions):
     """Build the unsaved TimelapseRemoval rows for a posted pass.
 
-    `sessions` maps id -> LookoutSession across every lapse being signed off,
+    `sessions` maps id -> Timelapse across every lapse being signed off,
     so one form can carry cuts from several lapses at once. The rows arrive as
     four parallel lists, one entry per range the reviewer added.
 
@@ -147,7 +147,7 @@ def _parse_removals(request, sessions):
             session = sessions[int(raw_session)]
         except (ValueError, KeyError):
             raise RemovalError(
-                f"Range {position} isn't on a Lookout attached to this project."
+                f"Range {position} isn't on a recording attached to this project."
             )
 
         start = parse_timecode(raw_start)
@@ -162,7 +162,7 @@ def _parse_removals(request, sessions):
         # you cannot remove footage the video doesn't have.
         if end > session.video_seconds:
             raise RemovalError(
-                f"Range {position} runs past the end of that Lookout's video "
+                f"Range {position} runs past the end of that recording's video "
                 f"({session.video_duration_display} long, "
                 f"{format_timecode(session.tracked_seconds)} tracked)."
             )
@@ -187,7 +187,7 @@ def _parse_removals(request, sessions):
         video_ranges.append((session.id, start, end))
 
     # Overlapping ranges would double-count the same seconds against the
-    # shipper, so they're rejected rather than merged — per Lookout, since
+    # shipper, so they're rejected rather than merged — per recording, since
     # offsets only mean anything within one session.
     for session_id in {session_id for session_id, _, _ in video_ranges}:
         overlap = first_overlap(
@@ -199,7 +199,7 @@ def _parse_removals(request, sessions):
             start, end = overlap
             raise RemovalError(
                 f"{format_timecode(start)}-{format_timecode(end)} overlaps another "
-                "removed range on the same Lookout."
+                "removed range on the same recording."
             )
 
     return removals
@@ -208,7 +208,7 @@ def _parse_removals(request, sessions):
 def _parse_descriptions(request, lapses):
     """`{session id: description}` for a posted pass, or raise.
 
-    One per Lookout in the pass, every one of them required. A recording
+    One per recording in the pass, every one of them required. A recording
     nobody wrote a line about is a recording nobody watched, and the point of
     the field is that the next reviewer down the pipeline can read what this
     one saw without watching the hour again themselves.
@@ -222,12 +222,12 @@ def _parse_descriptions(request, lapses):
             value = request.POST.get(f"description_{session.id}", "").strip()
             if not value:
                 raise RemovalError(
-                    "Every Lookout needs a description before the pass can be "
+                    "Every recording needs a description before the pass can be "
                     f'approved — one on "{lapse.title}" doesn\'t have one yet.'
                 )
             if len(value) > DESCRIPTION_MAX_LENGTH:
                 raise RemovalError(
-                    f'A Lookout description on "{lapse.title}" is too long '
+                    f'A recording description on "{lapse.title}" is too long '
                     f"(max {DESCRIPTION_MAX_LENGTH} characters)."
                 )
             descriptions[session.id] = value
@@ -235,7 +235,7 @@ def _parse_descriptions(request, lapses):
 
 
 def _recording_payload(session, removals=(), description=""):
-    """One Lookout, as the review page's JavaScript needs it.
+    """One recording, as the review page's JavaScript needs it.
 
     Everything is in the compiled video's own timeline, because that is the
     only one the reviewer can see or scrub: the ranges they draw, the
@@ -392,7 +392,7 @@ def timelapse_review_project(request, project_id):
     pending_sessions = [
         session for lapse in pending for session in lapse.timelapses.all()
     ]
-    # Only the footage this pass covers: an unchecked Lookout on a lapse
+    # Only the footage this pass covers: an unchecked recording on a lapse
     # somebody already signed off is nobody's problem now.
     unchecked = sum(1 for session in pending_sessions if not session.activity_checked)
     return render(request, "root/timelapse_review_project.html", {
@@ -402,7 +402,7 @@ def timelapse_review_project(request, project_id):
         "reviewed": reviewed,
         "lapse_count": len(pending),
         "recording_count": len(pending_sessions),
-        "lookout_count": sum(lapse.lookout_count for lapse in pending),
+        "recording_count": sum(lapse.recording_count for lapse in pending),
         "screenshot_count": sum(
             session.screenshot_count for session in pending_sessions
         ),
@@ -435,7 +435,7 @@ def timelapse_decision(request, project_id):
         messages.error(request, "Every lapse on that project has already been reviewed.")
         return redirect("timelapse_review_dash")
 
-    # Optional, unlike the per-Lookout descriptions below: those carry the
+    # Optional, unlike the per-recording descriptions below: those carry the
     # account of the pass, and this is the space for anything that spans the
     # whole project rather than one piece of footage.
     internal_notes = request.POST.get("internal_notes", "").strip()
@@ -502,7 +502,7 @@ def timelapse_decision(request, project_id):
             kept.append(removal)
         TimelapseRemoval.objects.bulk_create(kept)
 
-        # Same rule for the descriptions: one per Lookout, on the lapses this
+        # Same rule for the descriptions: one per recording, on the lapses this
         # pass actually got to write.
         annotations = [
             TimelapseAnnotation(
@@ -518,7 +518,7 @@ def timelapse_decision(request, project_id):
     removed_seconds = sum(removal.duration_seconds for removal in kept)
     dropped = len(removals) - len(kept)
 
-    # No send_slack_dm and no notify_followers, deliberately: Lookout review is
+    # No send_slack_dm and no notify_followers, deliberately: timelapse review is
     # internal, and the shipper is not told that it happened or what it cost
     # them.
     record_audit(

@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from django.core.cache import cache
 
-from ..models import Journal, LookoutSession, Ship, T1, T2, T3, TimelapseReview
+from ..models import Journal, Timelapse, Ship, T1, T2, T3, TimelapseReview
 from ..views.admin.queue import (
 	REVIEW_STAT_KEYS, age_bucket, age_display, all_reviews_page, claim_holder,
 	claim_review, next_item_id, percentile, release_claim, review_stats,
@@ -206,7 +206,7 @@ class LookoutQueueTests(BaseTestCase):
 		The decision view won't take a pass until each recording in it has one,
 		so a test about where "next" lands has to supply them.
 		"""
-		sessions = LookoutSession.objects.filter(
+		sessions = Timelapse.objects.filter(
 			journal__project=project, journal__timelapse_review__isnull=True
 		)
 		return {f"description_{session.id}": "watched it" for session in sessions}
@@ -252,7 +252,7 @@ class LookoutQueueTests(BaseTestCase):
 
 		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
 		self.assertEqual(row.lapse_count, 2)
-		self.assertEqual(row.lookout_count, 2)
+		self.assertEqual(row.recording_count, 2)
 		self.assertEqual(row.tracked_label, "2h 0m")
 		self.assertEqual(row.held_ships, [ship.id])
 
@@ -329,7 +329,7 @@ class LookoutReviewPageTests(BaseTestCase):
 
 		self.assertEqual([lapse.id for lapse in context["pending"]], [first.id, second.id])
 		self.assertEqual(context["lapse_count"], 2)
-		self.assertEqual(context["lookout_count"], 2)
+		self.assertEqual(context["recording_count"], 2)
 		self.assertEqual(context["tracked_display"], "1h 30m")
 
 	def test_already_signed_off_lapses_are_shown_read_only(self):
@@ -574,7 +574,7 @@ class ReviewContextTests(BaseTestCase):
 		preflight = self.client.get(reverse("review_project", args=[ship.id])).context["preflight"]
 		labels = {check["label"]: check["state"] for check in preflight["checks"]}
 		self.assertEqual(labels["Printables listing"], "fail")
-		self.assertEqual(labels["Lookout footage"], "fail")
+		self.assertEqual(labels["Timelapse footage"], "fail")
 		self.assertEqual(labels["Editor model"], "warn")
 		self.assertEqual(preflight["failed"], 2)
 

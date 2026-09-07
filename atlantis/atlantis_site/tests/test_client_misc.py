@@ -4,7 +4,7 @@ from django.core.cache import cache
 from django.urls import reverse
 
 from .. import lookout
-from .base import BaseTestCase, grant_perms, make_project, make_timelapse, make_user
+from .base import BaseTestCase, grant_perms, make_lookout, make_project, make_timelapse, make_user
 
 
 class IndexAndDashboardTests(BaseTestCase):
@@ -92,7 +92,7 @@ class LookoutSyncErrorTests(BaseTestCase):
 		cache.clear()
 		self.owner = make_user("recorder")
 		self.project = make_project(self.owner)
-		self.session = make_timelapse(self.project)
+		self.session = make_lookout(self.project)
 		self.client.force_login(self.owner)
 
 	def _sync(self):

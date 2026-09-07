@@ -3,18 +3,25 @@ The Lookout recorder, laid over the book rather than on a page of its own.
 Mounted by lookout_recorder.js, which finds every element by id; the ids and
 class names are what that script drives, so keep them in step with it.
 
+Legacy. Lapse has replaced this and the book only reaches it through the
+picker's second tab; it is still here, whole, so that recordings already in
+flight can be finished and the hours in them still land. Nothing about how it
+works has changed.
+
 data-open carries a session to pop open the moment the page loads — set when
 someone arrives from an old recorder link.
 {% endcomment %}
 <div class="slip slip--wide slip--recorder" id="slip-record" hidden>
     <div class="recorder" id="lookout-recorder" data-csrf="{{ csrf_token }}" data-open="{{ record_session_url }}">
         <div class="recorder-head">
-            <h2>Record a lookout</h2>
+            <h2>Record a lookout <span class="tl-tag tl-tag--legacy">legacy</span></h2>
             <span class="tl-pill" id="lookout-pill">Not started</span>
         </div>
         <p class="recorder-hint" id="lookout-hint">
-            When you hit start, your browser asks which screen or window to share &mdash;
-            pick the one you'll be modelling in. Nothing is captured until you do.
+            Lookout has been replaced by <a href="{{ lapse_web_url }}" target="_blank" rel="noreferrer noopener">Lapse</a>,
+            which is where new recordings belong. If you carry on here: when you hit start,
+            your browser asks which screen or window to share &mdash; pick the one you'll be
+            modelling in. Nothing is captured until you do.
         </p>
 
         <div class="recorder-alert" id="lookout-alert" hidden>
@@ -69,7 +76,7 @@ someone arrives from an old recorder link.
 
         <ul class="recorder-facts">
             <li>One screenshot of the screen you share is taken roughly every minute, then stitched into a video.</li>
-            <li>Time is credited by Lookout from those screenshots &mdash; it's the only way time gets logged, so it can't be typed in by hand.</li>
+            <li>Time is credited by Lookout from those screenshots &mdash; it can't be typed in by hand.</li>
             <li>Keep this tab open while you work. Closing this popup is fine &mdash; the recording carries on, and &ldquo;record a lookout&rdquo; brings it back.</li>
             <li>Pause any time. Resuming asks you to share your screen again &mdash; browsers drop the share when you leave.</li>
         </ul>

@@ -132,10 +132,21 @@
     font-weight: 500;
 }
 
-.root-page .ta-badge-lookout {
+/* Which recorder produced the footage. Lapse is the live one and keeps the
+   tide colour the single badge used to have; Lookout is legacy and is drawn
+   quietly, so a reviewer can tell at a glance which of the two they're
+   watching without either shouting. */
+.root-page .ta-badge-lapse {
     border-color: var(--oc-tide);
     background: var(--oc-tide-soft);
     color: var(--oc-tide-2);
+}
+
+.root-page .ta-badge-lookout {
+    border-color: var(--oc-line-2);
+    background: var(--oc-surface-2);
+    color: var(--oc-ink-2);
+    font-style: italic;
 }
 
 .root-page .ta-badge-done {

@@ -1,6 +1,6 @@
 """Queue navigation shared by the four review desks.
 
-Every desk (T1, T2, T3 and Lookout) is the same shape: an ordered list of
+Every desk (T1, T2, T3 and timelapse review) is the same shape: an ordered list of
 things waiting, one of which a reviewer is looking at right now. This module is
 what makes that shape explicit, so a reviewer can walk the queue — open the
 oldest, decide, land on the next one — without going back to a dashboard
@@ -35,7 +35,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from ...models import (
-    Journal, LookoutSession, Project, Ship, T1, T2, T3, TimelapseAnnotation,
+    Journal, Timelapse, Project, Ship, T1, T2, T3, TimelapseAnnotation,
     TimelapseReview,
 )
 from ..helpers import (
@@ -122,7 +122,7 @@ class Queue:
             # footage of the same person working on the same thing, and judging
             # them one at a time meant re-learning that context on every visit.
             # One project is one sitting: all of its lapses, all of their
-            # Lookouts, one decision.
+            # recordings, one decision.
             pending_lapses = Journal.objects.filter(
                 project=OuterRef("pk"), timelapse_review__isnull=True
             )
@@ -341,7 +341,7 @@ def decorate_rows(queue_key, items):
             decorate_lapses(row.pending_lapses, queue.sla_days)
             row.lapses = row.pending_lapses
             row.lapse_count = len(row.lapses)
-            row.lookout_count = sum(len(lapse.timelapses.all()) for lapse in row.lapses)
+            row.recording_count = sum(len(lapse.timelapses.all()) for lapse in row.lapses)
             row.tracked_seconds_total = sum(
                 lapse.tracked_seconds_total for lapse in row.lapses
             )
@@ -366,7 +366,7 @@ def decorate_lapses(lapses, sla_days):
             session.tracked_seconds for session in lapse.timelapses.all()
         )
         lapse.tracked_label = format_minutes(lapse.tracked_seconds_total // 60)
-        lapse.lookout_count = len(lapse.timelapses.all())
+        lapse.recording_count = len(lapse.timelapses.all())
         lapse.age_display = age_display(lapse.created_at)
         lapse.age_bucket = age_bucket(lapse.created_at, sla_days)
     return lapses
@@ -512,7 +512,7 @@ STATS_WINDOW = timedelta(days=3)
 STATS_CACHE_TTL = 5 * 60
 
 # Which cards each desk carries, and in what order. Not every metric means
-# something at every tier: Lookout review has no verdict to average, so it gets
+# something at every tier: timelapse review has no verdict to average, so it gets
 # no approval ratio, and the hours a queue is sitting on are only knowable once
 # lapse review has settled them — which is after T1.
 REVIEW_STAT_KEYS = {
@@ -734,7 +734,7 @@ def review_stats(queue_key):
             "label": meta["label"],
             "description": meta["description"],
             # What the card is counting, which is not the same thing at every
-            # desk: Lookout review measures the wait of a lapse, the ship
+            # desk: timelapse review measures the wait of a lapse, the ship
             # queues measure the wait of a ship.
             "count_noun": (
                 "decision" if key == "approval_ratio"
@@ -917,7 +917,9 @@ def ship_snapshot(ship):
     return {
         "journals": len(journals),
         "ship_journals": len(ship_journals),
-        "lookouts": LookoutSession.objects.filter(journal__in=journals).count(),
+        # Both sources count: a Lapse timelapse and a Lookout session are the
+        # same evidence for the same hours.
+        "recordings": Timelapse.objects.filter(journal__in=journals).count(),
         "tracked": tracked,
         "tracked_display": format_minutes(tracked),
         "approved": approved,
@@ -998,7 +1000,7 @@ def annotate_recordings(journals):
     """Hang the timelapse reviewer's own words on each piece of footage.
 
     A T1/T2/T3 reviewer reading a journal wants to know what somebody who
-    actually watched the Lookout thought of it. Without this they would have to
+    actually watched the footage thought of it. Without this they would have to
     open the internal review to find out, which is a page most of them can't
     reach — so the description travels with the recording instead.
 
@@ -1008,7 +1010,7 @@ def annotate_recordings(journals):
     returning fresh objects that never saw it.
 
     The rest of the annotation is the same idea applied to time. Journal and
-    LookoutSession both expose tracked/removed/approved as properties that
+    Timelapse both expose tracked/removed/approved as properties that
     aggregate on read, which is one or two queries every time a template
     touches one; over a page that lists every entry and every recording under
     it that is hundreds. So the same numbers are computed once here, off the
@@ -1083,10 +1085,10 @@ def preflight_checks(ship, subject, owner, has_make=None):
         "" if ship.project.editor_model_url else "no source file uploaded",
     )
     add(
-        "Lookout footage",
-        "pass" if subject["lookouts"] else "fail",
-        f"{subject['lookouts']} session{'' if subject['lookouts'] == 1 else 's'}"
-        if subject["lookouts"] else "no verifiable time at all",
+        "Timelapse footage",
+        "pass" if subject["recordings"] else "fail",
+        f"{subject['recordings']} recording{'' if subject['recordings'] == 1 else 's'}"
+        if subject["recordings"] else "no verifiable time at all",
     )
     if subject["removed"]:
         add("Time cut in lapse review", "warn", f"{format_minutes(subject['removed'])} removed")
