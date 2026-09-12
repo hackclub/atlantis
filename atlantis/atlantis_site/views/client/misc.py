@@ -27,6 +27,11 @@ GUIDES = (
         "blurb": "The approved packages, and how Fusion, Onshape, and Solidworks compare.",
     },
     {
+        "slug": "designing-for-3dp",
+        "title": "Designing for 3D Printing",
+        "blurb": "Walls, overhangs, holes, tolerances, fillets, and orientation: designing parts that actually print.",
+    },
+    {
         "slug": "project-guidelines",
         "title": "Project Guidelines",
         "blurb": "What makes a project good enough to pass review, and what is disallowed.",

@@ -1,0 +1,424 @@
+{% extends "atlantis_site/_guides_base.html" %}
+{% load static %}
+
+{% comment %}
+Parker's DesignFor3DP guide, reproduced with permission and kept word for word
+from github.com/ProgrammerTurtle/DesignFor3DP. Original spelling included. If
+the source is ever revised, re-copy it rather than editing the prose here.
+{% endcomment %}
+
+{% block title %}Designing for 3D Printing &mdash; Guides{% endblock %}
+
+{% block guide %}
+<article class="guide-article">
+    <h1>Designing for 3D Printing</h1>
+
+    <p class="guide-lead">
+        A guide on how to design functional 3D models for 3D printing production. This is
+        not intended to be all inclusive and is certainly not the only way to design parts
+        for manufacturing with 3DP. This is just the philosophy I follow when designing
+        and it works well for me. Loosely based on a flyer guide by Billie Ruben.
+    </p>
+
+    <h2>Introduction</h2>
+
+    <p>
+        Hi! My name is Parker and I have been doing 3D printing for the majority of my
+        life. Almost 12 years, actually. I started in First Grade with a Makerbot
+        Replicator at my school, and fell in love immediately. From there, I eventually
+        got my first personal printer in Middle School. I now own 7 or 8 different
+        printers, including a few fully custom designed ones.
+    </p>
+
+    <p>
+        This is my guide for how to design parts that can be FDM printed well. These are
+        all things I have learned over the years - hopefully, I can help others learn it a
+        bit quicker than I did!
+    </p>
+
+    <p>
+        I have 2 design philosphies that I follow with my parts: <strong>Make it look
+        cool</strong> and <strong>never ever use supports unless ABSOLUTELY
+        necessary</strong> (they rarely are) - You should be using supports for less than
+        5% of prints!
+    </p>
+
+    <h2>1. Wall Thickness</h2>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/wall-thickness.gif' %}"
+             alt="A wall face in CAD being offset to change its thickness."
+             width="640" height="788" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Wall thickness should, ideally, be a multiple of the extrusion width. Because
+            FDM 3D printing operates off of a nozzle drawing "lines" of filament, those
+            lines have a fixed width. For standard printing at 0.2mm layer height, you can
+            assume an 0.4mm line width. So, your walls should be a multiple of 0.4mm. It
+            should NOT be less than 0.4mm. Walls thinner than one line width will not
+            print well, if at all.
+        </li>
+        <li>
+            Generally, this does not matter much unless you are doing thin walls. If your
+            wall is thicker than 2-3mm, you can basically forget this as the walls will
+            start to have infill and not just be perimeters, which is where the majority
+            of line width applies.
+        </li>
+        <li>
+            NOTE: Nowadays, we do have a wonderful slicer feature called Arachne, which
+            changes line width to adjust for differing sizes. This makes it significantly
+            less important to pay attention to line width, but it is still good practice
+            to at least keep it in mind as often times perimiter/vertical line count is
+            associated with strength. It is especially crucial to keep in mind not going
+            below 1x line width.
+        </li>
+    </ul>
+
+    <h2>2. Overhangs</h2>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/overhangs-lines.png' %}"
+             alt="A CAD block with an unsupported shelf sticking out into open air, crossed out in red."
+             width="1205" height="856" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            This is easily the most important aspect of designing for 3D printing. As
+            mentioned earlier, FDM 3D printing operates off of a nozzle drawing "lines" of
+            filament. These lines, generally, need to build off of other preexisting lines
+            or the bed! Filament must be built upon exisiting material, otherwise it can
+            droop or simply turn into a print failure as you have random blobs of plastic
+            formed by the printer attempting to create floating layers.
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/overhangs-angles.png' %}"
+             alt="Angled and curved undersides in CAD, comparing printable angles against too-shallow ones."
+             width="1521" height="942" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Not only does this apply to straight overhangs, but this also applies to
+            vertically angled and curved features on the <strong>underside</strong> of a
+            part. Too low of an angle means that there is too little filament to build
+            upon in the previous layer, resulting in curling, waviness, or failed parts.
+            This also applies to too much of a curve - generally, you can not curve all
+            the way to vertical.
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/bridging.png' %}"
+             alt="A short gap in CAD spanned between two supported ends, illustrating a bridge."
+             width="1164" height="881" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            An exception to this, of course, is bridging. Short unsupported sections can
+            be completed by the printer as long as there is something to build off of at
+            either end. This means cantilevers do not work, where only one end is
+            supported. Generally, do not expect the printer to bridge distances larger
+            than ~15mm.
+        </li>
+    </ul>
+
+    <h2>3. Holes and Arches</h2>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/holes-teardrop.png' %}"
+             alt="A CAD block with a round horizontal hole next to a teardrop-shaped one."
+             width="1409" height="1017" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            This is actually fairly similar to overhangs if you think about it - they are
+            just complete curves. Vertical holes will print fine with no issues.
+            Horizontal holes, however, are a different story. The top of the hole is what
+            we consider a <strong>steep overhang</strong>. This means it will not print
+            very well. So, we can make the holes print better by turning them into a
+            teardrop shape - when done correctly, this will not noticeably affect quality
+            or performance.
+        </li>
+        <li>
+            Fun fact about teardropped holes - they are actually the
+            <a href="https://reprap.org/wiki/RepRapLogo" target="_blank" rel="noopener">RepRap Logo</a>!
+            RepRap is an important movement from the early days of consumer 3D printing
+            and is the reason that all of modern 3D printing exists. It was all about easy
+            to source, self replicating 3D printers, so that we could get machines to the
+            masses. Really, really important piece of history, and it happens to be this
+            exact technique!
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/arches.png' %}"
+             alt="A rounded arch in CAD next to a pointed one that prints without support."
+             width="1068" height="839" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            The same applies to arches! They are essentially an incomplete circle. Point
+            the top, and the print will come out perfect!
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/hex-holes.png' %}"
+             alt="A hexagonal bore in CAD shown as an alternative to a round one."
+             width="1064" height="899" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Another technique you can use for holes, specifically holes you are pressing
+            components into, is hexagonal holes! A good example would be for bearing holes
+            where you want a good press fit - often times, a hexagon will be more accurate
+            than a round bore. Especially on vertical walls. This is because at the end of
+            the day all circles are approximations, not actual circles. Some of them are
+            really, really good approximations, but it is still an approximation. A
+            hexagon is straight lines and exact angles - nothing to mess up.
+        </li>
+    </ul>
+
+    <h2>4. Tolerances</h2>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/tolerances.png' %}"
+             alt="A CAD cross-section of a pin in a hole with a small gap between them."
+             width="1383" height="783" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Tolerances are one that catches a lot of people off guard, even though it
+            makes a lot of sense in hindsight. Your printer is working its absolute
+            hardest to be accurate - so accurate, that if you have a hole and a pin that
+            are the same size in CAD, they won't fit together without a lot of force! You
+            have to add <strong>tolerance</strong>, aka a gap that allows for the parts to
+            fit together cleanly. For most parts, an 0.3mm gap will be enough. On vertical
+            features, you may need a bit more tolerance due to less accuracy in Z. These
+            apply to <strong>any parts that need to fit together</strong>
+        </li>
+        <li>
+            Tolerances also apply to print-in-place prints and other multi-part assemblies
+            that print in one go. They must be added so that parts do not fuse together,
+            allowing for proper motion and seperation. An example of this would be an
+            articulated flexy dragon - everyone has seen one of those. Proper tolerancing
+            on the joints is what allows motion.
+        </li>
+    </ul>
+
+    <h2>5. Fillets and Chamfers</h2>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/fillets-vertical.png' %}"
+             alt="A CAD part with rounded vertical corners."
+             width="1004" height="990" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Vertical fillets should be used on corners when possible. These help reduce
+            inertia during direction changes and result in a cleaner print overall.
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/fillets-horizontal.png' %}"
+             alt="A horizontal fillet on the bottom edge of a CAD part, creating a curved underside."
+             width="854" height="1115" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Horizontal fillets can be tricky when on the bottom of parts - they result in
+            the curved under surface mentioned earlier, which causes a steep overhang that
+            is hard to print.
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/chamfers-equal.png' %}"
+             alt="Equal chamfers on the top and bottom edges of a CAD part, each at 45 degrees."
+             width="1056" height="1092" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Standard horizontal chamfers work on both the top and bottom of a part. These
+            are called <strong>equal chamfers</strong> - the amount the chamfer extends in
+            either direction is equal, always resulting in a 45 degree angle. Which is
+            easily printable!
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/chamfer-fillet-combo.png' %}"
+             alt="A chamfer combined with a fillet on a CAD edge to give a curved finish without a steep overhang."
+             width="897" height="1116" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Horizontal chamfers and fillets can be combined to negate the steep overhang
+            but still have a curved finish, even if it is a bit "false"
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/wall-base-fillet.png' %}"
+             alt="A fillet added where a vertical wall meets the base of a CAD part."
+             width="1001" height="1030" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Chamfers or fillets should be added to the base of vertical walls to
+            strengthen the joint - otherwise, you are at a big risk of the part snapping!
+        </li>
+    </ul>
+
+    <h2>6. Print Orientation</h2>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/orientation-strength.png' %}"
+             alt="A CAD part shown on the build plate with its layer direction called out."
+             width="1460" height="1137" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            When designing a part for 3D Printing, you should always have a print
+            orientation in mind. You should be thinking about which side will be on the
+            bed, which sides will be walls, which side should be the top, etc. This can
+            take a bit to get the hang of, but it is the true key to 3DP design. Once you
+            understand your print orientation, you can fine tune strength, quality,
+            tolerances, and more.
+        </li>
+        <li>
+            Parts will always be weaker in Z than they are in XY. This should be
+            considered when you are making your part - if you need it to be strong, the
+            forces should be top down, not on the side. That way, you aren't splitting at
+            layers, but rather compressing layers together.
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/orientation-curves.png' %}"
+             alt="A curved surface printed vertically, showing stair-stepping between layers."
+             width="1456" height="1005" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            Print orientation also matters for curves! Layers will almost always be taller
+            than the resolution your printer can achieve in XY - so, vertical curves will
+            look like stair steps!
+        </li>
+    </ul>
+
+    <h2>7. Example Part!</h2>
+
+    <ul>
+        <li>
+            The following is a frame foot I designed for my carbon fiber filament winder,
+            <a href="https://github.com/ProgrammerTurtle/CharlotteCNCWinder" target="_blank" rel="noopener">Charlotte</a>.
+        </li>
+        <li>
+            The main techniques I used were to design based off printing for the one side,
+            fillets, and tolerances.
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/example-orientation.png' %}"
+             alt="The frame foot in CAD, oriented to print flat on its side."
+             width="1211" height="759" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>For this part, I designed for it to print flat on the side.</li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/example-features.png' %}"
+             alt="The frame foot's features, all built off the single face that sits on the bed."
+             width="1754" height="1149" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            With that in mind, I made every feature simple and built off of the one side.
+            It is a simple part, but it prints easily and is strong enough to hold my full
+            weight.
+        </li>
+        <li>
+            Could I have teardropped the holes to account for the overhang? Yes, but it
+            was not necessary here since they are a noncritical dimension. As long as the
+            screw fits it doesn't matter how big they are.
+        </li>
+    </ul>
+
+    <hr class="guide-rule">
+
+    <ul>
+        <li>
+            Fillets can be seen on all corners of the part - specifically on the internal
+            corners, where it minimizes stress concentrations.
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/example-fillets.png' %}"
+             alt="Fillets on the internal and external corners of the frame foot."
+             width="1204" height="677" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            These fillets make the part a lot stronger, make it look nicer, and make it
+            print smoother by reducing sharp jerking motions.
+        </li>
+    </ul>
+
+    <hr class="guide-rule">
+
+    <ul>
+        <li>
+            Tolerances can be seen on the T slot feature and the holes. The holes need
+            toleranced so that screws and my allen key can fit through them, allowing for
+            mounting, while on the T slot tolerances allow for it to properly slide into
+            the aluminum extrusion of the winder frame without getting stuck.
+        </li>
+    </ul>
+
+    <figure class="guide-figure">
+        <img src="{% static 'atlantis_site/assets/img/guides/designing-for-3dp/example-tolerances.png' %}"
+             alt="The frame foot's T-slot and screw holes, each toleranced for fit."
+             width="1213" height="748" loading="lazy">
+    </figure>
+
+    <ul>
+        <li>
+            On all of these features, I added 0.3mm of tolerance, which is a standard safe
+            amount for any printed part tolerance. Closer or further may be needed
+            depending on the part, but it was not needed here. In context, this means the
+            bores are 5.3mm instead of 5mm and the tslots are 0.3mm undersized.
+        </li>
+    </ul>
+
+    <p class="guide-thanks">
+        Thanks to Parker (ProgrammerTurtle) for letting us put his guide on the site. The
+        original lives at
+        <a href="https://github.com/ProgrammerTurtle/DesignFor3DP" target="_blank" rel="noopener">github.com/ProgrammerTurtle/DesignFor3DP</a>.
+    </p>
+</article>
+{% endblock %}
