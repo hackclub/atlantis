@@ -8,6 +8,7 @@
     {% include '_favicon.html' %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/mihi.css' %}">
 </head>
 <body>
     <div id="backdrop" aria-hidden="true"></div>
@@ -110,5 +111,6 @@
             <a class="hud" id="hud-admin" href="{% url 'admin_dash' %}">admin</a>
         {% endif %}
     {% endif %}
+    {% include 'atlantis_site/_mihi_button.html' %}
 </body>
 </html>

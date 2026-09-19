@@ -1,11 +1,14 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
-from django.db.models import Sum
-from django.http import Http404
+from django.db.models import F, Sum
+from django.http import Http404, JsonResponse
+from django.utils import timezone
+from django.views.decorators.http import require_POST
 
-from ...models import Journal, Timelapse, Ship
+from ...models import Journal, MihiActivation, Timelapse, Ship
 from ...printers import tracks, track as find_track
+from ..helpers import rate_limit
 
 # The one list of guides: the scroll rail in _guides_base.html renders it, and
 # guide_detail() will only serve a slug that appears here. Adding a guide means
@@ -131,3 +134,26 @@ def user_profile(request, user_id):
         "tracked_minutes": (tracked_seconds % 3600) // 60,
         "is_self": is_self,
     })
+
+
+@login_required
+@require_POST
+@rate_limit("mihi_activate", 1, json=True)
+def mihi_activate(request):
+    """Note that this user turned mihi mode on. The button is a joke and this is
+    all it records: that today's row for them exists, and that they clicked
+    again. The response is empty because the browser has already done the only
+    thing the click was for — the effect is local, and nothing here is read back
+    into the page.
+    """
+    activation, created = MihiActivation.objects.get_or_create(
+        user=request.user,
+        activated_on=timezone.localdate(),
+    )
+    if not created:
+        # F() rather than activation.save(): two clicks racing each other should
+        # count twice, not have the later one overwrite the earlier.
+        MihiActivation.objects.filter(pk=activation.pk).update(
+            activations_count=F("activations_count") + 1
+        )
+    return JsonResponse({"ok": True})

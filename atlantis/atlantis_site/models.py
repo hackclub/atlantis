@@ -307,6 +307,36 @@ class ActiveDay(models.Model):
 		return f"{self.user_id} seen on {self.day}"
 
 
+class MihiActivation(models.Model):
+	"""One row per user per day they turned mihi mode on, and how many times.
+
+	Mihi mode is a joke — the button promises pearls it cannot pay — so this is
+	the only thing it writes. The unique constraint is what makes the day's row
+	idempotent, and the counter is what separates five people clicking once from
+	one person clicking five times, which is the whole of the difference the
+	daily-active-mihis figure is read for.
+	"""
+	user = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="mihi_activations"
+	)
+	activated_on = models.DateField()
+	activations_count = models.PositiveIntegerField(default=1)
+
+	class Meta:
+		ordering = ["-activated_on"]
+		constraints = [
+			models.UniqueConstraint(
+				fields=["user", "activated_on"],
+				name="mihi_once_per_user_per_day",
+			),
+		]
+
+	def __str__(self):
+		return f"{self.user_id} mihi on {self.activated_on}"
+
+
 # project/ship models
 class Project(models.Model):
 	owner = models.ForeignKey(

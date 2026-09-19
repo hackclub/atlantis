@@ -1,0 +1,15 @@
+{% load static %}
+{% comment %}
+Mihi mode's only entry point. The button carries its own config as data
+attributes and mihi_mode.js boots itself off it, so a page opts in by including
+this file. Signed-in only, because the click is tallied per user, and only when
+MIHI_MODE is on — that switch takes the button off every page at once.
+{% endcomment %}
+{% if mihi_mode and user.is_authenticated %}
+<button type="button" class="mihi-toggle" id="mihi-toggle" data-mihi-mode-ignore
+        aria-pressed="false"
+        data-mihi-url="{% url 'mihi_activate' %}"
+        data-mihi-csrf="{{ csrf_token }}"
+        data-mihi-image="{% static 'atlantis_site/assets/img/dashboard/pearl.png' %}">free 10,000 pearls hack *LEGIT* 2026 (WORKING)</button>
+<script src="{% static 'atlantis_site/mihi_mode.js' %}" defer></script>
+{% endif %}

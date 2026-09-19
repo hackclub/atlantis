@@ -1,0 +1,74 @@
+/* Mihi mode — the toggle and the effect it turns on. Ported from stardance,
+   repainted in Atlantis's own parchment and ink. */
+
+/* Fixed to the bottom-right corner rather than sitting in the flow. This shows
+   up on ten art-directed layouts — a scene, a shelf of books, a parallax
+   landing page — and a button in the flow would have to be placed into each one
+   and made room for. Pinned to the corner it needs no page to accommodate it.
+   Bottom-right because the signed-in profile card already owns bottom-left at
+   the same depth. */
+.mihi-toggle {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 1000;
+    max-width: min(320px, calc(100vw - 36px));
+    padding: 10px 16px;
+    border: 2px solid #6b4a24;
+    border-radius: 8px;
+    background: linear-gradient(115deg, #f6e7c8, #fffdf7 48%, #e5f2fc);
+    color: #35270f;
+    font-family: "Prompt", sans-serif;
+    font-size: 15px;
+    line-height: 1.3;
+    text-align: center;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #6b4a24;
+    transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.mihi-toggle:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 0 #6b4a24;
+}
+
+.mihi-toggle:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: none;
+}
+
+.mihi-toggle:focus-visible {
+    outline: 3px solid #00528c;
+    outline-offset: 3px;
+}
+
+.mihi-toggle:disabled {
+    opacity: 1;
+    background: #e4d8be;
+    cursor: default;
+    box-shadow: none;
+}
+
+/* Everything the controller tagged: every picture, background and mask on the
+   page becomes the portrait. !important because these have to beat whatever
+   rule the page itself has about that element's artwork, which is the point of
+   the mode. */
+[data-mihi-image],
+[data-mihi-before]::before,
+[data-mihi-after]::after {
+    background-image: var(--mihi-portrait) !important;
+    background-size: 100% 100% !important;
+    background-position: center !important;
+    background-repeat: no-repeat !important;
+    mask-image: none !important;
+    animation: none !important;
+}
+
+/* An inline SVG or a role="img" element keeps drawing its own children over the
+   swapped background, so they are hidden rather than recoloured. */
+svg[data-mihi-image] > *,
+[role="img"][data-mihi-image] > * {
+    visibility: hidden;
+}

@@ -115,6 +115,12 @@ SECRET_KEY = os.environ["SECRET_KEY"]
 DEBUG = os.environ.get("DEBUG", "False") == "True"
 ALLOW_JOURNALING = os.environ.get("ALLOW_JOURNALING", "False") == "True"
 
+# Mihi mode: the joke button that rewrites every word on a page. On by default,
+# because a visitor has to click it and a refresh puts the page back, so the
+# worst case is one person mildly confused. Set MIHI_MODE=False to take the
+# button off every page at once without a deploy.
+MIHI_MODE = os.environ.get("MIHI_MODE", "True") == "True"
+
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
 
 
@@ -164,6 +170,9 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                # Deployment-wide switches no view should have to remember to
+                # pass. See atlantis_site/context_processors.py.
+                'atlantis_site.context_processors.mihi_mode',
             ],
         },
     },

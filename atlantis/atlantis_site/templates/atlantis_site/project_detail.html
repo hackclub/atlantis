@@ -21,6 +21,7 @@
     {% if is_owner %}<link rel="stylesheet" href="{% static 'atlantis_site/css/lapse.css' %}">{% endif %}
     {% if is_owner and show_lookout %}<link rel="stylesheet" href="{% static 'atlantis_site/css/lookout.css' %}">{% endif %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/mihi.css' %}">
 </head>
 <body data-mode="book">
     <div class="desk">
@@ -596,5 +597,6 @@
     </script>
     {% endif %}
     {% endif %}
+    {% include 'atlantis_site/_mihi_button.html' %}
 </body>
 </html>
