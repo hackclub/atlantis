@@ -13,6 +13,9 @@
 @import url('css/timelapse.css');
 @import url('css/profile.css');
 @import url('css/guides.css');
+/* Mihi mode — the joke toggle, drawn on whatever page includes it. Before
+   admin.css so the /root theme still has the last word. */
+@import url('css/mihi.css');
 /* Admin-only (/root) theme. Last so it can override the shared rules above;
    every selector inside is scoped to .root-page. */
 @import url('css/admin.css');

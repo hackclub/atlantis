@@ -13,6 +13,8 @@ urlpatterns = [
     path("guides/<slug:slug>/", guide_detail, name="guide_detail"),
     path("printer-select/", printer_select, name="printer_select"),
     path("printer-select/<slug:slug>/", printer_track, name="printer_track"),
+    # Mihi mode. The effect is client-side; this only tallies the click.
+    path("mihi/activate/", mihi_activate, name="mihi_activate"),
     path("projects/", projects, name="projects"),
     path("projects/<int:project_id>/", project_detail, name="project_detail"),
     path("projects/<int:project_id>/journal", create_journal, name="create_journal"),
