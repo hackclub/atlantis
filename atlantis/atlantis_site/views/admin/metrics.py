@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.shortcuts import render
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Sum, Avg
 from django.db.models.functions import TruncDate
@@ -80,7 +81,12 @@ def _daily_rows(counts, days, today, value=lambda n: n):
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer"])
+@timezone.override(settings.CHALLENGE_TIMEZONE)
 def metrics(request):
+    """All "today"/"per day" windows here are cut in CHALLENGE_TIMEZONE (US
+    Eastern), not the server's UTC — the decorator above activates it for the
+    whole view, so timezone.localdate()/localtime(), the TruncDate groupings,
+    and the template's |date rendering of generated_at all follow it."""
     User = get_user_model()
     now = timezone.now()
     last_7 = now - timedelta(days=7)
