@@ -129,6 +129,8 @@ SECRET_KEY = os.environ["SECRET_KEY"]
 DEBUG = os.environ.get("DEBUG", "False") == "True"
 ALLOW_JOURNALING = os.environ.get("ALLOW_JOURNALING", "False") == "True"
 
+MIHI_MODE = os.environ.get("MIHI_MODE", "True") == "True"
+
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "").split(",")
 
 
@@ -178,6 +180,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'atlantis_site.context_processors.mihi_mode',
             ],
         },
     },

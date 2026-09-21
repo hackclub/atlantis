@@ -8,13 +8,14 @@
     {% include '_favicon.html' %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/dashboard.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/mihi.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/streak.css' %}">
 </head>
 <body>
     <div id="backdrop" aria-hidden="true"></div>
 
     <div id="scene">
-        <img id="scene-bg" src="{% static 'atlantis_site/assets/img/dashboard/background.png' %}"
+        <img id="scene-bg" data-mihi-mode-ignore src="{% static 'atlantis_site/assets/img/dashboard/background.png' %}"
              data-day-src="{% static 'atlantis_site/assets/img/dashboard/background.png' %}"
              data-night-src="{% static 'atlantis_site/assets/img/dashboard/night/background_night.png' %}" alt="The bow of a boat at sea, carrying a treasure chest and a telescope.">
 
@@ -122,5 +123,7 @@
             {% endif %}
         {% endif %}
     </div>
+    {% include 'atlantis_site/_mihi_button.html' %}
+    {% include 'atlantis_site/_mihi_script.html' %}
 </body>
 </html>
