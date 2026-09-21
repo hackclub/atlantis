@@ -463,6 +463,10 @@ body {
 /* ---------- banking hours, and spending them ---------- */
 
 /*
+ * Nothing wears these at the moment: the strip they dress is commented out of
+ * printer_track.html for now, and they are kept so putting it back is a
+ * template change and nothing more.
+ *
  * The strip between the heading and the map. For eight weeks it is a progress
  * line and a "make this my chart" button; on the last day it grows the form
  * that actually buys a printer. Same slab either way, so the page doesn't
@@ -483,6 +487,14 @@ body {
     border: 1px solid rgba(255, 217, 138, 0.25);
     border-radius: 0.6em;
     background-color: var(--deep-lift);
+    /* Lifted onto the same layer as the bar above it. The chart is a fixed
+       box later in the document, so anything left in the flow paints under
+       it: without this the slab is hidden wherever the map reaches, and the
+       button that picks the track can't be clicked. Unlike the bar it keeps
+       its pointer events, because it is an opaque slab with a button and a
+       select in it rather than writing over the stars. */
+    position: relative;
+    z-index: 1;
 }
 
 .chart-claim-done {

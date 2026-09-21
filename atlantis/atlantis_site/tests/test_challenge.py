@@ -833,25 +833,40 @@ class PageRenderTests(BaseTestCase):
                 self._survive()
                 self.assertEqual(self.client.get(reverse("printer_select")).status_code, 200)
 
+    # The claim strip is off the front end for now, so a chart is the same map
+    # in every state. These still render all of them: the view hands the
+    # template a standing, a claim and the affordability sums whatever the week
+    # is, and one of those going missing is a template error, not a wrong page.
+    # What the strip used to drive is covered against the views themselves, in
+    # PrinterClaimTests.
+
+    def _chart_carries_no_claim_ui(self, response):
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Make this my chart")
+        self.assertNotContains(response, "Claim this printer")
+        self.assertNotContains(response, "printer hours banked")
+
     def test_a_chart_renders_while_the_program_runs(self):
         with during_week(1):
-            response = self.client.get(reverse("printer_track", args=["bambu"]))
-            self.assertEqual(response.status_code, 200)
-            self.assertContains(response, "Make this my chart")
-            self.assertNotContains(response, "Claim this printer")
+            self._chart_carries_no_claim_ui(
+                self.client.get(reverse("printer_track", args=["bambu"]))
+            )
 
-    def test_a_chart_offers_the_claim_once_the_program_is_over(self):
+    def test_a_chart_renders_once_the_program_is_over(self):
         with after_week(1):
             self._survive()
-            response = self.client.get(reverse("printer_track", args=["bambu"]))
-            self.assertContains(response, "Claim this printer")
+            self._chart_carries_no_claim_ui(
+                self.client.get(reverse("printer_track", args=["bambu"]))
+            )
 
     def test_a_chart_renders_after_claiming(self):
         with after_week(1):
             self._survive()
             self.client.post(reverse("claim_printer", args=["bambu"]), {"printer": "A1"})
-            response = self.client.get(reverse("printer_track", args=["bambu"]))
-            self.assertContains(response, "You claimed")
+            self.assertTrue(PrinterClaim.objects.exists())
+            self._chart_carries_no_claim_ui(
+                self.client.get(reverse("printer_track", args=["bambu"]))
+            )
 
     def test_a_chart_renders_for_someone_who_is_out(self):
         with after_week(2):
