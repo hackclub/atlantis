@@ -177,6 +177,8 @@ def metrics(request):
     # window. It is the denominator the per-person average only makes sense
     # against — dividing by everyone who ever signed up would bury it.
     builders_window = journals_window.values("project__owner").distinct().count()
+    builders_today = journals_today.values("project__owner").distinct().count()
+    builders_last_7 = journals_last_7.values("project__owner").distinct().count()
 
     hours_counts = {
         row["day"]: row["seconds"]
@@ -203,6 +205,8 @@ def metrics(request):
         "devlogs_last_7": devlogs_last_7,
         "avg_per_builder": _avg(_hours(minutes_window), builders_window),
         "builders_window": builders_window,
+        "builders_today": builders_today,
+        "builders_last_7": builders_last_7,
         "avg_per_devlog_display": format_minutes(
             minutes_window / devlogs_window if devlogs_window else 0
         ),

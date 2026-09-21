@@ -1,26 +1,30 @@
 /*
- * The streak panel: this week's five hours, the season's forty, and the clock.
+ * The streak panel: this week's five hours and the clock.
  *
- * Its own stylesheet because it shows up on two pages that share no others —
- * the deck, where it sits on the artwork in the right-hand HUD column, and the
- * projects page, where it sits on paper. The base rules below are the dark HUD
- * form; .streak-compact repaints it for the light pages.
+ * Its own stylesheet because it belongs to the deck's right-hand HUD column
+ * and nothing else on that page.
  */
 /*
- * The week's five hours and the season's forty, in the deck's right-hand
- * column. Painted on a slab rather than floating on the sea like the pearl
- * count: it is a block of small text over moving artwork, and it has to stay
- * readable against both the day and the night backgrounds.
+ * The week's five hours, in the deck's right-hand column. Painted on a slab
+ * rather than floating on the sea like the pearl count: it is a block of small
+ * text over moving artwork, and it has to stay readable against both the day
+ * and the night backgrounds.
  */
 .streak {
     width: 100%;
+    max-width: 21em;
     box-sizing: border-box;
-    padding: 0.5em 0.75em 0.6em;
-    border-radius: 0.7em;
+    padding: 0.5em 0.7em 0.55em;
+    border-radius: 0.6em;
     background-color: rgba(0, 46, 79, 0.72);
     color: #E5F2FC;
-    font-size: clamp(14px, 1.3vw, 25px);
-    line-height: 1.3;
+    /*
+     * Smaller than the pearl count it sits under: that is one glanceable
+     * figure, this is four lines of text, and at the pearls' size the week
+     * label and the countdown could not share a line.
+     */
+    font-size: clamp(12px, 0.85vw, 16px);
+    line-height: 1.35;
     text-shadow: none;
 }
 
@@ -31,12 +35,22 @@
     gap: 0.5em;
 }
 
+/*
+ * The label gives way first: the countdown is fixed-width and always wanted in
+ * full, so when the two won't fit it is the date range that ellipsises rather
+ * than the pair wrapping to two lines.
+ */
 .streak-title {
-    font-size: 1.05em;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
 /* Tabular figures so a ticking countdown doesn't jitter the line it sits on. */
 .streak-clock {
+    flex: none;
+    font-size: 0.88em;
     font-variant-numeric: tabular-nums;
     opacity: 0.85;
     white-space: nowrap;
@@ -44,15 +58,11 @@
 
 .streak-bar {
     position: relative;
-    height: 0.62em;
-    margin: 0.35em 0 0.25em;
+    height: 0.5em;
+    margin: 0.4em 0 0.3em;
     border-radius: 999px;
     background-color: rgba(3, 26, 45, 0.75);
     overflow: hidden;
-}
-
-.streak-bar-small {
-    height: 0.36em;
 }
 
 .streak-fill {
@@ -72,24 +82,9 @@
     display: flex;
     align-items: baseline;
     flex-wrap: wrap;
-    gap: 0 0.45em;
+    gap: 0 0.4em;
     margin: 0;
-}
-
-.streak-legend-small {
-    font-size: 0.85em;
-    opacity: 0.85;
-}
-
-.streak-legend-small a {
-    color: inherit;
-    text-decoration: none;
-    border-bottom: 1px solid rgba(229, 242, 252, 0.35);
-}
-
-.streak-legend-small a:hover,
-.streak-legend-small a:focus-visible {
-    border-bottom-color: currentColor;
+    font-size: 0.94em;
 }
 
 .streak-count {
@@ -106,17 +101,11 @@
     padding: 0 0.4em;
     border-radius: 0.5em;
     background-color: rgba(179, 229, 252, 0.22);
-    font-size: 0.85em;
+    font-size: 0.82em;
 }
 
 .streak-done {
     background-color: rgba(129, 199, 132, 0.3);
-}
-
-.streak-printer {
-    margin-top: 0.45em;
-    padding-top: 0.4em;
-    border-top: 1px solid rgba(229, 242, 252, 0.18);
 }
 
 .streak-note {
@@ -145,103 +134,5 @@
 @media (max-aspect-ratio: 6 / 5) {
     #hud-right {
         width: min(340px, 62vw);
-    }
-}
-
-
-/* ---------- on paper ---------- */
-
-/*
- * The projects page is ink on a light sheet, so the slab and its light-on-dark
- * palette both have to go. Laid out wide rather than as a column: there is a
- * full page width here, and the two bars read better side by side than stacked
- * above a shelf of books.
- */
-.streak-compact {
-    display: grid;
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-    align-items: center;
-    gap: 0 1.4em;
-    width: auto;
-    margin: 0 0 1.1em;
-    padding: 0.7em 1em 0.8em;
-    border: 1px solid rgba(23, 62, 92, 0.22);
-    border-radius: 0.5em;
-    background-color: rgba(255, 255, 255, 0.55);
-    color: #173E5C;
-    font-size: 1rem;
-}
-
-.streak-compact .streak-head,
-.streak-compact .streak-bar,
-.streak-compact .streak-legend {
-    grid-column: 1;
-}
-
-.streak-compact .streak-printer {
-    grid-column: 2;
-    grid-row: 1 / span 3;
-    margin-top: 0;
-    padding-top: 0;
-    border-top: 0;
-    border-left: 1px solid rgba(23, 62, 92, 0.18);
-    padding-left: 1.2em;
-}
-
-.streak-compact .streak-note,
-.streak-compact .streak-action {
-    grid-column: 1;
-}
-
-.streak-compact .streak-bar {
-    background-color: rgba(23, 62, 92, 0.14);
-}
-
-.streak-compact .streak-fill {
-    background: linear-gradient(90deg, #1B7FC4, #61B8E8);
-}
-
-.streak-compact.streak-out .streak-fill {
-    background: linear-gradient(90deg, #A8323F, #D06A76);
-}
-
-.streak-compact .streak-savers {
-    background-color: rgba(27, 127, 196, 0.16);
-}
-
-.streak-compact .streak-done {
-    background-color: rgba(56, 142, 60, 0.18);
-}
-
-.streak-compact .streak-note-bad {
-    color: #8E1F2B;
-}
-
-.streak-compact .streak-action {
-    background-color: #173E5C;
-    color: #FFFFFF;
-    justify-self: start;
-}
-
-.streak-compact .streak-legend-small a {
-    border-bottom-color: rgba(23, 62, 92, 0.35);
-}
-
-/*
- * One column once the two bars would be too narrow to read side by side.
- */
-@media (max-width: 720px) {
-    .streak-compact {
-        grid-template-columns: minmax(0, 1fr);
-    }
-
-    .streak-compact .streak-printer {
-        grid-column: 1;
-        grid-row: auto;
-        margin-top: 0.5em;
-        padding-top: 0.45em;
-        padding-left: 0;
-        border-left: 0;
-        border-top: 1px solid rgba(23, 62, 92, 0.18);
     }
 }

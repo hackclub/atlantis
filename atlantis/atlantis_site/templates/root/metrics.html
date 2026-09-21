@@ -70,6 +70,16 @@
                 <div class="stat-label">Hours logged today</div>
                 <div class="stat-sub">{{ hours.devlogs_today }} lapse{{ hours.devlogs_today|pluralize }} &middot; {{ hours.today_display }}</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ hours.builders_today }}</div>
+                <div class="stat-label">Builders tracked today</div>
+                <div class="stat-sub">distinct users with a lapse today</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ hours.builders_last_7 }}</div>
+                <div class="stat-label">Builders tracked this week</div>
+                <div class="stat-sub">distinct users with a lapse in last {{ hours.short_window_days }} days</div>
+            </div>
             <div class="stat-card warn">
                 <div class="stat-value">{{ hours.pending }}h</div>
                 <div class="stat-label">Hours in pending queue</div>

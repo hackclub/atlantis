@@ -23,7 +23,6 @@ from ...models import (
 )
 from ... import activity, challenge, lapse, lookout
 from ...checklists import SHIP_CHECKLIST, unticked, unticked_message
-from .dashboard import challenge_context
 from .lapse import account_for
 from .timelapse import _apply_session_payload
 from ..helpers import (
@@ -212,7 +211,6 @@ def projects(request):
         "projects": projects,
         "profile": profile,
         "create_blocked_reason": ysws_block_reason(request.user),
-        **challenge_context(request.user),
     })
 
 @login_required

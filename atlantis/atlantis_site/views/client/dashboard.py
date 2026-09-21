@@ -24,7 +24,6 @@ def challenge_context(user):
         "week": live,
         "week_deadline": weeks.deadline(live.index).isoformat() if live else "",
         "weekly_hours": weeks.WEEKLY_HOURS,
-        "printer_hours_total": weeks.printer_hours(),
         "program_starts": weeks.starts_at().isoformat(),
         "dropped_reason": challenge.shipping_blocked_reason(user),
     }

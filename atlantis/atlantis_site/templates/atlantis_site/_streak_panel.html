@@ -1,17 +1,13 @@
 {% comment %}
-The streak panel: this week's five hours, the forty that buy a printer, and how
-long is left to finish the week.
+The streak panel: this week's five hours and how long is left to finish them.
 
-Two bars, deliberately different sizes. The big one is the only thing that can
-put you out of the program, so it is the one you see first; the printer bar
-under it moves five hours a week at most and is a season-long readout, not
-something you act on today.
+One bar, and it is the only thing that can put you out of the program. The
+season's forty printer hours are a readout you never act on today, so they live
+on the charts instead of here.
 
-Rendered on the deck and, in `compact` form, on the projects page — the page
-where being dropped actually stops you doing something. Takes the context
-dashboard.challenge_context builds.
+Rendered on the deck. Takes the context dashboard.challenge_context builds.
 {% endcomment %}
-<section class="streak{% if compact %} streak-compact{% endif %}{% if standing.eliminated %} streak-out{% endif %}"
+<section class="streak{% if standing.eliminated %} streak-out{% endif %}"
          aria-label="Weekly challenge progress">
 
     {% if not standing.started %}
@@ -64,24 +60,6 @@ dashboard.challenge_context builds.
         </p>
     {% endif %}
 
-    {% comment %}
-    The printer bar shows through every state above, including elimination —
-    seeing the hours you already banked is the point of buying your way back in.
-    {% endcomment %}
-    <div class="streak-printer">
-        <div class="streak-bar streak-bar-small" role="progressbar"
-             aria-valuenow="{{ standing.printer_hours }}" aria-valuemin="0"
-             aria-valuemax="{{ printer_hours_total }}"
-             aria-label="Hours towards a printer">
-            <span class="streak-fill" style="--fill: {{ standing.printer_percent }}%"></span>
-        </div>
-        <p class="streak-legend streak-legend-small">
-            <a href="{% url 'printer_select' %}">
-                {{ standing.printer_hours }} of {{ printer_hours_total }} printer hours
-            </a>
-            {% if standing.printer_unlocked %}<span class="streak-done">unlocked</span>{% endif %}
-        </p>
-    </div>
 </section>
 
 {% if week_deadline %}
