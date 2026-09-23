@@ -44,6 +44,8 @@ def challenge_dash(request):
             continue
         if only == "at-risk" and (state.eliminated or not _at_risk(state)):
             continue
+        if only == "met" and (state.eliminated or not _met_this_week(state)):
+            continue
         rows.append({
             "user": user,
             "name": display_name(user),
@@ -70,6 +72,12 @@ def _at_risk(state):
     """Still in, but the live week isn't met yet — who to chase before Sunday."""
     live = state.current
     return bool(live and not live.met)
+
+
+def _met_this_week(state):
+    """The live week already has its hours, logged or saved."""
+    live = state.current
+    return bool(live and live.met)
 
 
 @staff_member_required

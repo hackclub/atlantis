@@ -737,6 +737,23 @@ class ChallengeAdminTests(BaseTestCase):
             self.assertIn("shipper", listed)
             self.assertNotIn("survivor", listed)
 
+    def test_it_can_filter_to_who_has_done_this_week(self):
+        finisher = make_user("finisher", slack_id="U0FIN")
+        finisher_project = make_project(finisher)
+        with during_week(1):
+            self._log(60, in_week(1))
+            journal = make_journal(finisher_project, time_spent=0)
+            make_timelapse(finisher_project, journal=journal, minutes=300, recorded_at=in_week(1))
+
+            listed = [
+                row["user"].username
+                for row in self.client.get(
+                    reverse("challenge_dash"), {"show": "met"}
+                ).context["rows"]
+            ]
+            self.assertIn("finisher", listed)
+            self.assertNotIn("shipper", listed)
+
     def test_granting_hours_revives_somebody(self):
         with during_week(2):
             self._log(240, in_week(1))

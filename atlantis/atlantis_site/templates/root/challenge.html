@@ -19,6 +19,7 @@
             <option value="" {% if not show %}selected{% endif %}>Everyone</option>
             <option value="out" {% if show == 'out' %}selected{% endif %}>Out of the program</option>
             <option value="at-risk" {% if show == 'at-risk' %}selected{% endif %}>Short this week</option>
+            <option value="met" {% if show == 'met' %}selected{% endif %}>Done this week</option>
         </select>
         <button type="submit">Filter</button>
         {% if search or show %}<a href="{% url 'challenge_dash' %}" class="link-button">Clear</a>{% endif %}
