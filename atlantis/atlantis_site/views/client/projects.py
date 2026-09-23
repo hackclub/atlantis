@@ -491,37 +491,62 @@ def project_detail(request, project_id):
 
     # Only the owner is ever offered the button, so only the owner's copy has
     # to work out whether it is live.
+    #
+    # The button stays live either way: when it can't ship it opens the list of
+    # what's in the way instead, and a list is only worth opening if it is the
+    # whole of it, so the requirements are all asked rather than stopping at the
+    # first no. Each one carries the slip that clears it where there is one, so
+    # the fix is a click away rather than a hunt around the book.
     can_ship = False
-    ship_disabled_reason = ""
+    ship_blockers = []
     if is_owner:
-        ysws_blocked = ysws_block_reason(user)
-        dropped = challenge.shipping_blocked_reason(user)
-        if ysws_blocked:
-            ship_disabled_reason = ysws_blocked
-        elif dropped:
-            ship_disabled_reason = dropped
-        elif project.locked:
-            ship_disabled_reason = "This project is locked and cannot be shipped."
-        elif not is_valid_printables_url(project.printablesUrl):
-            ship_disabled_reason = "You need a valid Printables URL before you can ship."
-        elif not project.editor_model_url:
-            ship_disabled_reason = "You need to upload or link your editor model before you can ship."
-        elif not project.image_url:
-            ship_disabled_reason = "You need to upload a screenshot of your project before you can ship."
-        elif ship_pending:
-            ship_disabled_reason = "Your most recent ship must be finalized or rejected before you can reship."
-        # The gate ship_project actually enforces: shipping claims the journals
-        # it carries, so what's left to ship is the lapses no ship has taken
-        # yet. Counting every lapse ever written would light the button up
-        # after a rejection and then bounce the post.
-        elif not project.journals.filter(ship__isnull=True).exists() and not can_bypass_ship_requirements(user):
-            ship_disabled_reason = (
-                "You need a new lapse before you can reship."
-                if latest_ship
-                else "You need at least one lapse before you can ship."
-            )
+        # Some answers are about where the account or the project stands rather
+        # than about a piece that is missing. While one of them holds there is
+        # nothing on the rest of the list worth doing anything about, so it is
+        # the whole answer.
+        halted = (
+            ysws_block_reason(user)
+            or challenge.shipping_blocked_reason(user)
+            or (project.locked and "This project is locked and cannot be shipped.")
+            or (ship_pending and "Your most recent ship must be finalized or rejected before you can reship.")
+        )
+        if halted:
+            ship_blockers.append({"text": halted})
         else:
-            can_ship = True
+            if not is_valid_printables_url(project.printablesUrl):
+                ship_blockers.append({
+                    "text": "You need a valid Printables URL before you can ship.",
+                    "slip": "slip-edit",
+                    "action": "add the link",
+                })
+            if not project.editor_model_url:
+                ship_blockers.append({
+                    "text": "You need to upload or link your editor model before you can ship.",
+                    "slip": "slip-model",
+                    "action": "upload the file",
+                })
+            if not project.image_url:
+                ship_blockers.append({
+                    "text": "You need to upload a screenshot of your project before you can ship.",
+                    "slip": "slip-screenshot",
+                    "action": "upload a screenshot",
+                })
+            # The gate ship_project actually enforces: shipping claims the
+            # journals it carries, so what's left to ship is the lapses no ship
+            # has taken yet. Counting every lapse ever written would light the
+            # button up after a rejection and then bounce the post.
+            if not project.journals.filter(ship__isnull=True).exists() and not can_bypass_ship_requirements(user):
+                ship_blockers.append({
+                    "text": (
+                        "You need a new lapse before you can reship."
+                        if latest_ship
+                        else "You need at least one lapse before you can ship."
+                    )
+                })
+        can_ship = not ship_blockers
+
+    # The same answer as one sentence, for anywhere a list doesn't fit.
+    ship_disabled_reason = " ".join(blocker["text"] for blocker in ship_blockers)
 
     if project.printablesUrl:
         try:
@@ -620,6 +645,7 @@ def project_detail(request, project_id):
         "pages": pages,
         "time_spent": time_spent,
         "can_ship": can_ship,
+        "ship_blockers": ship_blockers,
         "ship_disabled_reason": ship_disabled_reason,
         "ship_checklist": SHIP_CHECKLIST,
         "printablesData": printablesData,

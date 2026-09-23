@@ -228,7 +228,45 @@ class ProjectDetailTests(BaseTestCase):
 		make_journal(project, time_spent=200)
 		response = self._detail(project)
 		self.assertTrue(response.context["can_ship"])
+		self.assertEqual(response.context["ship_blockers"], [])
 		self.assertEqual(response.context["ship_disabled_reason"], "")
+
+	def test_blockers_list_everything_missing_at_once(self):
+		"""One click has to answer the whole question, not the first part of it."""
+		project = make_project(self.user)
+		response = self._detail(project)
+		self.assertFalse(response.context["can_ship"])
+		texts = [blocker["text"] for blocker in response.context["ship_blockers"]]
+		self.assertEqual(len(texts), 4)
+		for fragment in ("Printables URL", "editor model", "screenshot", "at least one lapse"):
+			self.assertTrue(
+				any(fragment in text for text in texts),
+				f"{fragment} missing from {texts}",
+			)
+
+	def test_blockers_carry_the_slip_that_clears_them(self):
+		project = make_project(self.user)
+		make_journal(project, time_spent=200)
+		blockers = self._detail(project).context["ship_blockers"]
+		self.assertEqual(
+			[blocker.get("slip") for blocker in blockers],
+			["slip-edit", "slip-model", "slip-screenshot"],
+		)
+
+	def test_a_halting_state_is_the_whole_answer(self):
+		"""Nothing else on the list is worth doing while a ship is in review."""
+		project = make_project(self.user)
+		make_ship(project, status=Ship.ShipStatus.T1_QUEUE)
+		blockers = self._detail(project).context["ship_blockers"]
+		self.assertEqual(len(blockers), 1)
+		self.assertIn("finalized or rejected", blockers[0]["text"])
+
+	def test_the_ship_button_is_live_even_when_blocked(self):
+		"""It opens the list of what's missing; a dead button says nothing."""
+		project = make_project(self.user)
+		body = self._detail(project).content.decode()
+		self.assertIn('data-slip="slip-blocked"', body)
+		self.assertNotIn("<button type=\"button\" class=\"ink-btn\" disabled>ship it</button>", body)
 
 	def test_cannot_ship_reasons(self):
 		cases = [

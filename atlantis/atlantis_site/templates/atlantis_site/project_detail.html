@@ -138,14 +138,17 @@
                                 </form>
                             {% endif %}
                         {% else %}
+                        {% comment %}
+                        Live either way. When the project is ready the click opens
+                        the checklist and the real post is in that slip; when it
+                        isn't, it opens the list of what's in the way instead — a
+                        dead button can only be hovered at, and on a phone not even
+                        that.
+                        {% endcomment %}
                         {% if can_ship %}
-                            {# the checklist comes first; the real post is in the slip #}
                             <button type="button" class="ink-btn ink-btn--strong js-slip" data-slip="slip-ship">ship it</button>
                         {% else %}
-                            {# a disabled button gets no pointer events, so the reason hangs on a wrapper #}
-                            <span class="ship-gate" title="{{ ship_disabled_reason }}">
-                                <button type="button" class="ink-btn" disabled>ship it</button>
-                            </span>
+                            <button type="button" class="ink-btn js-slip" data-slip="slip-blocked">ship it</button>
                         {% endif %}
                         {% if not project.locked %}
                             {% comment %}
@@ -284,8 +287,9 @@
                     <textarea name="description" maxlength="1000" required>{{ project.description }}</textarea>
                 </label>
                 <label>
-                    Printables URL (optional)
+                    Printables URL
                     <input type="url" name="printables_url" value="{{ project.printablesUrl }}" placeholder="https://printables.com/...">
+                    <span class="slip-hint">Optional while you're building, but required before you can ship.</span>
                 </label>
                 <div class="slip-actions">
                     <button type="button" data-close>Cancel</button>
@@ -341,6 +345,32 @@
                 </div>
             </form>
         </div>
+
+        {% if not can_ship %}
+        {% comment %}
+        What the ship button opens until the project is ready: everything in
+        the way at once, each line carrying the slip that clears it where one
+        exists. Opening that slip replaces this one — the layer shows a single
+        slip at a time — and the reader comes back to a shorter list.
+        {% endcomment %}
+        <div class="slip" id="slip-blocked" hidden>
+            <h2>Not ready to ship</h2>
+            <p>What's between this project and the shipping checklist:</p>
+            <ul class="slip-blockers">
+                {% for blocker in ship_blockers %}
+                    <li>
+                        <span class="slip-blocker-text">{{ blocker.text }}</span>
+                        {% if blocker.slip %}
+                            <button type="button" class="ink-link" data-slip="{{ blocker.slip }}">{{ blocker.action }}</button>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+            <div class="slip-actions">
+                <button type="button" data-close>Close</button>
+            </div>
+        </div>
+        {% endif %}
 
         {% if can_ship %}
         <div class="slip" id="slip-ship" hidden>

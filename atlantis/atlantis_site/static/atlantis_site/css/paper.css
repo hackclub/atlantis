@@ -105,6 +105,14 @@
     resize: vertical;
 }
 
+/* Sits under its field as the label's next grid row, so the label above it can
+   stay the name of the thing. */
+.field-hint {
+    font-size: 15px;
+    line-height: 1.35;
+    color: #7B6640;
+}
+
 .modal-actions {
     display: flex;
     gap: 12px;
