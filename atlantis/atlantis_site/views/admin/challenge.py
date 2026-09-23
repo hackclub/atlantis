@@ -20,10 +20,6 @@ from ..helpers import check_perms, display_name, record_audit
 
 CHALLENGE_PERMS = ["atlantis_site.organizer"]
 
-# The roster is one standing() per user and standing() is several queries, so
-# it is paged rather than run over every account on the site at once.
-ROSTER_PAGE = 100
-
 
 @staff_member_required
 @check_perms(CHALLENGE_PERMS)
@@ -38,7 +34,7 @@ def challenge_dash(request):
         users = users.filter(username__icontains=search)
 
     rows = []
-    for user in users[:ROSTER_PAGE]:
+    for user in users:
         state = challenge.standing(user)
         if only == "out" and not state.eliminated:
             continue
@@ -63,8 +59,6 @@ def challenge_dash(request):
         "current_week": weeks.current_week(),
         "search": search,
         "show": only,
-        "truncated": users.count() > ROSTER_PAGE,
-        "page_size": ROSTER_PAGE,
     })
 
 

@@ -25,10 +25,6 @@
         {% if search or show %}<a href="{% url 'challenge_dash' %}" class="link-button">Clear</a>{% endif %}
     </form>
 
-    {% if truncated %}
-        <p class="muted">Showing the first {{ page_size }} accounts. Narrow it with a search.</p>
-    {% endif %}
-
     <div class="table-scroll">
         <table class="users-table challenge-table">
             <thead>
