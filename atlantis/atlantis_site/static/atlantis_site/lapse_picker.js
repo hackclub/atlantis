@@ -311,6 +311,15 @@
 
 		if (ui.refresh) ui.refresh.addEventListener("click", load);
 
+		// Unlinking is a plain form post; this only asks first, so a stray
+		// click in the header doesn't drop the connection.
+		const unlink = document.getElementById("lapse-unlink");
+		if (unlink) {
+			unlink.addEventListener("submit", function (e) {
+				if (!window.confirm(unlink.dataset.confirm)) e.preventDefault();
+			});
+		}
+
 		ui.root.querySelectorAll(".tl-tab").forEach(function (tab) {
 			tab.addEventListener("click", function () {
 				showPane(tab.dataset.pane);

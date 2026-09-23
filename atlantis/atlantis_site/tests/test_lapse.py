@@ -433,6 +433,27 @@ class LapseAuthorizationTests(BaseTestCase):
 		taped_in.refresh_from_db()
 		self.assertEqual(taped_in.tracked_seconds, 3600)
 
+	def test_the_book_offers_an_unlink_only_once_connected(self):
+		project = make_project(self.user)
+		book = reverse("project_detail", args=[project.id])
+		unlink = reverse("lapse_disconnect")
+
+		self.assertNotContains(self.client.get(book), unlink)
+
+		account = LapseAccount.objects.create(user=self.user)
+		account.save_token({"access_token": "at", "expires_in": 3600})
+		account.save()
+		self.assertContains(self.client.get(book), unlink)
+
+	def test_unlinking_returns_to_the_book(self):
+		LapseAccount.objects.create(user=self.user)
+		project = make_project(self.user)
+		book = reverse("project_detail", args=[project.id])
+
+		response = self.client.post(reverse("lapse_disconnect"), {"next": book})
+		self.assertEqual(response["Location"], book)
+		self.assertEqual(LapseAccount.objects.count(), 0)
+
 
 @override_settings(**LAPSE_SETTINGS)
 class LapsePickerTests(BaseTestCase):

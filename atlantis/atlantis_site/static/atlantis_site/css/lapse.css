@@ -90,6 +90,10 @@
     color: var(--ink-soft);
 }
 
+.tl-unlink {
+    margin: 0;
+}
+
 .tl-refresh {
     margin-left: 6px;
     vertical-align: baseline;

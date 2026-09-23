@@ -29,6 +29,15 @@ create_journal must never mistake one for the other.
         <div class="tl-head">
             <h2>Which timelapses?</h2>
             <span class="tl-handle" id="lapse-account" hidden></span>
+            {% if lapse_account %}
+                {# Offered whenever a row exists, expired or not: unlinking a dead credential is still unlinking. #}
+                <form action="{% url 'lapse_disconnect' %}" method="post" class="tl-unlink" id="lapse-unlink"
+                      data-confirm="Unlink your Lapse account? Timelapses you've already taped in stay put.">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{% url 'project_detail' project.id %}">
+                    <button type="submit" class="ink-btn">unlink</button>
+                </form>
+            {% endif %}
         </div>
 
         <div class="tl-tabs" role="tablist" aria-label="Where your footage came from">
