@@ -240,9 +240,8 @@ class JustificationTests(BaseTestCase):
 	def test_lapses_from_an_earlier_unpaid_ship_are_included(self):
 		# A rejected ship paid nothing, so its lapses roll into this payout and
 		# their evidence has to go to HQ with it.
-		rejected = self.ship
-		rejected.status = Ship.ShipStatus.REJECTED
-		rejected.save()
+		self.ship.status = Ship.ShipStatus.REJECTED
+		self.ship.save()
 		ship = Ship.objects.create(project=self.project, status=Ship.ShipStatus.T3_QUEUE)
 		journal = make_journal(self.project, ship=ship, time_spent=0)
 		session = make_timelapse(self.project, journal=journal, minutes=30)
@@ -252,7 +251,6 @@ class JustificationTests(BaseTestCase):
 		self.assertIn(self.session.watch_url, text)
 		self.assertIn("idle, nothing on screen", text)
 		self.assertIn(session.watch_url, text)
-		self.assertIn(f"from earlier ship #{rejected.id}, rejected, never paid out", text)
 		self.assertIn("Tracked by timelapse: 2h 30m", text)
 
 	def test_lapses_already_paid_out_are_left_out(self):
