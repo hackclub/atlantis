@@ -96,6 +96,10 @@
     opacity: 0.75;
 }
 
+.streak-left {
+    margin-left: auto;
+}
+
 .streak-savers,
 .streak-done {
     padding: 0 0.4em;

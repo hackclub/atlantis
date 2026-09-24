@@ -49,7 +49,7 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
             {% if week.met %}
                 <span class="streak-done">done</span>
             {% else %}
-                <span class="streak-left">{{ week.shortfall_minutes }} min to go</span>
+                <span class="streak-left">{{ week.shortfall_display }} to go</span>
             {% endif %}
         </p>
 

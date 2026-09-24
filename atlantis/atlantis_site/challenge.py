@@ -150,6 +150,10 @@ class Week:
 		return format_minutes(self.credited_minutes)
 
 	@property
+	def shortfall_display(self):
+		return format_minutes(self.shortfall_minutes)
+
+	@property
 	def tracked_display(self):
 		return format_minutes(self.tracked_minutes)
 
