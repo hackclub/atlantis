@@ -290,15 +290,15 @@ class PayoutSplitTests(BaseTestCase):
         with during_week(1):
             journals = self._journals((300, in_week(1)))
             pearls, _lines, drawn = challenge.payout_breakdown(journals, 300)
-            self.assertEqual(pearls, 5)  # five hours at 1
+            self.assertEqual(pearls, 10)  # five hours at 2
             self.assertEqual(drawn, {1: 300})
 
     def test_hours_past_the_weekly_five_pay_the_bonus_rate(self):
         with during_week(1):
             journals = self._journals((480, in_week(1)))
             pearls, _lines, _drawn = challenge.payout_breakdown(journals, 480)
-            # 5h at 1 + 3h at 7
-            self.assertEqual(pearls, 5 + 21)
+            # 5h at 2 + 3h at 7
+            self.assertEqual(pearls, 10 + 21)
 
     def test_the_bracket_is_only_spent_once_across_two_ships(self):
         """A week's five cheap hours are the user's, not each project's."""
@@ -322,8 +322,8 @@ class PayoutSplitTests(BaseTestCase):
                 (120, in_week(1)),
             )
             pearls, lines, drawn = challenge.payout_breakdown(journals, 240)
-            # 2h prep at 8, 2h inside week 1's allowance at 1
-            self.assertEqual(pearls, 16 + 2)
+            # 2h prep at 8, 2h inside week 1's allowance at 2
+            self.assertEqual(pearls, 16 + 4)
             self.assertEqual(drawn, {1: 120})
             self.assertEqual([line.label for line in lines], ["Prep weeks", "Week 1"])
 
@@ -333,7 +333,7 @@ class PayoutSplitTests(BaseTestCase):
             pearls, _lines, _drawn = challenge.payout_breakdown(
                 journals, 480, multiplier=Decimal("2.0")
             )
-            self.assertEqual(pearls, (5 + 21) * 2)
+            self.assertEqual(pearls, (10 + 21) * 2)
 
     def test_a_reviewer_paying_less_than_logged_splits_proportionally(self):
         with during_week(2):

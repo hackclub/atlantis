@@ -164,10 +164,10 @@ class PrinterTrackTests(BaseTestCase):
 
 @override_settings(CHALLENGE_WEEKS=8)
 class PrinterPaceTests(BaseTestCase):
-	"""The weekly-hours estimate: 1/hr for the required five, 7/hr on top.
+	"""The weekly-hours estimate: 2/hr for the required five, 7/hr on top.
 
-	An 8-week season everyone survives banks 5 pearls a week from the required
-	hours alone (40 pearls total) before a single bonus hour is worked, so a
+	An 8-week season everyone survives banks 10 pearls a week from the required
+	hours alone (80 pearls total) before a single bonus hour is worked, so a
 	printer's pace is 5h/week up to that point and climbs from there.
 	"""
 
@@ -182,12 +182,12 @@ class PrinterPaceTests(BaseTestCase):
 		self.assertEqual(self._pearls("bambu", "A1 Mini"), 0)
 		self.assertEqual(self._pace("bambu", "A1 Mini"), "~5.0h/week")
 
-	def test_a_printer_past_the_free_forty_costs_more_than_the_required_five(self):
-		# A1 is 240 pearls: 200 of it has to come from bonus hours, spread
-		# over 8 weeks at 7/hr — 200 / 56 = ~3.57 more hours than the five
+	def test_a_printer_past_the_free_eighty_costs_more_than_the_required_five(self):
+		# A1 is 240 pearls: 160 of it has to come from bonus hours, spread
+		# over 8 weeks at 7/hr — 160 / 56 = ~2.86 more hours than the five
 		# that are already required.
 		self.assertEqual(self._pearls("bambu", "A1"), 240)
-		self.assertEqual(self._pace("bambu", "A1"), "~8.6h/week")
+		self.assertEqual(self._pace("bambu", "A1"), "~7.9h/week")
 
 	def test_pace_climbs_with_pearl_cost_down_a_branch(self):
 		costs = {p["name"]: p["pearls"] for p in track("bambu")["printers"]}
@@ -198,11 +198,10 @@ class PrinterPaceTests(BaseTestCase):
 		self.assertEqual(hours, sorted(hours), "a pricier printer should never look cheaper")
 
 	def test_a_track_whose_entry_already_costs_pearls_has_a_pace_above_the_floor(self):
-		# Qidi's entry (390 pearls) costs more than the free 40, so even its
-		# opening printer needs bonus hours: 350 / 56 = 6.25, landing on an
-		# exact tenth that a naive rounding would round down.
+		# Qidi's entry (390 pearls) costs more than the free 80, so even its
+		# opening printer needs bonus hours: 310 / 56 = ~5.54, rounded up.
 		self.assertEqual(self._pearls("qidi", "Q2C"), 390)
-		self.assertEqual(self._pace("qidi", "Q2C"), "~11.3h/week")
+		self.assertEqual(self._pace("qidi", "Q2C"), "~10.6h/week")
 
 	def test_the_pace_never_rounds_down_past_what_it_actually_costs(self):
 		"""Following the shown pace every week must never come up short.
@@ -218,7 +217,7 @@ class PrinterPaceTests(BaseTestCase):
 				hours = Decimal(entry["pace"].removeprefix("~").removesuffix("h/week"))
 				season = weeks.week_count()
 				banked = (
-					weeks.WEEKLY_HOURS
+					weeks.WEEKLY_HOURS * 2  # base rate
 					+ (hours - weeks.WEEKLY_HOURS) * 7  # bonus rate
 				) * season
 				with self.subTest(track=spec["slug"], printer=entry["name"]):
@@ -241,17 +240,17 @@ class PrinterPaceTests(BaseTestCase):
 		user = make_user(layers=1000)
 		self.client.force_login(user)
 		response = self.client.get(reverse("printer_track", args=["bambu"]))
-		self.assertContains(response, "~8.6h/week")
+		self.assertContains(response, "~7.9h/week")
 
 	def test_pace_appears_in_the_claim_dropdown(self):
 		user = make_user(layers=1000)
 		self.client.force_login(user)
 		response = self.client.get(reverse("printer_track", args=["bambu"]))
-		self.assertContains(response, "240 pearls, ~8.6h/week")
+		self.assertContains(response, "240 pearls, ~7.9h/week")
 
 	def test_pace_appears_on_the_chart_room(self):
 		user = make_user(layers=1000)
 		self.client.force_login(user)
 		response = self.client.get(reverse("printer_select"))
 		self.assertContains(response, "~5.0h/week")  # bambu's entry
-		self.assertContains(response, "~11.3h/week")  # qidi's entry
+		self.assertContains(response, "~10.6h/week")  # qidi's entry

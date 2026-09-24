@@ -24,7 +24,7 @@ PEARLS_PER_HOUR = Decimal("8")
 # Inside the weekly five: an hour that is *owed* rather than extra. It pays
 # little because it is already being paid for in printer hours — those five are
 # what fill the 40-hour bar.
-CHALLENGE_BASE_PEARLS_PER_HOUR = Decimal("1")
+CHALLENGE_BASE_PEARLS_PER_HOUR = Decimal("2")
 
 # Every hour past the weekly five. Worth more than the prep rate: the required
 # hours are behind you and this is the only way to afford a better printer.
