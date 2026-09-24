@@ -1,9 +1,10 @@
 """Presence tracking, and the activity/time figures the metrics page draws."""
 
 import os
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 from unittest.mock import patch
 
+from django.conf import settings
 from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
@@ -238,6 +239,26 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(hours["devlogs_last_7"], 1)
 		self.assertEqual(hours["avg_per_day_7"], 1.0)
 		self.assertEqual(hours["window"], 17.0)
+
+	def test_this_week_counts_from_monday_midnight_local(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		make_journal(project, time_spent=120)
+		last_week = make_journal(project, time_spent=300)
+		with timezone.override(settings.CHALLENGE_TIMEZONE):
+			today = timezone.localdate()
+			monday = datetime.combine(
+				today - timedelta(days=today.weekday()), time.min,
+				tzinfo=timezone.get_current_timezone(),
+			)
+		# A minute before the week opened: last week's, however recent.
+		Journal.objects.filter(pk=last_week.pk).update(created_at=monday - timedelta(minutes=1))
+
+		hours = self._hours()
+
+		self.assertEqual(hours["this_week"], 2.0)
+		self.assertEqual(hours["devlogs_this_week"], 1)
+		self.assertEqual(hours["builders_this_week"], 1)
+		self.assertEqual(hours["week_start"], monday.date())
 
 	def test_a_site_with_nothing_on_it_does_not_divide_by_zero(self):
 		hours = self._hours()

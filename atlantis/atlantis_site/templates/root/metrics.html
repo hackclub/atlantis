@@ -80,6 +80,11 @@
                 <div class="stat-label">Builders tracked this week</div>
                 <div class="stat-sub">distinct users with a lapse in last {{ hours.short_window_days }} days</div>
             </div>
+            <div class="stat-card accent">
+                <div class="stat-value">{{ hours.this_week }}h</div>
+                <div class="stat-label">Hours this week (Mon&ndash;Sun)</div>
+                <div class="stat-sub">since Mon {{ hours.week_start|date:"M j" }} &middot; {{ hours.devlogs_this_week }} lapse{{ hours.devlogs_this_week|pluralize }} &middot; {{ hours.builders_this_week }} builder{{ hours.builders_this_week|pluralize }}</div>
+            </div>
             <div class="stat-card warn">
                 <div class="stat-value">{{ hours.pending }}h</div>
                 <div class="stat-label">Hours in pending queue</div>
@@ -89,6 +94,11 @@
                 <div class="stat-value">{{ hours.window }}h</div>
                 <div class="stat-label">Hours in {{ hours.window_days }}d</div>
                 <div class="stat-sub">{{ hours.devlogs_window }} lapse{{ hours.devlogs_window|pluralize }} logged</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ hours.all_time }}h</div>
+                <div class="stat-label">Hours all time</div>
+                <div class="stat-sub">{{ hours.all_time_display }} across {{ hours.devlogs_all_time }} lapse{{ hours.devlogs_all_time|pluralize }}</div>
             </div>
             <div class="stat-card good">
                 <div class="stat-value">{{ hours.approved_window }}h</div>
@@ -148,11 +158,6 @@
                 <div class="stat-value">{{ projects.total_journals }}</div>
                 <div class="stat-label">Journal entries</div>
                 <div class="stat-sub">avg {{ projects.avg_journal_display }} each</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ projects.total_time_hours }}h</div>
-                <div class="stat-label">Total time logged</div>
-                <div class="stat-sub">{{ projects.total_time_display }}</div>
             </div>
             <div class="stat-card">
                 <div class="stat-value">{{ projects.avg_project_display }}</div>

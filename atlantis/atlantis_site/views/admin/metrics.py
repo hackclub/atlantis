@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 from django.shortcuts import render
 from django.conf import settings
@@ -96,6 +96,11 @@ def metrics(request):
     today_start = timezone.localtime(now).replace(
         hour=0, minute=0, second=0, microsecond=0
     )
+    # The calendar week so far, Monday midnight local. Built from the local
+    # date rather than by stepping back from today_start, which would land an
+    # hour out on the Monday after a DST change.
+    week_start_day = today - timedelta(days=today.weekday())
+    week_start = datetime.combine(week_start_day, time.min, tzinfo=timezone.get_current_timezone())
     window_start_day = today - timedelta(days=WINDOW_DAYS - 1)
     trend_start_day = today - timedelta(days=TREND_DAYS - 1)
 
@@ -160,12 +165,15 @@ def metrics(request):
     journals_today = Journal.objects.filter(created_at__gte=today_start)
     journals_window = Journal.objects.filter(created_at__gte=last_30)
     journals_last_7 = Journal.objects.filter(created_at__gte=last_7)
+    journals_this_week = Journal.objects.filter(created_at__gte=week_start)
     pending_journals = Journal.objects.filter(timelapse_review__isnull=True)
     reviewed_window = Journal.objects.filter(timelapse_review__reviewed_at__gte=last_30)
 
     minutes_today = tracked_minutes_for_journals(journals_today)
     minutes_window = tracked_minutes_for_journals(journals_window)
     minutes_last_7 = tracked_minutes_for_journals(journals_last_7)
+    minutes_this_week = tracked_minutes_for_journals(journals_this_week)
+    total_time_minutes = tracked_minutes_for_journals(Journal.objects.all())
     pending_minutes = tracked_minutes_for_journals(pending_journals)
     approved_minutes_window = approved_minutes_for_journals(reviewed_window)
 
@@ -173,12 +181,14 @@ def metrics(request):
     devlogs_window = journals_window.count()
     devlogs_last_7 = journals_last_7.count()
     pending_devlogs = pending_journals.count()
+    total_journals = Journal.objects.count()
     # Builders, not users: whoever owns a project that got a lapse in the
     # window. It is the denominator the per-person average only makes sense
     # against — dividing by everyone who ever signed up would bury it.
     builders_window = journals_window.values("project__owner").distinct().count()
     builders_today = journals_today.values("project__owner").distinct().count()
     builders_last_7 = journals_last_7.values("project__owner").distinct().count()
+    builders_this_week = journals_this_week.values("project__owner").distinct().count()
 
     hours_counts = {
         row["day"]: row["seconds"]
@@ -203,6 +213,13 @@ def metrics(request):
         "short_window_days": SHORT_WINDOW_DAYS,
         "last_7": _hours(minutes_last_7),
         "devlogs_last_7": devlogs_last_7,
+        "this_week": _hours(minutes_this_week),
+        "devlogs_this_week": journals_this_week.count(),
+        "builders_this_week": builders_this_week,
+        "week_start": week_start_day,
+        "all_time": _hours(total_time_minutes),
+        "all_time_display": format_minutes(total_time_minutes),
+        "devlogs_all_time": total_journals,
         "avg_per_builder": _avg(_hours(minutes_window), builders_window),
         "builders_window": builders_window,
         "builders_today": builders_today,
@@ -238,8 +255,6 @@ def metrics(request):
         for name, count in sorted(editor_counts.items(), key=lambda kv: kv[1], reverse=True)
     ])
 
-    total_journals = Journal.objects.count()
-    total_time_minutes = tracked_minutes_for_journals(Journal.objects.all())
     avg_journal_minutes = (total_time_minutes / total_journals) if total_journals else 0
     avg_project_minutes = (total_time_minutes / active_projects) if active_projects else 0
 
@@ -254,8 +269,6 @@ def metrics(request):
         "no_ship": projects_no_ship,
         "editor_breakdown": editor_breakdown,
         "total_journals": total_journals,
-        "total_time_display": format_minutes(total_time_minutes),
-        "total_time_hours": round(total_time_minutes / 60, 1),
         "avg_journal_display": format_minutes(avg_journal_minutes),
         "avg_project_display": format_minutes(avg_project_minutes),
     }
