@@ -108,6 +108,13 @@ def download_url(value):
 def build_timelapse_audit(ship):
 	"""The internal timelapse review of this ship, written out for HQ.
 
+	The journals covered are every one the payout covers, not only the ones
+	shipped under this ship: a rejected ship pays nothing, so the lapses it
+	carried roll forward into the next payout, and HQ needs their evidence next
+	to the hours they add. That is everything logged since the project's last
+	finalized ship — see payable_journals_for_ship. Journals from an earlier,
+	unpaid ship are labelled with it.
+
 	One block per journal: the reviewer's notes on the pass if they left any,
 	then every recording attached to it — what the reviewer said that recording
 	showed, and the ranges they refused to pay for with the reason for each.
@@ -121,8 +128,13 @@ def build_timelapse_audit(ship):
 	redirect that stops working, and this field is read by HQ long after the
 	ship is closed.
 	"""
+	# Imported here: views.admin.review imports this module, so a top-level
+	# import of the views package would be circular.
+	from .views.helpers import payable_journals_for_ship
+
 	journals = list(
-		ship.journals.order_by("created_at").select_related("timelapse_review").prefetch_related(
+		payable_journals_for_ship(ship).order_by("created_at")
+		.select_related("timelapse_review", "ship").prefetch_related(
 			"timelapses", "timelapses__removals", "timelapse_review__annotations"
 		)
 	)
@@ -132,7 +144,13 @@ def build_timelapse_audit(ship):
 	blocks = []
 	for journal in journals:
 		sessions = list(journal.timelapses.all())
-		lines = [f'"{journal.title}": {journal.tracked_display} tracked']
+		heading = f'"{journal.title}": {journal.tracked_display} tracked'
+		if journal.ship_id != ship.id:
+			heading += (
+				f" (from earlier ship #{journal.ship_id}, "
+				f"{journal.ship.get_status_display().lower()}, never paid out)"
+			)
+		lines = [heading]
 		review = journal.timelapse_review_or_none
 		if review and review.internal_notes:
 			lines.append(f"  reviewer's notes: {review.internal_notes}")
