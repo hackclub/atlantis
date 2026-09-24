@@ -1,10 +1,5 @@
 SHIP_CHECKLIST = [
     {
-        "key": "print_files",
-        "label": "The printable files are on the Printables page",
-        "detail": "The .stl or .3mf files somebody needs to actually print it.",
-    },
-    {
         "key": "step_file",
         "label": "A STEP file is on the Printables page",
         "detail": "A .step export, so the model can be opened and edited in any CAD program.",
@@ -46,11 +41,6 @@ T1_CHECKLIST = [
         "key": "models_present",
         "label": "Every model file is on the page, STEP included",
         "detail": "A .step export is there alongside the rest.",
-    },
-    {
-        "key": "print_files",
-        "label": "The 3D-printable files are on the page",
-        "detail": ".stl or .3mf.",
     },
     {
         "key": "license",
