@@ -24,6 +24,7 @@ from ...models import (
     PAYOUT_MULTIPLIER_DEFAULT,
     detect_editor,
 )
+from ... import weeks
 from ..helpers import (
     add_bars,
     approved_minutes_for_journals,
@@ -166,6 +167,11 @@ def metrics(request):
     journals_window = Journal.objects.filter(created_at__gte=last_30)
     journals_last_7 = Journal.objects.filter(created_at__gte=last_7)
     journals_this_week = Journal.objects.filter(created_at__gte=week_start)
+    # The whole program, week 1's Monday up to (not including) the midnight
+    # after the last Sunday — the span the challenge rates are paid over.
+    journals_challenge = Journal.objects.filter(
+        created_at__gte=weeks.starts_at(), created_at__lt=weeks.ends_at()
+    )
     pending_journals = Journal.objects.filter(timelapse_review__isnull=True)
     reviewed_window = Journal.objects.filter(timelapse_review__reviewed_at__gte=last_30)
 
@@ -173,6 +179,7 @@ def metrics(request):
     minutes_window = tracked_minutes_for_journals(journals_window)
     minutes_last_7 = tracked_minutes_for_journals(journals_last_7)
     minutes_this_week = tracked_minutes_for_journals(journals_this_week)
+    minutes_challenge = tracked_minutes_for_journals(journals_challenge)
     total_time_minutes = tracked_minutes_for_journals(Journal.objects.all())
     pending_minutes = tracked_minutes_for_journals(pending_journals)
     approved_minutes_window = approved_minutes_for_journals(reviewed_window)
@@ -217,6 +224,11 @@ def metrics(request):
         "devlogs_this_week": journals_this_week.count(),
         "builders_this_week": builders_this_week,
         "week_start": week_start_day,
+        "challenge": _hours(minutes_challenge),
+        "devlogs_challenge": journals_challenge.count(),
+        "builders_challenge": journals_challenge.values("project__owner").distinct().count(),
+        "challenge_start": weeks.start_date(),
+        "challenge_end": weeks.start_date() + timedelta(weeks=weeks.week_count(), days=-1),
         "all_time": _hours(total_time_minutes),
         "all_time_display": format_minutes(total_time_minutes),
         "devlogs_all_time": total_journals,

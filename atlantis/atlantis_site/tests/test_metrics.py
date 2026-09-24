@@ -9,6 +9,7 @@ from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 
+from .. import weeks
 from ..models import ActiveDay, Journal, Profile
 from ..presence import WRITE_EVERY, record_seen
 from .base import (
@@ -267,3 +268,24 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(hours["avg_per_builder"], 0.0)
 		self.assertEqual(hours["avg_per_devlog_display"], "0h 0m")
 		self.assertEqual(hours["avg_per_day_7"], 0.0)
+
+	def test_challenge_hours_only_count_the_program_weeks(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		inside = make_journal(project, time_spent=120)
+		before = make_journal(project, time_spent=300)
+		after = make_journal(project, time_spent=600)
+		Journal.objects.filter(pk=inside.pk).update(created_at=weeks.starts_at())
+		Journal.objects.filter(pk=before.pk).update(created_at=weeks.starts_at() - timedelta(minutes=1))
+		# The end is exclusive: midnight after the last Sunday is already past it.
+		Journal.objects.filter(pk=after.pk).update(created_at=weeks.ends_at())
+
+		hours = self._hours()
+
+		self.assertEqual(hours["challenge"], 2.0)
+		self.assertEqual(hours["devlogs_challenge"], 1)
+		self.assertEqual(hours["builders_challenge"], 1)
+		self.assertEqual(hours["challenge_start"], weeks.start_date())
+		self.assertEqual(
+			hours["challenge_end"],
+			weeks.start_date() + timedelta(weeks=weeks.week_count(), days=-1),
+		)
