@@ -1804,6 +1804,48 @@
     color: var(--oc-ink-3);
 }
 
+.root-page .rq-project-cell {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.root-page .rq-cover {
+    flex: none;
+    width: 56px;
+    height: 42px;
+    object-fit: cover;
+    border: 1px solid var(--oc-line);
+    border-radius: 4px;
+    background: var(--oc-surface-2);
+}
+
+.root-page .rq-rollback label {
+    display: block;
+    margin: 12px 0 6px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.root-page .rq-rollback p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rq-rollback textarea {
+    box-sizing: border-box;
+    width: 100%;
+    resize: vertical;
+}
+
+.root-page .rq-rollback-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+
 .root-page .rq-owner {
     white-space: nowrap;
 }

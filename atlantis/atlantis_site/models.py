@@ -1651,6 +1651,10 @@ class Permissions(models.Model):
 			# reviewer picks up: timelapse review is a different job, and the
 			# people who do it are not the people who talk to the shipper.
 			("timelapse_review", "Timelapse Review (internal)"),
+			# Oversight of the reviewers rather than a tier of review: undoing a
+			# T1 decision that shouldn't have been made, and reading the audit
+			# trail of review decisions. Makes no decisions of its own.
+			("reviewer_lead", "Reviewer Lead: roll back T1 reviews, audit reviews"),
 			("fulfillment", "Fulfill shop orders"),
 			("organizer", "Access to everything")
 		]

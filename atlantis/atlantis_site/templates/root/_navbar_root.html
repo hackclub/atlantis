@@ -9,7 +9,7 @@
         <a href="/root/shop">shop management</a>
         <a href="/root/fulfillment" class="nav-counted">fulfillment{% nav_badge 'fulfillment' %}</a>
     {% endif %}
-    {% if perms.atlantis_site.t1_review or perms.atlantis_site.organizer or perms.atlantis_site.t2_review or perms.atlantis_site.t3_review %}
+    {% if perms.atlantis_site.t1_review or perms.atlantis_site.organizer or perms.atlantis_site.t2_review or perms.atlantis_site.t3_review or perms.atlantis_site.reviewer_lead %}
         <a href="/root/review" class="nav-counted">T1 review{% nav_badge 't1' %}</a>
     {% endif %}
     {% if perms.atlantis_site.t2_review or perms.atlantis_site.organizer or perms.atlantis_site.t3_review %}
@@ -20,6 +20,9 @@
     {% endif %}
     {% if perms.atlantis_site.timelapse_review or perms.atlantis_site.organizer %}
         <a href="/root/timelapse_review" class="nav-counted">timelapse review{% nav_badge 'lookout' %}</a>
+    {% endif %}
+    {% if perms.atlantis_site.reviewer_lead or perms.atlantis_site.organizer %}
+        <a href="/root/review/audit/">review audit</a>
     {% endif %}
     {% if perms.atlantis_site.organizer %}
         <a href="/root/audit_log">audit log</a>

@@ -29,8 +29,17 @@
                     <tr class="rq-row" tabindex="0" data-href="{% url queue.detail ship.id %}">
                         <td class="rq-col-num">{{ ship.queue_index }}</td>
                         <td>
-                            <a class="rq-project" href="{% url queue.detail ship.id %}">{{ ship.project.title }}</a>
-                            <span class="rq-desc">{{ ship.project.description|truncatechars:110 }}</span>
+                            <div class="rq-project-cell">
+                                {% if ship.project.image_display_url %}
+                                    <img class="rq-cover" src="{{ ship.project.image_display_url }}" alt="Cover of {{ ship.project.title }}" loading="lazy">
+                                {% else %}
+                                    <span class="rq-cover rq-cover-none" aria-hidden="true"></span>
+                                {% endif %}
+                                <div>
+                                    <a class="rq-project" href="{% url queue.detail ship.id %}">{{ ship.project.title }}</a>
+                                    <span class="rq-desc">{{ ship.project.description|truncatechars:110 }}</span>
+                                </div>
+                            </div>
                         </td>
                         <td class="rq-owner">{{ ship.project.owner.hackclub_profile.slack_username }}</td>
                         <td class="rq-num">{{ ship.time_spent_display }}</td>

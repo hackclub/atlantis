@@ -11,6 +11,7 @@
                     <th>Verdict</th>
                     <th>Reviewed by</th>
                     <th>Reviewed</th>
+                    {% if can_roll_back %}<th>Rollback</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -28,9 +29,20 @@
                         </td>
                         <td class="rq-owner">{{ review.reviewer }}</td>
                         <td class="rq-quiet">{{ review.at|date:"M j, Y, g:i a" }}</td>
+                        {% if can_roll_back %}
+                            <td>
+                                {% if review.rollback_block %}
+                                    <span class="rq-quiet">Can't: {{ review.rollback_block }}</span>
+                                {% else %}
+                                    <button type="button" class="rv-btn rv-btn-sm rv-btn-danger"
+                                            data-rollback-url="{{ review.rollback_url }}"
+                                            data-rollback-label="the T1 {% if review.status == 'approved' %}approval{% else %}rejection{% endif %} of {{ review.project }} by {{ review.reviewer }}">Roll back</button>
+                                {% endif %}
+                            </td>
+                        {% endif %}
                     </tr>
                 {% empty %}
-                    <tr><td colspan="6" class="rq-empty">Nothing decided here yet.</td></tr>
+                    <tr><td colspan="{% if can_roll_back %}7{% else %}6{% endif %}" class="rq-empty">Nothing decided here yet.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -64,3 +76,23 @@
         </div>
     {% endif %}
 </section>
+
+{% if can_roll_back %}
+    {% comment %}
+    One dialog for the whole table rather than a form per row: a row is a link,
+    and a text field inside one would have its Enter key open the ship.
+    {% endcomment %}
+    <dialog class="rv-shortcuts rq-rollback" id="rq-rollback">
+        <form method="post" class="rv-form" id="rq-rollback-form">
+            {% csrf_token %}
+            <h2>Roll back a T1 review</h2>
+            <p>This deletes <strong data-rollback-subject></strong> and puts the ship back in the T1 queue. The shipper is told in the review checkpoint channel, and your reason is left as an internal comment on the ship.</p>
+            <label for="rq-rollback-reason">Why is it being rolled back?</label>
+            <textarea id="rq-rollback-reason" name="reason" rows="4" required maxlength="{{ rollback_reason_max }}"></textarea>
+            <div class="rq-rollback-actions">
+                <button type="button" class="rv-btn rv-btn-ghost" data-rollback-cancel>Cancel</button>
+                <button type="submit" class="rv-btn rv-btn-danger">Roll back</button>
+            </div>
+        </form>
+    </dialog>
+{% endif %}

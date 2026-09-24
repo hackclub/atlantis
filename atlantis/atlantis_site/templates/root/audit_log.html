@@ -1,13 +1,13 @@
 {% extends 'root/_base_root.html' %}
 
 {% block page_id %}admin-audit-page{% endblock %}
-{% block title %}Audit Log{% endblock %}
+{% block title %}{{ heading }}{% endblock %}
 
 {% block content %}
 <div class="content">
     {% include "root/_messages_admin.html" %}
-    <h1>Audit Log</h1>
-    <h3>A record of every admin action</h3>
+    <h1>{{ heading }}</h1>
+    <h3>{{ subheading }}</h3>
 
     <form method="get" class="audit-filters" id="auditFilters">
         <label>
@@ -46,7 +46,7 @@
                         <th>Action</th>
                         <th>Actor</th>
                         <th>Target</th>
-                        <th>Request</th>
+                        {% if show_request %}<th>Request</th>{% endif %}
                         <th>Details</th>
                     </tr>
                 </thead>
@@ -63,10 +63,12 @@
                             {% endif %}
                         </td>
                         <td>{{ log.target|default:"none" }}</td>
+                        {% if show_request %}
                         <td>
                             {{ log.method }} {{ log.path }}
                             {% if log.ip_address %}<br><small>{{ log.ip_address }}</small>{% endif %}
                         </td>
+                        {% endif %}
                         <td>
                             <details>
                                 <summary>Form values ({{ log.form_data|length }})</summary>

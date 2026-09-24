@@ -586,6 +586,30 @@
         });
     }
 
+    /* ------------------------------------------------------------ rollback */
+
+    function setupRollback() {
+        var dialog = document.getElementById('rq-rollback');
+        if (!dialog) return;
+        var form = document.getElementById('rq-rollback-form');
+        var subject = dialog.querySelector('[data-rollback-subject]');
+        var reason = document.getElementById('rq-rollback-reason');
+
+        document.querySelectorAll('[data-rollback-url]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                form.action = button.dataset.rollbackUrl;
+                subject.textContent = button.dataset.rollbackLabel;
+                reason.value = '';
+                dialog.showModal();
+                reason.focus();
+            });
+        });
+
+        dialog.querySelector('[data-rollback-cancel]').addEventListener('click', function () {
+            dialog.close();
+        });
+    }
+
     /* -------------------------------------------------------------- charts */
 
     function setupBars() {
@@ -608,6 +632,7 @@
         setupPayout();
         setupHeartbeat();
         setupQueueTable();
+        setupRollback();
         setupBars();
         document.addEventListener('keydown', onKeyDown);
         var help = document.querySelector('[data-shortcut-help]');

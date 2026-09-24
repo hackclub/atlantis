@@ -1,9 +1,11 @@
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 
@@ -16,7 +18,7 @@ from ...models import (
 )
 from ...checklists import T1_CHECKLIST, ticked, unticked, unticked_message
 from ...submissions import build_override_justification, submit_ship
-from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, INT_FIELD_MAX, INT_FIELD_MIN
+from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
 from .queue import (
     QUEUES, annotate_recordings, dash_context, decorate_rows, go_to_next,
@@ -32,6 +34,29 @@ TIMELAPSE_PENDING_MESSAGE = (
     "That ship's timelapses haven't finished internal review yet. It'll appear "
     "in the queue once they have."
 )
+
+# The T1 desk and a ship's T1 page, which a reviewer lead can read (it is where
+# rollbacks are made from) without being able to decide anything on them.
+T1_VIEW_PERMS = [
+    "atlantis_site.t1_review",
+    "atlantis_site.t2_review",
+    "atlantis_site.organizer",
+    "atlantis_site.t3_review",
+    "atlantis_site.reviewer_lead",
+]
+
+T1_DECIDE_PERMS = [
+    "atlantis_site.t1_review",
+    "atlantis_site.t2_review",
+    "atlantis_site.organizer",
+    "atlantis_site.t3_review",
+]
+
+ROLLBACK_PERMS = ["atlantis_site.reviewer_lead", "atlantis_site.organizer"]
+
+# Leaves room in the InternalComment the rollback writes for the line that says
+# whose review it was.
+ROLLBACK_REASON_MAX_LENGTH = 800
 
 COMMENT_PERMS = [
     "atlantis_site.t1_review",
@@ -126,24 +151,71 @@ def report_submission(request, submission):
             f"{submission.error} The submit_airtable command will retry it.",
         )
 
+def t1_rollback_block(t1):
+    """Why this T1 review can't be rolled back, or None when it can.
+
+    A rollback undoes one decision and puts the ship back in the T1 queue as if
+    it had never been made. That is only honest while nothing has been built on
+    top of the decision: once the ship has moved on, been looked at by a later
+    tier, or been reshipped, putting it back would undo other people's work
+    too, and that is a different conversation.
+    """
+    ship = t1.ship
+    expected = Ship.ShipStatus.T2_QUEUE if t1.approved else Ship.ShipStatus.REJECTED
+    if ship.status != expected:
+        return f"the ship is now {ship.get_status_display().lower()}"
+
+    latest = ship.t1_reviews.order_by("-reviewed_at", "-id").first()
+    if latest.id != t1.id:
+        return "a later T1 review has replaced it"
+
+    later_tier = (
+        ship.t2_reviews.filter(reviewed_at__gte=t1.reviewed_at).exists()
+        or ship.t3_reviews.filter(reviewed_at__gte=t1.reviewed_at).exists()
+    )
+    if later_tier:
+        return "a later tier has reviewed the ship since"
+
+    if not t1.approved and ship.project.ships.filter(id__gt=ship.id).exists():
+        return "the project has been reshipped since"
+
+    return None
+
+def can_roll_back(user):
+    return any(user.has_perm(perm) for perm in ROLLBACK_PERMS)
+
 @staff_member_required
-@check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+@check_perms(T1_VIEW_PERMS)
 def review_dash(request):
     ships = decorate_rows("t1", QUEUES["t1"].pending())
+    context = dash_context(request, "t1", ships)
+
+    # Only worked out for someone who can act on it: it is a few queries a row.
+    if can_roll_back(request.user):
+        reviews = T1.objects.select_related("ship", "ship__project").in_bulk(
+            [row["id"] for row in context["all_reviews"]]
+        )
+        for row in context["all_reviews"]:
+            t1 = reviews.get(row["id"])
+            row["rollback_block"] = t1_rollback_block(t1) if t1 else "it no longer exists"
+            row["rollback_url"] = reverse("t1_rollback", args=[row["id"]])
+
     return render(request, "root/review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboard("t1_reviews"),
-        **dash_context(request, "t1", ships),
+        "can_roll_back": can_roll_back(request.user),
+        "rollback_reason_max": ROLLBACK_REASON_MAX_LENGTH,
+        **context,
     })
 
 @staff_member_required
-@check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+@check_perms(T1_DECIDE_PERMS)
 def review_next(request):
     """Open the next T1 ship, or return to the desk when the queue is clear."""
     return go_to_next(request, "t1", parse_skip(request))
 
 @staff_member_required
-@check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+@check_perms(T1_VIEW_PERMS)
 def review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
     if not ship.timelapse_cleared:
@@ -171,12 +243,17 @@ def review_project(request, ship_id):
         "journal_stats": journal_stats(journals),
         "preflight": preflight_checks(ship, subject, owner, has_make=hasMake),
         "t1_checklist": T1_CHECKLIST,
-        **review_context(request, "t1", ship, claimable=ship.status == Ship.ShipStatus.T1_QUEUE),
+        # A lead who can't decide is only reading, and shouldn't hold a claim
+        # that turns the reviewers who can away.
+        **review_context(request, "t1", ship, claimable=(
+            ship.status == Ship.ShipStatus.T1_QUEUE
+            and any(request.user.has_perm(perm) for perm in T1_DECIDE_PERMS)
+        )),
     })
 
 @require_POST
 @staff_member_required
-@check_perms(["atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+@check_perms(T1_DECIDE_PERMS)
 def t1_decision(request, ship_id): 
     reviewer = request.user
     feedback = request.POST.get("feedback", "").strip()
@@ -251,6 +328,83 @@ def t1_decision(request, ship_id):
     # the desk is a place to start from, not somewhere to pass through between
     # every review.
     return go_to_next(request, "t1", parse_skip(request) + [ship.id])
+
+@require_POST
+@staff_member_required
+@check_perms(ROLLBACK_PERMS)
+def t1_rollback(request, t1_id):
+    """Undo a T1 decision and put the ship back in the T1 queue.
+
+    The review row is deleted rather than marked, so nothing downstream — the
+    shipper's feedback, the leaderboard, the desk stats — goes on counting a
+    decision that was taken back. What it said is not lost: the audit entry
+    carries all of it, and an internal comment on the ship tells the next
+    reviewer that there was one and why it went.
+    """
+    reason = request.POST.get("reason", "").strip()
+    if not reason:
+        messages.error(request, "Say why the review is being rolled back.")
+        return safe_redirect_back(request)
+    if len(reason) > ROLLBACK_REASON_MAX_LENGTH:
+        messages.error(request, f"Rollback reason too long (max {ROLLBACK_REASON_MAX_LENGTH} characters).")
+        return safe_redirect_back(request)
+
+    with transaction.atomic():
+        # The ship is locked before the review is read, so two leads rolling
+        # back the same review can't both get past the checks below.
+        ship = get_object_or_404(Ship.objects.select_for_update(), t1_reviews__id=t1_id)
+        t1 = get_object_or_404(
+            T1.objects.select_related("reviewer", "reviewer__hackclub_profile"), id=t1_id, ship=ship,
+        )
+
+        block = t1_rollback_block(t1)
+        if block:
+            messages.error(request, f"That T1 review can't be rolled back: {block}.")
+            return safe_redirect_back(request)
+
+        previous_status = ship.status
+        verdict = "approval" if t1.approved else "rejection"
+        snapshot = {
+            "ship_id": ship.id,
+            "t1_id": t1.id,
+            "project": ship.project.title,
+            "reviewer": t1.reviewer.username,
+            "reviewed_at": t1.reviewed_at.isoformat(),
+            "approved": t1.approved,
+            "feedback": t1.feedback,
+            "internal_notes": t1.internal_notes,
+            "reason": reason,
+            "previous_ship_status": previous_status,
+            "new_ship_status": Ship.ShipStatus.T1_QUEUE,
+        }
+
+        reviewed_on = timezone.localtime(t1.reviewed_at)
+        InternalComment.objects.create(
+            ship=ship,
+            author=request.user,
+            text=(
+                f"Rolled back {display_name(t1.reviewer)}'s T1 {verdict} "
+                f"from {reviewed_on:%b} {reviewed_on.day}, {reviewed_on.year}: {reason}"
+            ),
+        )
+        t1.delete()
+        ship.status = Ship.ShipStatus.T1_QUEUE
+        ship.save()
+
+    record_audit(request, "t1_rollback", target=f"Ship #{ship.id} ({ship.project.title})", metadata=snapshot)
+
+    # The shipper was told about the decision in the checkpoint channel, so
+    # they are told there that it no longer stands.
+    if settings.REVIEW_CHECKPOINT_ID:
+        send_slack_message(
+            f"{slack_mention(ship.project.owner)} the T1 {verdict} of your project "
+            f"{project_link(ship.project)} has been rolled back by {slack_mention(request.user)}. "
+            f"It's back in the T1 queue and will be reviewed again.",
+            settings.REVIEW_CHECKPOINT_ID,
+        )
+
+    messages.success(request, f"Rolled back the T1 {verdict} of {ship.project.title}. It's back in the T1 queue.")
+    return safe_redirect_back(request)
 
 @staff_member_required
 @check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
