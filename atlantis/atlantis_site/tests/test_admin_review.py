@@ -5,6 +5,7 @@ from django.test import override_settings
 from django.urls import reverse
 from django.utils.html import escape
 
+from .. import challenge
 from ..models import (
 	AuditLog, InternalComment, Ship, T1, T2, T3, TimelapseAnnotation,
 )
@@ -12,6 +13,7 @@ from ..checklists import T1_CHECKLIST
 from .base import (
 	BaseTestCase,
 	approve_timelapse,
+	during_week,
 	grant_perms,
 	make_journal,
 	make_project,
@@ -140,6 +142,61 @@ class T1DecisionTests(BaseTestCase):
 		self.assertEqual(self.ship.status, Ship.ShipStatus.REJECTED)
 		self.assertFalse(T1.objects.get().approved)
 
+	def test_request_changes_holds_ship_for_the_shipper(self):
+		self._decide(approved="changes", feedback="add a scale reference")
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.CHANGES_REQUESTED)
+		t1 = T1.objects.get()
+		self.assertFalse(t1.approved)
+		self.assertTrue(t1.changes_requested)
+		self.assertEqual(t1.verdict, "changes requested")
+
+	def test_request_changes_needs_feedback(self):
+		response = self._decide(approved="changes", feedback="")
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.T1_QUEUE)
+		self.assertEqual(T1.objects.count(), 0)
+		self.assertIn(
+			"Say what needs changing in the feedback before requesting changes.",
+			message_texts(response),
+		)
+
+	def test_request_changes_is_not_held_to_the_checklist(self):
+		data = {"feedback": "fix the tolerances", "internal_notes": "", "approved": "changes"}
+		self.client.post(reverse("t1_decision", args=[self.ship.id]), data)
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.CHANGES_REQUESTED)
+
+	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
+	def test_request_changes_pings_checkpoint_channel(self):
+		self._decide(approved="changes", feedback="add a scale reference")
+		self.slack_dm_mocks["review"].assert_not_called()
+		content, channel = self.slack_message_mocks["review"].call_args.args
+		self.assertEqual(channel, "C0CHECK")
+		self.assertIn("<@U0AUTHOR>", content)
+		self.assertIn(f"<@{self.reviewer.hackclub_profile.slack_id}>", content)
+		self.assertIn("requested changes", content)
+		self.assertIn("hasn't been rejected", content)
+		self.assertIn("add a scale reference", content)
+
+	def test_request_changes_leaves_the_streak_alone(self):
+		with during_week(1):
+			before = challenge.standing(self.author)
+			self._decide(approved="changes", feedback="add a scale reference")
+			after = challenge.standing(self.author)
+			self.assertEqual(
+				[week.credited_minutes for week in after.weeks],
+				[week.credited_minutes for week in before.weeks],
+			)
+			self.assertEqual(challenge.shipping_blocked_reason(self.author), "")
+
+	def test_request_changes_audited(self):
+		self._decide(approved="changes", feedback="add a scale reference")
+		log = AuditLog.objects.get(action="t1_decision")
+		self.assertFalse(log.metadata["approved"])
+		self.assertTrue(log.metadata["changes_requested"])
+		self.assertEqual(log.metadata["new_ship_status"], Ship.ShipStatus.CHANGES_REQUESTED)
+
 	def test_invalid_approved_value_rejected(self):
 		self._decide(approved="maybe")
 		self.ship.refresh_from_db()
@@ -158,7 +215,8 @@ class T1DecisionTests(BaseTestCase):
 
 	def test_ship_must_be_in_t1_queue(self):
 		for status in (Ship.ShipStatus.T2_QUEUE, Ship.ShipStatus.T3_QUEUE,
-					   Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED):
+					   Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED,
+					   Ship.ShipStatus.CHANGES_REQUESTED):
 			with self.subTest(status=status):
 				ship = make_ship(self.project, status=status, journal_minutes=())
 				response = self._decide(ship=ship)

@@ -373,6 +373,10 @@ class Ship(models.Model):
 	created_at = models.DateTimeField(auto_now_add=True)
 	class ShipStatus(models.TextChoices):
 		REJECTED = "R", "Rejected"
+		# A T1 reviewer wants something fixed before they'll decide. The ship
+		# isn't over: it keeps its journals, waits on the shipper, and goes back
+		# into the T1 queue as the same ship when they resubmit.
+		CHANGES_REQUESTED = "C", "Changes requested"
 		T1_QUEUE = "T1", "Under T1 Review"
 		T2_QUEUE = "T2", "Under T2 Review"
 		T3_QUEUE = "T3", "Under fraud review"
@@ -413,6 +417,18 @@ class T1(models.Model):
 	feedback = models.CharField(max_length=1000)
 	internal_notes = models.CharField(max_length=1000)
 	approved = models.BooleanField()
+	# Only ever set alongside approved=False: the reviewer sent the ship back to
+	# the shipper for fixes rather than rejecting it.
+	changes_requested = models.BooleanField(default=False)
+
+	@property
+	def verdict(self):
+		"""What this review decided, as the review pages and Slack word it."""
+		if self.approved:
+			return "approved"
+		if self.changes_requested:
+			return "changes requested"
+		return "rejected"
 
 class T2(models.Model):
 	ship = models.ForeignKey(

@@ -312,7 +312,8 @@ def metrics(request):
 
     t1_total = T1.objects.count()
     t1_approved = T1.objects.filter(approved=True).count()
-    t1_denied = T1.objects.filter(approved=False).count()
+    t1_changes = T1.objects.filter(approved=False, changes_requested=True).count()
+    t1_denied = T1.objects.filter(approved=False, changes_requested=False).count()
 
     t2_total = T2.objects.count()
     t2_decisions = dict(
@@ -357,7 +358,9 @@ def metrics(request):
         "t1_total": t1_total,
         "t1_approved": t1_approved,
         "t1_denied": t1_denied,
+        "t1_changes": t1_changes,
         "t1_approval_rate": _pct(t1_approved, t1_total),
+        "t1_changes_rate": _pct(t1_changes, t1_total),
         "t1_denied_rate": _pct(t1_denied, t1_total),
         "t2_total": t2_total,
         "t2_breakdown": t2_breakdown,

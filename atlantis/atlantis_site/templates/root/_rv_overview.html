@@ -100,7 +100,7 @@
     <div class="rv-band rv-band-siblings">
         <span class="rv-band-label">Reviews</span>
         {% for tier in siblings %}
-            <span class="rv-sibling rv-sibling-{{ tier.state|default:'none' }}">
+            <span class="rv-sibling rv-sibling-{{ tier.state|default:'none'|slugify }}">
                 {{ tier.label }}: {{ tier.state|default:"not yet" }}{% if tier.reviewer %} ({{ tier.reviewer }}){% endif %}
             </span>
         {% endfor %}

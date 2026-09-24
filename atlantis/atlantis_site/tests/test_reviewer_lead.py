@@ -12,12 +12,17 @@ from .base import (
 )
 
 
-def decided(ship, reviewer, approved=True, **kwargs):
+def decided(ship, reviewer, approved=True, changes_requested=False, **kwargs):
 	"""A ship as a T1 decision leaves it."""
-	ship.status = Ship.ShipStatus.T2_QUEUE if approved else Ship.ShipStatus.REJECTED
+	if approved:
+		ship.status = Ship.ShipStatus.T2_QUEUE
+	elif changes_requested:
+		ship.status = Ship.ShipStatus.CHANGES_REQUESTED
+	else:
+		ship.status = Ship.ShipStatus.REJECTED
 	ship.save()
 	return T1.objects.create(
-		ship=ship, reviewer=reviewer, approved=approved,
+		ship=ship, reviewer=reviewer, approved=approved, changes_requested=changes_requested,
 		feedback=kwargs.get("feedback", "looks good"),
 		internal_notes=kwargs.get("internal_notes", "checked it all"),
 	)
@@ -50,6 +55,26 @@ class T1RollbackTests(BaseTestCase):
 		self.ship.refresh_from_db()
 		self.assertEqual(self.ship.status, Ship.ShipStatus.T1_QUEUE)
 		self.assertFalse(T1.objects.exists())
+
+	def test_request_for_changes_rolled_back_to_t1_queue(self):
+		self.t1.delete()
+		t1 = decided(self.ship, self.reviewer, approved=False, changes_requested=True)
+		self._roll_back(t1)
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.T1_QUEUE)
+		self.assertIn("request for changes", InternalComment.objects.get(ship=self.ship).text)
+
+	def test_request_for_changes_cannot_be_rolled_back_once_resubmitted(self):
+		self.t1.delete()
+		t1 = decided(self.ship, self.reviewer, approved=False, changes_requested=True)
+		self.ship.status = Ship.ShipStatus.T1_QUEUE
+		self.ship.save()
+		response = self._roll_back(t1)
+		self.assertTrue(T1.objects.filter(id=t1.id).exists())
+		self.assertIn(
+			"That T1 review can't be rolled back: the ship is now under t1 review.",
+			message_texts(response),
+		)
 
 	def test_leaves_an_internal_comment_with_the_reason(self):
 		self._roll_back(reason="approved a ship with no Printables page")

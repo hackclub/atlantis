@@ -5,7 +5,7 @@
             {% if review_history %}
                 {% for event in review_history %}
                     {% if event.type == "t1" %}
-                        <span class="rv-sibling rv-sibling-{% if event.review.approved %}approved{% else %}rejected{% endif %}">T1</span>
+                        <span class="rv-sibling rv-sibling-{{ event.review.verdict|slugify }}">T1</span>
                     {% elif event.type == "t2" %}
                         <span class="rv-sibling rv-sibling-{% if event.review.decision == 'A' %}approved{% else %}returned{% endif %}">T2</span>
                     {% endif %}
@@ -30,8 +30,8 @@
                 <li class="rv-history-item rv-history-{{ event.type }}">
                     <div class="rv-history-head">
                         {% if event.type == "t1" %}
-                            <span class="rv-sibling rv-sibling-{% if event.review.approved %}approved{% else %}rejected{% endif %}">
-                                {% if event.review.approved %}approved{% else %}rejected{% endif %}
+                            <span class="rv-sibling rv-sibling-{{ event.review.verdict|slugify }}">
+                                {{ event.review.verdict }}
                             </span>
                             <span class="rv-history-label">T1</span>
                         {% elif event.type == "t2" %}

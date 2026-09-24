@@ -304,6 +304,14 @@ class ProjectDetailTests(BaseTestCase):
 		self.assertTrue(response.context["can_ship"])
 		self.assertEqual(response.context["ship_disabled_reason"], "")
 
+	def test_can_resubmit_after_changes_requested_without_a_new_lapse(self):
+		project = make_project(self.user, shippable=True)
+		make_ship(project, status=Ship.ShipStatus.CHANGES_REQUESTED)
+		response = self._detail(project)
+		self.assertTrue(response.context["can_ship"])
+		self.assertTrue(response.context["resubmitting"])
+		self.assertContains(response, "Before you resubmit")
+
 	def test_cannot_reship_after_rejection_without_a_new_lapse(self):
 		"""The rejected ship owns every lapse, so the button must stay dark.
 
@@ -739,6 +747,34 @@ class ShipProjectTests(BaseTestCase):
 		new_ship = Ship.objects.order_by("-id").first()
 		new_journal.refresh_from_db()
 		self.assertEqual(new_journal.ship, new_ship)
+
+	def test_resubmit_after_changes_requested_reuses_the_same_ship(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED)
+		response = self._ship()
+		self.assertEqual(Ship.objects.count(), 1)
+		ship.refresh_from_db()
+		self.assertEqual(ship.status, Ship.ShipStatus.T1_QUEUE)
+		self.assertIn(f'Resubmitted "{self.project.title}" for T1 review!', message_texts(response))
+
+	def test_resubmit_takes_lapses_logged_since(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED)
+		new_journal = make_journal(self.project, time_spent=5)
+		self._ship()
+		self.assertEqual(Ship.objects.count(), 1)
+		new_journal.refresh_from_db()
+		self.assertEqual(new_journal.ship, ship)
+
+	def test_resubmit_still_needs_the_checklist(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED)
+		self._ship(checklist={})
+		ship.refresh_from_db()
+		self.assertEqual(ship.status, Ship.ShipStatus.CHANGES_REQUESTED)
+
+	def test_cannot_delete_while_changes_are_requested(self):
+		make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED)
+		self.client.post(reverse("delete_project", args=[self.project.id]))
+		self.project.refresh_from_db()
+		self.assertFalse(self.project.deleted)
 
 	def test_reship_after_rejection_still_needs_a_new_journal(self):
 		make_ship(self.project, status=Ship.ShipStatus.REJECTED)

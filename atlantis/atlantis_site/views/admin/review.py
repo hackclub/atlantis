@@ -126,6 +126,24 @@ def ping_review_checkpoint(ship, reviewer, tier, outcome, feedback):
         settings.REVIEW_CHECKPOINT_ID,
     )
 
+def ping_changes_requested(ship, reviewer, feedback):
+    """
+    The checkpoint post for a T1 reviewer asking for changes. Worded apart from
+    ping_review_checkpoint's so it doesn't read as a verdict: nothing has been
+    decided yet, and the shipper needs to know the ship is waiting on them.
+    """
+    if not settings.REVIEW_CHECKPOINT_ID:
+        return False
+
+    project = ship.project
+    return send_slack_message(
+        f"{slack_mention(project.owner)} {slack_mention(reviewer)} has requested changes to your "
+        f"project {project_link(project)} during T1 review. It hasn't been rejected: make the "
+        f"changes, then resubmit it from the project page and it'll go back into the T1 queue. "
+        f"{feedback_line(feedback)}",
+        settings.REVIEW_CHECKPOINT_ID,
+    )
+
 def report_submission(request, submission):
     """Tell the reviewer what became of the Airtable record.
 
@@ -161,7 +179,12 @@ def t1_rollback_block(t1):
     too, and that is a different conversation.
     """
     ship = t1.ship
-    expected = Ship.ShipStatus.T2_QUEUE if t1.approved else Ship.ShipStatus.REJECTED
+    if t1.approved:
+        expected = Ship.ShipStatus.T2_QUEUE
+    elif t1.changes_requested:
+        expected = Ship.ShipStatus.CHANGES_REQUESTED
+    else:
+        expected = Ship.ShipStatus.REJECTED
     if ship.status != expected:
         return f"the ship is now {ship.get_status_display().lower()}"
 
@@ -176,7 +199,7 @@ def t1_rollback_block(t1):
     if later_tier:
         return "a later tier has reviewed the ship since"
 
-    if not t1.approved and ship.project.ships.filter(id__gt=ship.id).exists():
+    if t1.verdict == "rejected" and ship.project.ships.filter(id__gt=ship.id).exists():
         return "the project has been reshipped since"
 
     return None
@@ -265,11 +288,17 @@ def t1_decision(request, ship_id):
 
     approved_raw = request.POST.get("approved", "").strip()
 
-    if approved_raw not in ("approved", "denied"):
+    if approved_raw not in ("approved", "changes", "denied"):
         messages.error(request, f"How did we get here? (approved: {approved_raw})")
         return redirect("review_project", ship_id=ship_id)
 
     approved = approved_raw == "approved"
+    changes_requested = approved_raw == "changes"
+
+    # Asking for changes is only useful if the shipper is told which ones.
+    if changes_requested and not feedback:
+        messages.error(request, "Say what needs changing in the feedback before requesting changes.")
+        return redirect("review_project", ship_id=ship_id)
 
     with transaction.atomic():
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
@@ -282,9 +311,10 @@ def t1_decision(request, ship_id):
             messages.error(request, TIMELAPSE_PENDING_MESSAGE)
             return redirect("review_dash")
 
-        # Only an approval is held to the checklist. A rejection is already a
-        # reviewer saying something is wrong, and making them tick eight boxes
-        # to say so would only teach them to tick eight boxes. Last of the
+        # Only an approval is held to the checklist. A rejection or a request
+        # for changes is already a reviewer saying something is wrong, and
+        # making them tick eight boxes to say so would only teach them to tick
+        # eight boxes. Last of the
         # gates, so a ship that was never reviewable here is told that rather
         # than sent off to read a checklist about it.
         if approved:
@@ -296,6 +326,10 @@ def t1_decision(request, ship_id):
                 ))
                 return redirect("review_project", ship_id=ship_id)
             ship.status = Ship.ShipStatus.T2_QUEUE
+        elif changes_requested:
+            # Not a rejection: the ship stays open with its journals, and the
+            # shipper resubmits it once it's fixed (see ship_project).
+            ship.status = Ship.ShipStatus.CHANGES_REQUESTED
         else:
             ship.status = Ship.ShipStatus.REJECTED
 
@@ -306,16 +340,21 @@ def t1_decision(request, ship_id):
             ship=ship,
             feedback=feedback,
             internal_notes=internal_notes,
-            approved=approved
+            approved=approved,
+            changes_requested=changes_requested,
         )
 
-    ping_review_checkpoint(ship, reviewer, "T1", "approved" if approved else "rejected", feedback)
+    if changes_requested:
+        ping_changes_requested(ship, reviewer, feedback)
+    else:
+        ping_review_checkpoint(ship, reviewer, "T1", t1.verdict, feedback)
 
     record_audit(request, "t1_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
         "t1_id": t1.id,
         "project": ship.project.title,
         "approved": approved,
+        "changes_requested": changes_requested,
         "new_ship_status": ship.status,
         # What the reviewer confirmed they looked at. On an approval this is
         # the whole list by definition; it is recorded anyway so a ship that
@@ -363,7 +402,11 @@ def t1_rollback(request, t1_id):
             return safe_redirect_back(request)
 
         previous_status = ship.status
-        verdict = "approval" if t1.approved else "rejection"
+        verdict = {
+            "approved": "approval",
+            "changes requested": "request for changes",
+            "rejected": "rejection",
+        }[t1.verdict]
         snapshot = {
             "ship_id": ship.id,
             "t1_id": t1.id,
@@ -371,6 +414,7 @@ def t1_rollback(request, t1_id):
             "reviewer": t1.reviewer.username,
             "reviewed_at": t1.reviewed_at.isoformat(),
             "approved": t1.approved,
+            "changes_requested": t1.changes_requested,
             "feedback": t1.feedback,
             "internal_notes": t1.internal_notes,
             "reason": reason,

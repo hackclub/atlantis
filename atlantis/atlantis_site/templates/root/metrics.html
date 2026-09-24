@@ -232,12 +232,14 @@
             <div class="chart">
                 <h4>T1 outcomes</h4>
                 {% if reviews.t1_total %}
-                <div class="meter" title="{{ reviews.t1_approved }} approved / {{ reviews.t1_denied }} denied">
+                <div class="meter" title="{{ reviews.t1_approved }} approved / {{ reviews.t1_changes }} changes requested / {{ reviews.t1_denied }} denied">
                     <div class="meter-seg good" data-bar="{{ reviews.t1_approval_rate }}"></div>
+                    <div class="meter-seg warn" data-bar="{{ reviews.t1_changes_rate }}"></div>
                     <div class="meter-seg bad" data-bar="{{ reviews.t1_denied_rate }}"></div>
                 </div>
                 <div class="meter-legend">
                     <span><span class="swatch good"></span>Approved - {{ reviews.t1_approved }} ({{ reviews.t1_approval_rate }}%)</span>
+                    <span><span class="swatch warn"></span>Changes requested - {{ reviews.t1_changes }} ({{ reviews.t1_changes_rate }}%)</span>
                     <span><span class="swatch bad"></span>Denied - {{ reviews.t1_denied }} ({{ reviews.t1_denied_rate }}%)</span>
                 </div>
                 {% else %}

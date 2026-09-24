@@ -36,7 +36,7 @@
                                 {% else %}
                                     <button type="button" class="rv-btn rv-btn-sm rv-btn-danger"
                                             data-rollback-url="{{ review.rollback_url }}"
-                                            data-rollback-label="the T1 {% if review.status == 'approved' %}approval{% else %}rejection{% endif %} of {{ review.project }} by {{ review.reviewer }}">Roll back</button>
+                                            data-rollback-label="the T1 {% if review.status == 'approved' %}approval{% elif review.status == 'changes requested' %}request for changes{% else %}rejection{% endif %} of {{ review.project }} by {{ review.reviewer }}">Roll back</button>
                                 {% endif %}
                             </td>
                         {% endif %}

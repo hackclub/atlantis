@@ -794,7 +794,7 @@ def _review_row(queue_key, review):
 
     ship = review.ship
     if queue_key == "t1":
-        status = "approved" if review.approved else "rejected"
+        status = review.verdict
         note = ""
     else:
         status = "approved" if review.decision == review.Decision.APPROVE else "returned"
@@ -946,7 +946,7 @@ def sibling_reviews(ship):
     latest_t1 = ship.t1_reviews.order_by("-reviewed_at", "-id").first()
     tiers.append({
         "label": "T1",
-        "state": "" if latest_t1 is None else ("approved" if latest_t1.approved else "rejected"),
+        "state": "" if latest_t1 is None else latest_t1.verdict,
         "reviewer": display_name(latest_t1.reviewer) if latest_t1 else "",
     })
 

@@ -162,6 +162,7 @@
 
 .meter-seg.good { background: var(--mviz-good); }
 .meter-seg.bad  { background: var(--mviz-bad); }
+.meter-seg.warn { background: var(--mviz-warn); }
 
 .meter-legend {
     display: flex;
@@ -182,3 +183,4 @@
 
 .meter-legend .swatch.good { background: var(--mviz-good); }
 .meter-legend .swatch.bad  { background: var(--mviz-bad); }
+.meter-legend .swatch.warn { background: var(--mviz-warn); }

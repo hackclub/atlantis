@@ -487,7 +487,12 @@ def project_detail(request, project_id):
     time_spent = format_minutes(tracked_minutes_for_journals(journals))
 
     latest_ship = ships[0] if ships else None
-    ship_pending = latest_ship is not None and latest_ship.status not in (Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED)
+    # A T1 reviewer asked for changes: the ship is waiting on its owner, and
+    # the button resubmits it rather than shipping a new one.
+    resubmitting = latest_ship is not None and latest_ship.status == Ship.ShipStatus.CHANGES_REQUESTED
+    ship_pending = latest_ship is not None and latest_ship.status not in (
+        Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED, Ship.ShipStatus.CHANGES_REQUESTED,
+    )
 
     # Only the owner is ever offered the button, so only the owner's copy has
     # to work out whether it is live.
@@ -534,8 +539,9 @@ def project_detail(request, project_id):
             # The gate ship_project actually enforces: shipping claims the
             # journals it carries, so what's left to ship is the lapses no ship
             # has taken yet. Counting every lapse ever written would light the
-            # button up after a rejection and then bounce the post.
-            if not project.journals.filter(ship__isnull=True).exists() and not can_bypass_ship_requirements(user):
+            # button up after a rejection and then bounce the post. A
+            # resubmission already carries its lapses, so it needs no new one.
+            if not resubmitting and not project.journals.filter(ship__isnull=True).exists() and not can_bypass_ship_requirements(user):
                 ship_blockers.append({
                     "text": (
                         "You need a new lapse before you can reship."
@@ -645,6 +651,7 @@ def project_detail(request, project_id):
         "pages": pages,
         "time_spent": time_spent,
         "can_ship": can_ship,
+        "resubmitting": resubmitting,
         "ship_blockers": ship_blockers,
         "ship_disabled_reason": ship_disabled_reason,
         "ship_checklist": SHIP_CHECKLIST,
@@ -986,13 +993,23 @@ def ship_project(request, project_id):
     # rest of the pipeline can be exercised without hours of real recording.
     bypass_requirements = can_bypass_ship_requirements(request.user)
 
+    latest_ship = project.ships.order_by('-created_at').first()
+
+    # A T1 reviewer asked for changes rather than rejecting the ship. The
+    # same ship goes back into the T1 queue with its journals, plus anything
+    # logged since, so none of the new-ship gates below apply to it.
+    resubmitting = (
+        latest_ship is not None and latest_ship.status == Ship.ShipStatus.CHANGES_REQUESTED
+    )
+
     unassigned_journals = project.journals.filter(ship__isnull=True)
-    if not bypass_requirements and not unassigned_journals.exists():
+    if not bypass_requirements and not resubmitting and not unassigned_journals.exists():
         messages.error(request, "Your project must have at least one journal to be shipped")
         return redirect("projects")
 
-    latest_ship = project.ships.order_by('-created_at').first()
-    if latest_ship and latest_ship.status not in (Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED):
+    if latest_ship and latest_ship.status not in (
+        Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED, Ship.ShipStatus.CHANGES_REQUESTED,
+    ):
         messages.error(request, "You cannot reship until your most recent ship has been finalized or rejected.")
         return redirect("project_detail", project_id=project_id)
 
@@ -1004,7 +1021,7 @@ def ship_project(request, project_id):
         latest_ship is not None and latest_ship.status == Ship.ShipStatus.REJECTED
     )
 
-    if not bypass_requirements and not retrying_rejection:
+    if not bypass_requirements and not retrying_rejection and not resubmitting:
         unassigned_time = tracked_minutes_for_journals(unassigned_journals)
         if unassigned_time <= 120:
             messages.error(
@@ -1025,6 +1042,21 @@ def ship_project(request, project_id):
             missing, "Go through the shipping checklist first; still unchecked:"
         ))
         return redirect("project_detail", project_id=project_id)
+
+    if resubmitting:
+        with transaction.atomic():
+            ship = Ship.objects.select_for_update().get(id=latest_ship.id)
+            # Re-checked under the lock, so a double-clicked resubmit or a
+            # rollback landing at the same moment can't be overwritten.
+            if ship.status != Ship.ShipStatus.CHANGES_REQUESTED:
+                messages.error(request, "That ship isn't waiting on changes any more.")
+                return redirect("project_detail", project_id=project_id)
+            ship.status = Ship.ShipStatus.T1_QUEUE
+            ship.save(update_fields=["status"])
+            project.journals.filter(ship__isnull=True).update(ship=ship)
+
+        messages.success(request, f'Resubmitted "{project.title}" for T1 review!')
+        return redirect("projects")
 
     with transaction.atomic():
         ship = Ship.objects.create(

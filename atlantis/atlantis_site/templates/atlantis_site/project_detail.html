@@ -146,9 +146,9 @@
                         that.
                         {% endcomment %}
                         {% if can_ship %}
-                            <button type="button" class="ink-btn ink-btn--strong js-slip" data-slip="slip-ship">ship it</button>
+                            <button type="button" class="ink-btn ink-btn--strong js-slip" data-slip="slip-ship">{% if resubmitting %}resubmit{% else %}ship it{% endif %}</button>
                         {% else %}
-                            <button type="button" class="ink-btn js-slip" data-slip="slip-blocked">ship it</button>
+                            <button type="button" class="ink-btn js-slip" data-slip="slip-blocked">{% if resubmitting %}resubmit{% else %}ship it{% endif %}</button>
                         {% endif %}
                         {% if not project.locked %}
                             {% comment %}
@@ -374,9 +374,16 @@
 
         {% if can_ship %}
         <div class="slip" id="slip-ship" hidden>
+            {% if resubmitting %}
+            <h2>Before you resubmit</h2>
+            <p>A reviewer asked for changes to this ship. Once you've made them, this
+                sends the same ship back to review, along with any lapses you've added
+                since. Tick the list off again first.</p>
+            {% else %}
             <h2>Before you ship</h2>
             <p>Read each one and tick it off. A reviewer is about to check the same
                 list, so anything you skip here comes back as a rejection.</p>
+            {% endif %}
             <form action="{% url 'ship_project' project.id %}" method="post">
                 {% csrf_token %}
                 <ul class="slip-check">
@@ -396,7 +403,7 @@
                 <p class="slip-check-count" id="ship-check-count"></p>
                 <div class="slip-actions">
                     <button type="button" data-close>Not yet</button>
-                    <button type="submit" id="ship-submit">Ship it</button>
+                    <button type="submit" id="ship-submit">{% if resubmitting %}Resubmit{% else %}Ship it{% endif %}</button>
                 </div>
             </form>
         </div>
