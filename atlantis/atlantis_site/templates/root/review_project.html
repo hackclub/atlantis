@@ -22,7 +22,6 @@
 {% block shortcut_rows %}
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>P</kbd></dt><dd>Approve: sends the ship to T2 (needs the checklist ticked)</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>K</kbd></dt><dd>Request changes: sends it back to the shipper to fix, not a rejection (focuses Feedback when it's empty)</dd>
-    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>E</kbd></dt><dd>Reject (focuses Feedback when it's empty)</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Submit the current draft</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>J</kbd></dt><dd>Focus Internal reason</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>F</kbd></dt><dd>Focus Feedback</dd>
@@ -67,8 +66,8 @@
     the database — somebody has to open the listing and slice the model — so
     they are asked here, beside the verdict they gate. Approve stays disabled
     until all of them are ticked and t1_decision refuses an approval without
-    them; Request changes and Reject are never gated, since both already say
-    something is wrong. The list itself is T1_CHECKLIST in checklists.py.
+    them; Request changes is never gated, since it already says something is
+    wrong. The list itself is T1_CHECKLIST in checklists.py.
     {% endcomment %}
     <fieldset class="rv-checklist" data-checklist>
         <legend>Before you approve<span class="rv-checklist-left" data-checklist-count></span></legend>
@@ -87,7 +86,7 @@
         </ul>
     </fieldset>
 
-    <div class="rv-verdicts rv-verdicts-t1">
+    <div class="rv-verdicts">
         <button type="submit" name="approved" value="approved" class="rv-verdict rv-verdict-good"
                 data-mod-key="p" data-primary data-needs-checklist
                 data-confirm="Approve this ship? It moves into the T2 queue and the shipper is pinged."
@@ -99,12 +98,6 @@
                 data-confirm="Request changes? The shipper is pinged with your feedback and can resubmit the same ship once it's fixed."
                 {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
             Request changes<kbd>&#8984;K</kbd>
-        </button>
-        <button type="submit" name="approved" value="denied" class="rv-verdict rv-verdict-bad"
-                data-mod-key="e" data-requires="#rv-feedback"
-                data-confirm="Reject this ship? The shipper is pinged with your feedback."
-                {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
-            Reject<kbd>&#8984;E</kbd>
         </button>
     </div>
     {% if ship.project.locked %}

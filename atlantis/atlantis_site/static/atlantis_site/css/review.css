@@ -1374,16 +1374,6 @@
     grid-template-columns: 1fr 1fr 1fr;
 }
 
-/* T1's labels are too long for three abreast in the sidebar: Approve, the
-   primary, gets the top row to itself and the two send-backs share the next. */
-.root-page .rv-verdicts-t1 {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.root-page .rv-verdicts-t1 > :first-child {
-    grid-column: 1 / -1;
-}
-
 .root-page .rv-verdicts:has(> :only-child) {
     grid-template-columns: 1fr;
 }
