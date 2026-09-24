@@ -77,13 +77,18 @@
             </div>
             <div class="stat-card">
                 <div class="stat-value">{{ hours.builders_last_7 }}</div>
-                <div class="stat-label">Builders tracked this week</div>
+                <div class="stat-label">Builders tracked ({{ hours.short_window_days }}d)</div>
                 <div class="stat-sub">distinct users with a lapse in last {{ hours.short_window_days }} days</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ hours.builders_this_week }}</div>
+                <div class="stat-label">Builders tracked this week (Mon&ndash;Sun)</div>
+                <div class="stat-sub">distinct users with a lapse since Mon {{ hours.week_start|date:"M j" }}</div>
             </div>
             <div class="stat-card accent">
                 <div class="stat-value">{{ hours.this_week }}h</div>
                 <div class="stat-label">Hours this week (Mon&ndash;Sun)</div>
-                <div class="stat-sub">since Mon {{ hours.week_start|date:"M j" }} &middot; {{ hours.devlogs_this_week }} lapse{{ hours.devlogs_this_week|pluralize }} &middot; {{ hours.builders_this_week }} builder{{ hours.builders_this_week|pluralize }}</div>
+                <div class="stat-sub">since Mon {{ hours.week_start|date:"M j" }} &middot; {{ hours.devlogs_this_week }} lapse{{ hours.devlogs_this_week|pluralize }}</div>
             </div>
             <div class="stat-card warn">
                 <div class="stat-value">{{ hours.pending }}h</div>
