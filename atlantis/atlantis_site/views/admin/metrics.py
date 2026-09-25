@@ -1,12 +1,16 @@
+import json
 from datetime import datetime, time, timedelta
 
-from django.shortcuts import render
+from django.core.serializers.json import DjangoJSONEncoder
+from django.http import Http404
+from django.shortcuts import get_object_or_404, render
 from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Sum, Avg
 from django.db.models.functions import TruncDate
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from ...models import (
     ActiveDay,
@@ -19,6 +23,7 @@ from ...models import (
     T2,
     T3,
     Item,
+    MetricsSnapshot,
     Order,
     Timelapse,
     PAYOUT_MULTIPLIER_DEFAULT,
@@ -80,16 +85,15 @@ def _daily_rows(counts, days, today, value=lambda n: n):
     ])
 
 
-@staff_member_required
-@check_perms(["atlantis_site.organizer"])
 @timezone.override(settings.CHALLENGE_TIMEZONE)
-def metrics(request):
-    """All "today"/"per day" windows here are cut in CHALLENGE_TIMEZONE (US
+def build_metrics(now):
+    """Every figure on the metrics page, as it reads at `now`.
+
+    All "today"/"per day" windows here are cut in CHALLENGE_TIMEZONE (US
     Eastern), not the server's UTC — the decorator above activates it for the
-    whole view, so timezone.localdate()/localtime(), the TruncDate groupings,
-    and the template's |date rendering of generated_at all follow it."""
+    whole build, so timezone.localdate()/localtime() and the TruncDate
+    groupings all follow it."""
     User = get_user_model()
-    now = timezone.now()
     last_7 = now - timedelta(days=7)
     last_30 = now - timedelta(days=30)
     last_24h = now - timedelta(hours=24)
@@ -478,8 +482,7 @@ def metrics(request):
         "actions": audit_actions,
     }
 
-    return render(request, "root/metrics.html", {
-        "generated_at": now,
+    return {
         "activity": activity_stats,
         "hours": hours_stats,
         "projects": projects_stats,
@@ -488,4 +491,62 @@ def metrics(request):
         "shop": shop_stats,
         "users": users_stats,
         "audit": audit_stats,
-    })
+    }
+
+
+# The dates in the context, which JSON flattens to ISO strings on the way into
+# a snapshot and which have to come back as dates for the template's |date.
+SNAPSHOT_DATE_KEYS = [
+    ("hours", "week_start"),
+    ("hours", "challenge_start"),
+    ("hours", "challenge_end"),
+]
+
+
+def take_snapshot(now=None):
+    """Write (or rewrite) the snapshot for the local day `now` falls on."""
+    now = now or timezone.now()
+    data = json.loads(json.dumps(build_metrics(now), cls=DjangoJSONEncoder))
+    snapshot, _ = MetricsSnapshot.objects.update_or_create(
+        day=timezone.localdate(now, weeks.zone()),
+        defaults={"taken_at": now, "data": data},
+    )
+    return snapshot
+
+
+def _snapshot_context(snapshot):
+    context = snapshot.data
+    for section, key in SNAPSHOT_DATE_KEYS:
+        value = context.get(section, {}).get(key)
+        if value:
+            context[section][key] = parse_date(value)
+    return context
+
+
+@staff_member_required
+@check_perms(["atlantis_site.organizer"])
+@timezone.override(settings.CHALLENGE_TIMEZONE)
+def metrics(request):
+    """The live page, or with ?day=YYYY-MM-DD the snapshot taken at the end of
+    that day. The timezone override is for the template: |date renders the
+    generated time in Eastern, the zone the snapshot days are named in."""
+    snapshot = None
+    requested = request.GET.get("day")
+    if requested:
+        try:
+            day = parse_date(requested)
+        except ValueError:
+            day = None
+        if day is None:
+            raise Http404("Not a date.")
+        snapshot = get_object_or_404(MetricsSnapshot, day=day)
+        context = _snapshot_context(snapshot)
+        context["generated_at"] = snapshot.taken_at
+    else:
+        now = timezone.now()
+        context = build_metrics(now)
+        context["generated_at"] = now
+
+    context["snapshot"] = snapshot
+    context["snapshot_days"] = list(MetricsSnapshot.objects.values_list("day", flat=True))
+    return render(request, "root/metrics.html", context)

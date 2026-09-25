@@ -1653,6 +1653,27 @@ class AuditLog(models.Model):
 		who = self.actor.username if self.actor else "deleted user"
 		return f"{self.created_at:%Y-%m-%d %H:%M} {who} {self.action}"
 
+
+class MetricsSnapshot(models.Model):
+	"""The metrics page as it read at the close of one day, Eastern.
+
+	Most of what that page shows is a window cut back from *now* — today, the
+	last 7 and 30 days, the pending queue, who is active — so none of it can be
+	rebuilt for a past date after the fact. The snapshot keeps the finished
+	page context instead, exactly as the template reads it, written by the
+	snapshot_metrics command at 23:59 in CHALLENGE_TIMEZONE.
+	"""
+
+	day = models.DateField(unique=True)
+	taken_at = models.DateTimeField()
+	data = models.JSONField(default=dict)
+
+	class Meta:
+		ordering = ["-day"]
+
+	def __str__(self):
+		return f"Metrics for {self.day:%Y-%m-%d}"
+
 # permissions model
 class Permissions(models.Model):
 	class Meta:

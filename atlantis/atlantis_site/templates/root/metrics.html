@@ -6,7 +6,27 @@
 <div class="content metrics-page">
     {% include "root/_messages_admin.html" %}
     <h1>Metrics</h1>
-    <p class="metrics-generated">Generated {{ generated_at|date:"Y-m-d H:i" }}</p>
+    <div class="metrics-toolbar">
+        <p class="metrics-generated">{% if snapshot %}Snapshot taken{% else %}Generated{% endif %} {{ generated_at|date:"Y-m-d H:i" }}</p>
+        {% if snapshot_days %}
+        <form method="get" class="metrics-picker">
+            <label for="metrics-day">View</label>
+            <select name="day" id="metrics-day">
+                <option value="">Live</option>
+                {% for day in snapshot_days %}
+                <option value="{{ day|date:'Y-m-d' }}"{% if snapshot and snapshot.day == day %} selected{% endif %}>{{ day|date:"D M j, Y" }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Go</button>
+        </form>
+        {% endif %}
+    </div>
+    {% if snapshot %}
+    <p class="metrics-snapshot-note">
+        You're looking at the page as it stood at the end of {{ snapshot.day|date:"l, M j" }} (Eastern). "Now" and "today" mean then, not now.
+        <a href="{% url 'metrics' %}">Back to live</a>
+    </p>
+    {% endif %}
 
     <section class="metrics-section">
         <h2>Activity</h2>

@@ -16,6 +16,31 @@
     margin-top: -8px;
 }
 
+.metrics-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+}
+
+.metrics-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--mviz-ink-2);
+}
+
+.metrics-snapshot-note {
+    border: 1px solid var(--mviz-border);
+    border-left: 4px solid var(--mviz-blue);
+    border-radius: 12px;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: var(--mviz-ink-2);
+}
+
 .metrics-section {
     margin: 12px 0 40px;
 }

@@ -5,9 +5,10 @@
 # Three things have to happen on a schedule and none of them had anywhere to
 # run: close_week settles finished challenge weeks and DMs whoever got dropped,
 # submit_airtable retries submissions that failed at finalization, and
-# check_timelapse_activity looks for dead air in compiled footage. Every one is
-# idempotent and safe to run late or twice, which is what makes a plain loop
-# enough and why nothing here tries to catch up on a run it missed.
+# check_timelapse_activity looks for dead air in compiled footage. (A fourth,
+# snapshot_metrics, runs once a day at a set time; see snapshot_loop.) Every
+# one is idempotent and safe to run late or twice, which is what makes a plain
+# loop enough and why nothing here tries to catch up on a run it missed.
 #
 # A loop rather than cron, deliberately. cron in a container is awkward in a
 # specific way: the daemon does not hand its own environment to the jobs it
@@ -79,6 +80,38 @@ until python manage.py migrate --check >/dev/null 2>&1; do
 	sleep 5
 done
 log "database ready; scheduling every ${TICK}s"
+
+# snapshot_metrics has to run at one particular minute, 23:59 Eastern, which
+# the tick loop below can't promise: one ffmpeg pass can hold it for minutes.
+# So it gets a loop of its own that sleeps straight to the next 23:59 in the
+# challenge zone. The target is worked out fresh each day as an absolute time,
+# so the host being on UTC and DST moving the offset both come out right.
+SNAPSHOT_TZ="${CHALLENGE_TIMEZONE:-America/New_York}"
+
+snapshot_loop() {
+	while true; do
+		now="$(date +%s)"
+		target="$(TZ="$SNAPSHOT_TZ" date -d 'today 23:59' +%s)"
+		# Still inside 23:59 counts as today's; only once the minute has gone
+		# is it tomorrow's.
+		if [ "$now" -ge "$((target + 60))" ]; then
+			target="$(TZ="$SNAPSHOT_TZ" date -d 'tomorrow 23:59' +%s)"
+		fi
+		if [ "$target" -gt "$now" ]; then
+			sleep "$((target - now))"
+		fi
+
+		log "running snapshot_metrics"
+		if python manage.py snapshot_metrics; then
+			log "snapshot_metrics finished"
+		else
+			log "snapshot_metrics FAILED (exit $?)" >&2
+		fi
+		# Past the minute before looking again, so it isn't taken twice.
+		sleep 60
+	done
+}
+snapshot_loop &
 
 while true; do
 	run_due close_week "$CLOSE_WEEK_EVERY" close_week

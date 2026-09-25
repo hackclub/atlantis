@@ -2,15 +2,18 @@
 
 import os
 from datetime import datetime, time, timedelta
+from io import StringIO
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.cache import cache
+from django.core.management import call_command
 from django.urls import reverse
 from django.utils import timezone
 
 from .. import weeks
-from ..models import ActiveDay, Journal, Profile
+from ..models import ActiveDay, Journal, MetricsSnapshot, Profile
 from ..presence import WRITE_EVERY, record_seen
 from .base import (
 	BaseTestCase,
@@ -289,3 +292,69 @@ class MetricsHoursTests(BaseTestCase):
 			hours["challenge_end"],
 			weeks.start_date() + timedelta(weeks=weeks.week_count(), days=-1),
 		)
+
+
+@patch.dict(os.environ, DEFAULT_PFP_ENV)
+class MetricsSnapshotTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		cache.clear()
+		self.organizer = grant_perms(make_user("organizer", slack_id="U0ORG"), "organizer")
+		self.client.force_login(self.organizer)
+
+	def _run(self, at, *args):
+		out = StringIO()
+		with patch("atlantis_site.management.commands.snapshot_metrics.timezone.now", return_value=at):
+			call_command("snapshot_metrics", *args, stdout=out)
+		return out.getvalue()
+
+	def test_a_run_at_2359_eastern_files_the_page_under_that_day(self):
+		make_journal(make_project(make_user("builder", slack_id="U1")), time_spent=120)
+		# 03:59 UTC on the 24th: still the 23rd in New York (EDT).
+		at = datetime(2026, 9, 23, 23, 59, tzinfo=ZoneInfo("America/New_York"))
+
+		self._run(at)
+
+		snapshot = MetricsSnapshot.objects.get()
+		self.assertEqual(snapshot.day, datetime(2026, 9, 23).date())
+		self.assertEqual(snapshot.taken_at, at)
+		self.assertEqual(snapshot.data["hours"]["all_time"], 2.0)
+
+	def test_a_run_at_any_other_minute_does_nothing(self):
+		# 23:59 UTC, and a run held up just past local midnight.
+		self._run(datetime(2026, 9, 23, 23, 59, tzinfo=ZoneInfo("UTC")))
+		self._run(datetime(2026, 9, 24, 0, 0, 30, tzinfo=ZoneInfo("America/New_York")))
+		self.assertFalse(MetricsSnapshot.objects.exists())
+
+	def test_force_ignores_the_clock_and_a_rerun_replaces_the_day(self):
+		at = datetime(2026, 9, 23, 12, 0, tzinfo=ZoneInfo("America/New_York"))
+		self._run(at, "--force")
+		make_journal(make_project(make_user("builder", slack_id="U1")), time_spent=60)
+		self._run(at + timedelta(hours=1), "--force")
+
+		snapshot = MetricsSnapshot.objects.get()
+		self.assertEqual(snapshot.data["hours"]["all_time"], 1.0)
+
+	def test_the_page_shows_a_past_day_with_its_dates_intact(self):
+		make_journal(make_project(make_user("builder", slack_id="U1")), time_spent=180)
+		at = datetime(2026, 9, 23, 23, 59, tzinfo=ZoneInfo("America/New_York"))
+		self._run(at)
+		# Live has moved on since the snapshot.
+		make_journal(make_project(make_user("builder2", slack_id="U2")), time_spent=600)
+
+		response = self.client.get(reverse("metrics"), {"day": "2026-09-23"})
+
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(response.context["hours"]["all_time"], 3.0)
+		self.assertEqual(response.context["hours"]["challenge_start"], weeks.start_date())
+		self.assertEqual(response.context["generated_at"], at)
+		self.assertContains(response, "Back to live")
+
+		live = self.client.get(reverse("metrics"))
+		self.assertEqual(live.context["hours"]["all_time"], 13.0)
+		self.assertEqual(live.context["snapshot_days"], [datetime(2026, 9, 23).date()])
+
+	def test_a_day_with_no_snapshot_or_a_bad_date_is_a_404(self):
+		self.assertEqual(self.client.get(reverse("metrics"), {"day": "2026-01-01"}).status_code, 404)
+		self.assertEqual(self.client.get(reverse("metrics"), {"day": "nonsense"}).status_code, 404)
+		self.assertEqual(self.client.get(reverse("metrics"), {"day": "2026-02-31"}).status_code, 404)
