@@ -10,6 +10,8 @@ equally safe to retry: see AirtableUnknownOutcome.
 """
 
 import logging
+import threading
+import time
 
 import requests
 from django.conf import settings
@@ -19,6 +21,14 @@ logger = logging.getLogger(__name__)
 _TIMEOUT = 15
 
 REQUIRED_SETTINGS = ("AIRTABLE_PAT", "AIRTABLE_BASE_ID", "AIRTABLE_TABLE_ID")
+EMAILS_REQUIRED_SETTINGS = ("AIRTABLE_PAT", "AIRTABLE_BASE_ID", "AIRTABLE_EMAILS_TABLE_ID")
+
+# Airtable takes at most ten records per write and five requests a second per
+# base; a 429 locks the base out for thirty seconds.
+_BATCH_SIZE = 10
+_REQUEST_SPACING = 0.25
+_RATE_LIMIT_WAIT = 30
+_RATE_LIMIT_RETRIES = 3
 
 
 class AirtableError(Exception):
@@ -43,9 +53,9 @@ class AirtableUnknownOutcome(AirtableError):
 	"""
 
 
-def missing_settings():
+def missing_settings(required=REQUIRED_SETTINGS):
 	"""Which of the credentials Airtable needs aren't set."""
-	return [name for name in REQUIRED_SETTINGS if not getattr(settings, name, "")]
+	return [name for name in required if not getattr(settings, name, "")]
 
 
 def is_configured():
@@ -59,9 +69,9 @@ def _headers():
 	}
 
 
-def records_url():
+def records_url(table_id=None):
 	base = settings.AIRTABLE_API_BASE_URL.rstrip("/")
-	return f"{base}/{settings.AIRTABLE_BASE_ID}/{settings.AIRTABLE_TABLE_ID}"
+	return f"{base}/{settings.AIRTABLE_BASE_ID}/{table_id or settings.AIRTABLE_TABLE_ID}"
 
 
 def _error_type(response):
@@ -134,3 +144,99 @@ def create_record(fields):
 			"Airtable accepted the record but returned no record id"
 		)
 	return record_id
+
+
+def emails_configured():
+	return not missing_settings(EMAILS_REQUIRED_SETTINGS)
+
+
+def upsert_emails(people):
+	"""Write (full name, email) pairs to the Emails table; return how many went.
+
+	An upsert keyed on Email, so running it twice — a backfill clicked again, or
+	a signup the backfill already covered — updates the existing row instead of
+	adding a second one. That also makes every failure here safe to retry,
+	unlike create_record. Only the name and the email are ever sent.
+	"""
+	missing = missing_settings(EMAILS_REQUIRED_SETTINGS)
+	if missing:
+		raise AirtableNotConfigured(
+			f"Airtable is not configured (missing {', '.join(missing)})"
+		)
+
+	url = records_url(settings.AIRTABLE_EMAILS_TABLE_ID)
+	records = [{"fields": {"Name": name, "Email": email}} for name, email in people]
+	sent = 0
+	for start in range(0, len(records), _BATCH_SIZE):
+		if start:
+			time.sleep(_REQUEST_SPACING)
+		batch = records[start:start + _BATCH_SIZE]
+		_patch_upsert(url, batch)
+		sent += len(batch)
+	return sent
+
+
+def _patch_upsert(url, records):
+	body = {
+		"performUpsert": {"fieldsToMergeOn": ["Email"]},
+		"records": records,
+		"typecast": True,
+	}
+	for attempt in range(_RATE_LIMIT_RETRIES + 1):
+		try:
+			response = requests.patch(url, headers=_headers(), json=body, timeout=_TIMEOUT)
+		except requests.RequestException as exc:
+			logger.error("Airtable upsert_emails transport failure: %s", exc)
+			raise AirtableUnknownOutcome(f"Airtable did not answer: {exc}") from exc
+
+		if response.status_code == 429 and attempt < _RATE_LIMIT_RETRIES:
+			time.sleep(_RATE_LIMIT_WAIT)
+			continue
+		break
+
+	if not response.ok:
+		# Same reasoning as create_record: the body can quote an email back.
+		logger.error(
+			"Airtable upsert_emails -> %s: %s", response.status_code, response.text[:500]
+		)
+		raise AirtableRequestFailed(
+			f"Airtable returned {response.status_code} ({_error_type(response)}). "
+			f"The full response is in the server log."
+		)
+
+
+# What auth_callback stores when HCA hands back no email. Not a real inbox.
+PLACEHOLDER_EMAIL = "hackclubber@example.com"
+
+
+def email_contact(user, fallback_name=""):
+	"""The (full name, email) pair the Emails table gets for a user, or None
+	when there is no real address to send."""
+	email = (user.email or "").strip()
+	if not email or email.lower() == PLACEHOLDER_EMAIL:
+		return None
+	return (user.get_full_name() or fallback_name).strip(), email
+
+
+def upsert_emails_in_background(people, label):
+	"""upsert_emails off the request thread.
+
+	A backfill is hundreds of rate-limited requests, longer than gunicorn will
+	hold a worker, and a signup shouldn't wait on Airtable to reach its
+	dashboard. The outcome goes to the log.
+	"""
+	def run():
+		try:
+			sent = upsert_emails(people)
+		except AirtableError as exc:
+			logger.error("Emails %s failed: %s", label, exc)
+		except Exception:
+			logger.exception("Emails %s crashed", label)
+		else:
+			logger.info("Emails %s sent %s record(s) to Airtable", label, sent)
+
+	_start(run)
+
+
+def _start(target):
+	threading.Thread(target=target, daemon=True).start()

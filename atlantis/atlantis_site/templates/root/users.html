@@ -8,6 +8,10 @@
     {% include "root/_messages_admin.html" %}
     <h1>Users</h1>
     <h3>Manage Users</h3>
+    <form method="POST" action="{% url 'backfill_emails' %}" id="backfillEmailsForm">
+        {% csrf_token %}
+        <button type="submit">Backfill emails to Airtable</button>
+    </form>
     <form method="GET" class="users-search" role="search">
         <input
             id="userSearchInput"
@@ -138,6 +142,16 @@
 </div>
 
 <script>
+    (function () {
+        const form = document.getElementById('backfillEmailsForm');
+        if (!form) return;
+        form.addEventListener('submit', (event) => {
+            if (!confirm("Send every user's full name and email to the Airtable Emails table?")) {
+                event.preventDefault();
+            }
+        });
+    })();
+
     (function () {
         const dialog = document.getElementById('editUserPopup');
         const form = document.getElementById('editUserForm');

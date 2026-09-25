@@ -9,6 +9,7 @@ from django.contrib import messages
 
 import os
 
+from ... import airtable
 from ...models import Profile, Project
 from ..helpers import check_perms, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, tracked_minutes_for_journals, format_minutes, INT_FIELD_MAX, INT_FIELD_MIN, field_max_length, too_long
 
@@ -31,6 +32,31 @@ def users(request):
         "all_groups": all_groups,
         "search_query": search_query,
     })
+
+@staff_member_required
+@require_POST
+@check_perms(["atlantis_site.organizer"])
+def backfill_emails(request):
+    if not airtable.emails_configured():
+        missing = ", ".join(airtable.missing_settings(airtable.EMAILS_REQUIRED_SETTINGS))
+        messages.error(request, f"Airtable Emails table is not configured (missing {missing}).")
+        return redirect("users")
+
+    # One row per address: the upsert is keyed on Email, and Airtable refuses a
+    # batch in which two records would land on the same row.
+    people = {}
+    for user in get_user_model().objects.order_by("id"):
+        contact = airtable.email_contact(user)
+        if contact:
+            people.setdefault(contact[1].lower(), contact)
+
+    airtable.upsert_emails_in_background(list(people.values()), "backfill")
+
+    record_audit(request, "backfill_emails", target="Airtable Emails", metadata={
+        "count": len(people),
+    })
+    messages.success(request, f"Sending {len(people)} user(s) to the Airtable Emails table in the background.")
+    return redirect("users")
 
 @staff_member_required
 @require_POST

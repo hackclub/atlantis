@@ -80,6 +80,7 @@ urlpatterns = [
     path("root/audit_log/", audit_log, name="audit_log"),
     path("root/users", users, name="users"),
     path("root/users/edit/<int:user_id>", edit_user, name="edit_user"),
+    path("root/users/backfill_emails", backfill_emails, name="backfill_emails"),
     path("root/projects/", manage_projects, name="manage_projects"),
     path("root/projects/edit/<int:project_id>/", admin_edit_project, name="admin_edit_project"),
     path("root/projects/delete/bulk/", db_delete_projects, name="db_delete_projects"),

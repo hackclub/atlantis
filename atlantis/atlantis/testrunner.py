@@ -19,7 +19,8 @@ class AtlantisTestRunner(DiscoverRunner):
 	def setup_test_environment(self, **kwargs):
 		super().setup_test_environment(**kwargs)
 		self._airtable_guard = override_settings(
-			AIRTABLE_PAT="", AIRTABLE_BASE_ID="", AIRTABLE_TABLE_ID=""
+			AIRTABLE_PAT="", AIRTABLE_BASE_ID="", AIRTABLE_TABLE_ID="",
+			AIRTABLE_EMAILS_TABLE_ID="",
 		)
 		self._airtable_guard.enable()
 

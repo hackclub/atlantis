@@ -50,6 +50,8 @@ TEST_RUNNER = "atlantis.testrunner.AtlantisTestRunner"
 AIRTABLE_PAT = os.environ.get("AIRTABLE_PAT", "")
 AIRTABLE_BASE_ID = os.environ.get("AIRTABLE_BASE_ID", "")
 AIRTABLE_TABLE_ID = os.environ.get("AIRTABLE_TABLE_ID", "")
+# The Emails table in the same base: one row per signup, name and email only.
+AIRTABLE_EMAILS_TABLE_ID = os.environ.get("AIRTABLE_EMAILS_TABLE_ID", "")
 AIRTABLE_API_BASE_URL = os.environ.get("AIRTABLE_API_BASE_URL", "https://api.airtable.com/v0")
 
 # How long the presigned R2 links handed to Airtable stay usable. The screenshot

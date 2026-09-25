@@ -8,7 +8,7 @@ from ...views.admin.review import fraud_review_dash, fraud_review_next, fraud_re
 from ...views.admin.review import lock_project, unlock_project, add_internal_comment
 from ...views.admin.timelapse_review import timelapse_review_dash, timelapse_review_next, timelapse_review_project, timelapse_decision
 from ...views.admin.shop import shop_dash, create_item, edit_item, delete_item, reorder_categories, fulfillment_dash, update_order_status, view_order_address
-from ...views.admin.management import users, edit_user, manage_projects, admin_edit_project, db_delete_project, db_delete_projects
+from ...views.admin.management import users, backfill_emails, edit_user, manage_projects, admin_edit_project, db_delete_project, db_delete_projects
 from ...views.admin.challenge import challenge_dash, challenge_user, grant_saver, override_week
 
 __all__ = [
@@ -21,6 +21,6 @@ __all__ = [
     "lock_project", "unlock_project", "add_internal_comment",
     "timelapse_review_dash", "timelapse_review_next", "timelapse_review_project", "timelapse_decision",
     "shop_dash", "create_item", "edit_item", "delete_item", "reorder_categories", "fulfillment_dash", "update_order_status", "view_order_address",
-    "users", "edit_user", "manage_projects", "admin_edit_project", "db_delete_project", "db_delete_projects",
+    "users", "backfill_emails", "edit_user", "manage_projects", "admin_edit_project", "db_delete_project", "db_delete_projects",
     "challenge_dash", "challenge_user", "grant_saver", "override_week",
 ]

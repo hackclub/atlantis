@@ -2,6 +2,7 @@ from django.shortcuts import redirect
 from django.contrib.auth import login, logout, get_user_model
 from django.views.decorators.http import require_POST
 
+from ... import airtable
 from ...models import Profile
 from ...crypto import encrypt_token
 from ...hca import extract_verification, oauth, storable_token
@@ -96,6 +97,11 @@ def auth_callback(request):
         user=user,
         defaults=defaults,
     )
+
+    if created and airtable.emails_configured():
+        contact = airtable.email_contact(user, fallback_name=name)
+        if contact:
+            airtable.upsert_emails_in_background([contact], f"signup for user #{user.id}")
 
     login(request, user)
     response = redirect("dashboard")
