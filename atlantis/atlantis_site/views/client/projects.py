@@ -861,8 +861,8 @@ def create_journal(request, project_id):
     if not validate_file_size(image_file, 5):
         messages.error(request, "Max file size for images is 5MB.")
         return redirect("project_detail", project_id=project_id)
-    if not validate_file_size(model_file, 100):
-        messages.error(request, "Max file size for STL files is 100MB.")
+    if not validate_file_size(model_file, 300):
+        messages.error(request, "Max file size for STL files is 300MB.")
         return redirect("project_detail", project_id=project_id)
 
     image_ext = sniff_image_extension(image_file)
