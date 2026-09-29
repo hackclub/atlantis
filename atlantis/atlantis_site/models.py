@@ -230,6 +230,11 @@ class Profile(models.Model):
 	# the tree is a plan, and the one debit that pays for it happens once.
 	printer_track = models.CharField(max_length=32, blank=True, default="")
 
+	# Set by an organizer from the users page. A banned user is shut out of
+	# every page on the site by BanMiddleware (see ban.py), which answers each
+	# request with the "you have been banned" screen instead of the view.
+	banned = models.BooleanField(default=False)
+
 	def __str__(self):
 		return self.user.username
 

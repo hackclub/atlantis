@@ -192,6 +192,30 @@ def edit_user(request, user_id):
     return redirect("users")
 
 @staff_member_required
+@require_POST
+@check_perms(["atlantis_site.organizer"])
+def set_user_ban(request, user_id):
+    targetUser = get_object_or_404(get_user_model(), id=user_id)
+    targetProfile = get_object_or_404(Profile, user=targetUser)
+    banned = request.POST.get("banned") == "1"
+    name = targetProfile.slack_username or f"User #{targetUser.id}"
+
+    # Staff are shut out by taking away their groups instead: a banned
+    # organizer could not reach this page to lift a mistaken ban.
+    if banned and (targetUser.is_staff or targetUser.is_superuser):
+        messages.error(request, f"{name} is a staff member. Remove their groups before banning them.")
+        return redirect("users")
+
+    if targetProfile.banned != banned:
+        Profile.objects.filter(pk=targetProfile.pk).update(banned=banned)
+        record_audit(request, "ban_user" if banned else "unban_user", target=f"User #{targetUser.id} ({targetProfile.slack_username})", metadata={
+            "user_id": targetUser.id,
+        })
+
+    messages.success(request, f"{name} has been {'banned' if banned else 'unbanned'}.")
+    return redirect("users")
+
+@staff_member_required
 @check_perms(["atlantis_site.organizer"])
 def manage_projects(request):
     projects = Project.objects.select_related("owner", "owner__hackclub_profile").order_by("id")

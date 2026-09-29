@@ -170,6 +170,9 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Needs request.user, and sits ahead of presence so a banned user's
+    # rejected requests don't count as visits. See atlantis_site/ban.py.
+    'atlantis_site.ban.BanMiddleware',
     # Needs request.user, so it sits behind AuthenticationMiddleware. See
     # atlantis_site/presence.py for what it writes and how rarely.
     'atlantis_site.presence.PresenceMiddleware',

@@ -170,6 +170,73 @@ class EditUserTests(BaseTestCase):
 
 
 @patch.dict(os.environ, DEFAULT_PFP_ENV)
+class BanUserTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.organizer = grant_perms(make_user("organizer"), "organizer")
+		self.target = make_user("target")
+
+	def _ban(self, banned="1", user=None):
+		self.client.force_login(self.organizer)
+		return self.client.post(reverse("set_user_ban", args=[(user or self.target).id]), {"banned": banned})
+
+	def _banned(self, user=None):
+		profile = (user or self.target).hackclub_profile
+		profile.refresh_from_db()
+		return profile.banned
+
+	def test_ban_and_unban(self):
+		self._ban("1")
+		self.assertTrue(self._banned())
+		self.assertTrue(AuditLog.objects.filter(action="ban_user").exists())
+
+		self._ban("0")
+		self.assertFalse(self._banned())
+		self.assertTrue(AuditLog.objects.filter(action="unban_user").exists())
+
+	def test_staff_cannot_be_banned(self):
+		other = grant_perms(make_user("other-organizer"), "organizer")
+		self._ban("1", user=other)
+		self.assertFalse(self._banned(other))
+
+	def test_requires_organizer(self):
+		self.client.force_login(make_user("pleb"))
+		self.client.post(reverse("set_user_ban", args=[self.target.id]), {"banned": "1"})
+		self.assertFalse(self._banned())
+
+	def test_banned_user_sees_ban_screen_everywhere(self):
+		self._ban("1")
+		self.client.force_login(self.target)
+		for url in (reverse("dashboard"), reverse("projects"), reverse("explore"), reverse("shop")):
+			response = self.client.get(url)
+			self.assertEqual(response.status_code, 403)
+			self.assertContains(response, "You have been banned from Atlantis", status_code=403)
+
+	def test_banned_user_cannot_create_project_or_journal(self):
+		project = make_project(self.target)
+		self._ban("1")
+		self.client.force_login(self.target)
+
+		self.client.post(reverse("create_project"), {"title": "New", "description": "x"})
+		self.assertEqual(Project.objects.filter(owner=self.target).count(), 1)
+
+		self.client.post(reverse("create_journal", args=[project.id]), {"text": "hi"})
+		self.assertFalse(Journal.objects.filter(project=project).exists())
+
+	def test_banned_user_can_log_out(self):
+		self._ban("1")
+		self.client.force_login(self.target)
+		response = self.client.post(reverse("logout"))
+		self.assertEqual(response.status_code, 302)
+		self.assertNotIn("_auth_user_id", self.client.session)
+
+	def test_unbanned_user_gets_through(self):
+		self.client.force_login(self.target)
+		response = self.client.get(reverse("projects"))
+		self.assertNotContains(response, "You have been banned from Atlantis")
+
+
+@patch.dict(os.environ, DEFAULT_PFP_ENV)
 class ManageProjectsTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()

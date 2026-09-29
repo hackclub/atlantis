@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Banned | Atlantis</title>
+    {% include '_favicon.html' %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Prompt", sans-serif;
+            background: #0b2340;
+        }
+
+        .banned-backdrop {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.7);
+        }
+
+        .banned-panel {
+            width: min(92vw, 640px);
+            padding: 48px 32px;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+            text-align: center;
+            box-sizing: border-box;
+        }
+
+        .banned-panel h1 {
+            margin: 0 0 16px;
+            font-size: clamp(2rem, 6vw, 3.25rem);
+            line-height: 1.1;
+            color: #b3261e;
+        }
+
+        .banned-panel p {
+            margin: 0 0 32px;
+            font-size: 1.1rem;
+            color: #333;
+        }
+
+        .banned-panel button {
+            font: inherit;
+            border: none;
+            cursor: pointer;
+            padding: 10px 24px;
+            border-radius: 999px;
+            background: #0b2340;
+            color: #fff;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="banned-backdrop">
+        <div class="banned-panel" role="alertdialog" aria-modal="true" aria-labelledby="bannedTitle">
+            <h1 id="bannedTitle">You have been banned from Atlantis</h1>
+            <p>If you think this is a mistake, reach out to the organizers in the Hack Club Slack.</p>
+            <form action="{% url 'logout' %}" method="post">
+                {% csrf_token %}
+                <button type="submit">Log out</button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
