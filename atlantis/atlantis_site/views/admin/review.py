@@ -22,8 +22,8 @@ from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_ment
 from ...challenge import brackets_for, draw_brackets
 from .queue import (
     QUEUES, annotate_recordings, dash_context, decorate_rows, go_to_next,
-    journal_stats, owner_snapshot, parse_skip, preflight_checks, review_context,
-    ship_snapshot, sibling_reviews,
+    is_own_item, journal_stats, owner_snapshot, parse_skip, preflight_checks,
+    refuse_own_item, review_context, ship_snapshot, sibling_reviews,
 )
 
 INTERNAL_COMMENT_MAX_LENGTH = 1000
@@ -241,6 +241,8 @@ def review_next(request):
 @check_perms(T1_VIEW_PERMS)
 def review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
+    if is_own_item("t1", ship, request.user):
+        return refuse_own_item(request, "t1")
     if not ship.timelapse_cleared:
         messages.error(request, TIMELAPSE_PENDING_MESSAGE)
         return redirect("review_dash")
@@ -302,6 +304,9 @@ def t1_decision(request, ship_id):
 
     with transaction.atomic():
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
+
+        if is_own_item("t1", ship, reviewer):
+            return refuse_own_item(request, "t1")
 
         if not ship.status == Ship.ShipStatus.T1_QUEUE:
             messages.error(request, "ship not in T1 queue")
@@ -469,6 +474,8 @@ def ysws_review_next(request):
 @check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def ysws_review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
+    if is_own_item("t2", ship, request.user):
+        return refuse_own_item(request, "t2")
     journals = annotate_recordings(ship.project.journals.order_by('-id'))
     timeline = build_journal_timeline(journals, ship.project.ships.all())
     # The unpaid work this ship is answerable for, matching what t2_decision
@@ -523,6 +530,9 @@ def t2_decision(request, ship_id):
 
     with transaction.atomic():
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
+
+        if is_own_item("t2", ship, reviewer):
+            return refuse_own_item(request, "t2")
 
         total_time = payable_minutes_for_ship(ship)
         if total_time < deductions:

@@ -238,6 +238,41 @@ def claims_for(queue_key, item_ids):
     return {keys[key]: holder for key, holder in found.items() if holder}
 
 
+# ------------------------------------------------------------ ownership
+
+# Desks a reviewer may not work their own items on. T3 is left out: it is
+# organizers, who are the last word on everything anyway.
+OWN_ITEM_BLOCKED = {"t1", "t2", "lookout"}
+
+OWN_ITEM_MESSAGE = "You can't review your own project."
+
+
+def owner_id_of(queue_key, item):
+    """Who shipped the item: a lookout item is a project, the rest are ships."""
+    return item.owner_id if queue_key == "lookout" else item.project.owner_id
+
+
+def is_own_item(queue_key, item, user):
+    return queue_key in OWN_ITEM_BLOCKED and owner_id_of(queue_key, item) == user.id
+
+
+def exclude_own(queue_key, items, user):
+    """`items` without the ones this reviewer may not review."""
+    if queue_key not in OWN_ITEM_BLOCKED or user is None:
+        return items
+    if queue_key == "lookout":
+        return items.exclude(owner_id=user.id)
+    return items.exclude(project__owner_id=user.id)
+
+
+def refuse_own_item(request, queue_key):
+    """Back to the desk with a message, for a reviewer who opened their own item."""
+    from django.contrib import messages
+
+    messages.error(request, OWN_ITEM_MESSAGE)
+    return redirect(QUEUES[queue_key].dash)
+
+
 # ------------------------------------------------------------ navigation
 
 def parse_skip(request):
@@ -265,7 +300,7 @@ def next_item_id(queue_key, skip_ids=(), user=None, items=None):
     queue = QUEUES[queue_key]
     if items is None:
         items = queue.pending()
-    ids = list(items.values_list("id", flat=True))
+    ids = list(exclude_own(queue_key, items, user).values_list("id", flat=True))
     claims = claims_for(queue_key, ids)
     for item_id in ids:
         if item_id in skip_ids:

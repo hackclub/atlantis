@@ -38,7 +38,8 @@ from ..helpers import (
 )
 from .queue import (
     QUEUES, dash_context, decorate_lapses, decorate_rows, go_to_next,
-    next_item_id, owner_snapshot, parse_skip, review_context,
+    is_own_item, next_item_id, owner_snapshot, parse_skip, refuse_own_item,
+    review_context,
 )
 
 # Its own permission, not a tier of the T1/T2/T3 ladder. Organizers keep their
@@ -422,6 +423,8 @@ def timelapse_review_project(request, project_id):
         id=project_id,
         deleted=False,
     )
+    if is_own_item("lookout", project, request.user):
+        return refuse_own_item(request, "lookout")
     pending = decorate_lapses(_pending_lapses(project), QUEUES["lookout"].sla_days)
     reviewed = _reviewed_lapses(project)
 
@@ -466,6 +469,8 @@ def timelapse_review_project(request, project_id):
 def timelapse_decision(request, project_id):
     """Sign off every lapse on the project in one pass."""
     project = get_object_or_404(Project, id=project_id, deleted=False)
+    if is_own_item("lookout", project, request.user):
+        return refuse_own_item(request, "lookout")
 
     lapses = _pending_lapses(project)
     if not lapses:
