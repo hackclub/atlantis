@@ -42,7 +42,7 @@
                      alt="{{ track.name }}'s {{ track.unit }}, drawn as {{ track.creature }}: {{ track.printers|length }} stars joined into a tree of upgrades.">
 
                 {% for printer in track.printers %}
-                    <div class="star" style="--x: {{ printer.x }}%; --y: {{ printer.y }}%"
+                    <div class="star"{% if printer.y < 26 %} data-tip="below"{% endif %} style="--x: {{ printer.x }}%; --y: {{ printer.y }}%"
                          tabindex="0" role="img"
                          aria-label="{{ printer.name }}, {{ printer.cost }}, {{ printer.pace }} average">
                         <img src="{% static 'atlantis_site/assets/img/printer/star.png' %}" alt="">

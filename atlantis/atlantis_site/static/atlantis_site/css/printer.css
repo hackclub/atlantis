@@ -416,6 +416,16 @@ body {
     transition: opacity 0.15s ease-out;
 }
 
+/* Stars in the band the heading is laid over hang their label below them
+   instead: the bar paints over the chart, so a label opening upward there
+   would be half hidden behind a long track name. */
+.star[data-tip="below"] .star-tip {
+    top: 100%;
+    bottom: auto;
+    margin-top: 0.5em;
+    margin-bottom: 0;
+}
+
 .star:hover .star-tip,
 .star:focus .star-tip {
     opacity: 1;
