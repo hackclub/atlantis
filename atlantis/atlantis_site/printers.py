@@ -111,7 +111,7 @@ TRACKS = (
     {
         "slug": "byop",
         "unit": "grant tiers",
-        "name": "BYOP",
+        "name": "Buy your own printer",
         "creature": "the ray",
         "entry_pearls": 0,
         # A tier is named by the grant it carries, which is the one dollar
@@ -205,8 +205,12 @@ def _pace_label(pearls):
     doing exactly what the star tells them every week must end up with at
     least as many pearls as it costs, never a hair short of it.
     """
-    hours = _weekly_hours_estimate(pearls).quantize(Decimal("0.1"), rounding=ROUND_CEILING)
-    return f"~{hours}h/week"
+    return f"~{_pace_hours(pearls)}h/week"
+
+
+def _pace_hours(pearls):
+    """The weekly-hours estimate as the pace labels show it: up to a tenth."""
+    return _weekly_hours_estimate(pearls).quantize(Decimal("0.1"), rounding=ROUND_CEILING)
 
 
 def tracks():
@@ -237,6 +241,8 @@ def tracks():
             "printers": printers,
             "entry_cost": _label(track["entry_pearls"]),
             "entry_pace": _pace_label(track["entry_pearls"]),
+            # Whole hours print without the ".0": "from 5 hours per week".
+            "entry_hours_per_week": f"{_pace_hours(track['entry_pearls']).normalize():f}",
         })
 
     return out

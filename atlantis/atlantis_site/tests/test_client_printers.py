@@ -252,5 +252,6 @@ class PrinterPaceTests(BaseTestCase):
 		user = make_user(layers=1000)
 		self.client.force_login(user)
 		response = self.client.get(reverse("printer_select"))
-		self.assertContains(response, "~5.0h/week")  # bambu's entry
-		self.assertContains(response, "~10.6h/week")  # qidi's entry
+		self.assertContains(response, "from 5 hours per week")  # bambu's entry
+		self.assertContains(response, "from 10.6 hours per week")  # qidi's entry
+		self.assertNotContains(response, f"{ENTRY_HOURS} hours")

@@ -40,7 +40,7 @@
                                 <span class="track-count">{{ track.printers|length }} {{ track.unit }}</span>
                             </span>
                             <span class="track-meta">
-                                from {{ track.entry_cost }} &middot; {{ track.entry_pace }}
+                                from {{ track.entry_hours_per_week }} hours per week
                                 {% if track.slug == chosen_track %}<em class="track-mine">your chart</em>{% endif %}
                             </span>
                         </span>
