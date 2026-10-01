@@ -38,7 +38,7 @@ from ..helpers import (
 )
 from .queue import (
     QUEUES, dash_context, decorate_lapses, decorate_rows, go_to_next,
-    owner_snapshot, parse_skip, review_context,
+    next_item_id, owner_snapshot, parse_skip, review_context,
 )
 
 # Its own permission, not a tier of the T1/T2/T3 ladder. Organizers keep their
@@ -96,6 +96,17 @@ def _locked_pending_lapses(project):
         .select_for_update()
         .order_by("created_at", "id")
     )
+
+
+def _holding_ships(projects):
+    """Narrow queued projects to those whose waiting lapses hold a ship out of T1.
+
+    The same rule as the desk's `?shipped=1` filter: an unreviewed lapse that
+    is on a ship keeps that ship out of the T1 queue until it's signed off.
+    """
+    return projects.filter(Exists(
+        _unreviewed(Journal.objects.filter(project=OuterRef("pk"), ship__isnull=False))
+    ))
 
 
 def _pending_lapses(project):
@@ -590,5 +601,11 @@ def timelapse_decision(request, project_id):
             "signed off the lapse they were on while this pass was open.",
         )
 
-    # On to the next project rather than back to the desk.
-    return go_to_next(request, "lookout", parse_skip(request) + [project.id])
+    # On to the next project rather than back to the desk — one holding a ship
+    # out of T1 first, since that's a shipper waiting on us, and only once
+    # those are clear the rest of the queue in its usual order.
+    skip = parse_skip(request) + [project.id]
+    holding = _holding_ships(QUEUES["lookout"].pending())
+    if next_item_id("lookout", skip, request.user, holding) is not None:
+        return go_to_next(request, "lookout", skip, items=holding)
+    return go_to_next(request, "lookout", skip)

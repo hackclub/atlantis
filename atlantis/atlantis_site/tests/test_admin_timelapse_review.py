@@ -507,6 +507,29 @@ class TimelapseDecisionTests(BaseTestCase):
 		)
 		self.assertEqual(TimelapseAnnotation.objects.count(), 1)
 
+	def test_approving_moves_on_to_a_project_holding_a_ship_first(self):
+		# Queued ahead of the shipped one, so plain queue order would pick it.
+		unshipped = make_project(make_user("unshipped"), shippable=True)
+		make_journal(unshipped)
+		shipped = make_project(make_user("shipper"), shippable=True)
+		make_ship(shipped, timelapse_approved=False)
+
+		response = self._decide()
+		self.assertEqual(
+			response["Location"],
+			reverse("timelapse_review_project", args=[shipped.id]) + f"?skip={self.project.id}",
+		)
+
+	def test_approving_falls_back_to_queue_order_with_no_held_ships(self):
+		unshipped = make_project(make_user("unshipped"), shippable=True)
+		make_journal(unshipped)
+
+		response = self._decide()
+		self.assertEqual(
+			response["Location"],
+			reverse("timelapse_review_project", args=[unshipped.id]) + f"?skip={self.project.id}",
+		)
+
 	def test_a_lapse_that_arrived_mid_pass_is_left_for_the_next_one(self):
 		"""The form has no description for it, and an undescribed sign-off sticks.
 

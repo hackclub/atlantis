@@ -257,10 +257,15 @@ def skip_param(skip_ids):
     return ",".join(str(i) for i in skip_ids)
 
 
-def next_item_id(queue_key, skip_ids=(), user=None):
-    """The next item to work: first unskipped, unclaimed thing in the queue."""
+def next_item_id(queue_key, skip_ids=(), user=None, items=None):
+    """The next item to work: first unskipped, unclaimed thing in the queue.
+
+    `items` narrows the search to part of the queue; it defaults to all of it.
+    """
     queue = QUEUES[queue_key]
-    ids = list(queue.pending().values_list("id", flat=True))
+    if items is None:
+        items = queue.pending()
+    ids = list(items.values_list("id", flat=True))
     claims = claims_for(queue_key, ids)
     for item_id in ids:
         if item_id in skip_ids:
@@ -272,7 +277,7 @@ def next_item_id(queue_key, skip_ids=(), user=None):
     return None
 
 
-def go_to_next(request, queue_key, skip_ids=(), empty_message=None):
+def go_to_next(request, queue_key, skip_ids=(), empty_message=None, items=None):
     """Send the reviewer to the next item, or back to the desk when it's clear."""
     from django.contrib import messages
 
@@ -281,7 +286,7 @@ def go_to_next(request, queue_key, skip_ids=(), empty_message=None):
     # search so a re-entrant "next" can't hand them back the item they just
     # decided on.
     release_claim(request.user)
-    item_id = next_item_id(queue_key, skip_ids, request.user)
+    item_id = next_item_id(queue_key, skip_ids, request.user, items)
     if item_id is None:
         release_claim(request.user)
         messages.info(request, empty_message or f"Nothing else waiting in {queue.label.lower()}.")
