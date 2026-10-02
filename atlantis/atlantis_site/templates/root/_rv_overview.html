@@ -26,26 +26,58 @@
                 {% if ship.project.locked %}
                     <span class="rv-fact-sep">|</span><span class="rv-chip rv-chip-bad">locked</span>
                 {% endif %}
+                {% if ship.project.flagged %}
+                    <span class="rv-fact-sep">|</span><span class="rv-chip rv-chip-warn">flagged</span>
+                {% endif %}
                 {% if owner.verified %}
                     <span class="rv-fact-sep">|</span><span class="rv-chip rv-chip-good">verified</span>
                 {% else %}
                     <span class="rv-fact-sep">|</span><span class="rv-chip rv-chip-bad">unverified</span>
                 {% endif %}
             </p>
+            {% if ship.project.flagged %}
+                <p class="rv-flag-note">
+                    <strong>Flagged</strong>{% if ship.project.flagged_by %} by {{ ship.project.flagged_by.hackclub_profile.slack_username|default:ship.project.flagged_by.username }}{% endif %}{% if ship.project.flagged_at %} on {{ ship.project.flagged_at|date:"M j" }}{% endif %}:
+                    {{ ship.project.flag_reason }}
+                </p>
+            {% endif %}
         </div>
-        {% if show_lock %}
+        {% if show_lock or can_flag %}
             <div class="rv-overview-controls">
-                {% if ship.project.locked %}
-                    <form method="post" action="{% url 'unlock_project' ship.project.id %}">
-                        {% csrf_token %}
-                        <button type="submit" class="rv-btn">Unlock project</button>
-                    </form>
-                {% else %}
-                    <form method="post" action="{% url 'lock_project' ship.project.id %}">
-                        {% csrf_token %}
-                        <button type="submit" class="rv-btn rv-btn-danger"
-                                data-confirm="Lock this project? The owner is told, and no decision can be recorded until it's unlocked.">Lock project</button>
-                    </form>
+                {% if show_lock %}
+                    {% if ship.project.locked %}
+                        <form method="post" action="{% url 'unlock_project' ship.project.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="rv-btn">Unlock project</button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'lock_project' ship.project.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="rv-btn rv-btn-danger"
+                                    data-confirm="Lock this project? The owner is told, and no decision can be recorded until it's unlocked.">Lock project</button>
+                        </form>
+                    {% endif %}
+                {% endif %}
+                {% if can_flag %}
+                    {% comment %}
+                    A flag is a note to the other reviewers and nothing more: the
+                    owner isn't told, and it blocks no decision. It shows on every
+                    desk's table and has a filter there.
+                    {% endcomment %}
+                    {% if ship.project.flagged %}
+                        <form method="post" action="{% url 'unflag_project' ship.project.id %}">
+                            {% csrf_token %}
+                            <button type="submit" class="rv-btn"
+                                    data-confirm="Take the flag off this project?">Remove flag</button>
+                        </form>
+                    {% else %}
+                        <form method="post" action="{% url 'flag_project' ship.project.id %}" class="rv-flag-form">
+                            {% csrf_token %}
+                            <input type="text" name="reason" maxlength="{{ flag_reason_max }}" required
+                                   placeholder="Why flag it?" aria-label="Reason for flagging">
+                            <button type="submit" class="rv-btn">Flag project</button>
+                        </form>
+                    {% endif %}
                 {% endif %}
             </div>
         {% endif %}

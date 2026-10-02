@@ -37,7 +37,7 @@ from ..helpers import (
     check_perms, display_name, format_minutes, record_audit, reviewer_leaderboard,
 )
 from .queue import (
-    QUEUES, dash_context, decorate_lapses, decorate_rows, go_to_next,
+    QUEUES, dash_context, decorate_lapses, decorate_rows, filter_rows, go_to_next,
     is_own_item, next_item_id, owner_snapshot, parse_skip, refuse_own_item,
     review_context,
 )
@@ -385,25 +385,23 @@ def timelapse_review_dash(request):
     The lapses aren't listed row by row — a sitting covers the project's whole
     pass, so the queue's job is to name the project and say how much is in it.
 
-    `?shipped=1` narrows the table to projects whose waiting lapses are holding
-    a ship out of T1. Only the table: the stats above it still describe the
-    whole queue, and each row keeps its place number in it.
+    `?filter=` narrows the table (see filter_rows) — `shipped` to projects
+    whose waiting lapses are holding a ship out of T1. Only the table: the
+    stats above it still describe the whole queue, and each row keeps its
+    place number in it.
     """
     projects = decorate_rows("lookout", QUEUES["lookout"].pending())
     waiting_lapses = sum(project.lapse_count for project in projects)
-    shipped_only = request.GET.get("shipped") == "1"
     context = dash_context(request, "lookout", projects, extra_stats=[{
         "label": "Lapses",
         "value": str(waiting_lapses),
         "phrase": "lapses across them",
     }])
-    if shipped_only:
-        projects = [project for project in projects if project.held_ships]
-        context["pending_count"] = len(projects)
+    projects, filters = filter_rows(request, "lookout", projects)
+    context.update(filters, pending_count=len(projects))
     return render(request, "root/timelapse_review.html", {
         **context,
         "projects": projects,
-        "shipped_only": shipped_only,
         "leaderboard": reviewer_leaderboard("timelapse_reviews"),
     })
 

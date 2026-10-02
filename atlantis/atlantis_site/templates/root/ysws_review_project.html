@@ -22,6 +22,7 @@
 {% block shortcut_rows %}
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>P</kbd></dt><dd>Approve: sends the ship to fraud review</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>E</kbd></dt><dd>Return to T1 (focuses Feedback when it's empty)</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>K</kbd></dt><dd>Request changes: sends it back to the shipper, and their resubmission goes to T1 (focuses Feedback when it's empty)</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Submit the current draft</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>J</kbd></dt><dd>Focus the Airtable justification</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>F</kbd></dt><dd>Focus Feedback</dd>
@@ -33,7 +34,7 @@
 {% endblock %}
 
 {% block evidence %}
-    {% include "root/_rv_overview.html" with show_lock=True %}
+    {% include "root/_rv_overview.html" with show_lock=can_lock %}
     {% include "root/_rv_checks.html" %}
     {% include "root/_rv_history.html" %}
     {% include "root/_rv_journals.html" with journal_empty="No journal entries. How did this happen?" %}
@@ -45,7 +46,8 @@
     {% csrf_token %}
     <h2 class="rv-form-title">Submit Review</h2>
     <p class="rv-form-note">Approving sends the ship to fraud review. Deductions come off
-        this ship's logged time before pearls are worked out.</p>
+        this ship's logged time before pearls are worked out. Requesting changes sends it
+        back to the shipper, and their resubmission starts again at T1.</p>
 
     <label class="rv-field">
         <span class="rv-field-label">Airtable justification <em>(not shown to user)</em><kbd>&#8984;J</kbd></span>
@@ -94,6 +96,12 @@
                 data-confirm="Send this ship back to T1? The shipper is pinged with your feedback."
                 {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
             Return to T1<kbd>&#8984;E</kbd>
+        </button>
+        <button type="submit" name="decision" value="C" class="rv-verdict rv-verdict-warn"
+                data-mod-key="k" data-requires="#rv-feedback"
+                data-confirm="Request changes? The shipper is pinged with your feedback, and once they resubmit it goes back to T1 review."
+                {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
+            Request changes<kbd>&#8984;K</kbd>
         </button>
     </div>
     {% if ship.project.locked %}

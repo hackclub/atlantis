@@ -684,6 +684,80 @@
             rec.currentTime = video.currentTime;
             renderCursor(rec);
         });
+        ['play', 'seeked', 'pointerdown', 'focus'].forEach(function (name) {
+            video.addEventListener(name, function () { activeVideo = video; });
+        });
+        measureFrames(video);
+    }
+
+    /* ------------------------------------------------------- playback keys */
+
+    /*
+     * K plays and pauses; J and L step one frame back and forward while
+     * paused. The step is one frame of the encoded video, which nothing on the
+     * server knows the rate of, so it starts at 1/30s and is corrected the
+     * first time the video plays: requestVideoFrameCallback reports each frame
+     * it presents, and two consecutive ones are exactly a frame apart.
+     */
+    var DEFAULT_FRAME_SECONDS = 1 / 30;
+    var activeVideo = null;
+
+    function measureFrames(video) {
+        if (!video.requestVideoFrameCallback) return;
+        var last = null;
+        function onFrame(_now, meta) {
+            if (last && meta.presentedFrames === last.presentedFrames + 1) {
+                var step = meta.mediaTime - last.mediaTime;
+                if (step > 0.001 && (!video.frameSeconds || step < video.frameSeconds)) {
+                    video.frameSeconds = step;
+                }
+            }
+            last = meta;
+            video.requestVideoFrameCallback(onFrame);
+        }
+        video.requestVideoFrameCallback(onFrame);
+    }
+
+    /* The player a key is meant for: the recording the key was pressed in,
+     * else the one last played or scrubbed, else the first one on screen. */
+    function playerFor(target) {
+        var here = target && target.closest ? target.closest('[data-recording]') : null;
+        var video = here ? here.querySelector('.ta-video') : null;
+        if (video) return video;
+        if (activeVideo && document.contains(activeVideo)) return activeVideo;
+        var videos = document.querySelectorAll('.ta-video');
+        for (var i = 0; i < videos.length; i++) {
+            var rect = videos[i].getBoundingClientRect();
+            if (rect.width && rect.bottom > 0 && rect.top < window.innerHeight) return videos[i];
+        }
+        return null;
+    }
+
+    function handlePlaybackKey(event) {
+        var key = event.key.toLowerCase();
+        if (key !== 'j' && key !== 'k' && key !== 'l') return false;
+        var video = playerFor(event.target);
+        if (!video) return false;
+        activeVideo = video;
+
+        if (key === 'k') {
+            if (video.paused) {
+                var playing = video.play();
+                if (playing && playing.catch) playing.catch(function () {});
+            } else {
+                video.pause();
+            }
+            return true;
+        }
+
+        // Frame stepping is for a paused player; mid-playback it would only
+        // fight the clock.
+        if (!video.paused) return true;
+        var step = video.frameSeconds || DEFAULT_FRAME_SECONDS;
+        var end = isFinite(video.duration) ? video.duration : Infinity;
+        var to = video.currentTime + (key === 'l' ? step : -step);
+        video.currentTime = Math.max(0, Math.min(end, to));
+        return true;
     }
 
     function addForm(rec) {
@@ -1090,6 +1164,11 @@
             if (event.key.toLowerCase() === 'i' && !isTyping(event.target)) {
                 event.preventDefault();
                 openFinal();
+                return;
+            }
+
+            if (!event.shiftKey && !isTyping(event.target) && handlePlaybackKey(event)) {
+                event.preventDefault();
             }
         });
 

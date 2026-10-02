@@ -1,0 +1,20 @@
+{% comment %}
+The narrowings over a desk's table, built by filter_rows. Each count is how
+many rows that filter would leave, within the current search.
+{% endcomment %}
+<div class="rq-filters">
+    <nav class="rq-filter" aria-label="Filter">
+        {% for option in filter_options %}
+            <a href="{{ option.href }}"{% if option.active %} aria-current="true"{% endif %}>
+                {{ option.label }}<span class="rq-filter-count">{{ option.count }}</span>
+            </a>
+        {% endfor %}
+    </nav>
+    <form class="rq-search" method="get" role="search">
+        {% if active_filter %}<input type="hidden" name="filter" value="{{ active_filter }}">{% endif %}
+        <input type="search" name="q" value="{{ filter_query }}" maxlength="{{ filter_search_max }}"
+               placeholder="Search project, #id or owner" aria-label="Search the queue" data-focus="/">
+        <kbd>/</kbd>
+        {% if filtering %}<a class="rq-filter-clear" href="?">Clear</a>{% endif %}
+    </form>
+</div>

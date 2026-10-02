@@ -450,6 +450,29 @@ class MetricsStreakTests(BaseTestCase):
 		# Whoever is out isn't counted against this week.
 		self.assertEqual(stats["short"], 2)
 
+	def test_completed_by_week_counts_logged_hours_and_averages_them(self):
+		# Wednesday of week 2: week 1 has closed, week 2 is live.
+		now = datetime(2026, 10, 1, 12, tzinfo=EASTERN)
+		week_1 = datetime(2026, 9, 23, 10, tzinfo=EASTERN)
+		week_2 = datetime(2026, 9, 30, 10, tzinfo=EASTERN)
+		self._builder("steady", (300, week_1), (360, week_2))
+		self._builder("keen", (420, week_1))
+		self._builder("short", (200, week_1))
+		# Five hours credited, but three of them bought: not completed.
+		saved = self._builder("saved", (120, week_1))
+		SaverCredit.objects.bulk_create([SaverCredit(user=saved, week_index=1) for _ in range(3)])
+
+		stats = build_streak_stats(now)
+
+		rows = stats["completed_by_week"]
+		self.assertEqual([row["label"] for row in rows], ["Week 1", "Week 2"])
+		self.assertEqual([row["value"] for row in rows], [2, 1])
+		# (300 + 420) / 2 = 360m.
+		self.assertEqual(rows[0]["sub"], "avg 6h 0m")
+		self.assertEqual(rows[1]["sub"], "avg 6h 0m so far")
+		self.assertEqual(stats["completed_this_week"], 1)
+		self.assertEqual(stats["avg_completed_display"], "6h 0m")
+
 	def test_the_bulk_standings_agree_with_one_at_a_time(self):
 		now = datetime(2026, 9, 30, 12, tzinfo=EASTERN)
 		users = [

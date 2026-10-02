@@ -151,6 +151,30 @@ def build_streak_stats(now):
         for index in closed
     ])
 
+    # Who actually logged the week's hours themselves, week by week, the live
+    # one included. Logged time only: a saver keeps someone in the program,
+    # but it isn't five hours of work, and an average padded with bought
+    # hours would say people built more than they did. Counted over the
+    # whole field, so someone who has since dropped out still counts for the
+    # weeks they did complete.
+    started = closed + ([live_index] if live_index else [])
+    completed_rows = []
+    for index in started:
+        completers = [
+            s.weeks[index - 1].tracked_minutes for s in field
+            if s.weeks[index - 1].tracked_minutes >= weeks.WEEKLY_MINUTES
+        ]
+        average = sum(completers) / len(completers) if completers else 0
+        completed_rows.append({
+            "label": f"Week {index}",
+            "value": len(completers),
+            "sub": (
+                f"avg {format_minutes(average)}" if completers else "nobody yet"
+            ) + (" so far" if index == live_index else ""),
+            "average_minutes": average,
+        })
+    stats["completed_by_week"] = add_bars(completed_rows)
+
     if live_index is None:
         return stats
 
@@ -189,6 +213,9 @@ def build_streak_stats(now):
             sum(w.credited_minutes for w in live) / len(live) if live else 0
         ),
         "saver_hours_this_week": SaverCredit.objects.filter(week_index=live_index).count(),
+        # The same figure the chart's live row carries, as a card.
+        "completed_this_week": completed_rows[-1]["value"],
+        "avg_completed_display": format_minutes(completed_rows[-1]["average_minutes"]),
         "this_week": add_bars([
             {"label": label, "value": count}
             for (label, _bound), count in zip(STREAK_BUCKETS, counts)

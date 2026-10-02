@@ -21,9 +21,10 @@ from ...submissions import build_override_justification, submit_ship
 from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
 from .queue import (
-    QUEUES, annotate_recordings, dash_context, decorate_rows, go_to_next,
-    is_own_item, journal_stats, owner_snapshot, parse_skip, preflight_checks,
-    refuse_own_item, review_context, ship_snapshot, sibling_reviews,
+    QUEUES, annotate_recordings, dash_context, decorate_rows, filter_rows,
+    go_to_next, is_own_item, journal_stats, owner_snapshot, parse_skip,
+    preflight_checks, refuse_own_item, review_context, ship_snapshot,
+    sibling_reviews,
 )
 
 INTERNAL_COMMENT_MAX_LENGTH = 1000
@@ -64,6 +65,22 @@ COMMENT_PERMS = [
     "atlantis_site.t3_review",
     "atlantis_site.organizer",
 ]
+
+# Who may flag a project for a closer look, and take the flag down again. The
+# same people who leave internal comments: a flag is a louder one.
+FLAG_PERMS = COMMENT_PERMS
+FLAG_REASON_MAX_LENGTH = 500
+
+# Locking is T2's call and up, the same list lock_project enforces. A T1
+# reviewer only sees the button when they also hold one of these.
+LOCK_PERMS = [
+    "atlantis_site.organizer",
+    "atlantis_site.t2_review",
+    "atlantis_site.t3_review",
+]
+
+def has_any_perm(user, perms):
+    return any(user.has_perm(perm) for perm in perms)
 
 def parse_payout_multiplier(raw):
     """
@@ -126,11 +143,12 @@ def ping_review_checkpoint(ship, reviewer, tier, outcome, feedback):
         settings.REVIEW_CHECKPOINT_ID,
     )
 
-def ping_changes_requested(ship, reviewer, feedback):
+def ping_changes_requested(ship, reviewer, feedback, tier="T1"):
     """
-    The checkpoint post for a T1 reviewer asking for changes. Worded apart from
+    The checkpoint post for a reviewer asking for changes. Worded apart from
     ping_review_checkpoint's so it doesn't read as a verdict: nothing has been
     decided yet, and the shipper needs to know the ship is waiting on them.
+    Whichever tier asked, the resubmission goes back to T1.
     """
     if not settings.REVIEW_CHECKPOINT_ID:
         return False
@@ -138,7 +156,7 @@ def ping_changes_requested(ship, reviewer, feedback):
     project = ship.project
     return send_slack_message(
         f"{slack_mention(project.owner)} {slack_mention(reviewer)} has requested changes to your "
-        f"project {project_link(project)} during T1 review. It hasn't been rejected: make the "
+        f"project {project_link(project)} during {tier} review. It hasn't been rejected: make the "
         f"changes, then resubmit it from the project page and it'll go back into the T1 queue. "
         f"{feedback_line(feedback)}",
         settings.REVIEW_CHECKPOINT_ID,
@@ -212,6 +230,8 @@ def can_roll_back(user):
 def review_dash(request):
     ships = decorate_rows("t1", QUEUES["t1"].pending())
     context = dash_context(request, "t1", ships)
+    ships, filters = filter_rows(request, "t1", ships)
+    context.update(filters, pending_count=len(ships))
 
     # Only worked out for someone who can act on it: it is a few queries a row.
     if can_roll_back(request.user):
@@ -268,6 +288,10 @@ def review_project(request, ship_id):
         "journal_stats": journal_stats(journals),
         "preflight": preflight_checks(ship, subject, owner, has_make=hasMake),
         "t1_checklist": T1_CHECKLIST,
+        # A T1 reviewer can't lock; one who also reviews at T2 can, from here.
+        "can_lock": has_any_perm(request.user, LOCK_PERMS),
+        "can_flag": has_any_perm(request.user, FLAG_PERMS),
+        "flag_reason_max": FLAG_REASON_MAX_LENGTH,
         # A lead who can't decide is only reading, and shouldn't hold a claim
         # that turns the reviewers who can away.
         **review_context(request, "t1", ship, claimable=(
@@ -459,10 +483,13 @@ def t1_rollback(request, t1_id):
 @check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def ysws_review_dash(request):
     ships = decorate_rows("t2", QUEUES["t2"].pending())
+    context = dash_context(request, "t2", ships)
+    ships, filters = filter_rows(request, "t2", ships)
+    context.update(filters, pending_count=len(ships))
     return render(request, "root/ysws_review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboard("t2_reviews"),
-        **dash_context(request, "t2", ships),
+        **context,
     })
 
 @staff_member_required
@@ -500,6 +527,9 @@ def ysws_review_project(request, ship_id):
         "siblings": sibling_reviews(ship),
         "journal_stats": journal_stats(journals),
         "preflight": preflight_checks(ship, subject, owner),
+        "can_lock": has_any_perm(request.user, LOCK_PERMS),
+        "can_flag": has_any_perm(request.user, FLAG_PERMS),
+        "flag_reason_max": FLAG_REASON_MAX_LENGTH,
         **review_context(request, "t2", ship, claimable=ship.status == Ship.ShipStatus.T2_QUEUE),
     })
 
@@ -550,6 +580,17 @@ def t2_decision(request, ship_id):
             case T2.Decision.RETURN_T1:
                 ship.status = Ship.ShipStatus.T1_QUEUE
                 message = "returned to T1 reviewers"
+            case T2.Decision.CHANGES:
+                # Asking for changes is only useful if the shipper is told
+                # which ones.
+                if not feedback:
+                    messages.error(request, "Say what needs changing in the feedback before requesting changes.")
+                    return redirect("ysws_review_project", ship_id=ship_id)
+                # Back to the shipper, the way a T1 request for changes is.
+                # Their resubmission lands in the T1 queue (see ship_project),
+                # since what they changed hasn't been through T1 yet.
+                ship.status = Ship.ShipStatus.CHANGES_REQUESTED
+                message = "changes requested"
             case _:
                 messages.error(request, f"How did we get here? (decision: {decision})")
                 return redirect("ysws_review_dash")
@@ -565,7 +606,10 @@ def t2_decision(request, ship_id):
             justification=justification
         )
 
-    ping_review_checkpoint(ship, reviewer, "T2", message, feedback)
+    if decision == T2.Decision.CHANGES:
+        ping_changes_requested(ship, reviewer, feedback, tier="T2")
+    else:
+        ping_review_checkpoint(ship, reviewer, "T2", message, feedback)
 
     record_audit(request, "t2_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
@@ -582,10 +626,13 @@ def t2_decision(request, ship_id):
 @check_perms(["atlantis_site.organizer", "atlantis_site.t3_review"])
 def fraud_review_dash(request):
     ships = decorate_rows("t3", QUEUES["t3"].pending())
+    context = dash_context(request, "t3", ships)
+    ships, filters = filter_rows(request, "t3", ships)
+    context.update(filters, pending_count=len(ships))
     return render(request, "root/fraud_review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboard("t3_reviews"),
-        **dash_context(request, "t3", ships),
+        **context,
     })
 
 @staff_member_required
@@ -634,6 +681,9 @@ def fraud_review_project(request, ship_id):
         "siblings": sibling_reviews(ship),
         "journal_stats": journal_stats(journals),
         "preflight": preflight_checks(ship, subject, owner),
+        "can_lock": has_any_perm(request.user, LOCK_PERMS),
+        "can_flag": has_any_perm(request.user, FLAG_PERMS),
+        "flag_reason_max": FLAG_REASON_MAX_LENGTH,
         **review_context(request, "t3", ship, claimable=ship.status == Ship.ShipStatus.T3_QUEUE),
     })
 
@@ -793,7 +843,66 @@ def add_internal_comment(request, ship_id):
 
 @staff_member_required
 @require_POST
-@check_perms(["atlantis_site.organizer", "atlantis_site.t2_review", "atlantis_site.t3_review"])
+@check_perms(FLAG_PERMS)
+def flag_project(request, project_id):
+    """Flag a project for a closer look, or update the reason on its flag."""
+    project = get_object_or_404(Project, id=project_id, deleted=False)
+    reason = request.POST.get("reason", "").strip()
+
+    if not reason:
+        messages.error(request, "Say why the project is being flagged.")
+        return safe_redirect_back(request)
+    if len(reason) > FLAG_REASON_MAX_LENGTH:
+        messages.error(request, f"Flag reason too long (max {FLAG_REASON_MAX_LENGTH} characters).")
+        return safe_redirect_back(request)
+
+    # Written as one update so a flag raised from two tabs at once can't leave
+    # one reviewer's reason under the other's name.
+    Project.objects.filter(pk=project.pk).update(
+        flagged=True,
+        flag_reason=reason,
+        flagged_by=request.user,
+        flagged_at=timezone.now(),
+    )
+
+    record_audit(request, "flag_project", target=f"Project #{project.id} ({project.title})", metadata={
+        "project_id": project.id,
+        "project": project.title,
+        "reason": reason,
+        "previous_reason": project.flag_reason if project.flagged else "",
+    })
+
+    # No message to the owner: a flag is a note between reviewers.
+    messages.success(request, f"Flagged {project.title}.")
+    return safe_redirect_back(request)
+
+@staff_member_required
+@require_POST
+@check_perms(FLAG_PERMS)
+def unflag_project(request, project_id):
+    project = get_object_or_404(Project, id=project_id, deleted=False)
+    if not project.flagged:
+        messages.info(request, "That project isn't flagged.")
+        return safe_redirect_back(request)
+
+    Project.objects.filter(pk=project.pk).update(
+        flagged=False, flag_reason="", flagged_by=None, flagged_at=None,
+    )
+
+    record_audit(request, "unflag_project", target=f"Project #{project.id} ({project.title})", metadata={
+        "project_id": project.id,
+        "project": project.title,
+        # What the flag said, which the row no longer does.
+        "reason": project.flag_reason,
+        "flagged_by": project.flagged_by.username if project.flagged_by else "",
+    })
+
+    messages.success(request, f"Removed the flag on {project.title}.")
+    return safe_redirect_back(request)
+
+@staff_member_required
+@require_POST
+@check_perms(LOCK_PERMS)
 def lock_project(request, project_id):
     project = get_object_or_404(Project, id=project_id, deleted=False)
     
@@ -815,7 +924,7 @@ def lock_project(request, project_id):
 
 @staff_member_required
 @require_POST
-@check_perms(["atlantis_site.organizer", "atlantis_site.t2_review", "atlantis_site.t3_review"])
+@check_perms(LOCK_PERMS)
 def unlock_project(request, project_id):
     project = get_object_or_404(Project, id=project_id, deleted=False)
     

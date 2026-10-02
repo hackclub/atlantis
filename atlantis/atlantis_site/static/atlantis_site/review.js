@@ -332,6 +332,17 @@
                 }, 0);
             });
         });
+
+        // The small forms beside the decision — lock, flag — ask too. They
+        // aren't .rv-form, so the handler above never sees them.
+        document.addEventListener('submit', function (event) {
+            var form = event.target;
+            if (!form || form.classList.contains('rv-form')) return;
+            var submitter = event.submitter;
+            if (submitter && submitter.dataset.confirm && !window.confirm(submitter.dataset.confirm)) {
+                event.preventDefault();
+            }
+        });
     }
 
     function setupCounters() {

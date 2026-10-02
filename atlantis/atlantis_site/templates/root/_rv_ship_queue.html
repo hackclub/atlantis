@@ -10,6 +10,7 @@
     </div>
 
     {% include "root/_rv_queue_summary.html" %}
+    {% include "root/_rv_queue_filters.html" %}
 
     <div class="rq-table-wrap">
         <table class="rq-table">
@@ -55,13 +56,15 @@
                             <span class="rq-since">since {{ ship.created_at|date:"M j" }}</span>
                         </td>
                         <td class="rq-flags">
+                            {% if ship.project.flagged %}<span class="rv-chip rv-chip-warn" title="{{ ship.project.flag_reason }}">flagged</span>{% endif %}
                             {% if ship.project.locked %}<span class="rv-chip rv-chip-bad">locked</span>{% endif %}
+                            {% if ship.is_reship %}<span class="rq-quiet">re-ship</span>{% endif %}
                             {% if not ship.project.printablesUrl %}<span class="rv-chip rv-chip-bad">no Printables</span>{% endif %}
                             {% if ship.project.editor_name %}<span class="rq-quiet">{{ ship.project.editor_name }}</span>{% endif %}
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="7" class="rq-empty">{{ empty_text }}</td></tr>
+                    <tr><td colspan="7" class="rq-empty">{% if filtering %}Nothing in the queue matches that filter.{% else %}{{ empty_text }}{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>

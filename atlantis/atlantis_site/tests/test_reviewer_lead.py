@@ -203,7 +203,7 @@ class ReviewerLeadDeskTests(BaseTestCase):
 		self.client.force_login(self.lead)
 		response = self.client.get(reverse("review_dash"))
 		self.assertNotContains(response, reverse("t1_rollback", args=[self.t1.id]))
-		self.assertContains(response, "Can't: the ship is now under fraud review")
+		self.assertContains(response, "Can't: the ship is now under final review")
 
 	def test_desk_hides_rollback_from_reviewers(self):
 		self.client.force_login(self.reviewer)

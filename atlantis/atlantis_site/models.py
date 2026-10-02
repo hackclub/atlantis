@@ -354,6 +354,21 @@ class Project(models.Model):
 		blank=True,
 	)
 
+	# Raised by a reviewer who wants the project looked at more closely by
+	# whoever comes next. Internal only, and it decides nothing: the review
+	# desks show it and filter on it, and that is the whole of what it does.
+	# On the project rather than the ship, so it carries over to a reship.
+	flagged = models.BooleanField(default=False)
+	flag_reason = models.CharField(max_length=500, blank=True, default="")
+	flagged_by = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		related_name="flagged_projects",
+		null=True,
+		blank=True,
+	)
+	flagged_at = models.DateTimeField(null=True, blank=True)
+
 	def __str__(self):
 		return f"{self.id}: {self.title}"
 
@@ -384,7 +399,7 @@ class Ship(models.Model):
 		CHANGES_REQUESTED = "C", "Changes requested"
 		T1_QUEUE = "T1", "Under T1 Review"
 		T2_QUEUE = "T2", "Under T2 Review"
-		T3_QUEUE = "T3", "Under fraud review"
+		T3_QUEUE = "T3", "Under final review"
 		FINALIZED = "F", "Finalized"
 		
 	status = models.CharField(
@@ -449,6 +464,9 @@ class T2(models.Model):
 	class Decision(models.TextChoices):
 		RETURN_T1 = "T1", "Returned to T1 Review"
 		APPROVE = "A", "Approved"
+		# Same as a T1 request for changes: the ship waits on its owner, and
+		# their resubmission puts it back in the T1 queue, not this one.
+		CHANGES = "C", "Changes requested"
 
 	reviewed_at = models.DateTimeField(auto_now_add=True)
 	decision = models.CharField(

@@ -24,6 +24,7 @@ from ...models import (
 from ... import activity, challenge, lapse, lookout
 from ...checklists import SHIP_CHECKLIST, unticked, unticked_message
 from .lapse import account_for
+from ..admin.queue import review_links_for_project
 from .timelapse import _apply_session_payload
 from ..helpers import (
     is_valid_printables_url, is_valid_editor_model_url, get_model_info, validate_file_size,
@@ -695,6 +696,12 @@ def project_detail(request, project_id):
         # the owner: a visitor's copy says nothing about their streak.
         "journal_blocked_reason": (
             challenge.journaling_blocked_reason(user) if is_owner else ""
+        ),
+        # A reviewer who lands here while the project is waiting on a desk
+        # they work gets a way straight onto its review page. Staff only,
+        # which keeps the queries off every ordinary visitor's page load.
+        "review_links": (
+            review_links_for_project(project, user) if user.is_staff and not is_owner else []
         ),
     })
 

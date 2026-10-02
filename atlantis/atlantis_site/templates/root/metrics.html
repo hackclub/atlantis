@@ -116,6 +116,13 @@
                 <div class="stat-label">Avg credited this week</div>
                 <div class="stat-sub">logged plus savers, per person still in</div>
             </div>
+            {% if streaks.avg_completed_display %}{# absent from snapshots taken before it existed #}
+            <div class="stat-card good">
+                <div class="stat-value">{{ streaks.avg_completed_display }}</div>
+                <div class="stat-label">Avg logged by those done</div>
+                <div class="stat-sub">{{ streaks.completed_this_week }} logged their {{ streaks.weekly_hours }}h themselves, savers not counted</div>
+            </div>
+            {% endif %}
             <div class="stat-card">
                 <div class="stat-value">{{ streaks.saver_hours_this_week }}h</div>
                 <div class="stat-label">Saver hours on this week</div>
@@ -159,6 +166,7 @@
             {% include "root/_metric_chart.html" with title="Credited this week, those still in" rows=streaks.this_week empty="Nobody's in yet" %}
             {% endif %}
             {% include "root/_metric_chart.html" with title="Met each closed week" rows=streaks.survived_by_week fill_class="good" empty="No week has closed yet" %}
+            {% include "root/_metric_chart.html" with title="Logged their hours each week, with their average" rows=streaks.completed_by_week fill_class="good" empty="No week has started yet" %}
         </div>
         {% endif %}
     </section>

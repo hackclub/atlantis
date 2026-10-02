@@ -1717,6 +1717,102 @@
     color: var(--oc-on-accent);
 }
 
+/* The filter strip between the queue summary and its table. */
+.root-page .rq-filters {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.root-page .rq-filters .rq-filter {
+    flex-wrap: wrap;
+    margin-left: 0;
+}
+
+.root-page .rq-filter-count {
+    margin-left: 6px;
+    opacity: 0.7;
+    font-variant-numeric: tabular-nums;
+}
+
+.root-page .rq-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.root-page .rq-search input[type="search"] {
+    width: 220px;
+    max-width: 100%;
+    padding: 6px 10px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-shallow);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 13px;
+}
+
+.root-page .rq-search input[type="search"]:focus-visible {
+    outline: 2px solid var(--oc-tide);
+    outline-offset: 1px;
+}
+
+.root-page .rq-filter-clear {
+    color: var(--oc-ink-3);
+    font-size: 12.5px;
+}
+
+/* Lock and flag, top right of the overview panel. */
+.root-page .rv-overview-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.root-page .rv-flag-form {
+    display: flex;
+    gap: 6px;
+}
+
+.root-page .rv-flag-form input[type="text"] {
+    width: 200px;
+    padding: 6px 10px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-shallow);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 13px;
+}
+
+.root-page .rv-flag-note {
+    margin: 10px 0 0;
+    padding: 8px 12px;
+    border: 1px solid #6a5323;
+    border-radius: 8px;
+    background: var(--oc-warn-soft);
+    color: var(--oc-warn);
+    font-size: 13px;
+}
+
+@media (max-width: 720px) {
+    .root-page .rq-search {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .root-page .rq-search input[type="search"] {
+        flex: 1;
+        width: auto;
+    }
+}
+
 /* ---------- paging the decided table ---------- */
 
 .root-page .rq-pager {

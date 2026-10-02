@@ -32,7 +32,7 @@
 {% endblock %}
 
 {% block evidence %}
-    {% include "root/_rv_overview.html" with show_lock=True %}
+    {% include "root/_rv_overview.html" with show_lock=can_lock %}
     {% include "root/_rv_checks.html" %}
     {% include "root/_rv_history.html" %}
 

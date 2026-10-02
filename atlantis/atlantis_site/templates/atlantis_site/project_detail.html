@@ -139,6 +139,9 @@
                                     <button type="submit" class="ink-btn ink-btn--strong" title="get a Slack DM for every new lapse and ship">follow</button>
                                 </form>
                             {% endif %}
+                            {% for link in review_links %}
+                                <a class="ink-btn ink-btn--strong" href="{{ link.url }}" title="this project is waiting in {{ link.queue.label|lower }}">{{ link.queue.short|lower }} review &rarr;</a>
+                            {% endfor %}
                         {% else %}
                         {% comment %}
                         Live either way. When the project is ready the click opens

@@ -15,16 +15,13 @@
                 Pending Timelapse reviews
                 {% if pending_count %}<span class="rq-count">{{ pending_count }}</span>{% endif %}
             </h2>
-            <nav class="rq-filter" aria-label="Filter">
-                <a href="{% url 'timelapse_review_dash' %}"{% if not shipped_only %} aria-current="true"{% endif %}>All</a>
-                <a href="{% url 'timelapse_review_dash' %}?shipped=1"{% if shipped_only %} aria-current="true"{% endif %}>Shipped</a>
-            </nav>
             {% if has_pending %}
                 <a class="rq-start" href="{{ start_url }}" data-key="enter">Start reviewing<kbd>&crarr;</kbd></a>
             {% endif %}
         </div>
 
         {% include "root/_rv_queue_summary.html" %}
+        {% include "root/_rv_queue_filters.html" %}
 
         <div class="rq-table-wrap">
             <table class="rq-table">
@@ -63,6 +60,7 @@
                                 <span class="rv-age-{{ project.age_bucket }}">{{ project.age_display }}</span>
                             </td>
                             <td class="rq-flags">
+                                {% if project.flagged %}<span class="rv-chip rv-chip-warn" title="{{ project.flag_reason }}">flagged</span>{% endif %}
                                 {% if project.held_ships %}
                                     <span class="rv-chip rv-chip-bad">
                                         holding ship{{ project.held_ships|pluralize }}
@@ -75,7 +73,7 @@
                             </td>
                         </tr>
                     {% empty %}
-                        <tr><td colspan="7" class="rq-empty">{% if shipped_only %}No shipped projects awaiting timelapse review.{% else %}Nothing awaiting timelapse review.{% endif %}</td></tr>
+                        <tr><td colspan="7" class="rq-empty">{% if filtering %}Nothing in the queue matches that filter.{% else %}Nothing awaiting timelapse review.{% endif %}</td></tr>
                     {% endfor %}
                 </tbody>
             </table>

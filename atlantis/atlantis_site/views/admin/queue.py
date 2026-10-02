@@ -27,11 +27,12 @@ from datetime import timedelta
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Exists, OuterRef, Prefetch, Subquery
+from django.db.models import Count, Exists, OuterRef, Prefetch, Subquery
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import urlencode
 from django.views.decorators.http import require_POST
 
 from ...models import (
@@ -394,7 +395,121 @@ def decorate_rows(queue_key, items):
             row.time_spent_display = format_minutes(
                 approved_minutes_for_journals(row.project.journals.all())
             )
+
+    # Which rows are another go at a project that has shipped before, for the
+    # re-ship filter. One query for the page, not one per row.
+    if queue_key != "lookout" and rows:
+        reshipped = set(
+            Ship.objects
+            .filter(project_id__in={row.project_id for row in rows})
+            .values("project_id")
+            .annotate(n=Count("id"))
+            .filter(n__gt=1)
+            .values_list("project_id", flat=True)
+        )
+        for row in rows:
+            row.is_reship = row.project_id in reshipped
     return rows
+
+
+# ---------------------------------------------------------------- filters
+
+# The narrowings a desk's table offers, as (key, label, test). Each test reads
+# only what decorate_rows has already hung on a row, so filtering is free. The
+# timelapse desk's rows are projects and the rest are ships, hence the split.
+def _project_of(queue_key, row):
+    return row if queue_key == "lookout" else row.project
+
+
+QUEUE_FILTERS = {
+    "ship": [
+        ("unclaimed", "Unclaimed", lambda key, row: not row.claim),
+        ("overdue", "Overdue", lambda key, row: row.age_bucket == "overdue"),
+        ("flagged", "Flagged", lambda key, row: _project_of(key, row).flagged),
+        ("reship", "Re-ships", lambda key, row: row.is_reship),
+        ("locked", "Locked", lambda key, row: _project_of(key, row).locked),
+    ],
+    "lookout": [
+        # A waiting lapse on a ship holds that ship out of T1.
+        ("shipped", "Shipped", lambda key, row: bool(row.held_ships)),
+        ("unclaimed", "Unclaimed", lambda key, row: not row.claim),
+        ("overdue", "Overdue", lambda key, row: row.age_bucket == "overdue"),
+        ("flagged", "Flagged", lambda key, row: _project_of(key, row).flagged),
+    ],
+}
+
+# Longest search a desk takes. Matching is a substring test over a page that is
+# already in memory, so this is about keeping the URL sensible, not the query.
+FILTER_SEARCH_MAX_LENGTH = 100
+
+
+def filter_rows(request, queue_key, rows):
+    """Narrow a desk's decorated rows by `?filter=` and `?q=`.
+
+    Only the table is narrowed. Rows keep their place number in the whole
+    queue, and the stats above the table still describe all of it. Returns the
+    narrowed rows and the context the filter bar renders from.
+
+    `?shipped=1` is the timelapse desk's older spelling of its shipped filter,
+    and it still works so bookmarks and links in Slack keep working.
+    """
+    filters = QUEUE_FILTERS["lookout" if queue_key == "lookout" else "ship"]
+    tests = {key: test for key, _label, test in filters}
+
+    active = request.GET.get("filter", "")
+    if queue_key == "lookout" and request.GET.get("shipped") == "1":
+        active = "shipped"
+    if active not in tests:
+        active = ""
+
+    query = request.GET.get("q", "").strip()[:FILTER_SEARCH_MAX_LENGTH]
+
+    def matches(row):
+        if not query:
+            return True
+        project = _project_of(queue_key, row)
+        owner = project.owner
+        profile = getattr(owner, "hackclub_profile", None)
+        haystack = " ".join(filter(None, [
+            project.title,
+            str(project.id),
+            owner.username,
+            profile.slack_username if profile else "",
+        ])).lower()
+        return query.lower() in haystack
+
+    searched = [row for row in rows if matches(row)]
+    shown = [row for row in searched if not active or tests[active](queue_key, row)]
+
+    def querystring(filter_key):
+        params = {key: value for key, value in (("filter", filter_key), ("q", query)) if value}
+        return "?" + urlencode(params) if params else "?"
+
+    options = [{
+        "key": "", "label": "All", "count": len(searched), "active": not active,
+        "href": querystring(""),
+    }]
+    options += [
+        {
+            "key": key,
+            "label": label,
+            "count": sum(1 for row in searched if test(queue_key, row)),
+            "active": key == active,
+            "href": querystring(key),
+        }
+        for key, label, test in filters
+    ]
+    current = querystring(active)
+    return shown, {
+        "filter_options": options,
+        "active_filter": active,
+        "filter_query": query,
+        "filtering": bool(active or query),
+        "filter_search_max": FILTER_SEARCH_MAX_LENGTH,
+        # Carried onto the decided table's pager, so paging it doesn't drop
+        # the narrowing on the table above.
+        "filter_params": "&" + current[1:] if current != "?" else "",
+    }
 
 
 def decorate_lapses(lapses, sla_days):
@@ -837,7 +952,7 @@ def _review_row(queue_key, review):
         status = review.verdict
         note = ""
     else:
-        status = "approved" if review.decision == review.Decision.APPROVE else "returned"
+        status = tier_state(review)
         note = review.get_decision_display() if status == "returned" else ""
     return {
         "id": review.id,
@@ -916,6 +1031,52 @@ QUEUE_PERMS = {
     "lookout": ["atlantis_site.timelapse_review", "atlantis_site.organizer"],
 }
 
+# Who can open an item's review page, which is a little wider than who can hold
+# a claim on it: a reviewer lead reads T1 pages to roll decisions back.
+QUEUE_VIEW_PERMS = {
+    **QUEUE_PERMS,
+    "t1": QUEUE_PERMS["t1"] + ["atlantis_site.reviewer_lead"],
+}
+
+
+def can_open_queue(user, queue_key):
+    return any(user.has_perm(perm) for perm in QUEUE_VIEW_PERMS[queue_key])
+
+
+def review_links_for_project(project, user):
+    """The review pages this project is waiting on that `user` can open.
+
+    For the project page, so a reviewer who lands on a project from Slack or
+    explore can go straight to its review without finding it on a desk. Only
+    queues the project really is in right now, and never the reviewer's own
+    project on a desk that refuses those.
+    """
+    links = []
+
+    if can_open_queue(user, "lookout") and not is_own_item("lookout", project, user):
+        waiting = QUEUES["lookout"].pending().filter(pk=project.pk).exists()
+        if waiting:
+            links.append({
+                "queue": QUEUES["lookout"],
+                "url": QUEUES["lookout"].detail_url(project.id),
+            })
+
+    ship = project.ships.order_by("-created_at", "-id").first()
+    for queue_key in ("t1", "t2", "t3"):
+        if ship is None or ship.status != SHIP_STATUS_FOR[queue_key]:
+            continue
+        if not can_open_queue(user, queue_key) or is_own_item(queue_key, ship, user):
+            continue
+        # A T1 ship still waiting on its lapses isn't on the T1 desk yet, and
+        # its page turns the reviewer away until it is.
+        if not QUEUES[queue_key].pending().filter(pk=ship.pk).exists():
+            continue
+        links.append({
+            "queue": QUEUES[queue_key],
+            "url": QUEUES[queue_key].detail_url(ship.id),
+        })
+    return links
+
 
 @require_POST
 @staff_member_required
@@ -974,6 +1135,15 @@ def ship_snapshot(ship):
     }
 
 
+def tier_state(review):
+    """A T2 or T3 decision as one word or two: what the badges and tables say."""
+    if review.decision == review.Decision.APPROVE:
+        return "approved"
+    if review.decision == T2.Decision.CHANGES:
+        return "changes requested"
+    return "returned"
+
+
 def sibling_reviews(ship):
     """Where this ship stands at each tier, as one row of badges.
 
@@ -993,18 +1163,14 @@ def sibling_reviews(ship):
     latest_t2 = ship.t2_reviews.order_by("-reviewed_at", "-id").first()
     tiers.append({
         "label": "T2",
-        "state": "" if latest_t2 is None else (
-            "approved" if latest_t2.decision == T2.Decision.APPROVE else "returned"
-        ),
+        "state": "" if latest_t2 is None else tier_state(latest_t2),
         "reviewer": display_name(latest_t2.reviewer) if latest_t2 else "",
     })
 
     latest_t3 = ship.t3_reviews.order_by("-reviewed_at", "-id").first()
     tiers.append({
         "label": "T3",
-        "state": "" if latest_t3 is None else (
-            "approved" if latest_t3.decision == T3.Decision.APPROVE else "returned"
-        ),
+        "state": "" if latest_t3 is None else tier_state(latest_t3),
         "reviewer": display_name(latest_t3.reviewer) if latest_t3 else "",
     })
     return tiers
