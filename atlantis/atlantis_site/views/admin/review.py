@@ -17,7 +17,7 @@ from ...models import (
     PAYOUT_MULTIPLIER_STEP, PEARLS_PER_HOUR,
 )
 from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked_message
-from ...submissions import build_override_justification, submit_ship
+from ...submissions import build_generated_justification, build_override_justification, submit_ship
 from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
 from .queue import (
@@ -30,6 +30,9 @@ from .queue import (
 INTERNAL_COMMENT_MAX_LENGTH = 1000
 T1_FIELD_MAX_LENGTH = 1000
 T2_FIELD_MAX_LENGTH = 1000
+# Room for a long T2 justification plus the timelapse audit of a ship with many
+# Lookouts, which is what the T3 field starts out holding.
+T3_JUSTIFICATION_MAX_LENGTH = 20000
 
 TIMELAPSE_PENDING_MESSAGE = (
     "That ship's timelapses haven't finished internal review yet. It'll appear "
@@ -675,6 +678,10 @@ def fraud_review_project(request, ship_id):
         # then every Lookout on the ship with the ranges cut from it and why.
         # Nothing else shows a T3 reviewer the timelapse review in full.
         "override_justification": build_override_justification(ship),
+        # What the T3 form's justification starts out as. The reviewer edits it
+        # there, and the approval sends their version.
+        "generated_justification": build_generated_justification(ship),
+        "justification_max": T3_JUSTIFICATION_MAX_LENGTH,
         "airtable_submission": AirtableSubmission.objects.filter(ship=ship).first(),
         "owner": owner,
         "subject": subject,
@@ -695,6 +702,12 @@ def t3_decision(request, ship_id):
     reviewer = request.user
     decision = request.POST.get("decision", "").strip()
     internal_notes = request.POST.get("internal_notes", "").strip()
+    # Textareas post CRLF; the generated text, and Airtable, use LF.
+    justification = request.POST.get("justification", "").replace("\r\n", "\n").strip()
+
+    if len(justification) > T3_JUSTIFICATION_MAX_LENGTH:
+        messages.error(request, f"Justification too long (max {T3_JUSTIFICATION_MAX_LENGTH} char)")
+        return redirect("fraud_review_project", ship_id=ship_id)
 
     payout_time_raw = request.POST.get("payout_time", "0").strip()
     airtable_time_raw = request.POST.get("airtable_time", "0").strip()
@@ -750,6 +763,11 @@ def t3_decision(request, ship_id):
                         "Work through the review checklist before approving; still unchecked:",
                     ))
                     return redirect("fraud_review_project", ship_id=ship_id)
+                # HQ's guidelines make the justification required, and a blank
+                # one here would quietly send the generated text instead.
+                if not justification:
+                    messages.error(request, "The justification sent to HQ can't be empty.")
+                    return redirect("fraud_review_project", ship_id=ship_id)
                 # A shipper who never came through the HCA login has no profile
                 # row; paying them out used to be a DoesNotExist.
                 owner_profile, _ = Profile.objects.get_or_create(user=ship.project.owner)
@@ -789,6 +807,8 @@ def t3_decision(request, ship_id):
             airtable_time=airtable_time,
             payout_multiplier=payout_multiplier,
             payout_layers=payout_layers,
+            # Only an approval sends anything, so a return keeps none.
+            justification=justification if decision == T3.Decision.APPROVE else "",
         )
 
     # Outside the transaction on purpose: the ship is committed as finalized
@@ -816,6 +836,10 @@ def t3_decision(request, ship_id):
         "payout_breakdown": payout_detail,
         "new_ship_status": ship.status,
         "checklist": ticked(T3_CHECKLIST, request),
+        # Whether HQ was sent something other than what T2 and the timelapse
+        # review wrote. The text itself is on the T3 row.
+        "justification_edited": bool(t3.justification)
+            and t3.justification != build_generated_justification(ship),
         "airtable_status": submission.status if submission else "",
         "airtable_record_id": submission.record_id if submission else "",
         "airtable_error": submission.error if submission else "",

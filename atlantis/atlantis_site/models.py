@@ -531,6 +531,11 @@ class T3(models.Model):
 
 	internal_notes = models.CharField(blank=True)
 
+	# The override-hours justification as the T3 reviewer approved it, sent to
+	# Airtable in place of the generated one. Blank on returns, and on approvals
+	# from before it could be edited, which still send the generated text.
+	justification = models.TextField(blank=True)
+
 class AirtableSubmission(models.Model):
 	"""The one Airtable record a finalized ship gets, and how it went.
 

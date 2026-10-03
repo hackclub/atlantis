@@ -490,6 +490,7 @@ class T3ChecklistTests(BaseTestCase):
 			"internal_notes": "clean",
 			"payout_time": "120",
 			"airtable_time": "120",
+			"justification": "Hours match the journals.",
 		}
 		data.update(overrides)
 		return self.client.post(reverse("t3_decision", args=[self.ship.id]), data)
@@ -560,6 +561,7 @@ class T3DecisionTests(BaseTestCase):
 			"internal_notes": "clean",
 			"payout_time": "120",
 			"airtable_time": "120",
+			"justification": "Hours match the journals.",
 			**t3_checklist(),
 		}
 		data.update(overrides)

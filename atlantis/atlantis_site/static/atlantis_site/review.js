@@ -130,7 +130,7 @@
         var field = document.querySelector(selector);
         if (!field || field.value.trim()) return false;
         field.focus();
-        toast('Write the feedback first. It goes to the shipper.', 'bad');
+        toast(button.dataset.requiresMessage || 'Write the feedback first. It goes to the shipper.', 'bad');
         return true;
     }
 

@@ -179,26 +179,26 @@ def build_timelapse_audit(ship):
 
 	t2 = latest_t2(ship)
 	deductions = t2.deductions if t2 else 0
-	t3 = approving_t3(ship)
 
+	# No "Submitted hours" here: this is the text the T3 reviewer edits before
+	# they've set the hours, so build_override_justification adds that line at
+	# send time instead.
 	summary = [
 		f"Tracked by timelapse: {_display_hours(tracked // 60)}",
 		f"Removed in internal timelapse review: {_display_hours(removed // 60)}",
 		f"Deducted by T2 review: {_display_hours(deductions)}",
 	]
-	if t3:
-		summary.append(f"Submitted hours: {_hours(t3.airtable_time)}")
 
 	return "\n".join([TIMELAPSE_HEADING, *summary, "", *blocks]).strip()
 
 
-def build_override_justification(ship):
-	"""The full "Optional - Override Hours Spent Justification" for a ship.
+def build_generated_justification(ship):
+	"""The justification as the earlier reviews wrote it, before T3 edits it.
 
 	The T2 reviewer's justification comes first and is copied character for
-	character: it is their account of the hours, HQ reads this field as the
-	unified justification, and nothing here may edit or replace it. The timelapse
-	audit is appended below it.
+	character: it is their account of the hours, and nothing here may edit or
+	replace it. The timelapse audit is appended below it. This is what the T3
+	page starts the reviewer off with; only they can change it.
 
 	The latest T2 review is the one quoted — it is the decision that stands, and
 	the same one whose deductions the T3 page shows. Superseded T2 passes stay
@@ -208,6 +208,23 @@ def build_override_justification(ship):
 	original = (t2.justification if t2 else "").strip()
 	audit = build_timelapse_audit(ship)
 	return "\n\n".join(part for part in (original, audit) if part)
+
+
+def build_override_justification(ship):
+	"""The full "Optional - Override Hours Spent Justification" for a ship.
+
+	HQ reads this field as the unified justification. It is whatever the
+	approving T3 reviewer signed off on, word for word; a ship approved before
+	that could be edited sends the generated text instead. Either way the hours
+	actually submitted close it, read from the T3 row so they can't disagree
+	with the hours column.
+	"""
+	t3 = approving_t3(ship)
+	edited = (t3.justification if t3 else "").strip()
+	body = edited or build_generated_justification(ship)
+	if not t3:
+		return body
+	return "\n\n".join(part for part in (body, f"Submitted hours: {_hours(t3.airtable_time)}") if part)
 
 
 def build_fields(ship, notes=None):

@@ -37,11 +37,12 @@
     {% include "root/_rv_history.html" %}
 
     {% comment %}
-    The exact text that goes to Airtable's override-hours justification, which
-    HQ reads as the unified justification. The T2 reviewer's own words come
-    first, then every Lookout on the ship with the ranges cut out of it and the
-    reason each was cut. Shown verbatim rather than prettified: this is the only
-    place a T3 reviewer can read the whole thing before approving it.
+    Airtable's override-hours justification, which HQ reads as the unified
+    justification. Before approval this is the generated text: the T2
+    reviewer's own words, then every Lookout on the ship with the ranges cut
+    out of it and the reason each was cut. The T3 reviewer edits the copy in the
+    form, and once approved this shows what was actually sent. Verbatim rather
+    than prettified either way.
     {% endcomment %}
     <details class="rv-card" data-card="airtable" open>
         <summary>
@@ -71,7 +72,7 @@
                     <p class="rv-airtable-state">{{ airtable_submission.notes|linebreaksbr }}</p>
                 {% endif %}
             {% else %}
-                <p class="rv-airtable-state">Not submitted yet. This is the text that will be sent on approval.</p>
+                <p class="rv-airtable-state">Not submitted yet. This is the generated text; what's sent is the copy you edit under Submit Review.</p>
             {% endif %}
             {% if override_justification %}
                 <pre class="rv-airtable-justification">{{ override_justification }}</pre>
@@ -103,6 +104,19 @@
         <textarea name="internal_notes" id="rv-internal" data-mod-focus="j" rows="4" maxlength="1000" required
                   placeholder="Why this is being finalized, returned, or paid at this rate."></textarea>
         <span class="rv-counter" data-counter-for="rv-internal" data-max="1000"></span>
+    </label>
+
+    {% comment %}
+    Starts as the generated justification and is sent to HQ word for word on
+    approval. Ignored on a return. Kept to the HQ standard: someone who wasn't
+    part of the review should reach the same conclusion from it.
+    {% endcomment %}
+    <label class="rv-field">
+        <span class="rv-field-label">Justification <em>(sent to HQ)</em></span>
+        <textarea name="justification" id="rv-justification" rows="10" maxlength="{{ justification_max }}"
+                  class="rv-justification-input"
+                  placeholder="Technical features, any deflation and why, and links anyone can check.">{{ generated_justification }}</textarea>
+        <span class="rv-counter" data-counter-for="rv-justification" data-max="{{ justification_max }}"></span>
     </label>
 
     <div class="rv-field-pair">
@@ -181,7 +195,8 @@
 
     <div class="rv-verdicts rv-verdicts-three">
         <button type="submit" name="decision" value="A" class="rv-verdict rv-verdict-good"
-                data-mod-key="p" data-primary data-needs-checklist
+                data-mod-key="p" data-primary data-needs-checklist data-requires="#rv-justification"
+                data-requires-message="Write the justification first. It goes to HQ."
                 data-confirm="Finalize this ship? The pearls are paid and the record goes to HQ. This can't be undone."
                 {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
             Approve<kbd>&#8984;P</kbd>

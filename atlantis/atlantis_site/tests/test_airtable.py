@@ -15,7 +15,8 @@ from ..hca import AddressUnavailable, IdentityUnavailable, extract_birthdate
 from ..models import AirtableSubmission, AuditLog, Ship, T2, T3
 from ..submissions import (
 	FIELDS, TIMELAPSE_HEADING, NotFinalized, build_fields,
-	build_override_justification, pending_ships, submit_ship,
+	build_generated_justification, build_override_justification, pending_ships,
+	submit_ship,
 )
 from .base import (
 	BaseTestCase,
@@ -506,12 +507,17 @@ class T3FinalizationSubmitsTests(BaseTestCase):
 		patcher.start()
 		self.addCleanup(patcher.stop)
 
-	def _decide(self, decision=T3.Decision.APPROVE, ship=None):
-		return self.client.post(reverse("t3_decision", args=[(ship or self.ship).id]), {
+	def _decide(self, decision=T3.Decision.APPROVE, ship=None, justification=None):
+		ship = ship or self.ship
+		# What the page posts when the reviewer leaves the field as it loaded.
+		if justification is None:
+			justification = build_generated_justification(ship)
+		return self.client.post(reverse("t3_decision", args=[ship.id]), {
 			"decision": decision,
 			"internal_notes": "clean",
 			"payout_time": "240",
 			"airtable_time": "240",
+			"justification": justification,
 			**t3_checklist(),
 		})
 
@@ -526,6 +532,59 @@ class T3FinalizationSubmitsTests(BaseTestCase):
 			AirtableSubmission.objects.get(ship=self.ship).record_id, "recABC"
 		)
 		self.assertIn("Submitted to Airtable as recABC.", message_texts(response))
+
+	def test_the_edited_justification_is_what_hq_gets(self):
+		with patch.object(airtable, "create_record", return_value="recABC") as create:
+			self._decide(justification="Rewritten by T3.\r\nSecond line.")
+
+		fields = create.call_args[0][0]
+		self.assertEqual(
+			fields[FIELDS["override_justification"]],
+			"Rewritten by T3.\nSecond line.\n\nSubmitted hours: 4.0",
+		)
+		self.assertEqual(T3.objects.get().justification, "Rewritten by T3.\nSecond line.")
+
+	def test_a_retry_sends_the_edited_justification_too(self):
+		with patch.object(
+			airtable, "create_record", side_effect=AirtableRequestFailed("422: nope")
+		):
+			self._decide(justification="Rewritten by T3.")
+		self.ship.refresh_from_db()
+		with patch.object(airtable, "create_record", return_value="recABC") as create:
+			submit_ship(self.ship)
+		self.assertEqual(
+			create.call_args[0][0][FIELDS["override_justification"]],
+			"Rewritten by T3.\n\nSubmitted hours: 4.0",
+		)
+
+	def test_a_blank_justification_is_refused(self):
+		with patch.object(airtable, "create_record") as create:
+			response = self._decide(justification="   ")
+		create.assert_not_called()
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.T3_QUEUE)
+		self.assertFalse(T3.objects.exists())
+		self.assertIn("The justification sent to HQ can't be empty.", message_texts(response))
+
+	def test_an_over_long_justification_is_refused(self):
+		response = self._decide(justification="x" * 20001)
+		self.assertFalse(T3.objects.exists())
+		self.assertIn("Justification too long (max 20000 char)", message_texts(response))
+
+	def test_a_return_keeps_no_justification(self):
+		self._decide(decision=T3.Decision.RETURN_T2, justification="")
+		self.assertEqual(T3.objects.get().justification, "")
+
+	def test_audit_log_says_whether_it_was_edited(self):
+		with patch.object(airtable, "create_record", return_value="recABC"):
+			self._decide()
+		self.assertFalse(AuditLog.objects.get(action="t3_decision").metadata["justification_edited"])
+
+		ship = make_ship(self.project, status=Ship.ShipStatus.T3_QUEUE, journal_minutes=())
+		with patch.object(airtable, "create_record", return_value="recDEF"):
+			self._decide(ship=ship, justification="Rewritten by T3.")
+		log = AuditLog.objects.filter(action="t3_decision").latest("id")
+		self.assertTrue(log.metadata["justification_edited"])
 
 	def test_returns_submit_nothing(self):
 		for decision in (T3.Decision.RETURN_T1, T3.Decision.RETURN_T2):
@@ -616,6 +675,23 @@ class FraudReviewJustificationVisibilityTests(BaseTestCase):
 		self.assertEqual(
 			response.context["override_justification"],
 			build_override_justification(self.ship),
+		)
+
+	def test_the_form_starts_with_the_generated_justification(self):
+		response = self.client.get(reverse("fraud_review_project", args=[self.ship.id]))
+		generated = build_generated_justification(self.ship)
+		self.assertEqual(response.context["generated_justification"], generated)
+		self.assertContains(response, 'name="justification"')
+		self.assertIn("Checked against the lapses.", generated)
+
+	def test_a_ship_approved_before_editing_existed_sends_the_generated_text(self):
+		T3.objects.create(
+			ship=self.ship, reviewer=self.reviewer, decision=T3.Decision.APPROVE,
+			payout_time=60, airtable_time=60,
+		)
+		self.assertEqual(
+			build_override_justification(self.ship),
+			build_generated_justification(self.ship) + "\n\nSubmitted hours: 1.0",
 		)
 
 	def test_page_shows_the_submission_state_once_there_is_one(self):

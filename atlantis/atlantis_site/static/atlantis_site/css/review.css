@@ -932,6 +932,12 @@
     color: var(--oc-ink-2);
 }
 
+.root-page .rv-form textarea.rv-justification-input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
 .root-page .rv-airtable-justification {
     margin: 0;
     padding: 12px 14px;
