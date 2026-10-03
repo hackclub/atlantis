@@ -689,6 +689,13 @@ a.ink-btn {
     font-size: 1.5cqw;
 }
 
+.lapse-actions {
+    display: flex;
+    gap: 0.6em;
+    margin: 0.15em 0 0;
+    font-size: 1.5cqw;
+}
+
 /* ---------- writing the next lapse, in its own space ---------- */
 
 .lapse--compose {
@@ -1262,6 +1269,7 @@ body[data-mode="flow"] .page--blank {
 }
 
 body[data-mode="flow"] .lapse-meta,
+body[data-mode="flow"] .lapse-actions,
 body[data-mode="flow"] .ship-note,
 body[data-mode="flow"] .picker-btn,
 body[data-mode="flow"] .page-actions--minor,

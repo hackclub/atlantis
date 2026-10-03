@@ -967,7 +967,104 @@ def create_journal(request, project_id):
 
     messages.success(request, "Lapse added successfully")
     return redirect("project_detail", project_id=project_id)
-    
+
+
+def _changeable_journal(request, project_id, journal_id):
+    """The owner's lapse, if it can still be edited or torn out.
+
+    Returns (journal, None) or (None, error message). A lapse a ship has
+    claimed is what a reviewer is looking at — or already signed off and paid
+    for — so it is frozen from the moment it ships, rejected or not.
+    """
+    project = get_object_or_404(Project, id=project_id, owner=request.user, deleted=False)
+    journal = get_object_or_404(Journal, id=journal_id, project=project)
+
+    if project.locked:
+        return None, "You cannot change a lapse on a locked project."
+    if journal.ship_id is not None:
+        return None, "This lapse has already been shipped and can't be changed."
+    return journal, None
+
+
+@login_required
+@require_POST
+@rate_limit("edit_journal", 2)
+def edit_journal(request, project_id, journal_id):
+    """Fix a lapse's title, photo or STL. The timelapses behind it stay put:
+    they are its hours, and swapping them is deleting it and taping in again."""
+    journal, error = _changeable_journal(request, project_id, journal_id)
+    if error:
+        messages.error(request, error)
+        return redirect("project_detail", project_id=project_id)
+
+    title = request.POST.get("title", "").strip()
+    if not title:
+        messages.error(request, "Your lapse needs a title.")
+        return redirect("project_detail", project_id=project_id)
+    if too_long(title, Journal, "title"):
+        messages.error(request, f"Lapse title too long (max {field_max_length(Journal, 'title')} chars)")
+        return redirect("project_detail", project_id=project_id)
+
+    # Both files are optional here: leaving one empty keeps what's there.
+    image_file = request.FILES.get("image")
+    model_file = request.FILES.get("STL")
+
+    if (image_file or model_file) and not settings.ALLOW_JOURNALING and not request.user.has_perm("atlantis_site.organizer"):
+        messages.error(request, "File uploads are currently disabled.")
+        return redirect("project_detail", project_id=project_id)
+
+    image_ext = None
+    if image_file:
+        if not validate_file_size(image_file, 5):
+            messages.error(request, "Max file size for images is 5MB.")
+            return redirect("project_detail", project_id=project_id)
+        image_ext = sniff_image_extension(image_file)
+        if not image_ext:
+            messages.error(request, "Uploaded image must be a valid PNG, JPEG, GIF, or WEBP file.")
+            return redirect("project_detail", project_id=project_id)
+
+    if model_file:
+        if not os.path.basename(model_file.name).lower().endswith(".stl"):
+            messages.error(request, "Uploaded model must be an STL file.")
+            return redirect("project_detail", project_id=project_id)
+        if not validate_file_size(model_file, 300):
+            messages.error(request, "Max file size for STL files is 300MB.")
+            return redirect("project_detail", project_id=project_id)
+
+    journal.title = title
+    if image_file:
+        journal.image_url = default_storage.save(random_storage_key("images", image_ext), image_file)
+    if model_file:
+        journal.model_url = default_storage.save(random_storage_key("models", ".stl"), model_file)
+    journal.save()
+
+    messages.success(request, "Lapse updated.")
+    return redirect("project_detail", project_id=project_id)
+
+
+@login_required
+@require_POST
+@rate_limit("delete_journal", 2)
+def delete_journal(request, project_id, journal_id):
+    """Tear a lapse out of the book, giving its footage back.
+
+    A Lookout row is ours from the moment it started recording, so it stays
+    and simply comes loose (the foreign key is SET_NULL) to be attached again.
+    A Lapse row only exists because of the attach, and its lapse_id is unique —
+    left behind it would hold the footage hostage — so it goes with the lapse.
+    """
+    journal, error = _changeable_journal(request, project_id, journal_id)
+    if error:
+        messages.error(request, error)
+        return redirect("project_detail", project_id=project_id)
+
+    with transaction.atomic():
+        journal.timelapses.filter(source=Timelapse.Source.LAPSE).delete()
+        journal.delete()
+
+    messages.success(request, "Lapse deleted.")
+    return redirect("project_detail", project_id=project_id)
+
 @login_required
 @rate_limit("ship_project", 3)
 def ship_project(request, project_id):

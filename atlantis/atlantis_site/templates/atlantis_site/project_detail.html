@@ -249,6 +249,12 @@
                                     <div class="lapse-body">
                                         <h3 class="lapse-title">{{ entry.journal.title }}</h3>
                                         <p class="lapse-meta">{{ entry.journal.tracked_display }} &middot; {{ entry.journal.created_at|date:"M j, Y" }}</p>
+                                        {% if is_owner and not project.locked and not entry.journal.ship_id %}
+                                            <p class="lapse-actions">
+                                                <button type="button" class="ink-link" data-slip="slip-lapse-edit-{{ entry.journal.id }}">edit</button>
+                                                <button type="button" class="ink-link ink-link--danger" data-slip="slip-lapse-delete-{{ entry.journal.id }}">delete</button>
+                                            </p>
+                                        {% endif %}
                                     </div>
                                 </li>
                             {% endif %}
@@ -425,6 +431,54 @@
                 </div>
             </form>
         </div>
+
+        {% if not project.locked %}
+        {% comment %}
+        One pair per lapse no ship has claimed yet. Shipped lapses are frozen,
+        so they get neither the slips nor the links that open them.
+        {% endcomment %}
+        {% for journal in journals %}
+            {% if not journal.ship_id %}
+            <div class="slip" id="slip-lapse-edit-{{ journal.id }}" hidden>
+                <h2>Edit lapse</h2>
+                <form action="{% url 'edit_journal' project.id journal.id %}" method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    <label>
+                        Title
+                        <input type="text" name="title" maxlength="100" value="{{ journal.title }}" required>
+                    </label>
+                    <label>
+                        Replace photo
+                        <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp">
+                        <span class="slip-hint">Leave empty to keep the current one. Max 5MB.</span>
+                    </label>
+                    <label>
+                        Replace STL
+                        <input type="file" name="STL" accept=".stl">
+                        <span class="slip-hint">Leave empty to keep the current one. Max 300MB.</span>
+                    </label>
+                    <p class="slip-note">The timelapses behind this lapse can't be swapped. To change them, delete the lapse and tape it in again.</p>
+                    <div class="slip-actions">
+                        <button type="button" data-close>Cancel</button>
+                        <button type="submit">Save</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="slip" id="slip-lapse-delete-{{ journal.id }}" hidden>
+                <h2>Delete lapse</h2>
+                <p>Delete &ldquo;{{ journal.title }}&rdquo;? Its {{ journal.tracked_display }} of timelapses come off this project and can be taped into a new lapse. This cannot be undone.</p>
+                <form action="{% url 'delete_journal' project.id journal.id %}" method="post">
+                    {% csrf_token %}
+                    <div class="slip-actions">
+                        <button type="button" data-close>Cancel</button>
+                        <button type="submit" class="is-danger">Delete</button>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+        {% endfor %}
+        {% endif %}
 
         {% include "atlantis_site/_timelapse_picker.html" %}
 

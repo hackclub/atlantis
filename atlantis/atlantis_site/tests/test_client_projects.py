@@ -627,6 +627,155 @@ class CreateJournalTests(BaseTestCase):
 		)
 
 
+@override_settings(ALLOW_JOURNALING=True)
+class EditJournalTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("editor")
+		self.project = make_project(self.user)
+		self.journal = make_journal(self.project, title="Old title")
+		self.client.force_login(self.user)
+
+	def _edit(self, journal=None, **data):
+		journal = journal or self.journal
+		data.setdefault("title", "New title")
+		data = {k: v for k, v in data.items() if v is not None}
+		return self.client.post(
+			reverse("edit_journal", args=[journal.project_id, journal.id]), data
+		)
+
+	def test_get_not_allowed(self):
+		response = self.client.get(reverse("edit_journal", args=[self.project.id, self.journal.id]))
+		self.assertEqual(response.status_code, 405)
+
+	def test_updates_title_and_keeps_files(self):
+		self._edit()
+		self.journal.refresh_from_db()
+		self.assertEqual(self.journal.title, "New title")
+		self.assertEqual(self.journal.image_url, "https://example.com/image.png")
+		self.assertEqual(self.journal.model_url, "https://example.com/model.stl")
+
+	def test_replaces_uploaded_files(self):
+		self._edit(image=image_upload(), STL=stl_upload())
+		self.journal.refresh_from_db()
+		self.assertTrue(self.journal.image_url.startswith("images/"))
+		self.assertTrue(self.journal.model_url.startswith("models/"))
+
+	def test_time_is_untouched(self):
+		self._edit()
+		self.assertEqual(Journal.objects.get().tracked_minutes, 60)
+
+	def test_title_required(self):
+		response = self._edit(title="  ")
+		self.journal.refresh_from_db()
+		self.assertEqual(self.journal.title, "Old title")
+		self.assertIn("Your lapse needs a title.", message_texts(response))
+
+	def test_rejects_non_stl_model(self):
+		response = self._edit(STL=stl_upload(name="model.obj"))
+		self.journal.refresh_from_db()
+		self.assertEqual(self.journal.title, "Old title")
+		self.assertIn("Uploaded model must be an STL file.", message_texts(response))
+
+	def test_rejects_fake_image(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		response = self._edit(image=SimpleUploadedFile("fake.png", b"just some text"))
+		self.journal.refresh_from_db()
+		self.assertEqual(self.journal.title, "Old title")
+		self.assertIn(
+			"Uploaded image must be a valid PNG, JPEG, GIF, or WEBP file.",
+			message_texts(response),
+		)
+
+	def test_cannot_edit_other_users_journal(self):
+		other = make_journal(make_project(make_user("other")), title="Theirs")
+		self.assertEqual(self._edit(journal=other).status_code, 404)
+		other.refresh_from_db()
+		self.assertEqual(other.title, "Theirs")
+
+	def test_cannot_edit_shipped_journal(self):
+		ship = Ship.objects.create(project=self.project, status=Ship.ShipStatus.REJECTED)
+		self.journal.ship = ship
+		self.journal.save()
+		response = self._edit()
+		self.journal.refresh_from_db()
+		self.assertEqual(self.journal.title, "Old title")
+		self.assertIn("This lapse has already been shipped and can't be changed.", message_texts(response))
+
+	def test_cannot_edit_on_locked_project(self):
+		self.project.locked = True
+		self.project.save()
+		self._edit()
+		self.journal.refresh_from_db()
+		self.assertEqual(self.journal.title, "Old title")
+
+
+class DeleteJournalTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("deleter")
+		self.project = make_project(self.user)
+		self.client.force_login(self.user)
+
+	def _delete(self, journal):
+		return self.client.post(reverse("delete_journal", args=[journal.project_id, journal.id]))
+
+	def test_deletes_journal(self):
+		journal = make_journal(self.project)
+		response = self._delete(journal)
+		self.assertFalse(Journal.objects.exists())
+		self.assertIn("Lapse deleted.", message_texts(response))
+
+	def test_lookout_footage_is_freed_to_attach_again(self):
+		journal = make_journal(self.project, time_spent=0)
+		lookout = make_lookout(self.project, journal=journal)
+		self._delete(journal)
+		lookout.refresh_from_db()
+		self.assertIsNone(lookout.journal)
+		self.assertTrue(lookout.is_attachable)
+
+	def test_lapse_rows_go_with_it(self):
+		"""Left behind, the row's unique lapse_id would block taping it in again."""
+		journal = make_journal(self.project)
+		self._delete(journal)
+		self.assertFalse(Timelapse.objects.filter(source=Timelapse.Source.LAPSE).exists())
+
+	def test_cannot_delete_other_users_journal(self):
+		other = make_journal(make_project(make_user("other")))
+		self.assertEqual(self._delete(other).status_code, 404)
+		self.assertTrue(Journal.objects.filter(pk=other.pk).exists())
+
+	def test_cannot_delete_shipped_journal(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(60,))
+		journal = ship.journals.get()
+		response = self._delete(journal)
+		self.assertTrue(Journal.objects.filter(pk=journal.pk).exists())
+		self.assertIn("This lapse has already been shipped and can't be changed.", message_texts(response))
+
+	def test_cannot_delete_on_locked_project(self):
+		journal = make_journal(self.project)
+		self.project.locked = True
+		self.project.save()
+		self._delete(journal)
+		self.assertTrue(Journal.objects.filter(pk=journal.pk).exists())
+
+	def test_detail_offers_controls_only_on_unshipped_lapses(self):
+		loose = make_journal(self.project)
+		shipped = make_ship(self.project, journal_minutes=(60,)).journals.get()
+		body = self.client.get(reverse("project_detail", args=[self.project.id])).content.decode()
+		self.assertIn(reverse("delete_journal", args=[self.project.id, loose.id]), body)
+		self.assertIn(reverse("edit_journal", args=[self.project.id, loose.id]), body)
+		self.assertNotIn(reverse("delete_journal", args=[self.project.id, shipped.id]), body)
+		self.assertNotIn(reverse("edit_journal", args=[self.project.id, shipped.id]), body)
+
+	def test_visitor_gets_no_controls(self):
+		journal = make_journal(self.project)
+		self.client.force_login(make_user("visitor"))
+		body = self.client.get(reverse("project_detail", args=[self.project.id])).content.decode()
+		self.assertNotIn(reverse("delete_journal", args=[self.project.id, journal.id]), body)
+		self.assertNotIn(reverse("edit_journal", args=[self.project.id, journal.id]), body)
+
+
 class ShipProjectTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()
