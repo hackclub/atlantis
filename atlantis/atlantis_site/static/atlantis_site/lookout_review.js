@@ -760,6 +760,25 @@
         return true;
     }
 
+    /* C and X act on the recording the player key would: cut from (or to)
+     * the playhead, or open the remove-time form there. */
+    function handleEditKey(event) {
+        var key = event.key.toLowerCase();
+        if (key !== 'c' && key !== 'x') return false;
+        var video = playerFor(event.target);
+        var el = video ? video.closest('[data-recording]') : null;
+        var rec = el ? recordings[el.dataset.recordingId] : null;
+        if (!rec || !rec.editable || !rec.el) return false;
+        activeVideo = video;
+
+        if (key === 'c') {
+            cutHere(rec);
+        } else {
+            openAdd(rec);
+        }
+        return true;
+    }
+
     function addForm(rec) {
         return {
             root: rec.el.querySelector('[data-add-form]'),
@@ -850,7 +869,7 @@
      */
     function cutHere(rec) {
         var at = Math.round(rec.currentTime);
-        var button = rec.el.querySelector('[data-cut-here]');
+        var button = rec.el.querySelector('[data-cut-label]');
         if (rec.pendingCut === null) {
             rec.pendingCut = at;
             if (button) button.textContent = 'Cut to here';
@@ -878,7 +897,7 @@
         el.querySelector('[data-cut-here]').addEventListener('click', function () { cutHere(rec); });
         el.querySelector('[data-add-cancel]').addEventListener('click', function () {
             rec.pendingCut = null;
-            el.querySelector('[data-cut-here]').textContent = 'Cut from here';
+            el.querySelector('[data-cut-label]').textContent = 'Cut from here';
             closeAdd(rec);
         });
         el.querySelector('[data-add-confirm]').addEventListener('click', function () { confirmAdd(rec); });
@@ -1167,7 +1186,8 @@
                 return;
             }
 
-            if (!event.shiftKey && !isTyping(event.target) && handlePlaybackKey(event)) {
+            if (!event.shiftKey && !isTyping(event.target) &&
+                    (handlePlaybackKey(event) || handleEditKey(event))) {
                 event.preventDefault();
             }
         });
