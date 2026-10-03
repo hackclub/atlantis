@@ -69,6 +69,58 @@ T1_CHECKLIST = [
     },
 ]
 
+# What HQ's YSWS submission guidelines ask of a record before it goes into the
+# unified database, as it applies to an Atlantis ship: the Printables listing
+# is the Code URL, the editor model the Playable URL. A record that fails one of
+# these gets the program fined at spot-check, and approving is what sends it.
+T3_CHECKLIST = [
+    {
+        "key": "eligible",
+        "label": "Eligible for the unified database",
+        "detail": "Not a school assignment, not paid Hack Club work, and not a duplicate of a project already submitted. An update counts only the new work.",
+    },
+    {
+        "key": "original",
+        "label": "Original work, no signs of fraud",
+        "detail": "Not copied or a lightly modified remix, and the journals and timelapses show real incremental work, not something manufactured after the fact.",
+    },
+    {
+        "key": "code_url",
+        "label": "Printables listing is public and open source",
+        "detail": "It opens without logging in and has an open source license set.",
+    },
+    {
+        "key": "reproducible",
+        "label": "Someone else could rebuild it from the listing",
+        "detail": "Modifiable CAD (.STEP, .F3D, not just .STL), plus a BOM and wiring diagram if it has electronics, and any build steps beyond printing.",
+    },
+    {
+        "key": "playable_url",
+        "label": "The editor model link works",
+        "detail": "It downloads or opens publicly, and it's this project.",
+    },
+    {
+        "key": "screenshot",
+        "label": "The screenshot shows the actual project",
+        "detail": "A still image of the model or the print. No GIFs, no video.",
+    },
+    {
+        "key": "description",
+        "label": "The description says what it is and what it's for",
+        "detail": "A clear, short summary of the project's purpose and how it works.",
+    },
+    {
+        "key": "hours",
+        "label": "Airtable time is hours you're confident are real",
+        "detail": "Proportional to the project's complexity. When in doubt, deflate; AI-generated work counts only the genuine effort around it.",
+    },
+    {
+        "key": "justification",
+        "label": "The justification would convince someone who wasn't here",
+        "detail": "Specific technical features, a reason for any deflation, and evidence anyone can go check. Not \"looks good\".",
+    },
+]
+
 FIELD = "checklist"
 
 

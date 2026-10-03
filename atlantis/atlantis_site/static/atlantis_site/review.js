@@ -139,7 +139,7 @@
      *
      * Same shape as firePrerequisite above and the same reason for existing:
      * an approval from somebody who hasn't opened the files isn't a review.
-     * t1_decision refuses one server-side too — this is so the button says so
+     * t1_decision and t3_decision refuse one server-side too — this is so the button says so
      * before the round trip rather than after it.
      *
      * A verdict disabled for some other reason (a locked project) was

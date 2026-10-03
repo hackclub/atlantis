@@ -9,7 +9,7 @@ from .. import challenge
 from ..models import (
 	AuditLog, InternalComment, Ship, T1, T2, T3, TimelapseAnnotation,
 )
-from ..checklists import T1_CHECKLIST
+from ..checklists import T1_CHECKLIST, T3_CHECKLIST
 from .base import (
 	BaseTestCase,
 	approve_timelapse,
@@ -21,6 +21,7 @@ from .base import (
 	make_user,
 	message_texts,
 	t1_checklist,
+	t3_checklist,
 )
 
 
@@ -469,6 +470,81 @@ class T2DecisionTests(BaseTestCase):
 		self.assertEqual(log.metadata["new_ship_status"], Ship.ShipStatus.T3_QUEUE)
 
 
+class T3ChecklistTests(BaseTestCase):
+	"""HQ's submission guidelines, confirmed before a ship goes to Airtable.
+
+	The page disables Approve until they're ticked; this is the same gate for a
+	post that didn't come from the page.
+	"""
+
+	def setUp(self):
+		super().setUp()
+		self.reviewer = grant_perms(make_user("t3rev"), "t3_review")
+		self.client.force_login(self.reviewer)
+		self.author = make_user("author", slack_id="U0AUTHOR", layers=10)
+		self.ship = make_ship(make_project(self.author, shippable=True), status=Ship.ShipStatus.T3_QUEUE)
+
+	def _decide(self, **overrides):
+		data = {
+			"decision": T3.Decision.APPROVE,
+			"internal_notes": "clean",
+			"payout_time": "120",
+			"airtable_time": "120",
+		}
+		data.update(overrides)
+		return self.client.post(reverse("t3_decision", args=[self.ship.id]), data)
+
+	def test_approval_without_the_checklist_is_refused(self):
+		response = self._decide()
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.T3_QUEUE)
+		self.assertFalse(T3.objects.exists())
+		self.author.hackclub_profile.refresh_from_db()
+		self.assertEqual(self.author.hackclub_profile.layers, 10)
+		self.assertIn(
+			"Work through the review checklist before approving",
+			" ".join(message_texts(response)),
+		)
+
+	def test_a_half_ticked_checklist_is_refused_and_names_the_rest(self):
+		half = [item["key"] for item in T3_CHECKLIST[:4]]
+		response = self._decide(checklist=half)
+		self.assertFalse(T3.objects.exists())
+		text = " ".join(message_texts(response))
+		for item in T3_CHECKLIST[4:]:
+			self.assertIn(item["label"], text)
+
+	def test_an_unrecognised_tick_is_not_a_tick(self):
+		self._decide(checklist=["made_it_up"])
+		self.assertFalse(T3.objects.exists())
+
+	def test_a_full_checklist_approves(self):
+		self._decide(**t3_checklist())
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.FINALIZED)
+
+	def test_returns_are_never_gated_by_it(self):
+		self._decide(decision=T3.Decision.RETURN_T2)
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.T2_QUEUE)
+
+	def test_a_ship_out_of_the_queue_is_told_that_not_the_checklist(self):
+		Ship.objects.filter(pk=self.ship.pk).update(status=Ship.ShipStatus.T2_QUEUE)
+		response = self._decide()
+		self.assertIn("ship not in T3 queue", message_texts(response))
+
+	def test_what_was_ticked_is_audited(self):
+		self._decide(**t3_checklist())
+		log = AuditLog.objects.get(action="t3_decision")
+		self.assertEqual(log.metadata["checklist"], [item["key"] for item in T3_CHECKLIST])
+
+	def test_the_checklist_is_on_the_review_page(self):
+		response = self.client.get(reverse("fraud_review_project", args=[self.ship.id]))
+		self.assertEqual(response.context["t3_checklist"], T3_CHECKLIST)
+		for item in T3_CHECKLIST:
+			self.assertContains(response, escape(item["label"]))
+
+
 class T3DecisionTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()
@@ -484,6 +560,7 @@ class T3DecisionTests(BaseTestCase):
 			"internal_notes": "clean",
 			"payout_time": "120",
 			"airtable_time": "120",
+			**t3_checklist(),
 		}
 		data.update(overrides)
 		ship = ship or self.ship

@@ -16,7 +16,7 @@ from ...models import (
     PAYOUT_MULTIPLIER_DEFAULT, PAYOUT_MULTIPLIER_MAX, PAYOUT_MULTIPLIER_MIN,
     PAYOUT_MULTIPLIER_STEP, PEARLS_PER_HOUR,
 )
-from ...checklists import T1_CHECKLIST, ticked, unticked, unticked_message
+from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked_message
 from ...submissions import build_override_justification, submit_ship
 from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
@@ -684,6 +684,7 @@ def fraud_review_project(request, ship_id):
         "can_lock": has_any_perm(request.user, LOCK_PERMS),
         "can_flag": has_any_perm(request.user, FLAG_PERMS),
         "flag_reason_max": FLAG_REASON_MAX_LENGTH,
+        "t3_checklist": T3_CHECKLIST,
         **review_context(request, "t3", ship, claimable=ship.status == Ship.ShipStatus.T3_QUEUE),
     })
 
@@ -740,6 +741,15 @@ def t3_decision(request, ship_id):
                 ship.status = Ship.ShipStatus.T2_QUEUE
                 message = "returned to T2 reviewers"
             case T3.Decision.APPROVE:
+                # Approving is what sends the record to HQ, so it is held to
+                # their submission guidelines; a return is never gated.
+                missing = unticked(T3_CHECKLIST, request)
+                if missing:
+                    messages.error(request, unticked_message(
+                        missing,
+                        "Work through the review checklist before approving; still unchecked:",
+                    ))
+                    return redirect("fraud_review_project", ship_id=ship_id)
                 # A shipper who never came through the HCA login has no profile
                 # row; paying them out used to be a DoesNotExist.
                 owner_profile, _ = Profile.objects.get_or_create(user=ship.project.owner)
@@ -805,6 +815,7 @@ def t3_decision(request, ship_id):
         # record of how a split payout was arrived at.
         "payout_breakdown": payout_detail,
         "new_ship_status": ship.status,
+        "checklist": ticked(T3_CHECKLIST, request),
         "airtable_status": submission.status if submission else "",
         "airtable_record_id": submission.record_id if submission else "",
         "airtable_error": submission.error if submission else "",

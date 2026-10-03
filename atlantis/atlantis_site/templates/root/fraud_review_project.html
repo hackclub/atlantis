@@ -20,7 +20,7 @@
 {% endblock %}
 
 {% block shortcut_rows %}
-    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>P</kbd></dt><dd>Approve: finalizes, pays pearls, sends the record to HQ</dd>
+    <dt><kbd>&#8984;</kbd>&thinsp;<kbd>P</kbd></dt><dd>Approve: finalizes, pays pearls, sends the record to HQ (needs the checklist ticked)</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>E</kbd></dt><dd>Return to T1</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>T</kbd></dt><dd>Return to T2</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Submit the current draft</dd>
@@ -156,9 +156,32 @@
         <p class="rv-payout-note">Scales the pearls only. The hours sent to Airtable are unchanged.</p>
     </div>
 
+    {% comment %}
+    HQ's YSWS submission guidelines, as they apply to the record this approval
+    sends. Approve stays disabled until all of them are ticked and t3_decision
+    refuses an approval without them; returning to T1 or T2 is never gated.
+    The list itself is T3_CHECKLIST in checklists.py.
+    {% endcomment %}
+    <fieldset class="rv-checklist" data-checklist>
+        <legend>Before you approve<span class="rv-checklist-left" data-checklist-count></span></legend>
+        <ul>
+            {% for item in t3_checklist %}
+                <li>
+                    <label>
+                        <input type="checkbox" name="checklist" value="{{ item.key }}" data-checklist-box>
+                        <span>
+                            <span class="rv-checklist-label">{{ item.label }}</span>
+                            <span class="rv-checklist-detail">{{ item.detail }}</span>
+                        </span>
+                    </label>
+                </li>
+            {% endfor %}
+        </ul>
+    </fieldset>
+
     <div class="rv-verdicts rv-verdicts-three">
         <button type="submit" name="decision" value="A" class="rv-verdict rv-verdict-good"
-                data-mod-key="p" data-primary
+                data-mod-key="p" data-primary data-needs-checklist
                 data-confirm="Finalize this ship? The pearls are paid and the record goes to HQ. This can't be undone."
                 {% if ship.project.locked %}disabled title="Can't review a locked project."{% endif %}>
             Approve<kbd>&#8984;P</kbd>

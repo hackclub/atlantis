@@ -26,6 +26,7 @@ from .base import (
 	make_ship,
 	make_timelapse,
 	make_user,
+	t3_checklist,
 	message_texts,
 )
 
@@ -511,6 +512,7 @@ class T3FinalizationSubmitsTests(BaseTestCase):
 			"internal_notes": "clean",
 			"payout_time": "240",
 			"airtable_time": "240",
+			**t3_checklist(),
 		})
 
 	def test_approval_submits_the_project(self):

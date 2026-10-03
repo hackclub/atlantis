@@ -15,7 +15,7 @@ from cryptography.fernet import Fernet
 from PIL import Image
 
 from .. import weeks
-from ..checklists import FIELD as CHECKLIST_FIELD, SHIP_CHECKLIST, T1_CHECKLIST
+from ..checklists import FIELD as CHECKLIST_FIELD, SHIP_CHECKLIST, T1_CHECKLIST, T3_CHECKLIST
 from ..models import (
 	Item, Journal, Timelapse, Profile, Project, Ship, TimelapseRemoval,
 	TimelapseReview,
@@ -256,7 +256,7 @@ def make_ship(project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(120, 12
 def ticked(checklist):
 	"""POST data with every box on `checklist` ticked.
 
-	Both checklists are refused unless all of them are, so almost every test
+	Every checklist is refused unless all of them are, so almost every test
 	that ships or approves needs this; a test about the checklist itself sends
 	its own subset instead.
 	"""
@@ -269,6 +269,10 @@ def ship_checklist():
 
 def t1_checklist():
 	return ticked(T1_CHECKLIST)
+
+
+def t3_checklist():
+	return ticked(T3_CHECKLIST)
 
 
 def image_upload(name="test.png", fmt="PNG", size=(4, 4)):
