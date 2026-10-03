@@ -795,8 +795,8 @@ class ShipProjectTests(BaseTestCase):
 		self.client.get(reverse("ship_project", args=[self.project.id]))
 		self.assertEqual(Ship.objects.count(), 0)
 
-	def test_first_ship_requires_more_than_120_minutes(self):
-		make_journal(self.project, time_spent=120)
+	def test_first_ship_requires_119_minutes(self):
+		make_journal(self.project, time_spent=118)
 		response = self._ship()
 		self.assertEqual(Ship.objects.count(), 0)
 		self.assertIn(
@@ -804,8 +804,8 @@ class ShipProjectTests(BaseTestCase):
 			message_texts(response),
 		)
 
-	def test_first_ship_with_121_minutes_succeeds(self):
-		journal = make_journal(self.project, time_spent=121)
+	def test_first_ship_with_119_minutes_succeeds(self):
+		journal = make_journal(self.project, time_spent=119)
 		response = self._ship()
 		self.assertIn(
 			f'Successfully shipped project "{self.project.title}"!', message_texts(response)
@@ -879,9 +879,9 @@ class ShipProjectTests(BaseTestCase):
 			message_texts(response),
 		)
 
-	def test_reship_requires_more_than_120_new_minutes(self):
+	def test_reship_requires_119_new_minutes(self):
 		make_ship(self.project, status=Ship.ShipStatus.FINALIZED)
-		make_journal(self.project, time_spent=120)
+		make_journal(self.project, time_spent=118)
 		response = self._ship()
 		self.assertEqual(Ship.objects.count(), 1)
 		self.assertIn(

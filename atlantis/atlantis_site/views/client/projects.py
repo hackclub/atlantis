@@ -1134,8 +1134,10 @@ def ship_project(request, project_id):
     )
 
     if not bypass_requirements and not retrying_rejection and not resubmitting:
+        # Two hours, less a minute of grace: tracked time is floored to the
+        # minute, and 119.5 minutes already reads as "2h" on the project page.
         unassigned_time = tracked_minutes_for_journals(unassigned_journals)
-        if unassigned_time <= 120:
+        if unassigned_time < 119:
             messages.error(
                 request,
                 "Can't ship again without at least 2 hours of work!"
