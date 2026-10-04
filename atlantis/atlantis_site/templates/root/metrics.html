@@ -299,6 +299,11 @@
                 <div class="stat-label">Total ships</div>
                 <div class="stat-sub">{{ ships.last_7 }} in last 7 days</div>
             </div>
+            <div class="stat-card accent">
+                <div class="stat-value">{{ ships.shipped_hours|default:0 }}h</div>
+                <div class="stat-label">Hours shipped</div>
+                <div class="stat-sub">{{ ships.shipped_devlogs|default:0 }} lapse{{ ships.shipped_devlogs|pluralize }} &middot; {{ ships.finalized_hours|default:0 }}h finalized</div>
+            </div>
             <div class="stat-card warn">
                 <div class="stat-value">{{ ships.backlog_total }}</div>
                 <div class="stat-label">In queue right now</div>

@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .. import challenge, weeks
-from ..models import ActiveDay, Journal, MetricsSnapshot, Profile, SaverCredit
+from ..models import ActiveDay, Journal, Ship, MetricsSnapshot, Profile, SaverCredit
 from ..presence import WRITE_EVERY, record_seen
 from ..views.admin.metrics import build_streak_stats
 from .base import (
@@ -23,6 +23,7 @@ from .base import (
 	grant_perms,
 	make_journal,
 	make_project,
+	make_ship,
 	make_timelapse,
 	make_user,
 )
@@ -283,6 +284,21 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(hours["devlogs_this_week"], 1)
 		self.assertEqual(hours["builders_this_week"], 1)
 		self.assertEqual(hours["week_start"], monday.date())
+
+	def test_shipped_hours_count_every_shipped_lapse_and_finalized_apart(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(120,))
+		make_ship(project, status=Ship.ShipStatus.REJECTED, journal_minutes=(60,))
+		make_ship(project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(30, 30))
+		# Logged but never shipped: not shipped hours.
+		make_journal(project, time_spent=600)
+
+		response = self.client.get(reverse("metrics"))
+		ships = response.context["ships"]
+
+		self.assertEqual(ships["shipped_hours"], 4.0)
+		self.assertEqual(ships["shipped_devlogs"], 4)
+		self.assertEqual(ships["finalized_hours"], 2.0)
 
 	def test_a_site_with_nothing_on_it_does_not_divide_by_zero(self):
 		hours = self._hours()

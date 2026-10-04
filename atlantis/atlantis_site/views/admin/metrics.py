@@ -476,8 +476,21 @@ def build_metrics(now):
     finalized_ships = status_counts.get(Ship.ShipStatus.FINALIZED, 0)
     rejected_ships = status_counts.get(Ship.ShipStatus.REJECTED, 0)
 
+    # Every lapse that has gone out in a ship, whatever became of the ship. A
+    # rejected ship's lapses stay attached to it and are paid by the next one,
+    # so they count as shipped here; the finalized figure is the share a T3
+    # has signed off.
+    shipped_journals = Journal.objects.filter(ship__isnull=False)
+    shipped_minutes = tracked_minutes_for_journals(shipped_journals)
+    finalized_minutes = tracked_minutes_for_journals(
+        shipped_journals.filter(ship__status=Ship.ShipStatus.FINALIZED)
+    )
+
     ships_stats = {
         "total": total_ships,
+        "shipped_hours": _hours(shipped_minutes),
+        "shipped_devlogs": shipped_journals.count(),
+        "finalized_hours": _hours(finalized_minutes),
         "last_7": ships_last_7,
         "by_status": ship_by_status,
         "finalized": finalized_ships,
