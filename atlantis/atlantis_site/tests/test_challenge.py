@@ -227,7 +227,7 @@ class GraceWeeksTests(BaseTestCase):
             self.assertTrue(state.weeks[0].pending)
             self.assertFalse(state.weeks[0].missed)
             self.assertFalse(state.eliminated)
-            self.assertEqual(challenge.journaling_blocked_reason(self.user), "")
+            self.assertEqual(challenge.elimination_reason(self.user), "")
 
     def test_week_2_asks_for_whatever_the_pair_still_needs(self):
         with during_week(2):
@@ -624,16 +624,18 @@ class EliminationGateTests(BaseTestCase):
         make_timelapse(self.project, journal=journal, minutes=minutes, recorded_at=when)
         return journal
 
-    def test_shipping_is_blocked_after_a_missed_week(self):
+    def test_shipping_stays_open_after_a_missed_week(self):
+        """Ships are where the pearls for savers come from, so being out can't block them."""
         with during_week(3):  # after the grace pair has closed
             self._log(60, in_week(1))
-            response = self.client.post(
+            self._log(120, in_week(3))  # shipping wants two hours logged
+            self.assertTrue(challenge.standing(self.user).eliminated)
+            self.client.post(
                 reverse("ship_project", args=[self.project.id]), ship_checklist(), follow=True
             )
-            self.assertEqual(Ship.objects.count(), 0)
-            self.assertTrue(any("out of the program" in m for m in message_texts(response)))
+            self.assertEqual(Ship.objects.count(), 1)
 
-    def test_logging_new_time_is_blocked_too(self):
+    def test_logging_new_time_stays_open_too(self):
         with during_week(3):  # after the grace pair has closed
             self._log(60, in_week(1))
             response = self.client.post(
@@ -641,7 +643,12 @@ class EliminationGateTests(BaseTestCase):
                 {"title": "x", "lapse_timelapses": ["abc"]},
                 follow=True,
             )
-            self.assertTrue(any("out of the program" in m for m in message_texts(response)))
+            self.assertFalse(any("out of the program" in m for m in message_texts(response)))
+
+    def test_the_reason_says_journaling_and_shipping_still_work(self):
+        with during_week(3):
+            self._log(60, in_week(1))
+            self.assertIn("still journal and ship", challenge.elimination_reason(self.user))
 
     def test_shipping_works_again_once_the_week_is_paid_for(self):
         with during_week(2):
@@ -655,15 +662,14 @@ class EliminationGateTests(BaseTestCase):
             reason = challenge.shipping_blocked_reason(self.user)
             self.assertIn("shipping is closed", reason)
 
-    def test_someone_who_survived_can_still_log_time_after_the_end(self):
-        """Shipping stops at the end; taping in what you already did does not."""
-        with after_week(1):
-            self._log(300, in_week(1))
-            self.assertEqual(challenge.journaling_blocked_reason(self.user), "")
+    def test_shipping_closes_at_the_end_for_someone_out_too(self):
+        with after_week(2):
+            self._log(60, in_week(1))
+            self.assertTrue(challenge.standing(self.user).eliminated)
+            self.assertIn("shipping is closed", challenge.shipping_blocked_reason(self.user))
 
     def test_nothing_is_blocked_before_the_program_starts(self):
         self.assertEqual(challenge.shipping_blocked_reason(self.user), "")
-        self.assertEqual(challenge.journaling_blocked_reason(self.user), "")
 
 
 class PrinterClaimTests(BaseTestCase):
@@ -1015,11 +1021,12 @@ class StreakPanelTests(BaseTestCase):
             self.assertEqual(response.context["week"].credited_minutes, 60)
             self.assertEqual(response.context["standing"].printer_hours, 6)
 
-    def test_the_projects_page_says_why_you_cannot_ship(self):
+    def test_the_dashboard_says_you_are_out(self):
         with during_week(3):  # after the grace pair has closed
             self._log(60, in_week(1))
-            response = self.client.get(reverse("projects"))
+            response = self.client.get(reverse("dashboard"))
             self.assertContains(response, "out of the program")
+            self.assertContains(response, "still journal and ship")
 
     def test_week_1_says_the_ten_are_not_due_when_the_countdown_ends(self):
         with during_week(1):

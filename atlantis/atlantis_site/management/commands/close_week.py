@@ -153,9 +153,11 @@ class Command(BaseCommand):
         if profile.slack_id:
             sent = send_slack_dm(
                 f"You didn't hit {missed}, "
-                "so you're out of Atlantis for now and can't ship or log new time. "
+                "so you're out of Atlantis for now. "
                 f"Buying {hours} missed-week streak saver{'s' if hours != 1 else ''} "
-                "in the shop puts you back in: https://atlantis.hackclub.com/shop/",
+                "in the shop puts you back in: https://atlantis.hackclub.com/shop/ "
+                "You can still make projects, journal and ship while you're out, "
+                "so if you're short on pearls, your ships can earn them.",
                 profile.slack_id,
             )
 

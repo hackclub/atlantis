@@ -692,11 +692,6 @@ def project_detail(request, project_id):
         ),
         "is_following": project.followers.filter(pk=user.pk).exists(),
         "follower_count": project.followers.count(),
-        # Why the book won't take a new lapse, if it won't. Only ever set for
-        # the owner: a visitor's copy says nothing about their streak.
-        "journal_blocked_reason": (
-            challenge.journaling_blocked_reason(user) if is_owner else ""
-        ),
         # A reviewer who lands here while the project is waiting on a desk
         # they work gets a way straight onto its review page. Staff only,
         # which keeps the queries off every ordinary visitor's page load.
@@ -751,14 +746,6 @@ def create_journal(request, project_id):
     
     if not settings.ALLOW_JOURNALING and not request.user.has_perm("atlantis_site.organizer"):
         messages.error(request, "Journaling is disallowed on this instance!")
-        return redirect("project_detail", project_id=project_id)
-
-    # Someone who is out of the program stops banking hours until they buy
-    # their way back in — logging time that could never count towards anything
-    # would be worse than being told plainly.
-    dropped = challenge.journaling_blocked_reason(request.user)
-    if dropped:
-        messages.error(request, dropped)
         return redirect("project_detail", project_id=project_id)
 
     project = get_object_or_404(Project, id=project_id, owner=request.user, deleted=False)
@@ -1079,9 +1066,9 @@ def ship_project(request, project_id):
     if blocked:
         messages.error(request, blocked)
         return redirect("projects")
-    # Missing a week ends your run, and the run is what shipping is for. Sits
-    # after the HCA check because eligibility is the more fundamental refusal:
-    # somebody HCA has turned down should hear that, not a streak message.
+    # Closed once the eight weeks are over. Not while someone is out of the
+    # program: ships are where the pearls for their savers come from. Sits
+    # after the HCA check because eligibility is the more fundamental refusal.
     dropped = challenge.shipping_blocked_reason(request.user)
     if dropped:
         messages.error(request, dropped)

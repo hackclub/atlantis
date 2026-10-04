@@ -437,21 +437,16 @@ def _build_standing(tracked, savers, overrides, now):
 
 # ---- gates ---------------------------------------------------------------
 
-# What someone who's been dropped is told, wherever they run into the wall.
+# What someone who's been dropped is told, wherever the deck or the shop says so.
 def elimination_reason(user, now=None):
-	"""Why this user may not ship or log time, or "" if they may.
+	"""Why this user is out of the program, or "" if they aren't.
 
-	Empty before the program opens: nothing can have been missed yet.
+	Being out is a status, not a wall: journaling and shipping stay open so the
+	pearls for the savers can still be earned. Empty before the program opens,
+	when nothing can have been missed yet.
 	"""
 	state = standing(user, now)
-	if not state.started:
-		return ""
-	if state.ended and not state.eliminated:
-		return (
-			"The eight weeks are over, so shipping is closed. Your printer claim "
-			"is on the printer charts."
-		)
-	if not state.eliminated:
+	if not state.started or not state.eliminated:
 		return ""
 
 	week = state.earliest_missed
@@ -469,25 +464,25 @@ def elimination_reason(user, now=None):
 		)
 	return (
 		f"You're out of the program: {closed}. Buy {hours} missed-week streak "
-		f"saver{'s' if hours != 1 else ''} in the shop to get back in."
+		f"saver{'s' if hours != 1 else ''} in the shop to get back in. You can "
+		"still journal and ship while you're out, so your ships can earn the "
+		"pearls to pay for them."
 	)
 
 
 def shipping_blocked_reason(user, now=None):
-	"""Why shipping is closed to this user, or ""."""
-	return elimination_reason(user, now)
+	"""Why shipping is closed to this user, or "".
 
-
-def journaling_blocked_reason(user, now=None):
-	"""Why logging new time is closed to this user, or "".
-
-	Same wall as shipping while eliminated. The difference is at the end of the
-	program: shipping stops, but someone who survived can still tape in footage
-	against work already done.
+	Only the end of the program closes it. Being out doesn't: shipping is the
+	only way to earn pearls, and savers cost pearls, so blocking it would leave
+	someone with an empty wallet no way back in.
 	"""
 	state = standing(user, now)
-	if state.started and state.eliminated:
-		return elimination_reason(user, now)
+	if state.started and state.ended:
+		return (
+			"The eight weeks are over, so shipping is closed. Your printer claim "
+			"is on the printer charts."
+		)
 	return ""
 
 
