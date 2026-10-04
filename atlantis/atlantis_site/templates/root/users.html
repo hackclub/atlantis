@@ -17,6 +17,9 @@
             {% csrf_token %}
             <button type="submit">Add Slack users to Atlantis channels</button>
         </form>
+        <form method="GET" action="{% url 'unfinished_hours_csv' %}">
+            <button type="submit">Export users short on hours (CSV)</button>
+        </form>
     </div>
     <form method="GET" class="users-search" role="search">
         <input

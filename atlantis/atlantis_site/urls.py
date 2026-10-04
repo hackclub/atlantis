@@ -87,6 +87,7 @@ urlpatterns = [
     path("root/users/ban/<int:user_id>", set_user_ban, name="set_user_ban"),
     path("root/users/backfill_emails", backfill_emails, name="backfill_emails"),
     path("root/users/invite_to_channels", invite_to_channels, name="invite_to_channels"),
+    path("root/users/unfinished_hours.csv", unfinished_hours_csv, name="unfinished_hours_csv"),
     path("root/projects/", manage_projects, name="manage_projects"),
     path("root/projects/edit/<int:project_id>/", admin_edit_project, name="admin_edit_project"),
     path("root/projects/delete/bulk/", db_delete_projects, name="db_delete_projects"),

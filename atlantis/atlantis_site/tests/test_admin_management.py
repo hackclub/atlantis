@@ -1,7 +1,12 @@
+import csv
+import io
 import os
+from datetime import datetime
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth.models import Group
+from django.test import override_settings
 from django.urls import reverse
 
 from ..models import (
@@ -25,6 +30,7 @@ from .base import (
 	make_journal,
 	make_project,
 	make_ship,
+	make_timelapse,
 	make_user,
 	message_texts,
 )
@@ -585,3 +591,47 @@ class MetricsViewTests(BaseTestCase):
 		self.assertEqual(context["shop"]["layers_spent"], 5)
 		self.assertEqual(context["users"]["layers_in_circulation"], 30)
 		self.assertGreaterEqual(context["audit"]["total"], 1)
+
+
+@override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+class UnfinishedHoursCsvTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.organizer = grant_perms(make_user("organizer", slack_id=""), "organizer")
+		self.client.force_login(self.organizer)
+
+	def _log(self, user, minutes, when):
+		project = make_project(user)
+		journal = make_journal(project, time_spent=0)
+		make_timelapse(project, journal=journal, minutes=minutes, recorded_at=when)
+
+	def _rows(self, when):
+		with patch("django.utils.timezone.now", return_value=when):
+			response = self.client.get(reverse("unfinished_hours_csv"))
+		self.assertEqual(response["Content-Type"], "text/csv")
+		return list(csv.DictReader(io.StringIO(response.content.decode())))
+
+	def test_lists_only_people_short_on_this_week(self):
+		ET = ZoneInfo("America/New_York")
+		short = make_user("short", slack_id="U0SHORT", slack_username="short-slack")
+		done = make_user("done", slack_id="U0DONE")
+		make_user("noslack", slack_id="")
+		make_user("nothing", slack_id="U0NOTHING")
+		banned = make_user("banned", slack_id="U0BAN")
+		banned.hackclub_profile.banned = True
+		banned.hackclub_profile.save()
+		self._log(short, 90, datetime(2026, 9, 29, 10, tzinfo=ET))
+		self._log(done, 600, datetime(2026, 9, 29, 10, tzinfo=ET))
+		self._log(banned, 60, datetime(2026, 9, 29, 10, tzinfo=ET))
+
+		rows = self._rows(datetime(2026, 10, 3, 12, tzinfo=ET))
+
+		self.assertEqual([r["slack_id"] for r in rows], ["U0SHORT"])
+		self.assertEqual(rows[0]["username"], "short-slack")
+		self.assertEqual(rows[0]["week"], "2")
+		self.assertEqual(rows[0]["left"], "8h 30m")
+
+	def test_empty_outside_the_program(self):
+		ET = ZoneInfo("America/New_York")
+		make_user("short", slack_id="U0SHORT")
+		self.assertEqual(self._rows(datetime(2026, 9, 1, tzinfo=ET)), [])

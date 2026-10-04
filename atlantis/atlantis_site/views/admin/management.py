@@ -7,10 +7,13 @@ from django.db.models import Q
 from django.db import transaction
 from django.contrib import messages
 from django.conf import settings
+from django.http import HttpResponse
+from django.utils import timezone
 
+import csv
 import os
 
-from ... import airtable
+from ... import airtable, challenge, weeks
 from ...models import Profile, Project
 from ..helpers import check_perms, invite_to_autojoin_channels_in_background, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, tracked_minutes_for_journals, format_minutes, INT_FIELD_MAX, INT_FIELD_MIN, field_max_length, too_long
 
@@ -86,9 +89,61 @@ def invite_to_channels(request):
     return redirect("users")
 
 @staff_member_required
+@check_perms(["atlantis_site.organizer"])
+def unfinished_hours_csv(request):
+    """Everyone still in who hasn't filled this week's bar, for the mass-DM script.
+
+    Slack-linked, not banned, not already out, has tracked some time, and is
+    short of the week in progress (for weeks 1 and 2, the pair's ten).
+    """
+    now = timezone.now()
+    index = weeks.current_week(now)
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = (
+        f'attachment; filename="unfinished_hours_week_{index or "none"}.csv"'
+    )
+    writer = csv.writer(response)
+    writer.writerow(["slack_id", "username", "user_id", "week", "progress", "left"])
+
+    if index is None:
+        return response
+
+    # standings() only covers people who have logged time or hold a saver;
+    # anyone who never started isn't someone to chase about finishing.
+    standings = challenge.standings(now)
+    count = 0
+    profiles = (
+        Profile.objects.select_related("user")
+        .exclude(slack_id="")
+        .filter(banned=False, user_id__in=standings.keys())
+        .order_by("user_id")
+    )
+    for profile in profiles:
+        state = standings[profile.user_id]
+        week = state.current
+        tracked = state.prep_minutes + sum(w.tracked_minutes for w in state.weeks)
+        if week is None or state.eliminated or week.done or not tracked:
+            continue
+        count += 1
+        writer.writerow([
+            profile.slack_id,
+            profile.slack_username,
+            profile.user_id,
+            week.index,
+            week.progress_display,
+            week.left_display,
+        ])
+
+    record_audit(request, "export_unfinished_hours", target=f"week {index}", metadata={
+        "count": count,
+    })
+    return response
+
+@staff_member_required
 @require_POST
 @check_perms(["atlantis_site.organizer"])
-def edit_user(request, user_id):    
+def edit_user(request, user_id):
     user_model = get_user_model()
     targetUser = get_object_or_404(user_model, id=user_id)
     targetProfile = targetUser.hackclub_profile
