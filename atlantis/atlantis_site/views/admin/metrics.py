@@ -14,6 +14,7 @@ from django.utils.dateparse import parse_date
 
 from ...models import (
     ActiveDay,
+    AirtableSubmission,
     AuditLog,
     Profile,
     Project,
@@ -486,8 +487,29 @@ def build_metrics(now):
         shipped_journals.filter(ship__status=Ship.ShipStatus.FINALIZED)
     )
 
+    # What HQ's Airtable was actually told: the override hours on each record
+    # we created, which is the approving T3's airtable_time. Picked per ship
+    # the way submissions.approving_t3 picks it (the latest approval, else the
+    # latest T3 of any kind), in one query rather than one per ship.
+    pushed_ship_ids = set(
+        AirtableSubmission.objects.exclude(record_id="").values_list("ship_id", flat=True)
+    )
+    airtable_t3 = {}
+    for ship_id, decision, minutes in (
+        T3.objects.filter(ship_id__in=pushed_ship_ids)
+        .order_by("id").values_list("ship_id", "decision", "airtable_time")
+    ):
+        approved = decision == T3.Decision.APPROVE
+        if approved or not airtable_t3.get(ship_id, (False,))[0]:
+            airtable_t3[ship_id] = (approved, minutes or 0)
+    airtable_minutes = sum(minutes for _approved, minutes in airtable_t3.values())
+    airtable_unsent = AirtableSubmission.objects.filter(record_id="").count()
+
     ships_stats = {
         "total": total_ships,
+        "airtable_hours": _hours(airtable_minutes),
+        "airtable_ships": len(pushed_ship_ids),
+        "airtable_unsent": airtable_unsent,
         "shipped_hours": _hours(shipped_minutes),
         "shipped_devlogs": shipped_journals.count(),
         "finalized_hours": _hours(finalized_minutes),

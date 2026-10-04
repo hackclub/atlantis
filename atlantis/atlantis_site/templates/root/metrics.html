@@ -304,6 +304,11 @@
                 <div class="stat-label">Hours shipped</div>
                 <div class="stat-sub">{{ ships.shipped_devlogs|default:0 }} lapse{{ ships.shipped_devlogs|pluralize }} &middot; {{ ships.finalized_hours|default:0 }}h finalized</div>
             </div>
+            <div class="stat-card good">
+                <div class="stat-value">{{ ships.airtable_hours|default:0 }}h</div>
+                <div class="stat-label">Hours pushed to Airtable</div>
+                <div class="stat-sub">{{ ships.airtable_ships|default:0 }} record{{ ships.airtable_ships|pluralize }} &middot; {{ ships.airtable_unsent|default:0 }} not sent yet</div>
+            </div>
             <div class="stat-card warn">
                 <div class="stat-value">{{ ships.backlog_total }}</div>
                 <div class="stat-label">In queue right now</div>

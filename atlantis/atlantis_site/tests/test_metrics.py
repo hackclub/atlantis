@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .. import challenge, weeks
-from ..models import ActiveDay, Journal, Ship, MetricsSnapshot, Profile, SaverCredit
+from ..models import ActiveDay, AirtableSubmission, Journal, Ship, T3, MetricsSnapshot, Profile, SaverCredit
 from ..presence import WRITE_EVERY, record_seen
 from ..views.admin.metrics import build_streak_stats
 from .base import (
@@ -299,6 +299,31 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(ships["shipped_hours"], 4.0)
 		self.assertEqual(ships["shipped_devlogs"], 4)
 		self.assertEqual(ships["finalized_hours"], 2.0)
+
+	def test_airtable_hours_are_what_each_created_record_was_sent(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		reviewer = make_user("t3", slack_id="U-t3")
+
+		def finalized(*t3s, record_id="rec1"):
+			ship = make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(60,))
+			for decision, minutes in t3s:
+				T3.objects.create(
+					ship=ship, reviewer=reviewer, decision=decision,
+					payout_time=minutes, airtable_time=minutes,
+				)
+			AirtableSubmission.objects.create(ship=ship, record_id=record_id)
+
+		# A later return doesn't displace the approval Airtable was sent.
+		finalized((T3.Decision.APPROVE, 120), (T3.Decision.RETURN_T2, 600))
+		finalized((T3.Decision.APPROVE, 30), (T3.Decision.APPROVE, 60), record_id="rec2")
+		# Claimed but never created: nothing reached Airtable.
+		finalized((T3.Decision.APPROVE, 900), record_id="")
+
+		ships = self.client.get(reverse("metrics")).context["ships"]
+
+		self.assertEqual(ships["airtable_hours"], 3.0)
+		self.assertEqual(ships["airtable_ships"], 2)
+		self.assertEqual(ships["airtable_unsent"], 1)
 
 	def test_a_site_with_nothing_on_it_does_not_divide_by_zero(self):
 		hours = self._hours()
