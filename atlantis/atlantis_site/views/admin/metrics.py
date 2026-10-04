@@ -222,6 +222,22 @@ def build_streak_stats(now):
             for (label, _bound), count in zip(STREAK_BUCKETS, counts)
         ]),
     })
+
+    # The grace weeks are judged as a pair, which "done" can't show: in week
+    # 2 it counts five in that week alone, even from someone still short on
+    # week 1. While the pair is live, count who has the whole pair settled —
+    # every grace week met, which comes to the ten between them or an
+    # organizer's pass. Gone once the pair has closed.
+    grace = weeks.grace_weeks()
+    if live_index in grace:
+        secured = sum(1 for s in still_in if all(w.met for w in s.weeks if w.grace))
+        stats.update({
+            "grace_live": True,
+            "grace_label": " & ".join(str(index) for index in grace),
+            "grace_hours": weeks.grace_minutes() // 60,
+            "grace_secured": secured,
+            "grace_secured_rate": _pct(secured, len(still_in)),
+        })
     return stats
 
 

@@ -514,6 +514,30 @@ class MetricsStreakTests(BaseTestCase):
 		self.assertEqual(stats["completed_this_week"], 1)
 		self.assertEqual(stats["avg_completed_display"], "6h 0m")
 
+	def test_the_grace_pair_counts_ten_between_the_weeks_until_it_closes(self):
+		# Wednesday of week 2.
+		now = datetime(2026, 9, 30, 12, tzinfo=EASTERN)
+		week_1 = datetime(2026, 9, 23, 10, tzinfo=EASTERN)
+		week_2 = datetime(2026, 9, 29, 10, tzinfo=EASTERN)
+		self._builder("split", (420, week_1), (180, week_2))
+		self._builder("front-loaded", (600, week_1))
+		# Five this week counts as done, but week 1 is still short.
+		self._builder("late", (300, week_2))
+		self._builder("short", (240, week_1), (300, week_2))
+
+		stats = build_streak_stats(now)
+
+		self.assertEqual(stats["done"], 4)
+		self.assertTrue(stats["grace_live"])
+		self.assertEqual(stats["grace_label"], "1 & 2")
+		self.assertEqual(stats["grace_hours"], 10)
+		self.assertEqual(stats["grace_secured"], 2)
+		self.assertEqual(stats["grace_secured_rate"], 50.0)
+
+		# Week 3: the pair has closed and the card goes.
+		stats = build_streak_stats(datetime(2026, 10, 7, 12, tzinfo=EASTERN))
+		self.assertNotIn("grace_live", stats)
+
 	def test_the_bulk_standings_agree_with_one_at_a_time(self):
 		now = datetime(2026, 9, 30, 12, tzinfo=EASTERN)
 		users = [

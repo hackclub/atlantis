@@ -96,6 +96,13 @@
                 <div class="stat-label">Done this week</div>
                 <div class="stat-sub">{{ streaks.done_rate }}% of those still in have their {{ streaks.weekly_hours }}h</div>
             </div>
+            {% if streaks.grace_live %}
+            <div class="stat-card good">
+                <div class="stat-value">{{ streaks.grace_secured }}</div>
+                <div class="stat-label">Weeks {{ streaks.grace_label }} secured</div>
+                <div class="stat-sub">{{ streaks.grace_secured_rate }}% of those still in have {{ streaks.grace_hours }}h across the pair</div>
+            </div>
+            {% endif %}
             <div class="stat-card accent">
                 <div class="stat-value">{{ streaks.on_pace }}</div>
                 <div class="stat-label">Short but on pace</div>
