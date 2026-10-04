@@ -8,3 +8,5 @@ staticfiles
 certs/
 .claude
 fallout
+unfinished_hours_**.csv
+sent_unfinished_hours.*
