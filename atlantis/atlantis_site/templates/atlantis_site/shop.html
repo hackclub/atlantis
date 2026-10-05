@@ -51,17 +51,15 @@
                                 <h3 class="item-card-title">{{ item.name }}</h3>
                                 <p class="item-card-desc">{{ item.description }}</p>
 
-                                {% if item.is_saver %}
+                                {% if item.blocked_reason %}
+                                    <p class="item-card-note item-card-note-off">{{ item.blocked_reason }}</p>
+                                {% elif item.is_saver %}
                                     {% comment %}
                                     A saver is not a parcel: it is spent the
                                     moment it is paid for, on a week named here
                                     so nobody buys the wrong one.
                                     {% endcomment %}
-                                    {% if item.blocked_reason %}
-                                        <p class="item-card-note item-card-note-off">{{ item.blocked_reason }}</p>
-                                    {% else %}
-                                        <p class="item-card-note">Applies to {{ item.saver_target }}, instantly.</p>
-                                    {% endif %}
+                                    <p class="item-card-note">Applies to {{ item.saver_target }}, instantly.</p>
                                 {% endif %}
 
                                 <div class="item-card-foot">

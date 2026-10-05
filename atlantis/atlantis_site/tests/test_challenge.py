@@ -604,6 +604,37 @@ class SaverPurchaseTests(BaseTestCase):
             self.assertTrue(challenge.standing(self.user).eliminated)
             self.assertEqual(Profile.objects.get(user=self.user).layers, 100)
 
+    def test_being_out_locks_everything_but_the_restore(self):
+        regular = Item.objects.create(name="Sticker", description="A sticker", cost=5)
+        with during_week(3):
+            self._log(240, in_week(1))
+            self._log(300, in_week(2))
+            response = self.client.get(reverse("shop"))
+            blocked = {i.name: i.blocked_reason for i in response.context["items"]}
+            self.assertEqual(blocked["Streak restore"], "")
+            self.assertTrue(blocked["Streak saver"])
+            self.assertTrue(blocked["Sticker"])
+
+    def test_someone_out_cannot_order_anything_but_the_restore(self):
+        regular = Item.objects.create(name="Sticker", description="A sticker", cost=5)
+        with during_week(3):
+            self._log(240, in_week(1))
+            self._log(300, in_week(2))
+            for item in (regular, self.current):
+                cache.clear()  # the view is rate limited; these are deliberate retries
+                response = self._buy(item)
+                self.assertTrue(any("out of the program" in m for m in message_texts(response)))
+            self.assertEqual(Order.objects.count(), 0)
+            self.assertEqual(SaverCredit.objects.count(), 0)
+            self.assertEqual(Profile.objects.get(user=self.user).layers, 100)
+
+            # Back in, and the rest of the shop opens again.
+            cache.clear()
+            self._buy(self.past)
+            cache.clear()
+            self._buy(regular)
+            self.assertEqual(Order.objects.filter(item=regular).count(), 1)
+
     def test_printers_are_not_on_the_shelves(self):
         response = self.client.get(reverse("shop"))
         kinds = {item.kind for item in response.context["items"]}

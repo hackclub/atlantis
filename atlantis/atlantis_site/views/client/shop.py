@@ -27,26 +27,50 @@ def shoppable():
     return Item.objects.filter(deleted=False).exclude(kind=Item.Kind.PRINTER)
 
 
-def _saver_state(user, item, now=None):
-    """(why it can't be bought, which week it would land on) for a saver.
+# What every shelf but the restore says to someone who's out.
+OUT_REASON = (
+    "You're out of the program, so the shop is locked until you're back in. "
+    "Buy missed-week streak savers to get back in."
+)
 
-    Both empty for anything that isn't a saver. Not a security check —
-    order_item re-asks inside the lock before taking anyone's pearls. This is
-    so the shelf can grey an item out and name the week instead of letting
-    someone find out by spending a click, or a pearl.
+
+def _out_blocks(item, eliminated):
+    """Whether being out puts this item off limits.
+
+    Someone who's out can spend pearls on exactly one thing: getting back in.
+    Even the this-week saver waits, since it can't undo a week already missed.
     """
+    return eliminated and item.kind != Item.Kind.SAVER_PAST
+
+
+def _saver_state(user, item, now=None, eliminated=None):
+    """(why it can't be bought, which week it would land on) for an item.
+
+    Both empty for a regular item anyone can buy. Not a security check —
+    order_item re-asks before taking anyone's pearls. This is so the shelf can
+    grey an item out and name the week instead of letting someone find out by
+    spending a click, or a pearl.
+    """
+    if eliminated is None:
+        eliminated = challenge.standing(user, now).eliminated
+    # A saver with nowhere to land says so first; that's the more specific
+    # sentence, and stays true whether or not you're out.
+    if item.is_saver:
+        try:
+            index = challenge.target_week(user, item.kind, now)
+        except SaverError as err:
+            return str(err), ""
+    if _out_blocks(item, eliminated):
+        return OUT_REASON, ""
     if not item.is_saver:
         return "", ""
-    try:
-        index = challenge.target_week(user, item.kind, now)
-    except SaverError as err:
-        return str(err), ""
     return "", weeks.week_label(index)
 
 
 def _decorate(user, items, now=None):
+    eliminated = challenge.standing(user, now).eliminated
     for item in items:
-        item.blocked_reason, item.saver_target = _saver_state(user, item, now)
+        item.blocked_reason, item.saver_target = _saver_state(user, item, now, eliminated)
     return items
 
 
@@ -112,6 +136,11 @@ def order_item(request, item_id):
 
     if too_long(user_notes, Order, "user_notes"):
         messages.error(request, f"Order notes too long (max {field_max_length(Order, 'user_notes')} chars).")
+        return redirect("shop")
+
+    blocked_reason, _ = _saver_state(request.user, item)
+    if blocked_reason == OUT_REASON:
+        messages.error(request, OUT_REASON)
         return redirect("shop")
 
     total_cost = item.cost * quantity
