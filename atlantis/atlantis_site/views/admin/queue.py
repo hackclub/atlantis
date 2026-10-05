@@ -42,7 +42,7 @@ from ...models import (
 )
 from ..helpers import (
     approved_minutes_by_project, approved_minutes_for_journals, display_name, format_minutes,
-    timelapse_cleared_ships, tracked_minutes_for_journals,
+    payable_minutes_for_ship, timelapse_cleared_ships, tracked_minutes_for_journals,
 )
 
 # How long a claim survives without a heartbeat. Long enough to read a project
@@ -820,9 +820,13 @@ def _reships(window, as_of):
 
 
 def _hours_pending(queue_key):
-    """Approved hours sitting in this queue right now."""
-    ships = QUEUES[queue_key].pending()
-    minutes = approved_minutes_for_journals(Journal.objects.filter(ship__in=ships))
+    """Approved hours sitting in this queue right now.
+
+    Each ship counts what its payout would cover, not just the journals
+    attached to it: a reship after a rejection carries only the entries written
+    since, and would otherwise hide every hour the rejected ship held.
+    """
+    minutes = sum(payable_minutes_for_ship(ship) for ship in QUEUES[queue_key].pending())
     return round(minutes / 60, 1)
 
 
