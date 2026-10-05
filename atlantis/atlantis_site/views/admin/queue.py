@@ -679,11 +679,11 @@ STATS_CACHE_TTL = 5 * 60
 
 # Which cards each desk carries, and in what order. Not every metric means
 # something at every tier: timelapse review has no verdict to average, so it gets
-# no approval ratio, and the hours a queue is sitting on are only knowable once
-# lapse review has settled them — which is after T1.
+# no approval ratio. All three ship queues report approved hours; T1 only
+# includes ships whose lapse review has cleared.
 REVIEW_STAT_KEYS = {
     "lookout": ["turnaround"],
-    "t1": ["turnaround", "approval_ratio", "reship_ratio"],
+    "t1": ["hours_pending", "turnaround", "approval_ratio", "reship_ratio"],
     "t2": ["hours_pending", "turnaround", "approval_ratio"],
     "t3": ["hours_pending", "turnaround", "approval_ratio"],
 }
