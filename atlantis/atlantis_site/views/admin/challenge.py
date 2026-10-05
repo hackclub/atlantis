@@ -39,9 +39,11 @@ def challenge_dash(request):
             | Q(hackclub_profile__slack_username__icontains=search)
         )
 
+    users = list(users)
+    states = challenge.standings_for([user.id for user in users])
     rows = []
     for user in users:
-        state = challenge.standing(user)
+        state = states[user.id]
         if only == "out" and not state.eliminated:
             continue
         if only == "at-risk" and (state.eliminated or not _at_risk(state)):

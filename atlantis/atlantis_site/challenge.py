@@ -378,8 +378,23 @@ def standings(now=None):
 	account that ever signed in would have every week "missed" by people who
 	never started.
 	"""
-	now = now or timezone.now()
+	tracked, savers, overrides = _ledger()
+	return _standings_for(tracked.keys() | savers.keys(), tracked, savers, overrides, now)
 
+
+def standings_for(user_ids, now=None):
+	"""{user id: Standing} for exactly these users, in three queries.
+
+	Unlike standings(), someone who has logged nothing still gets a row — the
+	empty one standing() would have given them.
+	"""
+	tracked, savers, overrides = _ledger()
+	return _standings_for(user_ids, tracked, savers, overrides, now)
+
+
+def _ledger():
+	"""Everyone's ({week: tracked minutes}, {week: saver hours}, {week: override}),
+	each keyed by user id."""
 	rows = {}
 	for owner, at, seconds in _all_logged_timelapses().values_list("owner", "at", "tracked_seconds"):
 		rows.setdefault(owner, []).append((at, seconds))
@@ -397,20 +412,44 @@ def standings(now=None):
 	for owner, index, value in WeekOutcome.objects.values_list("user", "week_index", "override"):
 		overrides.setdefault(owner, {})[index] = value
 
+	return tracked, savers, overrides
+
+
+def _standings_for(user_ids, tracked, savers, overrides, now):
+	now = now or timezone.now()
+	calendar = _calendar(now)
 	return {
 		owner: _build_standing(
-			tracked.get(owner, {}), savers.get(owner, {}), overrides.get(owner, {}), now
+			tracked.get(owner, {}), savers.get(owner, {}), overrides.get(owner, {}), now,
+			calendar,
 		)
-		for owner in tracked.keys() | savers.keys()
+		for owner in user_ids
 	}
 
 
-def _build_standing(tracked, savers, overrides, now):
+def _calendar(now):
+	"""The parts of a Standing that are the same for everyone at `now`.
+
+	Worked out once per page rather than once per user: on the pages that
+	build the whole field, recomputing the week boundaries for every row was
+	most of the time spent.
+	"""
+	return {
+		"closed": set(weeks.closed_weeks(now)),
+		"live": weeks.current_week(now),
+		"grace": weeks.grace_weeks(),
+		"started": weeks.has_started(now),
+		"ended": weeks.has_ended(now),
+	}
+
+
+def _build_standing(tracked, savers, overrides, now, calendar=None):
 	"""A Standing from one user's {week: minutes}, {week: saver hours} and
 	{week: override}."""
-	closed = set(weeks.closed_weeks(now))
-	live = weeks.current_week(now)
-	grace = weeks.grace_weeks()
+	calendar = calendar or _calendar(now)
+	closed = calendar["closed"]
+	live = calendar["live"]
+	grace = calendar["grace"]
 	grace_minutes = sum(tracked.get(i, 0) + savers.get(i, 0) * 60 for i in grace)
 	grace_open = any(i not in closed for i in grace)
 
@@ -430,8 +469,8 @@ def _build_standing(tracked, savers, overrides, now):
 			for index in range(1, weeks.week_count() + 1)
 		],
 		prep_minutes=tracked.get(PREP, 0),
-		started=weeks.has_started(now),
-		ended=weeks.has_ended(now),
+		started=calendar["started"],
+		ended=calendar["ended"],
 	)
 
 

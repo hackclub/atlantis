@@ -27,7 +27,8 @@ from datetime import timedelta
 from django.contrib.admin.views.decorators import staff_member_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Count, Exists, OuterRef, Prefetch, Subquery
+from django.db.models import Count, Exists, Min, OuterRef, Prefetch, Q, Sum
+from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
@@ -40,7 +41,7 @@ from ...models import (
     TimelapseReview,
 )
 from ..helpers import (
-    approved_minutes_for_journals, display_name, format_minutes,
+    approved_minutes_by_project, approved_minutes_for_journals, display_name, format_minutes,
     timelapse_cleared_ships, tracked_minutes_for_journals,
 )
 
@@ -67,17 +68,23 @@ SHIP_STATUS_FOR = {
 
 
 def project_lapse_prefetch():
-    """The unreviewed lapses of a project, oldest first, footage attached.
+    """The unreviewed lapses of a project, oldest first, with their footage
+    counted and summed.
 
-    The desk lists every queued project's lapses under it, so they load as two
-    extra queries for the whole page rather than two per project.
+    The desk lists every queued project's lapses under it, so they load as one
+    extra query for the whole page rather than one per project. The footage is
+    counted in SQL rather than prefetched: the desk only shows totals, and
+    building a model for every recording in the queue was most of its load time.
     """
     return Prefetch(
         "journals",
         queryset=(
             Journal.objects
             .filter(timelapse_review__isnull=True)
-            .prefetch_related("timelapses")
+            .annotate(
+                recording_count=Count("timelapses"),
+                tracked_seconds_total=Coalesce(Sum("timelapses__tracked_seconds"), 0),
+            )
             .order_by("created_at", "id")
         ),
         to_attr="pending_lapses",
@@ -124,18 +131,21 @@ class Queue:
             # them one at a time meant re-learning that context on every visit.
             # One project is one sitting: all of its lapses, all of their
             # recordings, one decision.
-            pending_lapses = Journal.objects.filter(
-                project=OuterRef("pk"), timelapse_review__isnull=True
-            )
+            #
+            # A project has been waiting since its oldest unreviewed lapse,
+            # worked out as one grouped MIN over a join. A correlated
+            # "ORDER BY ... LIMIT 1" subquery per project gave the same answer
+            # and was most of the desk's load time.
             return (
                 Project.objects
                 .filter(deleted=False)
-                .filter(Exists(pending_lapses))
+                .annotate(waiting_since=Min(
+                    "journals__created_at",
+                    filter=Q(journals__timelapse_review__isnull=True),
+                ))
+                .filter(waiting_since__isnull=False)
                 .select_related("owner", "owner__hackclub_profile")
                 .prefetch_related(project_lapse_prefetch())
-                .annotate(waiting_since=Subquery(
-                    pending_lapses.order_by("created_at", "id").values("created_at")[:1]
-                ))
                 .order_by("waiting_since", "id")
             )
         base = Ship.objects.filter(status=SHIP_STATUS_FOR[self.key], project__deleted=False)
@@ -370,6 +380,8 @@ def decorate_rows(queue_key, items):
     queue = QUEUES[queue_key]
     rows = list(items)
     claims = claims_for(queue_key, [row.id for row in rows])
+    if queue_key != "lookout":
+        approved = approved_minutes_by_project(row.project_id for row in rows)
     for index, row in enumerate(rows, start=1):
         row.queue_index = index
         row.claim = claims.get(row.id)
@@ -379,10 +391,11 @@ def decorate_rows(queue_key, items):
         row.age_display = age_display(waiting)
         row.age_bucket = age_bucket(waiting, queue.sla_days)
         if queue_key == "lookout":
-            decorate_lapses(row.pending_lapses, queue.sla_days)
+            # Counted by project_lapse_prefetch, not decorate_lapses: the desk
+            # never loads the recordings themselves.
             row.lapses = row.pending_lapses
             row.lapse_count = len(row.lapses)
-            row.recording_count = sum(len(lapse.timelapses.all()) for lapse in row.lapses)
+            row.recording_count = sum(lapse.recording_count for lapse in row.lapses)
             row.tracked_seconds_total = sum(
                 lapse.tracked_seconds_total for lapse in row.lapses
             )
@@ -392,9 +405,7 @@ def decorate_rows(queue_key, items):
                 lapse.ship_id for lapse in row.lapses if lapse.ship_id
             })
         else:
-            row.time_spent_display = format_minutes(
-                approved_minutes_for_journals(row.project.journals.all())
-            )
+            row.time_spent_display = format_minutes(approved[row.project_id])
 
     # Which rows are another go at a project that has shipped before, for the
     # re-ship filter. One query for the page, not one per row.
@@ -934,7 +945,9 @@ def _review_row(queue_key, review):
     if queue_key == "lookout":
         journal = review.journal
         project = journal.project
-        removed = review.removed_seconds
+        # Off the prefetched removals; review.removed_seconds would aggregate
+        # again for every row.
+        removed = sum(removal.duration_seconds for removal in review.removals.all())
         return {
             "id": review.id,
             "project": project.title,

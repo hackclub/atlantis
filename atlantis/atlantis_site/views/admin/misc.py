@@ -62,7 +62,7 @@ def _audit_page(request, logs, template_context):
 @staff_member_required
 @check_perms(["atlantis_site.organizer"])
 def audit_log(request):
-    return _audit_page(request, AuditLog.objects.select_related("actor").all(), {
+    return _audit_page(request, AuditLog.objects.select_related("actor", "actor__hackclub_profile").all(), {
         "heading": "Audit Log",
         "subheading": "A record of every admin action",
         "show_request": True,
@@ -71,7 +71,7 @@ def audit_log(request):
 @staff_member_required
 @check_perms(["atlantis_site.reviewer_lead", "atlantis_site.organizer"])
 def review_audit(request):
-    logs = AuditLog.objects.select_related("actor").filter(action__in=REVIEW_AUDIT_ACTIONS)
+    logs = AuditLog.objects.select_related("actor", "actor__hackclub_profile").filter(action__in=REVIEW_AUDIT_ACTIONS)
     return _audit_page(request, logs, {
         "heading": "Review Audit",
         "subheading": "Every review decision, rollback and internal comment",

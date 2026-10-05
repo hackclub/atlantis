@@ -3,7 +3,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.views.decorators.http import require_POST
 from django.contrib.admin.views.decorators import staff_member_required
-from django.db.models import Q
+from django.db.models import Count, Q, Sum
 from django.db import transaction
 from django.contrib import messages
 from django.conf import settings
@@ -14,14 +14,19 @@ import csv
 import os
 
 from ... import airtable, challenge, weeks
-from ...models import Profile, Project
-from ..helpers import check_perms, invite_to_autojoin_channels_in_background, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, tracked_minutes_for_journals, format_minutes, INT_FIELD_MAX, INT_FIELD_MIN, field_max_length, too_long
+from ...models import Journal, Profile, Project, Ship, Timelapse
+from ..helpers import check_perms, invite_to_autojoin_channels_in_background, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, format_minutes, INT_FIELD_MAX, INT_FIELD_MIN, field_max_length, too_long
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer"])
 def users(request):
     user_model = get_user_model()
-    users = user_model.objects.all().prefetch_related("groups").order_by("id")
+    users = (
+        user_model.objects.all()
+        .select_related("hackclub_profile")
+        .prefetch_related("groups")
+        .order_by("id")
+    )
 
     search_query = request.GET.get("q", "").strip()
     if search_query:
@@ -282,13 +287,37 @@ def manage_projects(request):
             | Q(owner__hackclub_profile__slack_username__icontains=search_query)
         )
 
+    # Per-project figures as three grouped queries for the whole table rather
+    # than three per row.
+    projects = list(projects)
+    project_ids = [project.id for project in projects]
+    tracked = dict(
+        Timelapse.objects.filter(journal__project_id__in=project_ids)
+        .values_list("journal__project_id")
+        .order_by()
+        .annotate(total=Sum("tracked_seconds"))
+    )
+    journal_counts = dict(
+        Journal.objects.filter(project_id__in=project_ids)
+        .values_list("project_id")
+        .order_by()
+        .annotate(n=Count("id"))
+    )
+    # Newest first, so the first status seen for a project is its latest ship's.
+    latest_status = {}
+    for project_id, status in (
+        Ship.objects.filter(project_id__in=project_ids)
+        .order_by("project_id", "-created_at")
+        .values_list("project_id", "status")
+    ):
+        latest_status.setdefault(project_id, status)
+    status_labels = dict(Ship.ShipStatus.choices)
+
     for project in projects:
-        project.time_spent_display = format_minutes(
-            tracked_minutes_for_journals(project.journals.all())
-        )
-        project.journal_count = project.journals.count()
-        latest_ship = project.ships.order_by("-created_at").first()
-        project.status_display = latest_ship.get_status_display() if latest_ship else "No ships yet"
+        project.time_spent_display = format_minutes((tracked.get(project.id) or 0) // 60)
+        project.journal_count = journal_counts.get(project.id, 0)
+        status = latest_status.get(project.id)
+        project.status_display = status_labels.get(status, status) if status else "No ships yet"
 
     default_pfp_url = os.environ["DEFAULT_PFP"]
 

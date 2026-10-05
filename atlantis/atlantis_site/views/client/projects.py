@@ -709,7 +709,7 @@ def explore(request):
     # its owner has written at least one lapse into it.
     projects = projects_unlocked.exclude(owner=request.user).filter(
         Exists(Journal.objects.filter(project=OuterRef("pk")))
-    ).order_by("?")  # shuffled so every visit surfaces different projects first
+    ).select_related("owner__hackclub_profile").order_by("?")  # shuffled so every visit surfaces different projects first
 
     return render(request, "atlantis_site/explore.html", {'profile': profile, 'projects': projects})
 

@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from ..models import (
     AuditLog, InternalComment, Journal, Ship, T1, T2, T3, Timelapse, TimelapseRemoval,
+    TimelapseReview,
     PAYOUT_MULTIPLIER_DEFAULT, PEARLS_PER_HOUR, detect_editor, is_editor_model_file
 )
 from ..hca import (
@@ -114,6 +115,30 @@ def approved_seconds_for_journals(journals):
 def approved_minutes_for_journals(journals):
     return approved_seconds_for_journals(journals) // 60
 
+def approved_minutes_by_project(project_ids):
+    """{project id: approved minutes over all its journals}, in two queries.
+
+    approved_minutes_for_journals(project.journals.all()) for a whole page of
+    projects at once.
+    """
+    project_ids = set(project_ids)
+    tracked = dict(
+        Timelapse.objects.filter(journal__project_id__in=project_ids)
+        .values_list("journal__project_id")
+        .order_by()
+        .annotate(total=Sum("tracked_seconds"))
+    )
+    removed = dict(
+        TimelapseRemoval.objects.filter(review__journal__project_id__in=project_ids)
+        .values_list("review__journal__project_id")
+        .order_by()
+        .annotate(total=Sum(F("end_seconds") - F("start_seconds"), output_field=IntegerField()))
+    )
+    return {
+        project_id: max((tracked.get(project_id) or 0) - (removed.get(project_id) or 0), 0) // 60
+        for project_id in project_ids
+    }
+
 def payable_journals_for_ship(ship):
     """Every journal this ship's payout has to cover.
 
@@ -198,9 +223,14 @@ def payout_buckets(ship, brackets=None):
     return out
 
 def timelapse_cleared_ships(ships):
-    return ships.exclude(
-        Exists(Journal.objects.filter(ship=OuterRef("pk"), timelapse_review__isnull=True))
+    # "No review" as its own NOT EXISTS rather than timelapse_review__isnull,
+    # whose LEFT JOIN ... IS NULL Postgres estimates at one row: nested inside
+    # this EXISTS that became a nested loop over every journal for every ship,
+    # which every admin page paid for through the T1 nav badge.
+    unreviewed = Journal.objects.filter(ship=OuterRef("pk")).exclude(
+        Exists(TimelapseReview.objects.filter(journal=OuterRef("pk")))
     )
+    return ships.exclude(Exists(unreviewed))
 
 def format_minutes(minutes):
     minutes = int(minutes or 0)
