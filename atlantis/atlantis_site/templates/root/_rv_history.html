@@ -51,11 +51,16 @@
                         {% endif %}
                         <span class="rv-history-byline">
                             {{ event.actor }} &middot; {{ event.at|date:"M j, Y, g:i a" }}
-                            {% if event.other_ship %}&middot; on ship #{{ event.ship_id }}{% endif %}
+                            {% if event.other_ship %}&middot; {% if event.ship_id %}on ship #{{ event.ship_id }}{% else %}before shipping{% endif %}{% endif %}
                         </span>
                     </div>
                     {% if event.type == "comment" %}
                         <p>{{ event.comment.text|linebreaksbr }}</p>
+                    {% elif event.type == "timelapse" %}
+                        <div class="rv-history-field-block">
+                            <p class="rv-history-field">Notes on the pass</p>
+                            <p>{{ event.notes|linebreaksbr }}</p>
+                        </div>
                     {% elif event.type == "t1" %}
                         <div class="rv-history-field-block">
                             <p class="rv-history-field">Feedback</p>

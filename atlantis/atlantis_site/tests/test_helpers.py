@@ -41,7 +41,7 @@ from ..views.helpers import (
 	sniff_image_extension,
 	validate_file_size,
 )
-from .base import User, make_journal, make_project, make_ship, make_user, image_upload
+from .base import User, approve_timelapse, make_journal, make_project, make_ship, make_user, image_upload
 
 
 class EditorDetectionTests(TestCase):
@@ -345,6 +345,26 @@ class BuildReviewHistoryTests(TestCase):
 		self.assertEqual([e["type"] for e in events], ["t1", "t2", "t3"])
 		self.assertEqual(events[-1]["review"], t3)
 		self.assertEqual(events[-1]["label"], "T3 Review")
+
+	def test_timelapse_pass_notes_are_one_event_per_pass(self):
+		first = make_journal(self.project, ship=self.ship)
+		second = make_journal(self.project, ship=self.ship)
+		approve_timelapse(first, reviewer=self.user, internal_notes="screen is blank half the time")
+		approve_timelapse(second, reviewer=self.user, internal_notes="screen is blank half the time")
+		T1.objects.create(
+			ship=self.ship, reviewer=self.user, feedback="ok", internal_notes="fine", approved=True
+		)
+
+		events = build_review_history(self.ship)
+
+		self.assertEqual([e["type"] for e in events], ["timelapse", "t1"])
+		self.assertEqual(events[0]["notes"], "screen is blank half the time")
+		self.assertEqual(events[0]["actor"], "Historian")
+		self.assertFalse(events[0]["other_ship"])
+
+	def test_timelapse_passes_without_notes_are_left_out(self):
+		approve_timelapse(make_journal(self.project, ship=self.ship), internal_notes="")
+		self.assertEqual(build_review_history(self.ship), [])
 
 	def test_other_projects_are_untouched(self):
 		other_ship = make_ship(make_project(self.user), journal_minutes=())

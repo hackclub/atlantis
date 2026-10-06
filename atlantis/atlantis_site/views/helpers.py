@@ -411,6 +411,45 @@ def build_review_history(ship):
             "ship_id": t3.ship_id,
             "at": t3.reviewed_at,
         })
+    # The notes a timelapse reviewer leaves on sign-off are written to every
+    # lapse the pass covered, so one pass is one event here, not one per lapse.
+    # A pass with no notes has nothing to tell the reviewers after it.
+    passes = []
+    for review in (
+        TimelapseReview.objects.filter(journal__project=project)
+        .exclude(internal_notes="")
+        .select_related("journal", "reviewer", "reviewer__hackclub_profile")
+        .order_by("reviewed_at")
+    ):
+        last = passes[-1] if passes else None
+        if (
+            last
+            and last["reviewer_id"] == review.reviewer_id
+            and last["notes"] == review.internal_notes
+            and (review.reviewed_at - last["at"]).total_seconds() < 60
+        ):
+            last["ship_ids"].add(review.journal.ship_id)
+            continue
+        passes.append({
+            "reviewer_id": review.reviewer_id,
+            "notes": review.internal_notes,
+            "actor": display_name(review.reviewer),
+            "at": review.reviewed_at,
+            "ship_ids": {review.journal.ship_id},
+        })
+    for lookout in passes:
+        on_this_ship = ship.id in lookout["ship_ids"]
+        events.append({
+            "type": "timelapse",
+            "label": "Timelapse Review",
+            "notes": lookout["notes"],
+            "actor": lookout["actor"],
+            "other_ship": not on_this_ship,
+            "ship_id": ship.id if on_this_ship else next(
+                (ship_id for ship_id in lookout["ship_ids"] if ship_id), None
+            ),
+            "at": lookout["at"],
+        })
     for comment in internal_comments_for_project(project):
         events.append({
             "type": "comment",
