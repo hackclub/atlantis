@@ -166,6 +166,10 @@ except ImportError:
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    # Straight after security, as WhiteNoise asks: an asset is answered here
+    # and never reaches the session, auth, ban and presence middleware below,
+    # each of which costs a database round trip for a signed-in user.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -178,7 +182,6 @@ MIDDLEWARE = [
     'atlantis_site.presence.PresenceMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    "whitenoise.middleware.WhiteNoiseMiddleware",
 ]
 
 ROOT_URLCONF = 'atlantis.urls'
@@ -212,6 +215,13 @@ DATABASES = {
         "PASSWORD": os.environ["POSTGRES_PASSWORD"],
         "HOST": os.environ["POSTGRES_HOST"],
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        # Keep each thread's connection open between requests rather than
+        # paying for a fresh Postgres handshake (and auth) on every one. The
+        # health check catches a connection the database dropped while idle,
+        # so a restart of the db container can't 500 the first request after.
+        # See gunicorn.conf.py for how many of these there can be at once.
+        "CONN_MAX_AGE": int(os.environ.get("CONN_MAX_AGE", 60)),
+        "CONN_HEALTH_CHECKS": True,
     }
 }
 

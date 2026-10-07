@@ -17,6 +17,10 @@ class AtlantisTestRunner(DiscoverRunner):
 
 	The autojoin channels go the same way: every Slack-linked signup invites
 	somebody to them, and a test login shouldn't reach the real workspace.
+
+	RUN_BACKGROUND_INLINE makes views.helpers.run_in_background call its job
+	on the spot, so a test that asserts on a DM sees it sent by the time the
+	response comes back rather than racing a pool thread for it.
 	"""
 
 	def setup_test_environment(self, **kwargs):
@@ -25,6 +29,7 @@ class AtlantisTestRunner(DiscoverRunner):
 			AIRTABLE_PAT="", AIRTABLE_BASE_ID="", AIRTABLE_TABLE_ID="",
 			AIRTABLE_EMAILS_TABLE_ID="",
 			SLACK_AUTOJOIN_CHANNEL_IDS=[],
+			RUN_BACKGROUND_INLINE=True,
 		)
 		self._airtable_guard.enable()
 

@@ -7,7 +7,8 @@ to read and no form to post: no projects, no journals, no orders.
 
 Two things are let through. Logging out, so a banned person can still sign out
 of the account (or sign in as someone else on a shared machine), and static
-files, which WhiteNoise serves from further down the stack than this.
+files. WhiteNoise sits ahead of this and answers those before they get here;
+the exemption is kept for anything under STATIC_URL it doesn't have a file for.
 """
 
 from django.conf import settings

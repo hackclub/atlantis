@@ -18,7 +18,7 @@ from ...models import (
 )
 from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked_message
 from ...submissions import build_generated_justification, build_override_justification, submit_ship
-from ..helpers import check_perms, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
+from ..helpers import check_perms, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
 from .queue import (
     QUEUES, annotate_recordings, dash_context, decorate_rows, filter_rows,
@@ -140,11 +140,13 @@ def ping_review_checkpoint(ship, reviewer, tier, outcome, feedback):
         return False
 
     project = ship.project
-    return send_slack_message(
+    run_in_background(
+        send_slack_message,
         f"{slack_mention(project.owner)} your project {project_link(project)} has been "
         f"{tier} reviewed by {slack_mention(reviewer)} and {outcome}. {feedback_line(feedback)}",
         settings.REVIEW_CHECKPOINT_ID,
     )
+    return True
 
 def ping_changes_requested(ship, reviewer, feedback, tier="T1"):
     """
@@ -157,13 +159,15 @@ def ping_changes_requested(ship, reviewer, feedback, tier="T1"):
         return False
 
     project = ship.project
-    return send_slack_message(
+    run_in_background(
+        send_slack_message,
         f"{slack_mention(project.owner)} {slack_mention(reviewer)} has requested changes to your "
         f"project {project_link(project)} during {tier} review. It hasn't been rejected: make the "
         f"changes, then resubmit it from the project page and it'll go back into the T1 queue. "
         f"{feedback_line(feedback)}",
         settings.REVIEW_CHECKPOINT_ID,
     )
+    return True
 
 def report_submission(request, submission):
     """Tell the reviewer what became of the Airtable record.
@@ -472,7 +476,8 @@ def t1_rollback(request, t1_id):
     # The shipper was told about the decision in the checkpoint channel, so
     # they are told there that it no longer stands.
     if settings.REVIEW_CHECKPOINT_ID:
-        send_slack_message(
+        run_in_background(
+            send_slack_message,
             f"{slack_mention(ship.project.owner)} the T1 {verdict} of your project "
             f"{project_link(ship.project)} has been rolled back by {slack_mention(request.user)}. "
             f"It's back in the T1 queue and will be reviewed again.",
@@ -819,7 +824,7 @@ def t3_decision(request, ship_id):
 
     owner_profile = getattr(ship.project.owner, "hackclub_profile", None)
     owner_slack_id = owner_profile.slack_id if owner_profile else ""
-    send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized and you've received {payout_layers} pearls for it!", owner_slack_id) if decision == T3.Decision.APPROVE else send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
+    run_in_background(send_slack_dm, f"Your project <https://atlantis.hackclub.com/projects/{ship.project.id}|{ship.project.title}> has been finalized and you've received {payout_layers} pearls for it!", owner_slack_id) if decision == T3.Decision.APPROVE else run_in_background(send_slack_dm, f"Your project <https://atlantis.hackclub.com/projects/{ship.project.id}|{ship.project.title}> has been {message}!", owner_slack_id)
 
     record_audit(request, "t3_decision", target=f"Ship #{ship.id} ({ship.project.title})", metadata={
         "ship_id": ship.id,
@@ -953,7 +958,7 @@ def lock_project(request, project_id):
     owner_profile = getattr(project.owner, "hackclub_profile", None)
     owner_slack_id = owner_profile.slack_id if owner_profile else ""
     if owner_slack_id:
-        send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{project_id}|{project.title}> has been locked.", owner_slack_id)
+        run_in_background(send_slack_dm, f"Your project <https://atlantis.hackclub.com/projects/{project_id}|{project.title}> has been locked.", owner_slack_id)
 
     return safe_redirect_back(request)
 
@@ -975,6 +980,6 @@ def unlock_project(request, project_id):
     owner_profile = getattr(project.owner, "hackclub_profile", None)
     owner_slack_id = owner_profile.slack_id if owner_profile else ""
     if owner_slack_id:
-        send_slack_dm(f"Your project <https://atlantis.hackclub.com/projects/{project_id}|{project.title}> has been unlocked.", owner_slack_id)
+        run_in_background(send_slack_dm, f"Your project <https://atlantis.hackclub.com/projects/{project_id}|{project.title}> has been unlocked.", owner_slack_id)
 
     return safe_redirect_back(request)

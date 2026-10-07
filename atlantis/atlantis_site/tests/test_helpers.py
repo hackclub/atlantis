@@ -671,6 +671,51 @@ class GetModelInfoTests(TestCase):
 		with self.assertRaises(ValueError):
 			helpers.get_model_info("1")
 
+	@patch("atlantis_site.views.helpers.requests.post")
+	def test_answer_is_cached(self, mock_post):
+		mock_post.return_value.json.return_value = {
+			"data": {"print": {"id": "1", "makesCount": 3}}
+		}
+		helpers.get_model_info("1")
+		self.assertEqual(helpers.get_model_info("1"), {"id": "1", "makesCount": 3})
+		mock_post.assert_called_once()
+
+	@patch("atlantis_site.views.helpers.requests.post")
+	def test_failure_is_remembered_briefly(self, mock_post):
+		mock_post.side_effect = ConnectionError("printables down")
+		with self.assertRaises(ConnectionError):
+			helpers.get_model_info("1")
+		# The second page view fails fast instead of waiting on another timeout.
+		with self.assertRaises(ValueError):
+			helpers.get_model_info("1")
+		mock_post.assert_called_once()
+
+
+class RunInBackgroundTests(TestCase):
+	def test_runs_inline_under_the_test_runner(self):
+		job = MagicMock()
+		helpers.run_in_background(job, "a", b=2)
+		job.assert_called_once_with("a", b=2)
+
+	def test_hands_the_job_to_the_pool_outside_tests(self):
+		job = MagicMock()
+		with self.settings(RUN_BACKGROUND_INLINE=False), \
+				patch.object(helpers, "_background") as pool:
+			helpers.run_in_background(job, "a")
+		job.assert_not_called()
+		pool.submit.assert_called_once()
+		# What the pool would run calls the job.
+		fn, *args = pool.submit.call_args.args
+		with patch.object(helpers.connections, "close_all") as close_all:
+			fn(*args)
+		job.assert_called_once_with("a")
+		close_all.assert_called_once()
+
+	def test_a_failing_job_is_logged_not_raised(self):
+		job = MagicMock(side_effect=RuntimeError("slack down"))
+		with self.assertLogs("atlantis_site.views.helpers", level="ERROR"):
+			helpers.run_in_background(job)
+
 
 class DisplayNameTests(TestCase):
 	def test_none_user(self):

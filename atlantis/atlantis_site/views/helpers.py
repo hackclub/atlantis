@@ -2,6 +2,7 @@ from django.contrib.auth.decorators import user_passes_test
 from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
+from django.db import connections
 from django.db.models import Count, Exists, F, IntegerField, OuterRef, Sum
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
@@ -34,6 +35,7 @@ import os
 import uuid
 import logging
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import requests
 import socket
 import ipaddress
@@ -688,7 +690,35 @@ def is_valid_stl_url(url):
     except Exception:
         return False
 
+# How long a Printables answer is reused. The only thing read off it is the
+# makes count, which nobody needs to the minute, and without this every load
+# of a project page or a T1 review waited on a round trip to Printables.
+MODEL_INFO_TTL = 15 * 60
+# How long a failed lookup is remembered, so a Printables outage costs one
+# timeout a minute per model rather than one on every page view.
+MODEL_INFO_FAILURE_TTL = 60
+_MODEL_INFO_FAILED = "failed"
+
+
 def get_model_info(model_id: str) -> dict:
+    """The Printables model behind model_id, cached; raises when it can't be had."""
+    cache_key = f"printables-model:{model_id}"
+    cached = cache.get(cache_key)
+    if cached == _MODEL_INFO_FAILED:
+        raise ValueError(f"Printables lookup for {model_id} failed recently")
+    if cached is not None:
+        return cached
+
+    try:
+        info = _fetch_model_info(model_id)
+    except Exception:
+        cache.set(cache_key, _MODEL_INFO_FAILED, MODEL_INFO_FAILURE_TTL)
+        raise
+    cache.set(cache_key, info, MODEL_INFO_TTL)
+    return info
+
+
+def _fetch_model_info(model_id: str) -> dict:
     PRINTABLES_GRAPHQL_URL = os.environ['PRINTABLES_GRAPHQL_URL']
     QUERY = """
     query GetModelInfo($id: ID!) {
@@ -810,20 +840,71 @@ def invite_to_autojoin_channels_in_background(slack_ids, label):
 def _start_thread(target):
     threading.Thread(target=target, daemon=True).start()
 
+# Threads per gunicorn worker for work a request sets off but doesn't wait on,
+# which today is Slack: a DM or a checkpoint post is up to five seconds of
+# someone else's API that the person who clicked has no reason to sit through.
+# A pool rather than a thread per job, so a burst of them queues instead of
+# piling up threads, and so whatever is still queued when gunicorn recycles
+# a worker gets sent before the process exits instead of being dropped.
+BACKGROUND_WORKERS = 4
+_background = ThreadPoolExecutor(max_workers=BACKGROUND_WORKERS, thread_name_prefix="atlantis-bg")
+
+
+def run_in_background(fn, *args, **kwargs):
+    """Call fn(*args, **kwargs) on the background pool and return at once.
+
+    Fire and forget: nothing comes back, and an exception is logged rather
+    than raised. Build anything that needs the database *before* calling
+    this — pass the finished strings and ids in — so the job is only the
+    network call and never sees a half-committed request.
+
+    With settings.RUN_BACKGROUND_INLINE (the test runner sets it) the call
+    runs right here instead, so a test can assert on what it did.
+    """
+    if getattr(settings, "RUN_BACKGROUND_INLINE", False):
+        _run_logged(fn, args, kwargs, close_connections=False)
+    else:
+        _background.submit(_run_logged, fn, args, kwargs)
+
+
+def _run_logged(fn, args, kwargs, close_connections=True):
+    try:
+        fn(*args, **kwargs)
+    except Exception:
+        logger.exception("Background job %s failed", getattr(fn, "__name__", fn))
+    finally:
+        # A pool thread lives as long as the worker, so a job that did touch
+        # the database mustn't leave a connection held open behind it.
+        if close_connections:
+            connections.close_all()
+
 def slack_mention(user):
     profile = getattr(user, "hackclub_profile", None)
     slack_id = profile.slack_id if profile else ""
     return f"<@{slack_id}>" if slack_id else display_name(user)
 
 def notify_followers(request, project, message):
+    """DM everyone following this project. Returns before any DM is sent.
+
+    The followers are read here, on the request's thread; only the Slack calls,
+    one per follower, go to the background, so shipping a popular project
+    doesn't hold the page for a round trip to Slack per follower.
+    """
     url = request.build_absolute_uri(reverse("project_detail", args=[project.id]))
     content = f"{message} {url}"
-    for follower in project.followers.all():
-        if follower == project.owner:
-            continue
-        profile = getattr(follower, "hackclub_profile", None)
-        if profile and profile.slack_id:
-            send_slack_dm(content, profile.slack_id)
+    slack_ids = [
+        follower.hackclub_profile.slack_id
+        for follower in project.followers.exclude(id=project.owner_id).select_related("hackclub_profile")
+        if getattr(follower, "hackclub_profile", None) and follower.hackclub_profile.slack_id
+    ]
+    if not slack_ids:
+        return
+
+    def send_all():
+        for slack_id in slack_ids:
+            send_slack_dm(content, slack_id)
+
+    run_in_background(send_all)
     
 def is_valid_editor_model_url(value):
     # An archive names no editor, so detect_editor can't vouch for it — but a

@@ -13,7 +13,7 @@ from ...hca import (
     IdentityUnavailable, extract_addresses, extract_contact, extract_phone,
     fetch_userinfo, select_address,
 )
-from ..helpers import check_perms, record_audit, send_slack_dm, is_valid_image_url, INT_FIELD_MAX, field_max_length, too_long
+from ..helpers import check_perms, record_audit, run_in_background, send_slack_dm, is_valid_image_url, INT_FIELD_MAX, field_max_length, too_long
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])
@@ -135,7 +135,7 @@ def update_order_status(request, order_id):
             Order.OrderStatus.REFUNDED: f"Your order for {order.quantity}x {order.item.name} was refunded and {amount_refunded} pearls have been added back to your balance.",
             Order.OrderStatus.PENDING: f"Your order for {order.quantity}x {order.item.name} has been marked as pending again.",
         }
-        send_slack_dm(dm_messages[order.status], owner_slack_id)
+        run_in_background(send_slack_dm, dm_messages[order.status], owner_slack_id)
 
     messages.success(request, f"Order #{order.id} updated to {order.get_status_display().lower()}.")
     return redirect("fulfillment_dash")

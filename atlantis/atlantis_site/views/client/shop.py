@@ -12,7 +12,7 @@ from ...models import Profile, Item, Order, ShopCategory
 from ...crypto import format_address
 from ...hca import AddressUnavailable
 from ..helpers import (
-    INT_FIELD_MAX, field_max_length, rate_limit, record_audit, send_slack_dm,
+    INT_FIELD_MAX, field_max_length, rate_limit, record_audit, run_in_background, send_slack_dm,
     too_long,
 )
 
@@ -309,7 +309,8 @@ def _order_saver(request, item, quantity, total_cost, user_notes):
 
     profile = request.user.hackclub_profile
     if profile.slack_id:
-        send_slack_dm(
+        run_in_background(
+            send_slack_dm,
             f"{quantity} streak saver hour{'s' if quantity != 1 else ''} applied to "
             f"{named}. " + (
                 "You're back in the program!" if not state.eliminated
