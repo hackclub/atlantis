@@ -319,6 +319,37 @@ def build_metrics(now):
         "daily_signups": _daily_rows(signup_counts, TREND_DAYS, today),
     }
 
+    # ---- conversion funnel -----------------------------------------------
+    # Each step is cut from the one before it, so the bars only ever shrink
+    # and every percentage is a share of a set that contains it. A deleted
+    # project still counts as having made one. Time is tracked time on a
+    # lapse, the same footage "hours logged" adds up, and shipped is any ship
+    # at all, whatever review made of it.
+    made_project = User.objects.filter(projects__isnull=False)
+    tracked_time = User.objects.filter(
+        id__in=made_project,
+        projects__journals__timelapses__tracked_seconds__gt=0,
+    )
+    shipped = User.objects.filter(id__in=tracked_time, projects__ships__isnull=False)
+    funnel_steps = [
+        ("Signed up", total_users),
+        ("Made a project", made_project.distinct().count()),
+        ("Tracked some time", tracked_time.distinct().count()),
+        ("Shipped a project", shipped.distinct().count()),
+    ]
+    funnel_rows = []
+    for index, (label, count) in enumerate(funnel_steps):
+        row = {"label": label, "value": count}
+        if index:
+            row["sub"] = f"{_pct(count, total_users)}% of signups"
+        if index > 1:
+            row["sub"] += f" · {_pct(count, funnel_steps[index - 1][1])}% of previous"
+        funnel_rows.append(row)
+    funnel_stats = {
+        "steps": add_bars(funnel_rows),
+        "overall_rate": _pct(funnel_steps[-1][1], total_users),
+    }
+
     # ---- hours logged ----------------------------------------------------
     # "Logged" is counted against the lapse the footage was attached to, not
     # against when it was recorded: that is the moment the time entered the
@@ -695,6 +726,7 @@ def build_metrics(now):
 
     return {
         "activity": activity_stats,
+        "funnel": funnel_stats,
         "streaks": build_streak_stats(now),
         "hours": hours_stats,
         "projects": projects_stats,

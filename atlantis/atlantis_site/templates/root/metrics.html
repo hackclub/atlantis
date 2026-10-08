@@ -82,6 +82,16 @@
         </div>
     </section>
 
+    {% if funnel %}{# absent from snapshots taken before it existed #}
+    <section class="metrics-section">
+        <h2>Conversion funnel</h2>
+        <p class="metrics-generated">All time. Each step counts only people who made the one before it. {{ funnel.overall_rate }}% of signups have shipped.</p>
+        <div class="chart-grid">
+            {% include "root/_metric_chart.html" with title="Sign up to ship" rows=funnel.steps fill_class="good" wide=True empty="No signups yet" %}
+        </div>
+    </section>
+    {% endif %}
+
     {% if streaks %}
     <section class="metrics-section">
         <h2>Streaks</h2>

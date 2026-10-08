@@ -7,6 +7,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.core.cache import cache
 from django.core.management import call_command
@@ -324,6 +325,30 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(ships["airtable_hours"], 3.0)
 		self.assertEqual(ships["airtable_ships"], 2)
 		self.assertEqual(ships["airtable_unsent"], 1)
+
+	def test_funnel_counts_each_step_out_of_the_one_before(self):
+		make_user("signed-up-only", slack_id="U1")
+		make_project(make_user("made-project", slack_id="U2"))
+		# Two projects with time between them still count once.
+		tracker = make_user("tracked", slack_id="U3")
+		make_journal(make_project(tracker), time_spent=30)
+		make_journal(make_project(tracker), time_spent=30)
+		make_ship(make_project(make_user("shipped", slack_id="U4")), journal_minutes=(60,))
+		# A ship with no tracked time behind it skips a step, so it stops there.
+		skipper = make_user("skipper", slack_id="U5")
+		Ship.objects.create(project=make_project(skipper))
+
+		# Everyone signed up, the organizer and the base fixtures included.
+		signups = get_user_model().objects.count()
+
+		funnel = self.client.get(reverse("metrics")).context["funnel"]
+
+		self.assertEqual(
+			[(row["label"], row["value"]) for row in funnel["steps"]],
+			[("Signed up", signups), ("Made a project", 4), ("Tracked some time", 2), ("Shipped a project", 1)],
+		)
+		self.assertEqual(funnel["steps"][3]["sub"].split(" · ")[1], "50.0% of previous")
+		self.assertEqual(funnel["overall_rate"], round(100 / signups, 1))
 
 	def test_a_site_with_nothing_on_it_does_not_divide_by_zero(self):
 		hours = self._hours()
