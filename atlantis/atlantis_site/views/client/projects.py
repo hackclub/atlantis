@@ -4,7 +4,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.files.storage import default_storage
 from django.db import IntegrityError, transaction
-from django.db.models import Exists, OuterRef, Sum
+from django.db.models import Exists, OuterRef, Q, Sum
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
 from django.urls import reverse
@@ -491,7 +491,7 @@ def project_detail(request, project_id):
     ships = list(project.ships.order_by('-created_at'))
     # Oldest first: the book reads front to back, and the empty space for the
     # next lapse is at the end of the run.
-    journals = project.journals.order_by('id')
+    journals = project.journals.select_related('ship').order_by('id')
 
     time_spent = format_minutes(tracked_minutes_for_journals(journals))
 
@@ -558,6 +558,10 @@ def project_detail(request, project_id):
                         else "You need at least one lapse before you can ship."
                     )
                 })
+            # A returned ship's lapses can be torn out, so it may no longer
+            # carry any. It still has to go back with something on it.
+            if resubmitting and not resubmission_has_journals(project, latest_ship) and not can_bypass_ship_requirements(user):
+                ship_blockers.append({"text": "You need at least one lapse before you can resubmit."})
         can_ship = not ship_blockers
 
     # The same answer as one sentence, for anywhere a list doesn't fit.
@@ -956,19 +960,27 @@ def create_journal(request, project_id):
     return redirect("project_detail", project_id=project_id)
 
 
+def resubmission_has_journals(project, ship):
+    """Whether a returned ship would go back with any lapses on it: the ones
+    it still carries, plus the unshipped ones resubmitting sweeps onto it."""
+    return project.journals.filter(Q(ship=ship) | Q(ship__isnull=True)).exists()
+
+
 def _changeable_journal(request, project_id, journal_id):
     """The owner's lapse, if it can still be edited or torn out.
 
     Returns (journal, None) or (None, error message). A lapse a ship has
     claimed is what a reviewer is looking at — or already signed off and paid
-    for — so it is frozen from the moment it ships, rejected or not.
+    for — so it is frozen from the moment it ships, rejected or not. The one
+    exception is a ship sent back for changes, which is the owner's to fix
+    (see Journal.changeable).
     """
     project = get_object_or_404(Project, id=project_id, owner=request.user, deleted=False)
-    journal = get_object_or_404(Journal, id=journal_id, project=project)
+    journal = get_object_or_404(Journal.objects.select_related("ship"), id=journal_id, project=project)
 
     if project.locked:
         return None, "You cannot change a lapse on a locked project."
-    if journal.ship_id is not None:
+    if not journal.changeable:
         return None, "This lapse has already been shipped and can't be changed."
     return journal, None
 
@@ -1105,6 +1117,9 @@ def ship_project(request, project_id):
     if not bypass_requirements and not resubmitting and not unassigned_journals.exists():
         messages.error(request, "Your project must have at least one journal to be shipped")
         return redirect("projects")
+    if not bypass_requirements and resubmitting and not resubmission_has_journals(project, latest_ship):
+        messages.error(request, "Your project must have at least one journal to be resubmitted")
+        return redirect("project_detail", project_id=project_id)
 
     if latest_ship and latest_ship.status not in (
         Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED, Ship.ShipStatus.CHANGES_REQUESTED,

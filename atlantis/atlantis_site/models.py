@@ -657,6 +657,17 @@ class Journal(models.Model):
 		return media_url(self.model_url)
 
 	@property
+	def changeable(self):
+		"""Whether the owner may still edit or tear out this lapse.
+
+		An unshipped lapse is theirs to change. So is one on a ship a reviewer
+		sent back for changes: that ship is waiting on its owner, nobody has
+		signed off on or paid for it, and fixing a lapse is often the change
+		that was asked for. Anywhere else in review, or past it, it is frozen.
+		"""
+		return self.ship_id is None or self.ship.status == Ship.ShipStatus.CHANGES_REQUESTED
+
+	@property
 	def tracked_seconds(self):
 		return self.timelapses.aggregate(total=models.Sum("tracked_seconds"))["total"] or 0
 

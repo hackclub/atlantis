@@ -249,7 +249,7 @@
                                     <div class="lapse-body">
                                         <h3 class="lapse-title">{{ entry.journal.title }}</h3>
                                         <p class="lapse-meta">{{ entry.journal.tracked_display }} &middot; {{ entry.journal.created_at|date:"M j, Y" }}</p>
-                                        {% if is_owner and not project.locked and not entry.journal.ship_id %}
+                                        {% if is_owner and not project.locked and entry.journal.changeable %}
                                             <p class="lapse-actions">
                                                 <button type="button" class="ink-link" data-slip="slip-lapse-edit-{{ entry.journal.id }}">edit</button>
                                                 <button type="button" class="ink-link ink-link--danger" data-slip="slip-lapse-delete-{{ entry.journal.id }}">delete</button>
@@ -434,11 +434,12 @@
 
         {% if not project.locked %}
         {% comment %}
-        One pair per lapse no ship has claimed yet. Shipped lapses are frozen,
-        so they get neither the slips nor the links that open them.
+        One pair per lapse the owner can still change: unshipped, or on a ship
+        sent back for changes. Other shipped lapses are frozen, so they get
+        neither the slips nor the links that open them.
         {% endcomment %}
         {% for journal in journals %}
-            {% if not journal.ship_id %}
+            {% if journal.changeable %}
             <div class="slip" id="slip-lapse-edit-{{ journal.id }}" hidden>
                 <h2>Edit lapse</h2>
                 <form action="{% url 'edit_journal' project.id journal.id %}" method="post" enctype="multipart/form-data">

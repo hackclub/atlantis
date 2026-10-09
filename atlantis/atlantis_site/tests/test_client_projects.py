@@ -312,6 +312,29 @@ class ProjectDetailTests(BaseTestCase):
 		self.assertTrue(response.context["resubmitting"])
 		self.assertContains(response, "Before you resubmit")
 
+	def test_cannot_resubmit_returned_ship_with_no_lapses_left(self):
+		project = make_project(self.user, shippable=True)
+		ship = make_ship(project, status=Ship.ShipStatus.CHANGES_REQUESTED, journal_minutes=(60,))
+		ship.journals.get().delete()
+		response = self._detail(project)
+		self.assertFalse(response.context["can_ship"])
+		self.assertIn("before you can resubmit", response.context["ship_disabled_reason"])
+
+	def test_returned_ships_lapses_offer_edit_and_delete(self):
+		project = make_project(self.user, shippable=True)
+		ship = make_ship(project, status=Ship.ShipStatus.CHANGES_REQUESTED, journal_minutes=(60,))
+		journal = ship.journals.get()
+		response = self._detail(project)
+		self.assertContains(response, f'id="slip-lapse-edit-{journal.id}"')
+		self.assertContains(response, f'id="slip-lapse-delete-{journal.id}"')
+
+	def test_in_review_ships_lapses_offer_no_edit_or_delete(self):
+		project = make_project(self.user, shippable=True)
+		ship = make_ship(project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(60,))
+		journal = ship.journals.get()
+		response = self._detail(project)
+		self.assertNotContains(response, f'id="slip-lapse-edit-{journal.id}"')
+
 	def test_cannot_reship_after_rejection_without_a_new_lapse(self):
 		"""The rejected ship owns every lapse, so the button must stay dark.
 
@@ -702,6 +725,25 @@ class EditJournalTests(BaseTestCase):
 		self.assertEqual(self.journal.title, "Old title")
 		self.assertIn("This lapse has already been shipped and can't be changed.", message_texts(response))
 
+	def test_can_edit_journal_on_returned_ship(self):
+		ship = Ship.objects.create(project=self.project, status=Ship.ShipStatus.CHANGES_REQUESTED)
+		self.journal.ship = ship
+		self.journal.save()
+		response = self._edit()
+		self.journal.refresh_from_db()
+		self.assertNotEqual(self.journal.title, "Old title")
+		self.assertEqual(self.journal.ship, ship)
+		self.assertIn("Lapse updated.", message_texts(response))
+
+	def test_cannot_edit_journal_on_ship_back_in_review(self):
+		ship = Ship.objects.create(project=self.project, status=Ship.ShipStatus.T1_QUEUE)
+		self.journal.ship = ship
+		self.journal.save()
+		response = self._edit()
+		self.journal.refresh_from_db()
+		self.assertEqual(self.journal.title, "Old title")
+		self.assertIn("This lapse has already been shipped and can't be changed.", message_texts(response))
+
 	def test_cannot_edit_on_locked_project(self):
 		self.project.locked = True
 		self.project.save()
@@ -751,6 +793,14 @@ class DeleteJournalTests(BaseTestCase):
 		response = self._delete(journal)
 		self.assertTrue(Journal.objects.filter(pk=journal.pk).exists())
 		self.assertIn("This lapse has already been shipped and can't be changed.", message_texts(response))
+
+	def test_can_delete_journal_on_returned_ship(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED, journal_minutes=(60, 60))
+		journal = ship.journals.first()
+		response = self._delete(journal)
+		self.assertFalse(Journal.objects.filter(pk=journal.pk).exists())
+		self.assertEqual(ship.journals.count(), 1)
+		self.assertIn("Lapse deleted.", message_texts(response))
 
 	def test_cannot_delete_on_locked_project(self):
 		journal = make_journal(self.project)
@@ -911,6 +961,26 @@ class ShipProjectTests(BaseTestCase):
 		self._ship()
 		self.assertEqual(Ship.objects.count(), 1)
 		new_journal.refresh_from_db()
+		self.assertEqual(new_journal.ship, ship)
+
+	def test_cannot_resubmit_a_returned_ship_with_every_lapse_deleted(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED, journal_minutes=(60,))
+		ship.journals.get().delete()
+		response = self._ship()
+		ship.refresh_from_db()
+		self.assertEqual(ship.status, Ship.ShipStatus.CHANGES_REQUESTED)
+		self.assertIn(
+			"Your project must have at least one journal to be resubmitted", message_texts(response)
+		)
+
+	def test_resubmit_with_every_lapse_replaced(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED, journal_minutes=(60,))
+		ship.journals.get().delete()
+		new_journal = make_journal(self.project, time_spent=5)
+		self._ship()
+		ship.refresh_from_db()
+		new_journal.refresh_from_db()
+		self.assertEqual(ship.status, Ship.ShipStatus.T1_QUEUE)
 		self.assertEqual(new_journal.ship, ship)
 
 	def test_resubmit_still_needs_the_checklist(self):
