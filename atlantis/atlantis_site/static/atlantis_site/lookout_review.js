@@ -1082,6 +1082,24 @@
 
     /* Put the cursor in a container's first description box, or out of the one
      * it is in if there is nothing there to type in. */
+    /*
+     * A link straight to one recording (#recording-<id>, from a ship review's
+     * "watch"): open the entry it sits in, even a signed-off one, and scroll
+     * both columns to it. The browser's own anchor jump can't, since the
+     * columns scroll themselves rather than the page.
+     */
+    function jumpToHash() {
+        var match = /^#recording-(\d+)$/.exec(window.location.hash);
+        var rec = match ? document.getElementById('recording-' + match[1]) : null;
+        var section = rec ? rec.closest('[data-entry]') : null;
+        var scroller = document.getElementById('ta-scroll');
+        if (!section || !scroller) return;
+        setExpanded(section, true);
+        scrollColumnTo(scroller, section);
+        var column = section.querySelector('.ta-recordings');
+        if (column) scrollColumnTo(column, rec);
+    }
+
     function focusDescription(container) {
         var box = container.querySelector('[data-description]');
         if (box) {
@@ -1153,6 +1171,7 @@
         });
 
         wireEntries();
+        jumpToHash();
         setupPlaybackRate();
         setupFinal();
         setupSubmit();

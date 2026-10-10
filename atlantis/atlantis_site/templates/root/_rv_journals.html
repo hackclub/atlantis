@@ -56,7 +56,7 @@
                                         {% if session.review_removed_seconds %}
                                             <span class="is-no">&rarr; {{ session.review_approved_display }}</span>
                                         {% endif %}
-                                        <a class="rv-rec-open" href="{{ session.watch_url }}" target="_blank" rel="noreferrer noopener">watch</a>
+                                        <a class="rv-rec-open" href="{% url 'timelapse_review_project' event.journal.project_id %}?peek=1#recording-{{ session.id }}" target="_blank" rel="noreferrer noopener">watch</a>
                                     </p>
                                     {% if session.review_description %}
                                         <p class="rv-rec-note">{{ session.review_description }}</p>

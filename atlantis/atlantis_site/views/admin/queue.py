@@ -590,20 +590,25 @@ def reviews_today(queue_key, user):
     return model.objects.filter(reviewer=user, reviewed_at__gte=start).count()
 
 
-def review_context(request, queue_key, item, claimable=True, waiting_since=None):
+def review_context(request, queue_key, item, claimable=True, waiting_since=None, peek=False):
     """Everything the reviewer shell needs to place one item in its queue.
 
     Claiming happens here rather than in each view, because every path onto a
     review page goes through it. `claimable` is False for a page that can no
     longer be decided — an already-reviewed lapse, a ship that has moved on —
-    where a lease would hold the queue up for nothing.
+    where a lease would hold the queue up for nothing. `peek` is a look opened
+    from another review (a ship reviewer checking its footage, say): it leaves
+    every claim where it is, so the review it was opened from keeps its own.
     """
     queue = QUEUES[queue_key]
     skip_ids = parse_skip(request)
     ids = list(queue.pending().values_list("id", flat=True))
 
     holder = claim_holder(queue_key, item.id)
-    if claimable:
+    if peek:
+        claimable = False
+        mine = True
+    elif claimable:
         mine = claim_review(queue_key, item.id, request.user)
     else:
         release_claim(request.user)

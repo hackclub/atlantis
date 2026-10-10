@@ -457,6 +457,8 @@ def timelapse_review_project(request, project_id):
             request, "lookout", project,
             claimable=bool(pending),
             waiting_since=pending[0].created_at if pending else None,
+            # Opened from a ship review's "watch" link: look, don't claim.
+            peek=request.GET.get("peek") == "1",
         ),
     })
 

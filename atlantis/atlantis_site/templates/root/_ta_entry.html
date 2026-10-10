@@ -29,7 +29,7 @@
     <div class="ta-entry-body">
         <div class="ta-recordings">
             {% for session in lapse.timelapses.all %}
-                <div class="ta-rec" data-recording data-recording-id="{{ session.id }}">
+                <div class="ta-rec" id="recording-{{ session.id }}" data-recording data-recording-id="{{ session.id }}">
                     <div class="ta-video-wrap">
                         <video class="ta-video" src="{{ session.video_url }}" poster="{{ session.thumbnail_url }}"
                                controls preload="metadata" playsinline muted></video>
