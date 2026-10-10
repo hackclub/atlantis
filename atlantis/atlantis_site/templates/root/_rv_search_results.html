@@ -1,0 +1,44 @@
+{% comment %}
+Matches from search_everything: every ship (or project, on the timelapse desk)
+the search hits, whatever state it's in. Takes the queue table's place.
+{% endcomment %}
+<div class="rq-table-wrap">
+    <table class="rq-table">
+        <thead>
+            <tr>
+                <th>Project</th>
+                <th>Owner</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th>Flags</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for result in search_results %}
+                <tr class="rq-row" tabindex="0" data-href="{{ result.url }}">
+                    <td>
+                        <a class="rq-project" href="{{ result.url }}">{{ result.title }}</a>
+                        <span class="rq-desc">{{ result.subject }}</span>
+                    </td>
+                    <td class="rq-owner">{{ result.owner }}</td>
+                    <td>
+                        {% if result.in_queue %}
+                            <span class="rv-chip rv-chip-warn">{{ result.status }}</span>
+                        {% else %}
+                            <span class="rq-quiet">{{ result.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="rq-quiet">{{ result.at|date:"M j, Y" }}</td>
+                    <td class="rq-flags">
+                        {% if result.flagged %}<span class="rv-chip rv-chip-warn">flagged</span>{% endif %}
+                    </td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="5" class="rq-empty">No project matches that search.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% if search_results|length >= search_limit %}
+    <p class="rq-hint">Showing the newest {{ search_limit }} matches. Narrow the search to see older ones.</p>
+{% endif %}

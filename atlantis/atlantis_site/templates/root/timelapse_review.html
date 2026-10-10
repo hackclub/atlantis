@@ -23,6 +23,9 @@
         {% include "root/_rv_queue_summary.html" %}
         {% include "root/_rv_queue_filters.html" %}
 
+        {% if searching_all %}
+            {% include "root/_rv_search_results.html" %}
+        {% else %}
         <div class="rq-table-wrap">
             <table class="rq-table">
                 <thead>
@@ -78,6 +81,7 @@
                 </tbody>
             </table>
         </div>
+        {% endif %}
     </section>
     <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> to move through the queue, <kbd>&crarr;</kbd> to open, or <strong>Start reviewing</strong> to take the longest-waiting project from the top.</p>
 

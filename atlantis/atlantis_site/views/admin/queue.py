@@ -31,6 +31,7 @@ from django.db.models import Count, Exists, Min, OuterRef, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import redirect
+from django.template.defaultfilters import pluralize
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import urlencode
@@ -474,6 +475,7 @@ def filter_rows(request, queue_key, rows):
         active = ""
 
     query = request.GET.get("q", "").strip()[:FILTER_SEARCH_MAX_LENGTH]
+    scope = "all" if request.GET.get("scope") == "all" else ""
 
     def matches(row):
         if not query:
@@ -493,7 +495,11 @@ def filter_rows(request, queue_key, rows):
     shown = [row for row in searched if not active or tests[active](queue_key, row)]
 
     def querystring(filter_key):
-        params = {key: value for key, value in (("filter", filter_key), ("q", query)) if value}
+        params = {
+            key: value
+            for key, value in (("filter", filter_key), ("q", query), ("scope", scope))
+            if value
+        }
         return "?" + urlencode(params) if params else "?"
 
     options = [{
@@ -517,10 +523,91 @@ def filter_rows(request, queue_key, rows):
         "filter_query": query,
         "filtering": bool(active or query),
         "filter_search_max": FILTER_SEARCH_MAX_LENGTH,
+        "search_scope": scope,
+        # With ?scope=all the search leaves the queue and looks everywhere;
+        # the table above shows those matches in place of the queue's rows.
+        "searching_all": bool(scope and query),
+        "search_results": search_everything(queue_key, query) if scope and query else [],
+        "search_limit": SEARCH_ALL_LIMIT,
         # Carried onto the decided table's pager, so paging it doesn't drop
         # the narrowing on the table above.
         "filter_params": "&" + current[1:] if current != "?" else "",
     }
+
+
+# Most matches a search across everything shows. It runs in SQL rather than
+# over a page in memory, so this one is about the query.
+SEARCH_ALL_LIMIT = 50
+
+
+def _search_q(query, prefix=""):
+    """Title, owner or Slack name contains `query`; or, for a number (with or
+    without its #), that project id."""
+    q = (
+        Q(**{f"{prefix}title__icontains": query})
+        | Q(**{f"{prefix}owner__username__icontains": query})
+        | Q(**{f"{prefix}owner__hackclub_profile__slack_username__icontains": query})
+    )
+    number = query.lstrip("#")
+    if number.isdigit():
+        q |= Q(**{f"{prefix}id": int(number)})
+    return q
+
+
+def search_everything(queue_key, query):
+    """Every ship (or, on the timelapse desk, every project with lapses) that
+    matches `query`, whatever state it's in — not just what's waiting here.
+
+    For finding something that has already left the queue, or hasn't reached
+    it yet. Newest first, as rows the desk's search table renders.
+    """
+    queue = QUEUES[queue_key]
+    if queue_key == "lookout":
+        projects = (
+            Project.objects
+            .filter(deleted=False, journals__isnull=False)
+            .filter(_search_q(query))
+            .annotate(
+                lapse_total=Count("journals", distinct=True),
+                lapse_waiting=Count(
+                    "journals", filter=Q(journals__timelapse_review__isnull=True), distinct=True,
+                ),
+            )
+            .select_related("owner", "owner__hackclub_profile")
+            .order_by("-created_at", "-id")[:SEARCH_ALL_LIMIT]
+        )
+        return [{
+            "url": queue.detail_url(project.id),
+            "title": project.title,
+            "subject": f"Project #{project.id} · {project.lapse_total} journal{pluralize(project.lapse_total)}",
+            "owner": display_name(project.owner),
+            "status": f"{project.lapse_waiting} waiting" if project.lapse_waiting else "all signed off",
+            "in_queue": bool(project.lapse_waiting),
+            "flagged": project.flagged,
+            "at": project.created_at,
+        } for project in projects]
+
+    number = query.lstrip("#")
+    q = _search_q(query, prefix="project__")
+    if number.isdigit():
+        q |= Q(id=int(number))
+    ships = (
+        Ship.objects
+        .filter(project__deleted=False)
+        .filter(q)
+        .select_related("project", "project__owner", "project__owner__hackclub_profile")
+        .order_by("-created_at", "-id")[:SEARCH_ALL_LIMIT]
+    )
+    return [{
+        "url": queue.detail_url(ship.id),
+        "title": ship.project.title,
+        "subject": f"Ship #{ship.id} · project #{ship.project_id}",
+        "owner": display_name(ship.project.owner),
+        "status": ship.get_status_display(),
+        "in_queue": ship.status == SHIP_STATUS_FOR[queue_key],
+        "flagged": ship.project.flagged,
+        "at": ship.created_at,
+    } for ship in ships]
 
 
 def decorate_lapses(lapses, sla_days):

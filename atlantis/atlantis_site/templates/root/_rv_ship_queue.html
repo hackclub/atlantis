@@ -12,6 +12,9 @@
     {% include "root/_rv_queue_summary.html" %}
     {% include "root/_rv_queue_filters.html" %}
 
+    {% if searching_all %}
+        {% include "root/_rv_search_results.html" %}
+    {% else %}
     <div class="rq-table-wrap">
         <table class="rq-table">
             <thead>
@@ -69,4 +72,5 @@
             </tbody>
         </table>
     </div>
+    {% endif %}
 </section>

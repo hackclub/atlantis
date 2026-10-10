@@ -146,6 +146,62 @@ class DeskFilterTests(BaseTestCase):
 		self.assertEqual([p.id for p in response.context["projects"]], [flagged.id])
 
 
+class SearchEverythingTests(BaseTestCase):
+	"""?scope=all looks past the queue to every ship or project."""
+
+	def setUp(self):
+		super().setUp()
+		self.client.force_login(grant_perms(make_user("t1rev", slack_id="U-t1"), "t1_review"))
+		self.queued = make_ship(make_project(make_user("q", slack_id="U-q"), shippable=True, title="Queued Gear"))
+		self.done = make_ship(
+			make_project(make_user("d", slack_id="U-d"), shippable=True, title="Finished Gear"),
+			status=Ship.ShipStatus.FINALIZED,
+		)
+
+	def _results(self, dash, query):
+		response = self.client.get(reverse(dash) + query)
+		return [row["url"] for row in response.context["search_results"]], response
+
+	def test_the_queue_search_stays_in_the_queue(self):
+		response = self.client.get(reverse("review_dash") + "?q=gear")
+		self.assertEqual([ship.id for ship in response.context["ships"]], [self.queued.id])
+		self.assertFalse(response.context["searching_all"])
+
+	def test_all_projects_finds_ships_that_left_the_queue(self):
+		urls, response = self._results("review_dash", "?scope=all&q=gear")
+		self.assertTrue(response.context["searching_all"])
+		self.assertEqual(urls, [
+			reverse("review_project", args=[self.done.id]),
+			reverse("review_project", args=[self.queued.id]),
+		])
+		self.assertContains(response, "Finished Gear")
+
+	def test_all_projects_matches_ids(self):
+		urls, _ = self._results("review_dash", f"?scope=all&q=%23{self.done.project_id}")
+		self.assertIn(reverse("review_project", args=[self.done.id]), urls)
+
+	def test_scope_survives_the_pager(self):
+		_, response = self._results("review_dash", "?scope=all&q=gear")
+		self.assertIn("scope=all", response.context["filter_params"])
+
+	def test_the_t2_and_t3_desks_search_everything_too(self):
+		for perm, dash in (("t2_review", "ysws_review_dash"), ("t3_review", "fraud_review_dash")):
+			self.client.force_login(grant_perms(make_user(perm, slack_id=f"U-{perm}"), perm))
+			urls, _ = self._results(dash, "?scope=all&q=finished")
+			self.assertEqual(len(urls), 1)
+
+	def test_the_timelapse_desk_searches_every_project_with_lapses(self):
+		self.client.force_login(grant_perms(make_user("tl", slack_id="U-tl"), "timelapse_review"))
+		urls, response = self._results("timelapse_review_dash", "?scope=all&q=gear")
+		# make_ship signs every lapse off, so neither is in the queue.
+		self.assertEqual(response.context["projects"], [])
+		self.assertEqual(sorted(urls), sorted([
+			reverse("timelapse_review_project", args=[self.queued.project_id]),
+			reverse("timelapse_review_project", args=[self.done.project_id]),
+		]))
+		self.assertContains(response, "all signed off")
+
+
 class LockFromT1Tests(BaseTestCase):
 	def setUp(self):
 		super().setUp()

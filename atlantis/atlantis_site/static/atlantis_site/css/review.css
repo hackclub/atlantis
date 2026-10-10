@@ -1750,6 +1750,7 @@
     margin-left: auto;
 }
 
+.root-page .rq-search select,
 .root-page .rq-search input[type="search"] {
     width: 220px;
     max-width: 100%;
@@ -1762,6 +1763,11 @@
     font-size: 13px;
 }
 
+.root-page .rq-search select {
+    width: auto;
+}
+
+.root-page .rq-search select:focus-visible,
 .root-page .rq-search input[type="search"]:focus-visible {
     outline: 2px solid var(--oc-tide);
     outline-offset: 1px;
