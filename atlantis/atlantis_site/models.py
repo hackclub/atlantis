@@ -1801,6 +1801,8 @@ class Permissions(models.Model):
 			# trail of review decisions. Makes no decisions of its own.
 			("reviewer_lead", "Reviewer Lead: roll back T1 reviews, audit reviews"),
 			("fulfillment", "Fulfill shop orders"),
+			# Read-only: the metrics page and nothing else under /root.
+			("metrics", "View the metrics page"),
 			("organizer", "Access to everything")
 		]
 	

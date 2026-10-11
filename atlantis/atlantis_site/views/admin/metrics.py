@@ -768,7 +768,7 @@ def _snapshot_context(snapshot):
 
 
 @staff_member_required
-@check_perms(["atlantis_site.organizer"])
+@check_perms(["atlantis_site.metrics", "atlantis_site.organizer"])
 @timezone.override(settings.CHALLENGE_TIMEZONE)
 def metrics(request):
     """The live page, or with ?day=YYYY-MM-DD the snapshot taken at the end of

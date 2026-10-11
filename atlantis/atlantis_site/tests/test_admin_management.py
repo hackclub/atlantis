@@ -550,6 +550,23 @@ class AuditLogViewTests(BaseTestCase):
 		self.assertEqual(len(response.context["logs"]), 12)
 
 
+class MetricsPermissionTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.viewer = grant_perms(make_user("viewer"), "metrics")
+		self.client.force_login(self.viewer)
+
+	def test_metrics_perm_opens_metrics_and_admin_home(self):
+		self.assertEqual(self.client.get(reverse("metrics")).status_code, 200)
+		self.assertEqual(self.client.get(reverse("admin_dash")).status_code, 200)
+
+	@patch.dict(os.environ, DEFAULT_PFP_ENV)
+	def test_metrics_perm_does_not_open_other_organizer_pages(self):
+		for url in [reverse("users"), reverse("manage_projects"), reverse("audit_log")]:
+			with self.subTest(url=url):
+				self.assertEqual(self.client.get(url).status_code, 302)
+
+
 class MetricsViewTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()
