@@ -443,11 +443,12 @@ class T2DecisionTests(BaseTestCase):
 		self._decide(deductions="")
 		self.assertEqual(T2.objects.get().deductions, 0)
 
-	def test_deductions_must_be_less_than_logged_time(self):
-		response = self._decide(deductions="240")
+	def test_deductions_cannot_exceed_logged_time(self):
+		# Deducting all of it is allowed: a ship can be passed on at zero hours.
+		response = self._decide(deductions="241")
 		self.assertEqual(T2.objects.count(), 0)
 		self.assertTrue(any("Deduction too large" in m for m in message_texts(response)))
-		self._decide(deductions="239")
+		self._decide(deductions="240")
 		self.assertEqual(T2.objects.count(), 1)
 
 	def test_feedback_and_justification_length_limits(self):
@@ -963,7 +964,8 @@ class InternalCommentTests(BaseTestCase):
 				self.assertContains(response, "printables listing looks like a remix")
 				self.assertContains(response, "T1 Rev")
 				self.assertEqual(
-					[e["type"] for e in response.context["review_history"]], ["comment"]
+					[e["type"] for e in response.context["review_history"]],
+					["timelapse", "comment"],
 				)
 
 	def test_interleaved_with_review_actions_oldest_first(self):
@@ -975,7 +977,8 @@ class InternalCommentTests(BaseTestCase):
 
 		response = self.client.get(reverse("review_project", args=[self.ship.id]))
 		self.assertEqual(
-			[e["type"] for e in response.context["review_history"]], ["t1", "comment"]
+			[e["type"] for e in response.context["review_history"]],
+			["timelapse", "t1", "comment"],
 		)
 
 	def test_shown_while_reviewing_a_later_ship_of_the_project(self):

@@ -83,6 +83,7 @@ class CreateProjectTests(BaseTestCase):
 	def test_title_max_length(self):
 		self.assertEqual(self._create(title="x" * 61).status_code, 302)
 		self.assertEqual(Project.objects.count(), 0)
+		cache.clear()  # the create rate limit
 		self._create(title="x" * 60)
 		self.assertEqual(Project.objects.count(), 1)
 
@@ -93,6 +94,7 @@ class CreateProjectTests(BaseTestCase):
 	def test_description_max_length(self):
 		self._create(description="x" * 1001)
 		self.assertEqual(Project.objects.count(), 0)
+		cache.clear()  # the create rate limit
 		self._create(description="x" * 1000)
 		self.assertEqual(Project.objects.count(), 1)
 

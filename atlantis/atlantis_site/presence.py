@@ -27,6 +27,8 @@ from django.core.cache import cache
 from django.db import DatabaseError
 from django.utils import timezone
 
+from . import weeks
+
 logger = logging.getLogger(__name__)
 
 # How long a user's presence write is suppressed for after one goes through.
@@ -63,9 +65,11 @@ def record_seen(user):
         # clobber it.
         Profile.objects.filter(user=user).update(last_seen=now)
         # ON CONFLICT DO NOTHING, so the day's row is written without reading
-        # for it first and two parallel requests can't collide over it.
+        # for it first and two parallel requests can't collide over it. The
+        # day is the program's, not UTC's: the metrics page counts these by
+        # Eastern date, and a UTC date would file every evening under tomorrow.
         ActiveDay.objects.bulk_create(
-            [ActiveDay(user=user, day=timezone.localdate(now))],
+            [ActiveDay(user=user, day=timezone.localdate(now, weeks.zone()))],
             ignore_conflicts=True,
         )
     except DatabaseError:

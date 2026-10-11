@@ -39,7 +39,9 @@ def over(model, field_name, filler="x"):
 
 
 class ProjectFieldWidthTests(BaseTestCase):
-	"""printablesUrl is 150 chars; is_valid_printables_url vouches for 2048."""
+	"""printablesUrl and is_valid_printables_url both stop at 2048 chars, so an
+	over-long link is refused as invalid before the width check is reached —
+	either way, a sentence rather than a 500."""
 
 	def setUp(self):
 		super().setUp()
@@ -62,7 +64,7 @@ class ProjectFieldWidthTests(BaseTestCase):
 		})
 		self.assertEqual(response.status_code, 302)
 		self.assertEqual(Project.objects.count(), 0)
-		self.assertTrue(any("too long" in m for m in message_texts(response)))
+		self.assertTrue(any("Printables URL" in m for m in message_texts(response)))
 
 	def test_edit_rejects_over_long_printables_url(self):
 		project = make_project(self.user, printablesUrl=VALID_PRINTABLES_URL)

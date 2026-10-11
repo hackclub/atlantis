@@ -49,7 +49,7 @@ class PresenceTests(BaseTestCase):
 		self.assertIsNotNone(profile.last_seen)
 		self.assertEqual(
 			list(ActiveDay.objects.filter(user=user).values_list("day", flat=True)),
-			[timezone.localdate()],
+			[timezone.localdate(timezone.now(), weeks.zone())],
 		)
 
 	def test_anonymous_requests_record_nothing(self):
@@ -80,7 +80,7 @@ class PresenceTests(BaseTestCase):
 
 	def test_a_second_day_adds_a_row_and_a_repeat_day_does_not(self):
 		user = make_user("builder")
-		today = timezone.localdate()
+		today = timezone.localdate(timezone.now(), weeks.zone())
 		yesterday = today - timedelta(days=1)
 
 		ActiveDay.objects.create(user=user, day=yesterday)
@@ -115,7 +115,7 @@ class MetricsActivityTests(BaseTestCase):
 
 	def test_counts_who_is_here(self):
 		now = timezone.now()
-		today = timezone.localdate(now)
+		today = timezone.localdate(now, weeks.zone())
 		here_now = make_user("here-now", slack_id="U1")
 		here_today = make_user("here-today", slack_id="U2")
 		here_earlier = make_user("here-earlier", slack_id="U3")
@@ -142,7 +142,7 @@ class MetricsActivityTests(BaseTestCase):
 
 	def test_the_dau_average_only_divides_by_the_days_on_record(self):
 		user = make_user("builder", slack_id="U9")
-		today = timezone.localdate()
+		today = timezone.localdate(timezone.now(), weeks.zone())
 		# Nothing older: tracking, as far as this site knows, started four days
 		# ago, and dividing by thirty would read as a collapse in traffic.
 		for offset in range(4):
@@ -174,7 +174,7 @@ class MetricsActivityTests(BaseTestCase):
 
 	def test_daily_charts_fill_in_the_quiet_days(self):
 		user = make_user("builder", slack_id="U9")
-		today = timezone.localdate()
+		today = timezone.localdate(timezone.now(), weeks.zone())
 		ActiveDay.objects.create(user=user, day=today)
 		ActiveDay.objects.create(user=user, day=today - timedelta(days=2))
 
