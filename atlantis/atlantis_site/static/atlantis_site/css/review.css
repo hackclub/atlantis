@@ -1705,7 +1705,12 @@
     background: var(--oc-shallow);
 }
 
-.root-page .rq-filter a {
+.root-page .rq-filter a,
+.root-page .rq-filter button {
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font-family: inherit;
     padding: 5px 12px;
     border-radius: 6px;
     color: var(--oc-ink-3);
@@ -1714,11 +1719,13 @@
     text-decoration: none;
 }
 
-.root-page .rq-filter a:hover {
+.root-page .rq-filter a:hover,
+.root-page .rq-filter button:hover {
     color: var(--oc-ink-2);
 }
 
-.root-page .rq-filter a[aria-current="true"] {
+.root-page .rq-filter a[aria-current="true"],
+.root-page .rq-filter button[aria-pressed="true"] {
     background: var(--oc-btn);
     color: var(--oc-on-accent);
 }
@@ -2020,6 +2027,31 @@
 
 .root-page .rq-charts {
     margin-top: 26px;
+}
+
+/* One leaderboard per desk, switching between all time and this week. */
+.root-page .rq-leaderboard-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.root-page .rq-leaderboard-head h4 {
+    margin: 0;
+}
+
+/* .chart-bars is a flex column, which would otherwise beat [hidden]. */
+.root-page .rq-leaderboard [data-leaderboard-panel][hidden] {
+    display: none;
+}
+
+.root-page .rq-leaderboard-unit {
+    margin-left: 6px;
+    color: var(--oc-ink-3);
+    font-size: 12px;
+    font-weight: 500;
 }
 
 /* ============================================================

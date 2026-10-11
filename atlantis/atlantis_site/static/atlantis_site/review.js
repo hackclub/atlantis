@@ -633,6 +633,23 @@
         });
     }
 
+    function setupLeaderboards() {
+        document.querySelectorAll('[data-leaderboard]').forEach(function (board) {
+            var tabs = board.querySelectorAll('[data-leaderboard-tab]');
+            tabs.forEach(function (tab) {
+                tab.addEventListener('click', function () {
+                    var period = tab.dataset.leaderboardTab;
+                    tabs.forEach(function (other) {
+                        other.setAttribute('aria-pressed', String(other === tab));
+                    });
+                    board.querySelectorAll('[data-leaderboard-panel]').forEach(function (panel) {
+                        panel.hidden = panel.dataset.leaderboardPanel !== period;
+                    });
+                });
+            });
+        });
+    }
+
     function init() {
         setupCards();
         setupForms();
@@ -645,6 +662,7 @@
         setupQueueTable();
         setupRollback();
         setupBars();
+        setupLeaderboards();
         document.addEventListener('keydown', onKeyDown);
         var help = document.querySelector('[data-shortcut-help]');
         var dialog = shortcutsDialog();

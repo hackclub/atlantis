@@ -3,7 +3,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
 from django.db import connections
-from django.db.models import Count, Exists, F, IntegerField, OuterRef, Sum
+from django.db.models import Count, Exists, F, IntegerField, OuterRef, Q, Sum
 from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.shortcuts import redirect
@@ -982,12 +982,40 @@ def add_bars(rows, value_key="value"):
     return rows
 
 
-def reviewer_leaderboard(relation, limit=10):
+def reviewer_leaderboard(relation, limit=10, since=None, hours=False):
+    """The top reviewers on one desk, as bar-chart rows.
+
+    By default each reviewer scores the reviews they've written. `hours=True`
+    scores the timelapse desk by footage instead: the tracked time on every
+    lapse they signed off, before anything they cut, since that is what they
+    sat through. `since` counts only reviews written from then on.
+    """
     User = get_user_model()
+    when = Q(**{f"{relation}__reviewed_at__gte": since}) if since else Q()
+    if hours:
+        score = Sum(f"{relation}__journal__timelapses__tracked_seconds", filter=when)
+    else:
+        score = Count(relation, filter=when)
     rows = (
-        User.objects.annotate(n=Count(relation))
+        User.objects.annotate(n=score)
         .filter(n__gt=0)
         .select_related("hackclub_profile")
         .order_by("-n")[:limit]
     )
+    if hours:
+        return add_bars([
+            {"label": display_name(u), "value": format_minutes(u.n // 60), "minutes": u.n // 60}
+            for u in rows
+        ], value_key="minutes")
     return add_bars([{"label": display_name(u), "value": u.n} for u in rows])
+
+
+def reviewer_leaderboards(relation, hours=False):
+    """All-time and this-week boards for one desk, for _rv_leaderboard.html."""
+    from .. import weeks as weeks_mod
+    week_start, _ = weeks_mod.current_week_bounds()
+    return {
+        "all": reviewer_leaderboard(relation, hours=hours),
+        "week": reviewer_leaderboard(relation, since=week_start, hours=hours),
+        "unit": "Hours reviewed" if hours else "Reviews",
+    }

@@ -37,6 +37,7 @@ from ..views.helpers import (
 	random_storage_key,
 	record_audit,
 	reviewer_leaderboard,
+	reviewer_leaderboards,
 	send_slack_dm,
 	sniff_image_extension,
 	validate_file_size,
@@ -780,3 +781,49 @@ class ReviewerLeaderboardTests(TestCase):
 			ship = make_ship(project, journal_minutes=())
 			T1.objects.create(ship=ship, reviewer=reviewer, feedback="", internal_notes="", approved=True)
 		self.assertEqual(len(reviewer_leaderboard("t1_reviews", limit=2)), 2)
+
+	def test_since_counts_only_recent_reviews(self):
+		from datetime import timedelta
+		from django.utils import timezone
+		from ..models import T1
+		author = make_user("author")
+		project = make_project(author)
+		reviewer = make_user("reviewer")
+		old = T1.objects.create(ship=make_ship(project, journal_minutes=()), reviewer=reviewer, feedback="", internal_notes="", approved=True)
+		T1.objects.filter(pk=old.pk).update(reviewed_at=timezone.now() - timedelta(days=30))
+		T1.objects.create(ship=make_ship(project, journal_minutes=()), reviewer=reviewer, feedback="", internal_notes="", approved=True)
+
+		self.assertEqual(reviewer_leaderboard("t1_reviews")[0]["value"], 2)
+		since = timezone.now() - timedelta(days=7)
+		self.assertEqual(reviewer_leaderboard("t1_reviews", since=since)[0]["value"], 1)
+
+	def test_timelapse_board_scores_hours_reviewed(self):
+		author = make_user("author")
+		project = make_project(author)
+		long_haul = make_user("long_haul")
+		many_short = make_user("many_short")
+		approve_timelapse(make_journal(project, time_spent=150), reviewer=long_haul)
+		for _ in range(3):
+			approve_timelapse(make_journal(project, time_spent=10), reviewer=many_short)
+
+		rows = reviewer_leaderboard("timelapse_reviews", hours=True)
+		self.assertEqual([r["label"] for r in rows], ["long_haul", "many_short"])
+		self.assertEqual(rows[0]["value"], "2h 30m")
+		self.assertEqual(rows[0]["bar"], 100.0)
+		self.assertEqual(rows[1]["value"], "0h 30m")
+		self.assertEqual(rows[1]["bar"], 20.0)
+
+	def test_boards_split_all_time_and_this_week(self):
+		from datetime import timedelta
+		from django.utils import timezone
+		from ..models import T2
+		author = make_user("author")
+		project = make_project(author)
+		reviewer = make_user("reviewer")
+		old = T2.objects.create(ship=make_ship(project, journal_minutes=()), reviewer=reviewer, feedback="", justification="")
+		T2.objects.filter(pk=old.pk).update(reviewed_at=timezone.now() - timedelta(days=30))
+
+		boards = reviewer_leaderboards("t2_reviews")
+		self.assertEqual(boards["all"][0]["value"], 1)
+		self.assertEqual(boards["week"], [])
+		self.assertEqual(boards["unit"], "Reviews")

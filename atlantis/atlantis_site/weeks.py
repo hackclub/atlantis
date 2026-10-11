@@ -138,6 +138,22 @@ def current_week(now=None):
     return week_for(now or timezone.now())
 
 
+def current_week_bounds(now=None):
+    """(start, end) of the week `now` is in. End is exclusive.
+
+    The challenge week while the program runs; outside it, the local Monday to
+    Sunday around `now`, so a "this week" view still means something in prep
+    and after the end.
+    """
+    now = now or timezone.now()
+    index = week_for(now)
+    if index is not None:
+        return week_bounds(index)
+    today = now.astimezone(zone()).date()
+    monday = today - timedelta(days=today.weekday())
+    return _local_midnight(monday), _local_midnight(monday + timedelta(days=7))
+
+
 def has_started(now=None):
     return (now or timezone.now()) >= starts_at()
 

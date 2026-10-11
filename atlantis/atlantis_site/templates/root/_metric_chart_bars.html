@@ -1,0 +1,12 @@
+{# the bar rows of a horizontal bar chart. expects: rows (label/value/bar, optional sub), empty, fill_class #}
+{% for row in rows %}
+<div class="chart-row" title="{{ row.label }}: {{ row.value }}">
+    <span class="chart-name">{{ row.label }}</span>
+    <span class="chart-track">
+        <span class="chart-fill {{ fill_class }}" data-bar="{{ row.bar }}"></span>
+    </span>
+    <span class="chart-val">{{ row.value }}{% if row.sub %}<span class="chart-val-sub">{{ row.sub }}</span>{% endif %}</span>
+</div>
+{% empty %}
+<p class="chart-empty">{{ empty|default:"No data yet." }}</p>
+{% endfor %}

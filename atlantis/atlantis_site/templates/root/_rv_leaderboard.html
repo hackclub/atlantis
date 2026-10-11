@@ -1,0 +1,21 @@
+{% comment %}
+A desk's reviewer leaderboard, built by reviewer_leaderboards: one card that
+switches between all time and the current week. Both boards are rendered and
+review.js shows one; without JS the all-time board stays up.
+expects: title, leaderboard
+{% endcomment %}
+<div class="chart rq-leaderboard" data-leaderboard>
+    <div class="rq-leaderboard-head">
+        <h4>{{ title }} <span class="rq-leaderboard-unit">{{ leaderboard.unit }}</span></h4>
+        <div class="rq-filter" role="group" aria-label="Leaderboard period">
+            <button type="button" data-leaderboard-tab="all" aria-pressed="true">All time</button>
+            <button type="button" data-leaderboard-tab="week" aria-pressed="false">This week</button>
+        </div>
+    </div>
+    <div class="chart-bars" data-leaderboard-panel="all">
+        {% include "root/_metric_chart_bars.html" with rows=leaderboard.all empty="No reviews yet" %}
+    </div>
+    <div class="chart-bars" data-leaderboard-panel="week" hidden>
+        {% include "root/_metric_chart_bars.html" with rows=leaderboard.week empty="No reviews yet this week" %}
+    </div>
+</div>

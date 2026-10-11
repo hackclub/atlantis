@@ -18,7 +18,7 @@ from ...models import (
 )
 from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked_message
 from ...submissions import build_generated_justification, build_override_justification, submit_ship
-from ..helpers import check_perms, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboard, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
+from ..helpers import check_perms, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
 from .queue import (
     QUEUES, annotate_recordings, dash_context, decorate_rows, filter_rows,
@@ -252,7 +252,7 @@ def review_dash(request):
 
     return render(request, "root/review.html", {
         "ships": ships,
-        "leaderboard": reviewer_leaderboard("t1_reviews"),
+        "leaderboard": reviewer_leaderboards("t1_reviews"),
         "can_roll_back": can_roll_back(request.user),
         "rollback_reason_max": ROLLBACK_REASON_MAX_LENGTH,
         **context,
@@ -496,7 +496,7 @@ def ysws_review_dash(request):
     context.update(filters, pending_count=len(ships))
     return render(request, "root/ysws_review.html", {
         "ships": ships,
-        "leaderboard": reviewer_leaderboard("t2_reviews"),
+        "leaderboard": reviewer_leaderboards("t2_reviews"),
         **context,
     })
 
@@ -639,7 +639,7 @@ def fraud_review_dash(request):
     context.update(filters, pending_count=len(ships))
     return render(request, "root/fraud_review.html", {
         "ships": ships,
-        "leaderboard": reviewer_leaderboard("t3_reviews"),
+        "leaderboard": reviewer_leaderboards("t3_reviews"),
         **context,
     })
 

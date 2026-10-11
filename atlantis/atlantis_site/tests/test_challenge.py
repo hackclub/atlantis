@@ -103,6 +103,17 @@ class WeekMathTests(BaseTestCase):
         self.assertEqual(weeks.closed_weeks(et("2026-09-28 00:01")), [1])
         self.assertEqual(len(weeks.closed_weeks(et("2026-12-01 00:00"))), 8)
 
+    def test_current_week_bounds_is_the_challenge_week_while_it_runs(self):
+        self.assertEqual(
+            weeks.current_week_bounds(et("2026-10-07 15:00")),
+            weeks.week_bounds(3),
+        )
+
+    def test_current_week_bounds_falls_back_to_the_local_monday_outside_it(self):
+        opens, closes = weeks.current_week_bounds(et("2026-12-03 15:00"))
+        self.assertEqual(opens, et("2026-11-30 00:00"))
+        self.assertEqual(closes, et("2026-12-07 00:00"))
+
     def test_forty_printer_hours_is_exactly_every_week(self):
         self.assertEqual(weeks.printer_hours(), weeks.WEEKLY_HOURS * weeks.week_count())
         self.assertEqual(weeks.printer_hours(), 40)

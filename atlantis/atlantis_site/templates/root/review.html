@@ -15,7 +15,7 @@
     {% include "root/_rv_all_reviews.html" %}
 
     <section class="chart-grid rq-charts">
-        {% include "root/_metric_chart.html" with title="Top T1 reviewers" rows=leaderboard empty="No reviews yet" %}
+        {% include "root/_rv_leaderboard.html" with title="Top T1 reviewers" %}
     </section>
 </div>
 <script src="{% static 'atlantis_site/review.js' %}" defer></script>

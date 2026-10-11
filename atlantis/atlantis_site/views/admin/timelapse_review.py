@@ -34,7 +34,7 @@ from ...models import (
     video_to_tracked,
 )
 from ..helpers import (
-    check_perms, display_name, format_minutes, record_audit, reviewer_leaderboard,
+    check_perms, display_name, format_minutes, record_audit, reviewer_leaderboards,
 )
 from .queue import (
     QUEUES, dash_context, decorate_lapses, decorate_rows, filter_rows, go_to_next,
@@ -402,7 +402,7 @@ def timelapse_review_dash(request):
     return render(request, "root/timelapse_review.html", {
         **context,
         "projects": projects,
-        "leaderboard": reviewer_leaderboard("timelapse_reviews"),
+        "leaderboard": reviewer_leaderboards("timelapse_reviews", hours=True),
     })
 
 
