@@ -7,7 +7,8 @@ Sends as whoever owns SLACK_TOKEN (a user token, so the DMs come from you).
 Env:
   SLACK_TOKEN               user token (xoxp-...) with im:write, chat:write
   TEST_SLACK_USER_REDIRECT  send every DM to this Slack ID instead
-  TEST_ONLY_SLACK_ID        only DM this one row from the CSV, and don't log it
+  TEST_ONLY_SLACK_ID        send exactly one DM to this Slack ID (CSV optional, they
+                            don't need to be in it) and don't log it
 """
 
 import csv
@@ -124,19 +125,20 @@ def send_slack_dm(channel_id: str, message: str) -> bool:
 
 def build_message(slack_id: str) -> str:
     return (
-        f"hi <@{slack_id}>. it's swarit! i noticed you haven't finished your 10 hours "
-        "for weeks 1+2 for atlantis yet. is there any way i can help you finish the "
-        "hours? keep in mind you'll need to track 10 hours by sunday 11:59PM EDT to "
-        "get your printer :)"
+        f"hi <@{slack_id}>. it's kc! i noticed you haven't finished your 5 hours "
+        "for week 3 for atlantis yet. is there any way i can help you finish the "
+        "hours? keep in mind you'll need to track 5 hours by sunday 11:59PM EDT to "
+        "get your printer :) \n \n"
+        "thank you for participating in atlantis :ohneheart:"
     )
 
 
 def main() -> None:
-    if len(sys.argv) < 2:
+    if len(sys.argv) < 2 and not TEST_ONLY_SLACK_ID:
         print("Usage: python dm_unfinished_hours.py <csv_file>")
         sys.exit(1)
 
-    csv_file = sys.argv[1]
+    csv_file = sys.argv[1] if len(sys.argv) >= 2 else None
 
     if not SLACK_TOKEN:
         print("❌ SLACK_TOKEN environment variable not set.")
@@ -145,7 +147,7 @@ def main() -> None:
     if TEST_SLACK_USER_REDIRECT:
         print(f"⚠️  TEST MODE: all DMs will be sent to {TEST_SLACK_USER_REDIRECT}\n")
     if TEST_ONLY_SLACK_ID:
-        print(f"⚠️  TEST MODE: only DMing {TEST_ONLY_SLACK_ID}.\n")
+        print(f"⚠️  TEST MODE: sending one DM to {TEST_ONLY_SLACK_ID} only.\n")
 
     print("🔍 Checking token identity...")
     authed_user_id = fetch_authed_user_id()
@@ -154,26 +156,27 @@ def main() -> None:
         sys.exit(1)
     print(f"✅ Authenticated as {authed_user_id}\n")
 
-    with open(csv_file, "r", encoding="utf-8") as f:
-        rows = list(csv.DictReader(f))
+    rows = []
+    if csv_file:
+        with open(csv_file, "r", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+        print(f"📋 Loaded {len(rows)} records from {csv_file}")
 
-    print(f"📋 Loaded {len(rows)} records from {csv_file}")
-
-    sent_users = load_sent_users()
-    target_rows = []
-    for row in rows:
-        slack_id = row.get("slack_id", "").strip()
-        if not slack_id:
-            continue
-        if TEST_ONLY_SLACK_ID and slack_id != TEST_ONLY_SLACK_ID:
-            continue
-        if not TEST_ONLY_SLACK_ID and slack_id in sent_users:
-            continue
-        target_rows.append(row)
-
-    if TEST_ONLY_SLACK_ID and not target_rows:
-        print(f"❌ No rows found for TEST_ONLY_SLACK_ID={TEST_ONLY_SLACK_ID}.")
-        return
+    if TEST_ONLY_SLACK_ID:
+        # Use their CSV row for the details if they have one, otherwise a blank row.
+        match = next(
+            (r for r in rows if r.get("slack_id", "").strip() == TEST_ONLY_SLACK_ID),
+            {"slack_id": TEST_ONLY_SLACK_ID},
+        )
+        target_rows = [match]
+    else:
+        sent_users = load_sent_users()
+        target_rows = []
+        for row in rows:
+            slack_id = row.get("slack_id", "").strip()
+            if not slack_id or slack_id in sent_users:
+                continue
+            target_rows.append(row)
 
     print(f"📨 We will DM {len(target_rows)} users. Continue? (Y/N): ", end="", flush=True)
     proceed = getch("YN")
@@ -214,7 +217,6 @@ def main() -> None:
                 print("🧪 Test mode: not adding user to sent log.")
             else:
                 log_sent_user(slack_id)
-                sent_users.add(slack_id)
         else:
             print("❌ Failed to send. User NOT logged as sent.")
 
