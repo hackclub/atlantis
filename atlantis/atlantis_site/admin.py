@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from .models import (
     AirtableSubmission, AuditLog, LapseAccount, PearlBracket, PrinterClaim,
-    SaverCredit, Timelapse, TimelapseRemoval, TimelapseReview, WeekOutcome,
+    SaverCredit, SnackGrant, Timelapse, TimelapseRemoval, TimelapseReview, WeekOutcome,
     WeekReminder,
 )
 
@@ -185,3 +185,11 @@ class PrinterClaimAdmin(ReadOnlyAdmin):
         # The one exception: refunding a printer means letting them choose
         # again, and deleting the claim is how that is done.
         return True
+
+
+@admin.register(SnackGrant)
+class SnackGrantAdmin(ReadOnlyAdmin):
+    list_display = ("reviewer", "desk", "order", "created_at")
+    list_filter = ("desk", "created_at")
+    search_fields = ("reviewer__username",)
+    date_hierarchy = "created_at"

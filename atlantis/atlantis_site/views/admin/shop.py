@@ -21,7 +21,9 @@ def shop_dash(request):
     # Printer rows are left out: they are generated from printers.py by
     # sync_printer_items, nothing here can edit them, and there are dozens of
     # them. Their prices live on the charts, which is where they are decided.
-    items = Item.objects.exclude(kind=Item.Kind.PRINTER).order_by("id")
+    # The snack grant row is left out too: it is made by snack_grants.py and
+    # is only there to hang reviewers' grant orders on.
+    items = Item.objects.exclude(kind__in=Item.HIDDEN_KINDS).order_by("id")
     # Categories a rename or a delete left behind are still listed, flagged as
     # unused: they hold their slot for whenever an item lands back in them.
     categories = ShopCategory.objects.annotate(
@@ -30,7 +32,7 @@ def shop_dash(request):
     return render(request, "root/shop.html", {
         "items": items,
         "categories": categories,
-        "item_kinds": Item.Kind.choices,
+        "item_kinds": [(v, label) for v, label in Item.Kind.choices if v not in Item.HIDDEN_KINDS],
         "printer_item_count": Item.objects.filter(kind=Item.Kind.PRINTER, deleted=False).count(),
     })
 
@@ -302,6 +304,9 @@ def edit_item(request, item_id):
     # sync and would put its price out of line with the tree it is drawn on.
     if item.kind == Item.Kind.PRINTER:
         messages.error(request, "Printer items are generated from the tech trees and can't be edited here.")
+        return redirect("shop_dash")
+    if item.kind == Item.Kind.SNACK_GRANT:
+        messages.error(request, "The snack grant item is managed automatically and can't be edited here.")
         return redirect("shop_dash")
 
     name = request.POST.get("name", "").strip()

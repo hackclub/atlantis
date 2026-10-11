@@ -1556,6 +1556,11 @@ class Item(models.Model):
 		SAVER_CURRENT = "saver_current", "Streak saver: this week"
 		SAVER_PAST = "saver_past", "Streak saver: earliest missed week"
 		PRINTER = "printer", "Printer claim (hidden from the shop)"
+		SNACK_GRANT = "snack_grant", "Reviewer snack grant (hidden from the shop)"
+
+	# Rows that are Items only so that something can become an ordinary Order
+	# for fulfillment. Never on a shelf, and never typed in on the shop page.
+	HIDDEN_KINDS = (Kind.PRINTER, Kind.SNACK_GRANT)
 
 	name = models.CharField(max_length=60)
 	description = models.CharField(max_length=500)
@@ -1692,6 +1697,40 @@ class PrinterClaim(models.Model):
 
 	def __str__(self):
 		return f"{self.user_id} claimed {self.printer_name} ({self.track_slug})"
+
+
+class SnackGrant(models.Model):
+	"""One $10 snack grant a reviewer earned, and the Order that pays it out.
+
+	The ledger snack_grants.py checks before issuing: a reviewer is owed
+	(work on a desk since launch // that desk's threshold) grants per desk,
+	minus the rows already here. A grant stays issued whatever happens to its
+	order, and a rolled-back review doesn't take one back — it only means the
+	next one takes longer to earn.
+	"""
+
+	class Desk(models.TextChoices):
+		T1 = "t1", "T1 reviews"
+		T2 = "t2", "T2 reviews"
+		LAPSE = "lapse", "Lapse review hours"
+
+	reviewer = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="snack_grants",
+	)
+	desk = models.CharField(max_length=8, choices=Desk.choices)
+	order = models.OneToOneField(
+		Order,
+		on_delete=models.SET_NULL,
+		related_name="snack_grant",
+		null=True,
+		blank=True,
+	)
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	def __str__(self):
+		return f"Snack grant for {self.reviewer_id} ({self.desk})"
 
 
 class AuditLog(models.Model):

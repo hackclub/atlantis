@@ -80,7 +80,7 @@ def shop_items():
 	ordinary order, so "how many items exist" is never zero any more. Anything
 	counting what a shop action created means this.
 	"""
-	return Item.objects.exclude(kind=Item.Kind.PRINTER)
+	return Item.objects.exclude(kind__in=Item.HIDDEN_KINDS)
 
 VALID_PRINTABLES_URL = "https://www.printables.com/model/12345-cool-thing"
 VALID_EDITOR_LINK = "https://cad.onshape.com/documents/abc123"
@@ -314,6 +314,7 @@ class BaseTestCase(TestCase):
 		"review": "atlantis_site.views.admin.review.send_slack_dm",
 		"shop": "atlantis_site.views.admin.shop.send_slack_dm",
 		"client_shop": "atlantis_site.views.client.shop.send_slack_dm",
+		"snack_grants": "atlantis_site.snack_grants.send_slack_dm",
 	}
 	SLACK_MESSAGE_TARGETS = [
 		"atlantis_site.views.admin.review.send_slack_message",

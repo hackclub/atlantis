@@ -20,11 +20,11 @@ from ..helpers import (
 def shoppable():
     """Items a shopper can actually see on a shelf.
 
-    Printer rows are Items only so that claiming one becomes an ordinary order
-    that fulfillment already knows how to post; they are not merchandise and
-    have no business on the shop page.
+    Printer and snack grant rows are Items only so that a claim or a grant
+    becomes an ordinary order that fulfillment already knows how to post; they
+    are not merchandise and have no business on the shop page.
     """
-    return Item.objects.filter(deleted=False).exclude(kind=Item.Kind.PRINTER)
+    return Item.objects.filter(deleted=False).exclude(kind__in=Item.HIDDEN_KINDS)
 
 
 def _saver_state(user, item, now=None):
