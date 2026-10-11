@@ -2,9 +2,10 @@
 The streak panel: this week's five hours and how long is left to finish them.
 During weeks 1 and 2 it's the pair's ten instead (weeks.GRACE_WEEKS).
 
-One bar, and it is the only thing that can put you out of the program. The
-season's forty printer hours are a readout you never act on today, so they live
-on the charts instead of here.
+One bar, and it is the only thing that can put you out of the program. It stays
+up even once you're out — the five hours still come first — with the way back
+in underneath it. The season's forty printer hours are a readout you never act
+on today, so they live on the charts instead of here.
 
 Rendered on the deck. Takes the context dashboard.challenge_context builds.
 {% endcomment %}
@@ -16,10 +17,6 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
             The eight weeks open {{ program_starts|slice:":10" }}. Hours logged until then
             pay the prep rate and don't count towards a printer.
         </p>
-
-    {% elif standing.eliminated %}
-        <p class="streak-note streak-note-bad">{{ dropped_reason }}</p>
-        <a class="streak-action" href="{% url 'shop' %}">Buy a streak saver</a>
 
     {% elif week %}
         <div class="streak-head">
@@ -72,7 +69,12 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
             </p>
         {% endif %}
 
-    {% else %}
+    {% endif %}
+
+    {% if standing.started and standing.eliminated %}
+        <p class="streak-note streak-note-bad{% if week %} streak-note-below{% endif %}">{{ dropped_reason }}</p>
+        <a class="streak-action" href="{% url 'shop' %}">Buy a missed-week saver</a>
+    {% elif standing.started and not week %}
         <p class="streak-note">
             The eight weeks are over. {% if standing.printer_unlocked %}Your printer is
             waiting on the charts.{% endif %}

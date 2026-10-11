@@ -128,6 +128,11 @@
     color: #FFD3D7;
 }
 
+/* Out of the program but mid-week: the note sits under the bar, not in place of it. */
+.streak-note-below {
+    margin-top: 0.5em;
+}
+
 .streak-action {
     display: inline-block;
     margin-top: 0.4em;
