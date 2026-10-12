@@ -430,7 +430,41 @@
 }
 
 .root-page .rv-panel-head-text {
+    flex: 1;
     min-width: 0;
+}
+
+/* The project's cover screenshot, left of the title. Opens full size. */
+.root-page .rv-shot {
+    flex-shrink: 0;
+    display: block;
+    width: 180px;
+    aspect-ratio: 4 / 3;
+    border: 1px solid var(--oc-line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--oc-shallow);
+}
+
+.root-page .rv-shot img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.root-page .rv-shot-none {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--oc-ink-3);
+    border-style: dashed;
+}
+
+@media (max-width: 720px) {
+    .root-page .rv-panel-head { flex-wrap: wrap; }
+    .root-page .rv-shot { width: 100%; max-width: 320px; }
 }
 
 .root-page .rv-title-id {

@@ -23,28 +23,28 @@ class PrinterCostTests(BaseTestCase):
 
 	def test_upgrades_accumulate_down_a_branch(self):
 		costs = self._costs("bambu")
-		# A1 Mini -> A1 (240) -> P1S (290) -> P2S (440)
-		self.assertEqual(costs["A1"], 240)
-		self.assertEqual(costs["P1S"], 530)
-		self.assertEqual(costs["P2S"], 970)
+		# A1 Mini -> A1 (230) -> P1S (278) -> P2S (422)
+		self.assertEqual(costs["A1"], 230)
+		self.assertEqual(costs["P1S"], 508)
+		self.assertEqual(costs["P2S"], 930)
 
 	def test_branches_do_not_pay_for_each_other(self):
 		costs = self._costs("elegoo")
-		# Both hang off Neptune 4 Pro (70), so each pays only its own step.
-		self.assertEqual(costs["Neptune 4 Plus"], 470)
-		self.assertEqual(costs["Centauri Carbon 2"], 290)
+		# Both hang off Neptune 4 Pro (67), so each pays only its own step.
+		self.assertEqual(costs["Neptune 4 Plus"], 451)
+		self.assertEqual(costs["Centauri Carbon 2"], 278)
 
 	def test_track_entry_pearls_are_added_to_every_printer(self):
 		# Qidi's 40 hours stop short of its cheapest printer, so its whole
 		# tree carries the 390-pearl shortfall.
 		costs = self._costs("qidi")
 		self.assertEqual(costs["Q2C"], 390)
-		self.assertEqual(costs["Q2"], 700)
+		self.assertEqual(costs["Q2"], 688)
 
 	def test_label_names_hours_and_pearls(self):
 		labels = {p["name"]: p["cost"] for p in track("elegoo")["printers"]}
 		self.assertEqual(labels["Neptune 4"], f"{ENTRY_HOURS} hours")
-		self.assertEqual(labels["Neptune 4 Pro"], f"{ENTRY_HOURS} hours + 70 pearls")
+		self.assertEqual(labels["Neptune 4 Pro"], f"{ENTRY_HOURS} hours + 67 pearls")
 
 	def test_every_printer_is_reachable_from_the_entry(self):
 		for spec in TRACKS:
@@ -121,7 +121,7 @@ class PrinterTrackTests(BaseTestCase):
 		self.client.force_login(self.user)
 		response = self.client.get(reverse("printer_track", args=["elegoo"]))
 		self.assertContains(response, "Neptune 4 Pro")
-		self.assertContains(response, f"{ENTRY_HOURS} hours + 70 pearls")
+		self.assertContains(response, f"{ENTRY_HOURS} hours + 67 pearls")
 
 	def test_what_a_printer_costs_is_never_shown_in_dollars(self):
 		"""A printer's cost is hours and pearls, never money.
@@ -148,7 +148,7 @@ class PrinterTrackTests(BaseTestCase):
 		self.assertContains(response, "$250 grant")
 		self.assertContains(response, "$650 grant")
 		# The grant is the budget, not the cost; the cost stays in pearls.
-		self.assertContains(response, f"{ENTRY_HOURS} hours + 840 pearls")
+		self.assertContains(response, f"{ENTRY_HOURS} hours + 924 pearls")
 
 	def test_the_chart_room_stays_free_of_dollars(self):
 		"""Every card shows an entry cost, and none of them is a price."""
@@ -183,11 +183,11 @@ class PrinterPaceTests(BaseTestCase):
 		self.assertEqual(self._pace("bambu", "A1 Mini"), "~5.0h/week")
 
 	def test_a_printer_past_the_free_eighty_costs_more_than_the_required_five(self):
-		# A1 is 240 pearls: 160 of it has to come from bonus hours, spread
-		# over 8 weeks at 7/hr — 160 / 56 = ~2.86 more hours than the five
+		# A1 is 230 pearls: 150 of it has to come from bonus hours, spread
+		# over 8 weeks at 7/hr — 150 / 56 = ~2.68 more hours than the five
 		# that are already required.
-		self.assertEqual(self._pearls("bambu", "A1"), 240)
-		self.assertEqual(self._pace("bambu", "A1"), "~7.9h/week")
+		self.assertEqual(self._pearls("bambu", "A1"), 230)
+		self.assertEqual(self._pace("bambu", "A1"), "~7.7h/week")
 
 	def test_pace_climbs_with_pearl_cost_down_a_branch(self):
 		costs = {p["name"]: p["pearls"] for p in track("bambu")["printers"]}
@@ -240,13 +240,13 @@ class PrinterPaceTests(BaseTestCase):
 		user = make_user(layers=1000)
 		self.client.force_login(user)
 		response = self.client.get(reverse("printer_track", args=["bambu"]))
-		self.assertContains(response, "~7.9h/week")
+		self.assertContains(response, "~7.7h/week")
 
 	def test_pace_appears_in_the_claim_dropdown(self):
 		user = make_user(layers=1000)
 		self.client.force_login(user)
 		response = self.client.get(reverse("printer_track", args=["bambu"]))
-		self.assertContains(response, "240 pearls, ~7.9h/week")
+		self.assertContains(response, "230 pearls, ~7.7h/week")
 
 	def test_pace_appears_on_the_chart_room(self):
 		user = make_user(layers=1000)

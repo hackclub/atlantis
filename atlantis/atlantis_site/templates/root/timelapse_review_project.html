@@ -18,6 +18,11 @@
 
             <span class="ta-sep" role="presentation"></span>
 
+            {% if project.image_url %}
+                <a class="ta-shot" href="{{ project.image_display_url }}" target="_blank" rel="noreferrer noopener" title="Open the full screenshot">
+                    <img src="{{ project.image_display_url }}" alt="Screenshot of {{ project.title }}">
+                </a>
+            {% endif %}
             <a class="ta-subject" href="{% url 'project_detail' project.id %}" target="_blank" rel="noreferrer noopener">{{ project.title }}</a>
             <a class="ta-subject-id" href="{% url 'project_detail' project.id %}" target="_blank" rel="noreferrer noopener">(#{{ project.id }})</a>
             <span class="ta-byline">

@@ -753,11 +753,11 @@ class PrinterClaimTests(BaseTestCase):
     def test_claiming_spends_the_whole_path(self):
         with after_week(1):
             self._survive_the_program()
-            self._claim("A1")  # A1 Mini -> A1 is a 240-pearl step
+            self._claim("A1")  # A1 Mini -> A1 is a 230-pearl step
             claim = PrinterClaim.objects.get()
             self.assertEqual(claim.printer_name, "A1")
-            self.assertEqual(claim.pearls_spent, 240)
-            self.assertEqual(Profile.objects.get(user=self.user).layers, 760)
+            self.assertEqual(claim.pearls_spent, 230)
+            self.assertEqual(Profile.objects.get(user=self.user).layers, 770)
 
     def test_a_claim_becomes_a_pending_order(self):
         with after_week(1):
@@ -766,7 +766,7 @@ class PrinterClaimTests(BaseTestCase):
             order = Order.objects.get()
             self.assertEqual(order.status, Order.OrderStatus.PENDING)
             self.assertEqual(order.item.printer_key, item_key("bambu", "A1"))
-            self.assertEqual(order.cost, 240)
+            self.assertEqual(order.cost, 230)
 
     def test_you_only_get_one_printer(self):
         with after_week(1):
@@ -784,7 +784,7 @@ class PrinterClaimTests(BaseTestCase):
             response = self._claim("A1")
             self.assertFalse(PrinterClaim.objects.exists())
             self.assertEqual(Profile.objects.get(user=self.user).layers, 10)
-            self.assertTrue(any("costs 240 pearls" in m for m in message_texts(response)))
+            self.assertTrue(any("costs 230 pearls" in m for m in message_texts(response)))
 
     def test_a_printer_from_another_chart_is_refused(self):
         with after_week(1):

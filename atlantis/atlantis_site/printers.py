@@ -8,7 +8,8 @@ assets/img/printer/map_<slug>.png draws that tree as a constellation, and the
 the star overlay in printer_track.html is laid over the map at those points,
 so the two have to be edited together.
 
-Pearl figures are the per-step costs off the tech-tree diagrams. What a
+Pearl figures are the per-step costs off the tech-tree diagrams, less 4% on
+the printer tracks (each step rounded to the nearest pearl). What a
 printer costs in total is the sum of the steps leading to it plus the track's
 entry pearls, which is what `tracks()` works out. What a printer *sells* for
 is deliberately absent: the cost a person is shown is only ever hours and
@@ -41,17 +42,17 @@ TRACKS = (
         "entry_pearls": 0,
         "printers": (
             ("A1 Mini", None, 0, 10.68, 60.53),
-            ("A1 Mini Combo", "A1 Mini", 240, 23.29, 65.49),
-            ("A1", "A1 Mini", 240, 23.55, 54.20),
-            ("A1 Combo", "A1", 290, 36.38, 59.12),
-            ("P1S", "A1", 290, 36.42, 43.23),
-            ("P1S Combo", "P1S", 440, 50.03, 53.33),
-            ("P2S", "P1S", 440, 49.24, 39.59),
-            ("P2S Combo", "P2S", 290, 62.78, 50.72),
-            ("X2D", "P2S", 290, 63.60, 40.00),
-            ("X2D Combo", "X2D", 730, 76.52, 53.97),
-            ("H2S", "X2D", 1750, 75.45, 34.22),
-            ("H2S Combo", "H2S", 730, 89.26, 27.56),
+            ("A1 Mini Combo", "A1 Mini", 230, 23.29, 65.49),
+            ("A1", "A1 Mini", 230, 23.55, 54.20),
+            ("A1 Combo", "A1", 278, 36.38, 59.12),
+            ("P1S", "A1", 278, 36.42, 43.23),
+            ("P1S Combo", "P1S", 422, 50.03, 53.33),
+            ("P2S", "P1S", 422, 49.24, 39.59),
+            ("P2S Combo", "P2S", 278, 62.78, 50.72),
+            ("X2D", "P2S", 278, 63.60, 40.00),
+            ("X2D Combo", "X2D", 701, 76.52, 53.97),
+            ("H2S", "X2D", 1680, 75.45, 34.22),
+            ("H2S Combo", "H2S", 701, 89.26, 27.56),
         ),
     },
     {
@@ -62,11 +63,11 @@ TRACKS = (
         "entry_pearls": 0,
         "printers": (
             ("Neptune 4", None, 0, 23.82, 67.64),
-            ("Neptune 4 Pro", "Neptune 4", 70, 35.63, 67.27),
-            ("Neptune 4 Plus", "Neptune 4 Pro", 400, 49.26, 54.34),
-            ("Neptune 4 Max Bundle", "Neptune 4 Plus", 270, 58.58, 39.19),
-            ("Centauri Carbon 2", "Neptune 4 Pro", 220, 52.81, 69.10),
-            ("Centauri Carbon 2 Combo", "Centauri Carbon 2", 240, 65.02, 62.10),
+            ("Neptune 4 Pro", "Neptune 4", 67, 35.63, 67.27),
+            ("Neptune 4 Plus", "Neptune 4 Pro", 384, 49.26, 54.34),
+            ("Neptune 4 Max Bundle", "Neptune 4 Plus", 259, 58.58, 39.19),
+            ("Centauri Carbon 2", "Neptune 4 Pro", 211, 52.81, 69.10),
+            ("Centauri Carbon 2 Combo", "Centauri Carbon 2", 230, 65.02, 62.10),
         ),
     },
     {
@@ -79,15 +80,15 @@ TRACKS = (
         "entry_pearls": 390,
         "printers": (
             ("Q2C", None, 0, 20.60, 20.63),
-            ("Q2C Combo", "Q2C", 390, 26.93, 44.83),
-            ("Q2", "Q2C", 310, 34.36, 30.01),
-            ("Q2 Combo", "Q2", 390, 43.40, 58.98),
-            ("Plus 4", "Q2", 390, 46.46, 40.40),
-            ("Plus 4 Combo", "Plus 4", 390, 59.09, 65.55),
-            ("Plus 5", "Plus 4", 260, 62.60, 39.89),
-            ("Plus 5 Combo", "Plus 5", 390, 74.05, 71.17),
-            ("Max 4", "Plus 5", 910, 75.91, 43.68),
-            ("Max 4 Combo", "Max 4", 520, 86.44, 52.80),
+            ("Q2C Combo", "Q2C", 374, 26.93, 44.83),
+            ("Q2", "Q2C", 298, 34.36, 30.01),
+            ("Q2 Combo", "Q2", 374, 43.40, 58.98),
+            ("Plus 4", "Q2", 374, 46.46, 40.40),
+            ("Plus 4 Combo", "Plus 4", 374, 59.09, 65.55),
+            ("Plus 5", "Plus 4", 250, 62.60, 39.89),
+            ("Plus 5 Combo", "Plus 5", 374, 74.05, 71.17),
+            ("Max 4", "Plus 5", 874, 75.91, 43.68),
+            ("Max 4 Combo", "Max 4", 499, 86.44, 52.80),
         ),
     },
     {
@@ -98,14 +99,14 @@ TRACKS = (
         "entry_pearls": 0,
         "printers": (
             ("Ender 3 V3 SE", None, 0, 16.82, 67.36),
-            ("Ender 3 V3 KE", "Ender 3 V3 SE", 160, 26.87, 55.94),
-            ("Ender 3 V3 Plus", "Ender 3 V3 KE", 370, 37.92, 36.78),
-            ("K2", "Ender 3 V3 KE", 330, 41.26, 55.90),
-            ("K2 Combo", "K2", 370, 62.69, 36.09),
-            ("K2 Pro", "K2", 520, 65.51, 46.14),
-            ("K2 Pro Combo", "K2 Pro", 520, 77.44, 30.41),
-            ("K2 Plus", "K2 Pro", 1040, 80.14, 40.64),
-            ("K2 Plus Combo", "K2 Plus", 570, 90.58, 23.00),
+            ("Ender 3 V3 KE", "Ender 3 V3 SE", 154, 26.87, 55.94),
+            ("Ender 3 V3 Plus", "Ender 3 V3 KE", 355, 37.92, 36.78),
+            ("K2", "Ender 3 V3 KE", 317, 41.26, 55.90),
+            ("K2 Combo", "K2", 355, 62.69, 36.09),
+            ("K2 Pro", "K2", 499, 65.51, 46.14),
+            ("K2 Pro Combo", "K2 Pro", 499, 77.44, 30.41),
+            ("K2 Plus", "K2 Pro", 998, 80.14, 40.64),
+            ("K2 Plus Combo", "K2 Plus", 547, 90.58, 23.00),
         ),
     },
     {
@@ -116,17 +117,20 @@ TRACKS = (
         "entry_pearls": 0,
         # A tier is named by the grant it carries, which is the one dollar
         # figure the site shows: it is a budget to spend, not a price to pay.
-        # $50 of grant is 105 pearls — the diagrams' "grant cost times 2.1".
+        # $50 of grant was 105 pearls — the diagrams' "grant cost times 2.1" —
+        # until every pearl tier was inflated by 10%, to 115.5 a step. Steps
+        # alternate 116 and 115 so each tier's total is its old one times 1.1,
+        # rounded: 116, 231, 347, ... 924. The $250 tier stays pearl-free.
         "printers": (
             ("$250 grant", None, 0, 14.77, 33.27),
-            ("$300 grant", "$250 grant", 105, 23.48, 24.08),
-            ("$350 grant", "$300 grant", 105, 34.09, 33.36),
-            ("$400 grant", "$350 grant", 105, 42.17, 42.50),
-            ("$450 grant", "$400 grant", 105, 51.18, 37.50),
-            ("$500 grant", "$450 grant", 105, 64.96, 38.33),
-            ("$550 grant", "$500 grant", 105, 72.90, 45.96),
-            ("$600 grant", "$550 grant", 105, 80.97, 36.06),
-            ("$650 grant", "$600 grant", 105, 90.16, 53.30),
+            ("$300 grant", "$250 grant", 116, 23.48, 24.08),
+            ("$350 grant", "$300 grant", 115, 34.09, 33.36),
+            ("$400 grant", "$350 grant", 116, 42.17, 42.50),
+            ("$450 grant", "$400 grant", 115, 51.18, 37.50),
+            ("$500 grant", "$450 grant", 116, 64.96, 38.33),
+            ("$550 grant", "$500 grant", 115, 72.90, 45.96),
+            ("$600 grant", "$550 grant", 116, 80.97, 36.06),
+            ("$650 grant", "$600 grant", 115, 90.16, 53.30),
         ),
     },
 )
@@ -192,10 +196,10 @@ def _weekly_hours_estimate(pearls):
 
 
 def _pace_label(pearls):
-    """"~8.6h/week" — the estimate, rounded up to a tenth of an hour.
+    """"~7.7h/week" — the estimate, rounded up to a tenth of an hour.
 
     A tenth rather than a whole hour because so many of these land just past a
-    round number (Bambu's A1 is 8.6, not 8 or 9) that rounding off would make
+    round number (Bambu's A1 is 7.7, not 7 or 8) that rounding off would make
     every printer on a track look like it costs the same pace as its neighbor.
 
     Rounded up rather than to the nearest tenth: this is a pace to follow, not

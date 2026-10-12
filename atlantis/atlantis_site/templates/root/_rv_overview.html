@@ -1,5 +1,12 @@
 <section class="rv-panel rv-overview">
     <div class="rv-panel-head">
+        {% if ship.project.image_url %}
+            <a class="rv-shot" href="{{ ship.project.image_display_url }}" target="_blank" rel="noreferrer noopener" title="Open the full screenshot">
+                <img src="{{ ship.project.image_display_url }}" alt="Screenshot of {{ ship.project.title }}">
+            </a>
+        {% else %}
+            <span class="rv-shot rv-shot-none">no screenshot</span>
+        {% endif %}
         <div class="rv-panel-head-text">
             <h1 class="rv-title">
                 <a href="{% url 'project_detail' ship.project.id %}" target="_blank" rel="noreferrer noopener">{{ ship.project.title }}</a>
