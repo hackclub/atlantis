@@ -58,7 +58,8 @@ SHORT_WINDOW_DAYS = 7
 
 # The buckets the "this week so far" chart sorts people still in into, as
 # (label, upper bound in minutes, exclusive). The last is open-ended, and is
-# exactly the people who are done.
+# people with at least five credited hours. Grace pooling and overrides can
+# meet a week's requirement without putting five hours in that week's bucket.
 STREAK_BUCKETS = [
     ("Nothing yet", 1),
     ("Under 1h", 60),
@@ -66,7 +67,7 @@ STREAK_BUCKETS = [
     ("2-3h", 180),
     ("3-4h", 240),
     ("4-5h", weeks.WEEKLY_MINUTES),
-    ("Done (5h+)", None),
+    ("5h+", None),
 ]
 
 # How many days the daily bar charts go back. Short enough that each bar is
@@ -114,9 +115,9 @@ def build_streak_stats(now):
     """Where the field stands in the weekly challenge.
 
     Counted over challenge.standings(), so a participant is anyone who has
-    logged time or held a saver — not every account on the site. "Behind
-    pace" is the dropping-out forecast: someone whose hours so far, carried on
-    at the same rate to Sunday midnight, come up short of the five.
+    logged time or had a saver applied — not every account on the site.
+    Pace compares this week's credited hours with the elapsed share of five;
+    the grace pair's separate requirement is shown by grace_secured.
     """
     field = list(challenge.standings(now).values())
     still_in = [s for s in field if not s.eliminated]
@@ -135,12 +136,23 @@ def build_streak_stats(now):
         "printer_unlocked": sum(1 for s in still_in if s.printer_unlocked),
     }
 
-    # Weeks that closed short on logged time and were met anyway: savers,
-    # bought or granted, or an organizer's pass.
-    stats["weeks_rescued"] = sum(
-        1 for s in field for w in s.weeks
-        if w.closed and w.met and w.tracked_minutes < weeks.WEEKLY_MINUTES
-    )
+    # Closed weeks met only with assistance. Natural grace pooling is still
+    # logged work, even if one week has less than five hours of its own. A
+    # saver on either grace week can help the other, so checking only that
+    # week's saver_hours would miss assistance across the pair. This is a
+    # count of user-weeks, not buyers or proof of a purchase after close.
+    assisted = 0
+    for s in field:
+        organic_grace_met = (
+            sum(w.tracked_minutes for w in s.weeks if w.grace) >= weeks.grace_minutes()
+        )
+        assisted += sum(
+            1 for w in s.weeks
+            if w.closed and w.met and w.tracked_minutes < weeks.WEEKLY_MINUTES
+            and not (w.grace and organic_grace_met)
+        )
+    # A new key leaves historical snapshots' old, broader count identifiable.
+    stats["weeks_assisted"] = assisted
 
     closed = weeks.closed_weeks(now)
     stats["survived_by_week"] = add_bars([

@@ -103,8 +103,8 @@
         <div class="stat-grid">
             <div class="stat-card good">
                 <div class="stat-value">{{ streaks.done }}</div>
-                <div class="stat-label">Done this week</div>
-                <div class="stat-sub">{{ streaks.done_rate }}% of those still in have their {{ streaks.weekly_hours }}h</div>
+                <div class="stat-label">This week's requirement met</div>
+                <div class="stat-sub">{{ streaks.done_rate }}% of those still in &middot; includes savers, grace pooling and overrides</div>
             </div>
             {% if streaks.grace_live %}
             <div class="stat-card good">
@@ -120,8 +120,8 @@
             </div>
             <div class="stat-card bad">
                 <div class="stat-value">{{ streaks.behind_pace }}</div>
-                <div class="stat-label">Behind pace to drop out</div>
-                <div class="stat-sub">{{ streaks.behind_rate }}% of those still in &middot; {{ streaks.nothing_yet }} with nothing logged</div>
+                <div class="stat-label">Below weekly pace</div>
+                <div class="stat-sub">{{ streaks.behind_rate }}% of those still in &middot; {{ streaks.nothing_yet }} with nothing credited</div>
             </div>
             <div class="stat-card warn">
                 <div class="stat-value">{{ streaks.short }}</div>
@@ -136,7 +136,7 @@
             {% if streaks.avg_completed_display %}{# absent from snapshots taken before it existed #}
             <div class="stat-card good">
                 <div class="stat-value">{{ streaks.avg_completed_display }}</div>
-                <div class="stat-label">Avg logged by those done</div>
+                <div class="stat-label">Avg logged by {{ streaks.weekly_hours }}h+ builders</div>
                 <div class="stat-sub">{{ streaks.completed_this_week }} logged their {{ streaks.weekly_hours }}h themselves, savers not counted</div>
             </div>
             {% endif %}
@@ -152,7 +152,7 @@
             <div class="stat-card accent">
                 <div class="stat-value">{{ streaks.participants }}</div>
                 <div class="stat-label">Participants</div>
-                <div class="stat-sub">logged time or held a saver</div>
+                <div class="stat-sub">logged time or had a saver applied</div>
             </div>
             <div class="stat-card good">
                 <div class="stat-value">{{ streaks.still_in }}</div>
@@ -165,9 +165,15 @@
                 <div class="stat-sub">missed a closed week, not yet saved</div>
             </div>
             <div class="stat-card">
+                {% if streaks.weeks_assisted != None %}
+                <div class="stat-value">{{ streaks.weeks_assisted }}</div>
+                <div class="stat-label">Weeks met with assistance</div>
+                <div class="stat-sub">closed weeks needing savers or an override</div>
+                {% else %}{# Historical snapshots used the broader, pre-grace-aware count. #}
                 <div class="stat-value">{{ streaks.weeks_rescued }}</div>
-                <div class="stat-label">Weeks rescued</div>
-                <div class="stat-sub">closed short on logged time, met by savers or override</div>
+                <div class="stat-label">Weeks met below {{ streaks.weekly_hours }}h logged</div>
+                <div class="stat-sub">includes grace pooling, savers and overrides</div>
+                {% endif %}
             </div>
             {% if streaks.ended %}
             <div class="stat-card good">
@@ -178,11 +184,12 @@
             {% endif %}
         </div>
 
+        <p class="metrics-generated">Closed-week counts are independent outcomes for each week, including applied savers, grace pooling and overrides. Logged-hours charts count tracked work only.</p>
         <div class="chart-grid">
             {% if streaks.live_week %}
             {% include "root/_metric_chart.html" with title="Credited this week, those still in" rows=streaks.this_week empty="Nobody's in yet" %}
             {% endif %}
-            {% include "root/_metric_chart.html" with title="Met each closed week" rows=streaks.survived_by_week fill_class="good" empty="No week has closed yet" %}
+            {% include "root/_metric_chart.html" with title="Met each closed week, including savers" rows=streaks.survived_by_week fill_class="good" empty="No week has closed yet" %}
             {% include "root/_metric_chart.html" with title="Logged their hours each week, with their average" rows=streaks.completed_by_week fill_class="good" empty="No week has started yet" %}
         </div>
         {% endif %}
