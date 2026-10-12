@@ -53,7 +53,6 @@
                             <div class="card-dropdown" aria-hidden="true">
                                 <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-description="{{ project.description }}" data-printables="{{ project.printablesUrl|default_if_none:"" }}">edit</button>
                                 <button type="button" class="dropdown-item open-screenshot" data-project-id="{{ project.id }}" data-title="{{ project.title }}">screenshot</button>
-                                <button type="button" class="dropdown-item open-delete delete-button" data-project-id="{{ project.id }}" data-title="{{ project.title }}">delete</button>
                             </div>
                             <button type="button" class="menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Options for {{ project.title }}">&#8943;</button>
                         </div>
@@ -172,23 +171,6 @@
                 <div class="modal-actions">
                     <button type="button" id="cancelScreenshotModal">Cancel</button>
                     <button type="submit">Upload</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div id="deleteProjectModal" class="modal hidden" aria-hidden="true" hidden>
-        <div class="modal-backdrop" id="deleteModalBackdrop"></div>
-
-        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="deleteProjectTitle">
-            <h3 id="deleteProjectTitle">Delete Project</h3>
-            <p>Are you sure you want to delete "<span id="deleteProjectName"></span>"? This action cannot be undone.</p>
-
-            <form id="deleteProjectForm" action="" method="post">
-                {% csrf_token %}
-                <div class="modal-actions">
-                    <button type="button" id="cancelDeleteModal">Cancel</button>
-                    <button type="submit" class="delete-button">Delete</button>
                 </div>
             </form>
         </div>
@@ -327,38 +309,6 @@
             if (cancelScreenshotBtn) cancelScreenshotBtn.addEventListener('click', closeScreenshotModal);
             if (screenshotBackdrop) screenshotBackdrop.addEventListener('click', closeScreenshotModal);
             document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !screenshotModal.classList.contains('hidden')) closeScreenshotModal(); });
-
-            const deleteModal = document.getElementById('deleteProjectModal');
-            const deleteBackdrop = document.getElementById('deleteModalBackdrop');
-            const deleteForm = document.getElementById('deleteProjectForm');
-            const deleteProjectName = document.getElementById('deleteProjectName');
-            const cancelDeleteBtn = document.getElementById('cancelDeleteModal');
-
-            document.addEventListener('click', (e) => {
-                const openDeleteBtn = e.target.closest('.open-delete');
-                if (openDeleteBtn) {
-                    const id = openDeleteBtn.dataset.projectId;
-                    const title = openDeleteBtn.dataset.title || 'this project';
-                    deleteForm.action = `/projects/${id}/delete/`;
-                    deleteProjectName.textContent = title;
-                    deleteModal.classList.remove('hidden');
-                    deleteModal.hidden = false;
-                    deleteModal.setAttribute('aria-hidden', 'false');
-                    const first = deleteModal.querySelector('button');
-                    if (first) first.focus();
-                    closeAllMenus();
-                }
-            });
-
-            function closeDeleteModal() {
-                deleteModal.classList.add('hidden');
-                deleteModal.hidden = true;
-                deleteModal.setAttribute('aria-hidden', 'true');
-            }
-
-            if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteModal);
-            if (deleteBackdrop) deleteBackdrop.addEventListener('click', closeDeleteModal);
-            document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !deleteModal.classList.contains('hidden')) closeDeleteModal(); });
         })();
     </script>
 

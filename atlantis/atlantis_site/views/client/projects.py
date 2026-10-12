@@ -443,36 +443,6 @@ def update_project_image(request, project_id):
 
 
 @login_required
-@require_POST
-@rate_limit("delete_project", 2)
-def delete_project(request, project_id):
-    project = get_object_or_404(request.user.projects, id=project_id, deleted=False)
-
-    if project.locked:
-        messages.error(request, "You cannot delete a locked project.")
-        return redirect("projects")
-
-    in_flight = project.ships.exclude(
-        status__in=(Ship.ShipStatus.FINALIZED, Ship.ShipStatus.REJECTED)
-    ).exists()
-    if in_flight:
-        messages.error(request, "You cannot delete a project while a ship is under review. Wait until it is finalized or rejected.")
-        return redirect("projects")
-
-    # A finalized ship has already been paid for, and deleting the project is
-    # what frees its footage to be taped in again (see _released_lapse_rows) —
-    # so a project that has shipped is never deletable, or the same hours could
-    # be claimed a second time.
-    if project.ships.filter(status=Ship.ShipStatus.FINALIZED).exists():
-        messages.error(request, "You cannot delete a project that has already been finalized..")
-        return redirect("projects")
-
-    project.deleted = True
-    project.save()
-
-    return redirect("projects")
-
-@login_required
 def project_detail(request, project_id):
     """The project's book — one page for everyone who opens it.
 
@@ -990,7 +960,7 @@ def _changeable_journal(request, project_id, journal_id):
 @rate_limit("edit_journal", 2)
 def edit_journal(request, project_id, journal_id):
     """Fix a lapse's title, photo or STL. The timelapses behind it stay put:
-    they are its hours, and swapping them is deleting it and taping in again."""
+    they are its hours, and once taped in they can't be taken back off."""
     journal, error = _changeable_journal(request, project_id, journal_id)
     if error:
         messages.error(request, error)
@@ -1040,29 +1010,6 @@ def edit_journal(request, project_id, journal_id):
     messages.success(request, "Lapse updated.")
     return redirect("project_detail", project_id=project_id)
 
-
-@login_required
-@require_POST
-@rate_limit("delete_journal", 2)
-def delete_journal(request, project_id, journal_id):
-    """Tear a lapse out of the book, giving its footage back.
-
-    A Lookout row is ours from the moment it started recording, so it stays
-    and simply comes loose (the foreign key is SET_NULL) to be attached again.
-    A Lapse row only exists because of the attach, and its lapse_id is unique —
-    left behind it would hold the footage hostage — so it goes with the lapse.
-    """
-    journal, error = _changeable_journal(request, project_id, journal_id)
-    if error:
-        messages.error(request, error)
-        return redirect("project_detail", project_id=project_id)
-
-    with transaction.atomic():
-        journal.timelapses.filter(source=Timelapse.Source.LAPSE).delete()
-        journal.delete()
-
-    messages.success(request, "Lapse deleted.")
-    return redirect("project_detail", project_id=project_id)
 
 @login_required
 @rate_limit("ship_project", 3)

@@ -182,14 +182,6 @@
                                     </g>
                                 </svg>
                             </button>
-                            <button type="button" class="icon-btn icon-btn--danger js-slip" data-slip="slip-delete" title="delete" aria-label="Delete project">
-                                <svg viewBox="0 0 32 32" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" stroke-linejoin="round" stroke-miterlimit="1.414" aria-hidden="true" focusable="false">
-                                    <path d="M8.391 12.32c-.636-.131-1.248.368-1.213 1.016.808 14.714 1.271 14.711 7.681 14.669C15.22 28.003 15.6 28 16 28s.78.003 1.141.005c6.41.042 6.873.045 7.681-14.669.035-.648-.577-1.147-1.212-1.016a.975.975 0 0 0-.784.896c-.17 3.094-.323 5.51-.519 7.407-.266 2.584-.588 3.883-.95 4.566-.225.426-.422.586-1.067.701-.716.128-1.615.123-3.019.115h-.002a161.358 161.358 0 0 0-2.538 0h-.001c-1.405.008-2.304.013-3.02-.115-.645-.115-.842-.275-1.067-.701-.362-.683-.684-1.982-.95-4.566-.196-1.897-.349-4.313-.519-7.407a.975.975 0 0 0-.783-.896z"/>
-                                    <path d="M6 10a1 1 0 0 1 1-1h18a1 1 0 0 1 0 2H7a1 1 0 0 1-1-1z" fill-rule="nonzero"/>
-                                    <path d="M12.25 7.973C12.112 8.185 12 8.5 12 9h-2c0-.81.186-1.525.576-2.121.366-.536.963-1.006 1.525-1.271C13.24 5.087 14.687 5 16 5c1.313 0 2.76.087 3.899.608.562.265 1.158.735 1.525 1.271C21.814 7.475 22 8.19 22 9h-2c0-.5-.112-.815-.25-1.027-.161-.272-.324-.388-.684-.546C18.36 7.103 17.306 7 16 7c-1.306 0-2.36.103-3.066.427-.36.158-.523.274-.684.546z"/>
-                                    <path d="M12.044 14.086a1 1 0 1 1 1.998-.087l.349 7.992a1 1 0 0 1-1.998.087l-.349-7.992zM17.956 13.999a1 1 0 0 1 1.998.087l-.348 7.993a1 1 0 0 1-1.999-.088l.349-7.992z" fill-rule="nonzero"/>
-                                </svg>
-                            </button>
                             </span>
                         {% endif %}
                         {% endif %}
@@ -252,7 +244,6 @@
                                         {% if is_owner and not project.locked and entry.journal.changeable %}
                                             <p class="lapse-actions">
                                                 <button type="button" class="ink-link" data-slip="slip-lapse-edit-{{ entry.journal.id }}">edit</button>
-                                                <button type="button" class="ink-link ink-link--danger" data-slip="slip-lapse-delete-{{ entry.journal.id }}">delete</button>
                                             </p>
                                         {% endif %}
                                     </div>
@@ -420,23 +411,11 @@
         </div>
         {% endif %}
 
-        <div class="slip" id="slip-delete" hidden>
-            <h2>Delete project</h2>
-            <p>Are you sure you want to delete &ldquo;{{ project.title }}&rdquo;? This cannot be undone.</p>
-            <form action="{% url 'delete_project' project.id %}" method="post">
-                {% csrf_token %}
-                <div class="slip-actions">
-                    <button type="button" data-close>Cancel</button>
-                    <button type="submit" class="is-danger">Delete</button>
-                </div>
-            </form>
-        </div>
-
         {% if not project.locked %}
         {% comment %}
-        One pair per lapse the owner can still change: unshipped, or on a ship
-        sent back for changes. Other shipped lapses are frozen, so they get
-        neither the slips nor the links that open them.
+        One edit slip per lapse the owner can still change: unshipped, or on a
+        ship sent back for changes. Other shipped lapses are frozen, so they get
+        neither the slip nor the link that opens it.
         {% endcomment %}
         {% for journal in journals %}
             {% if journal.changeable %}
@@ -458,22 +437,10 @@
                         <input type="file" name="STL" accept=".stl">
                         <span class="slip-hint">Leave empty to keep the current one. Max 300MB.</span>
                     </label>
-                    <p class="slip-note">The timelapses behind this lapse can't be swapped. To change them, delete the lapse and tape it in again.</p>
+                    <p class="slip-note">The timelapses behind this lapse can't be removed or swapped.</p>
                     <div class="slip-actions">
                         <button type="button" data-close>Cancel</button>
                         <button type="submit">Save</button>
-                    </div>
-                </form>
-            </div>
-
-            <div class="slip" id="slip-lapse-delete-{{ journal.id }}" hidden>
-                <h2>Delete lapse</h2>
-                <p>Delete &ldquo;{{ journal.title }}&rdquo;? Its {{ journal.tracked_display }} of timelapses come off this project and can be taped into a new lapse. This cannot be undone.</p>
-                <form action="{% url 'delete_journal' project.id journal.id %}" method="post">
-                    {% csrf_token %}
-                    <div class="slip-actions">
-                        <button type="button" data-close>Cancel</button>
-                        <button type="submit" class="is-danger">Delete</button>
                     </div>
                 </form>
             </div>

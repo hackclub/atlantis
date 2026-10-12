@@ -149,58 +149,17 @@ class EditProjectTests(BaseTestCase):
 				self.assertEqual(self.project.title, "Test Project")
 
 
-class DeleteProjectTests(BaseTestCase):
-	def setUp(self):
-		super().setUp()
-		self.user = make_user("deleter")
-		self.project = make_project(self.user)
-		self.client.force_login(self.user)
+class ParticipantCannotDeleteProjectTests(BaseTestCase):
+	"""Only admins can delete projects (see db_delete_project)."""
 
-	def _delete(self, project=None):
-		project = project or self.project
-		return self.client.post(reverse("delete_project", args=[project.id]))
-
-	def test_soft_deletes_project(self):
-		self._delete()
-		self.project.refresh_from_db()
-		self.assertTrue(self.project.deleted)
-
-	def test_cannot_delete_locked_project(self):
-		self.project.locked = True
-		self.project.save()
-		self._delete()
-		self.project.refresh_from_db()
-		self.assertFalse(self.project.deleted)
-
-	def test_cannot_delete_with_ship_in_flight(self):
-		for status in (Ship.ShipStatus.T1_QUEUE, Ship.ShipStatus.T2_QUEUE,
-					   Ship.ShipStatus.T3_QUEUE):
-			with self.subTest(status=status):
-				project = make_project(self.user)
-				make_ship(project, status=status, journal_minutes=())
-				self._delete(project)
-				project.refresh_from_db()
-				self.assertFalse(project.deleted)
-
-	def test_can_delete_with_a_rejected_ship(self):
-		project = make_project(self.user)
-		make_ship(project, status=Ship.ShipStatus.REJECTED, journal_minutes=())
-		self._delete(project)
-		project.refresh_from_db()
-		self.assertTrue(project.deleted)
-
-	def test_cannot_delete_a_project_that_has_shipped(self):
-		"""Deleting frees the footage; a paid book must not be able to free its
-		own hours for a second payout."""
-		project = make_project(self.user)
-		make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=())
-		self._delete(project)
+	def test_old_delete_route_is_gone(self):
+		user = make_user("deleter")
+		project = make_project(user)
+		self.client.force_login(user)
+		response = self.client.post(f"/projects/{project.id}/delete/")
+		self.assertEqual(response.status_code, 404)
 		project.refresh_from_db()
 		self.assertFalse(project.deleted)
-
-	def test_cannot_delete_other_users_project(self):
-		other_project = make_project(make_user("other"))
-		self.assertEqual(self._delete(other_project).status_code, 404)
 
 
 class ProjectDetailTests(BaseTestCase):
@@ -222,7 +181,7 @@ class ProjectDetailTests(BaseTestCase):
 		response = self._detail(project)
 		self.assertTrue(response.context["is_owner"])
 		body = response.content.decode()
-		for name in ("ship_project", "edit_project", "delete_project", "create_journal", "start_timelapse"):
+		for name in ("ship_project", "edit_project", "create_journal", "start_timelapse"):
 			self.assertIn(reverse(name, args=[project.id]), body)
 
 	def test_can_ship_when_all_requirements_met(self):
@@ -322,13 +281,12 @@ class ProjectDetailTests(BaseTestCase):
 		self.assertFalse(response.context["can_ship"])
 		self.assertIn("before you can resubmit", response.context["ship_disabled_reason"])
 
-	def test_returned_ships_lapses_offer_edit_and_delete(self):
+	def test_returned_ships_lapses_offer_edit(self):
 		project = make_project(self.user, shippable=True)
 		ship = make_ship(project, status=Ship.ShipStatus.CHANGES_REQUESTED, journal_minutes=(60,))
 		journal = ship.journals.get()
 		response = self._detail(project)
 		self.assertContains(response, f'id="slip-lapse-edit-{journal.id}"')
-		self.assertContains(response, f'id="slip-lapse-delete-{journal.id}"')
 
 	def test_in_review_ships_lapses_offer_no_edit_or_delete(self):
 		project = make_project(self.user, shippable=True)
@@ -462,7 +420,7 @@ class ProjectDetailVisitorTests(BaseTestCase):
 		response = self._detail(project)
 		self.assertFalse(response.context["is_owner"])
 		body = response.content.decode()
-		for name in ("ship_project", "edit_project", "delete_project", "update_project_image",
+		for name in ("ship_project", "edit_project", "update_project_image",
 					 "update_editor_model", "create_journal", "start_timelapse"):
 			self.assertNotIn(reverse(name, args=[project.id]), body)
 
@@ -754,77 +712,35 @@ class EditJournalTests(BaseTestCase):
 		self.assertEqual(self.journal.title, "Old title")
 
 
-class DeleteJournalTests(BaseTestCase):
+class JournalControlsTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()
-		self.user = make_user("deleter")
+		self.user = make_user("journaler")
 		self.project = make_project(self.user)
 		self.client.force_login(self.user)
 
-	def _delete(self, journal):
-		return self.client.post(reverse("delete_journal", args=[journal.project_id, journal.id]))
-
-	def test_deletes_journal(self):
+	def test_participant_cannot_delete_journal(self):
+		"""Deleting a lapse would take its timelapses off it, so the route is gone."""
 		journal = make_journal(self.project)
-		response = self._delete(journal)
-		self.assertFalse(Journal.objects.exists())
-		self.assertIn("Lapse deleted.", message_texts(response))
-
-	def test_lookout_footage_is_freed_to_attach_again(self):
-		journal = make_journal(self.project, time_spent=0)
 		lookout = make_lookout(self.project, journal=journal)
-		self._delete(journal)
+		response = self.client.post(f"/projects/{self.project.id}/journal/{journal.id}/delete/")
+		self.assertEqual(response.status_code, 404)
+		self.assertTrue(Journal.objects.filter(pk=journal.pk).exists())
 		lookout.refresh_from_db()
-		self.assertIsNone(lookout.journal)
-		self.assertTrue(lookout.is_attachable)
+		self.assertEqual(lookout.journal, journal)
 
-	def test_lapse_rows_go_with_it(self):
-		"""Left behind, the row's unique lapse_id would block taping it in again."""
-		journal = make_journal(self.project)
-		self._delete(journal)
-		self.assertFalse(Timelapse.objects.filter(source=Timelapse.Source.LAPSE).exists())
-
-	def test_cannot_delete_other_users_journal(self):
-		other = make_journal(make_project(make_user("other")))
-		self.assertEqual(self._delete(other).status_code, 404)
-		self.assertTrue(Journal.objects.filter(pk=other.pk).exists())
-
-	def test_cannot_delete_shipped_journal(self):
-		ship = make_ship(self.project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(60,))
-		journal = ship.journals.get()
-		response = self._delete(journal)
-		self.assertTrue(Journal.objects.filter(pk=journal.pk).exists())
-		self.assertIn("This lapse has already been shipped and can't be changed.", message_texts(response))
-
-	def test_can_delete_journal_on_returned_ship(self):
-		ship = make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED, journal_minutes=(60, 60))
-		journal = ship.journals.first()
-		response = self._delete(journal)
-		self.assertFalse(Journal.objects.filter(pk=journal.pk).exists())
-		self.assertEqual(ship.journals.count(), 1)
-		self.assertIn("Lapse deleted.", message_texts(response))
-
-	def test_cannot_delete_on_locked_project(self):
-		journal = make_journal(self.project)
-		self.project.locked = True
-		self.project.save()
-		self._delete(journal)
-		self.assertTrue(Journal.objects.filter(pk=journal.pk).exists())
-
-	def test_detail_offers_controls_only_on_unshipped_lapses(self):
+	def test_detail_offers_edit_only_on_unshipped_lapses(self):
 		loose = make_journal(self.project)
 		shipped = make_ship(self.project, journal_minutes=(60,)).journals.get()
 		body = self.client.get(reverse("project_detail", args=[self.project.id])).content.decode()
-		self.assertIn(reverse("delete_journal", args=[self.project.id, loose.id]), body)
 		self.assertIn(reverse("edit_journal", args=[self.project.id, loose.id]), body)
-		self.assertNotIn(reverse("delete_journal", args=[self.project.id, shipped.id]), body)
 		self.assertNotIn(reverse("edit_journal", args=[self.project.id, shipped.id]), body)
+		self.assertNotIn(f"/journal/{loose.id}/delete/", body)
 
 	def test_visitor_gets_no_controls(self):
 		journal = make_journal(self.project)
 		self.client.force_login(make_user("visitor"))
 		body = self.client.get(reverse("project_detail", args=[self.project.id])).content.decode()
-		self.assertNotIn(reverse("delete_journal", args=[self.project.id, journal.id]), body)
 		self.assertNotIn(reverse("edit_journal", args=[self.project.id, journal.id]), body)
 
 
@@ -990,12 +906,6 @@ class ShipProjectTests(BaseTestCase):
 		self._ship(checklist={})
 		ship.refresh_from_db()
 		self.assertEqual(ship.status, Ship.ShipStatus.CHANGES_REQUESTED)
-
-	def test_cannot_delete_while_changes_are_requested(self):
-		make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED)
-		self.client.post(reverse("delete_project", args=[self.project.id]))
-		self.project.refresh_from_db()
-		self.assertFalse(self.project.deleted)
 
 	def test_reship_after_rejection_still_needs_a_new_journal(self):
 		make_ship(self.project, status=Ship.ShipStatus.REJECTED)
