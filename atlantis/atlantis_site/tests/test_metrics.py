@@ -539,16 +539,42 @@ class MetricsStreakTests(BaseTestCase):
 		self.assertEqual(stats["completed_this_week"], 1)
 		self.assertEqual(stats["avg_completed_display"], "6h 0m")
 
-	def test_organic_grace_pooling_is_not_a_rescue(self):
+	def test_organic_grace_pooling_stays_unassisted_after_every_later_deadline(self):
 		self._builder("organic-grace",
-			(420, datetime(2026, 9, 23, 10, tzinfo=EASTERN)),
-			(180, datetime(2026, 9, 30, 10, tzinfo=EASTERN)))
+			(420, weeks.week_bounds(1)[0]),
+			(180, weeks.week_bounds(2)[0]),
+			*((300, weeks.week_bounds(index)[0]) for index in range(3, 9)))
 
-		stats = build_streak_stats(datetime(2026, 10, 7, 12, tzinfo=EASTERN))
+		for closed_week in range(2, 9):
+			with self.subTest(closed_week=closed_week):
+				stats = build_streak_stats(weeks.week_bounds(closed_week)[1])
+				self.assertEqual((stats["still_in"], stats["out"]), (1, 0))
+				self.assertEqual([row["value"] for row in stats["survived_by_week"]], [1] * closed_week)
+				self.assertEqual([row["value"] for row in stats["completed_by_week"][:2]], [1, 0])
+				self.assertEqual(stats["weeks_assisted"], 0)
 
-		self.assertEqual(stats["still_in"], 1)
-		self.assertEqual([row["value"] for row in stats["survived_by_week"]], [1, 1])
-		self.assertEqual(stats["weeks_assisted"], 0)
+	def test_every_week_after_grace_requires_its_own_five_hours(self):
+		for short_week in range(3, 9):
+			with self.subTest(short_week=short_week):
+				# Plenty of opening hours and a later 7h+3h pair cannot pool
+				# into a pass once the grace period has ended.
+				neighbor = short_week + 1 if short_week < 8 else 7
+				user = self._builder(f"strict-week-{short_week}",
+					(1200, weeks.week_bounds(1)[0]),
+					*((180 if index == short_week else 420 if index == neighbor else 300,
+						weeks.week_bounds(index)[0]) for index in range(3, 9)))
+				baseline = build_streak_stats(weeks.ends_at())
+				self.assertEqual((baseline["participants"], baseline["still_in"], baseline["out"]), (1, 0, 1))
+				self.assertEqual(baseline["weeks_assisted"], 0)
+				self.assertEqual(baseline["survived_by_week"][short_week - 1]["value"], 0)
+				SaverCredit.objects.bulk_create([SaverCredit(user=user, week_index=short_week) for _ in range(2)])
+
+				assisted = build_streak_stats(weeks.ends_at())
+				self.assertEqual((assisted["participants"], assisted["still_in"], assisted["out"]), (1, 1, 0))
+				self.assertEqual(assisted["weeks_assisted"], 1)
+				self.assertEqual([row["value"] for row in assisted["survived_by_week"]], [1] * 8)
+				self.assertEqual(assisted["completed_by_week"], baseline["completed_by_week"])
+				user.delete()
 
 	def test_grace_assistance_can_come_from_the_other_week(self):
 		user = self._builder("pooled-saver",
@@ -706,6 +732,8 @@ class MetricsStreakTests(BaseTestCase):
 		self.assertEqual(past.context["streaks"]["out"], 1)
 		self.assertContains(live, "Weeks met with assistance")
 		self.assertContains(live, "Met each closed week, including savers")
+		self.assertContains(live, "Weeks 1–2 share a 10h target; from week 3, each week requires 5h.")
+		self.assertContains(live, "5h+ logged each week, with their average")
 		self.assertContains(past, "Weeks met with assistance")  # includes a zero value
 		# Old snapshots counted the naturally pooled second grace week too.
 		del snapshot.data["streaks"]["weeks_assisted"]

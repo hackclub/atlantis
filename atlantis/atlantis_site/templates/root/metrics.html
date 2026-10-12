@@ -184,13 +184,15 @@
             {% endif %}
         </div>
 
-        <p class="metrics-generated">Closed-week counts are independent outcomes for each week, including applied savers, grace pooling and overrides. Logged-hours charts count tracked work only.</p>
+        <p class="metrics-generated">Weeks 1–2 share a 10h target; from week 3, each week requires {{ streaks.weekly_hours }}h. Closed-week bars include applied savers and overrides and show each week's outcome, not cumulative retention. Logged-hours charts count tracked work only.</p>
         <div class="chart-grid">
             {% if streaks.live_week %}
             {% include "root/_metric_chart.html" with title="Credited this week, those still in" rows=streaks.this_week empty="Nobody's in yet" %}
             {% endif %}
             {% include "root/_metric_chart.html" with title="Met each closed week, including savers" rows=streaks.survived_by_week fill_class="good" empty="No week has closed yet" %}
-            {% include "root/_metric_chart.html" with title="Logged their hours each week, with their average" rows=streaks.completed_by_week fill_class="good" empty="No week has started yet" %}
+            {% with logged_title=streaks.weekly_hours|stringformat:"s"|add:"h+ logged each week, with their average" %}
+            {% include "root/_metric_chart.html" with title=logged_title rows=streaks.completed_by_week fill_class="good" empty="No week has started yet" %}
+            {% endwith %}
         </div>
         {% endif %}
     </section>
