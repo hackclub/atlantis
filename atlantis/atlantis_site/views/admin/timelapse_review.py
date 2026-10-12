@@ -387,7 +387,8 @@ def timelapse_review_dash(request):
     pass, so the queue's job is to name the project and say how much is in it.
 
     `?filter=` narrows the table (see filter_rows) — `shipped` to projects
-    whose waiting lapses are holding a ship out of T1. Only the table: the
+    whose waiting lapses are holding a ship out of T1, the tab it opens on
+    (`?filter=all` for the rest). Only the table: the
     stats above it still describe the whole queue, and each row keeps its
     place number in it.
     """

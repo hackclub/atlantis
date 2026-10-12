@@ -236,13 +236,13 @@ class LookoutQueueTests(BaseTestCase):
 		self._lapse(newer, 2)
 		self._lapse(older, 9)
 
-		rows = self.client.get(reverse("timelapse_review_dash")).context["projects"]
+		rows = self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["projects"]
 		self.assertEqual([p.id for p in rows], [older.id, newer.id])
 
 	def test_a_project_waits_from_its_oldest_lapse_not_its_creation(self):
 		self._lapse(self.project, 9)
 		self._lapse(self.project, 1)
-		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
+		row = self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["projects"][0]
 		self.assertEqual(row.age_display, "9d")
 		self.assertEqual(row.age_bucket, "overdue")
 
@@ -251,7 +251,7 @@ class LookoutQueueTests(BaseTestCase):
 		self._lapse(self.project, 3, ship=ship, time_spent=90)
 		self._lapse(self.project, 1, ship=ship, time_spent=30)
 
-		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
+		row = self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["projects"][0]
 		self.assertEqual(row.lapse_count, 2)
 		self.assertEqual(row.recording_count, 2)
 		self.assertEqual(row.tracked_label, "2h 0m")
@@ -260,7 +260,7 @@ class LookoutQueueTests(BaseTestCase):
 	def test_lapses_within_a_project_are_oldest_first(self):
 		second = self._lapse(self.project, 4)
 		first = self._lapse(self.project, 8)
-		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
+		row = self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["projects"][0]
 		self.assertEqual([lapse.id for lapse in row.lapses], [first.id, second.id])
 
 	def test_an_unshipped_project_is_on_the_desk(self):
@@ -268,7 +268,7 @@ class LookoutQueueTests(BaseTestCase):
 		journal = make_journal(self.project)
 		self.assertIsNone(journal.ship_id)
 
-		row = self.client.get(reverse("timelapse_review_dash")).context["projects"][0]
+		row = self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["projects"][0]
 		self.assertEqual(row.id, self.project.id)
 		self.assertEqual(row.held_ships, [])
 
@@ -304,7 +304,7 @@ class LookoutQueueTests(BaseTestCase):
 		self._lapse(other)
 
 		stats = {s["label"]: s["value"] for s in
-				 self.client.get(reverse("timelapse_review_dash")).context["queue_stats"]}
+				 self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["queue_stats"]}
 		self.assertEqual(stats["Waiting"], "2")
 		self.assertEqual(stats["Lapses"], "3")
 

@@ -217,7 +217,7 @@ class TimelapseReviewQueueTests(BaseTestCase):
 	def test_a_project_enters_the_queue_once_carrying_all_its_lapses(self):
 		first = make_journal(self.project)
 		second = make_journal(self.project)
-		response = self.client.get(reverse("timelapse_review_dash"))
+		response = self.client.get(reverse("timelapse_review_dash") + "?filter=all")
 
 		self.assertEqual([p.id for p in response.context["projects"]], [self.project.id])
 		self.assertEqual(
@@ -230,7 +230,7 @@ class TimelapseReviewQueueTests(BaseTestCase):
 		pending = make_journal(self.project)
 		approve_timelapse(reviewed, reviewer=self.reviewer)
 
-		response = self.client.get(reverse("timelapse_review_dash"))
+		response = self.client.get(reverse("timelapse_review_dash") + "?filter=all")
 		self.assertEqual([p.id for p in response.context["projects"]], [self.project.id])
 		self.assertEqual(
 			[lapse.id for lapse in response.context["projects"][0].lapses], [pending.id]
@@ -243,12 +243,12 @@ class TimelapseReviewQueueTests(BaseTestCase):
 
 	def test_a_fully_reviewed_project_leaves_the_queue(self):
 		approve_timelapse(make_journal(self.project), reviewer=self.reviewer)
-		response = self.client.get(reverse("timelapse_review_dash"))
+		response = self.client.get(reverse("timelapse_review_dash") + "?filter=all")
 		self.assertEqual(list(response.context["projects"]), [])
 
 	def test_deleted_projects_are_not_queued(self):
 		make_journal(make_project(make_user("gone"), deleted=True))
-		response = self.client.get(reverse("timelapse_review_dash"))
+		response = self.client.get(reverse("timelapse_review_dash") + "?filter=all")
 		self.assertEqual(list(response.context["projects"]), [])
 
 	def test_the_shipped_filter_keeps_only_projects_holding_a_ship(self):
@@ -256,7 +256,7 @@ class TimelapseReviewQueueTests(BaseTestCase):
 		shipped = make_project(make_user("shipper"), shippable=True)
 		make_ship(shipped, timelapse_approved=False)
 
-		everything = self.client.get(reverse("timelapse_review_dash"))
+		everything = self.client.get(reverse("timelapse_review_dash") + "?filter=all")
 		self.assertEqual(
 			{p.id for p in everything.context["projects"]}, {self.project.id, shipped.id}
 		)
@@ -264,6 +264,19 @@ class TimelapseReviewQueueTests(BaseTestCase):
 		response = self.client.get(reverse("timelapse_review_dash") + "?shipped=1")
 		self.assertEqual([p.id for p in response.context["projects"]], [shipped.id])
 		self.assertEqual(response.context["pending_count"], 1)
+
+	def test_the_desk_opens_on_the_shipped_tab(self):
+		make_journal(self.project)
+		shipped = make_project(make_user("shipper"), shippable=True)
+		make_ship(shipped, timelapse_approved=False)
+
+		response = self.client.get(reverse("timelapse_review_dash"))
+		self.assertEqual([p.id for p in response.context["projects"]], [shipped.id])
+		options = {option["key"]: option for option in response.context["filter_options"]}
+		self.assertTrue(options["shipped"]["active"])
+		self.assertEqual(options["shipped"]["href"], "?")
+		self.assertEqual(options[""]["href"], "?filter=all")
+		self.assertFalse(response.context["clearable"])
 
 
 class LockedReadTests(BaseTestCase):
@@ -440,7 +453,7 @@ class TimelapseDecisionTests(BaseTestCase):
 		self._decide()
 		later = make_journal(self.project, time_spent=45)
 
-		response = self.client.get(reverse("timelapse_review_dash"))
+		response = self.client.get(reverse("timelapse_review_dash") + "?filter=all")
 		self.assertEqual([p.id for p in response.context["projects"]], [self.project.id])
 		self.assertEqual(
 			[lapse.id for lapse in response.context["projects"][0].lapses], [later.id]

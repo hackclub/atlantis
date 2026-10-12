@@ -14,7 +14,7 @@ many rows that filter would leave, within the current search. Searching
         </nav>
     {% endif %}
     <form class="rq-search" method="get" role="search">
-        {% if active_filter and not search_scope %}<input type="hidden" name="filter" value="{{ active_filter }}">{% endif %}
+        {% if active_filter_param and not search_scope %}<input type="hidden" name="filter" value="{{ active_filter_param }}">{% endif %}
         <select name="scope" aria-label="Search where">
             <option value=""{% if not search_scope %} selected{% endif %}>This queue</option>
             <option value="all"{% if search_scope == "all" %} selected{% endif %}>All projects</option>
@@ -22,6 +22,6 @@ many rows that filter would leave, within the current search. Searching
         <input type="search" name="q" value="{{ filter_query }}" maxlength="{{ filter_search_max }}"
                placeholder="Search project, #id or owner" aria-label="Search" data-focus="/">
         <kbd>/</kbd>
-        {% if filtering or search_scope %}<a class="rq-filter-clear" href="?">Clear</a>{% endif %}
+        {% if clearable or search_scope %}<a class="rq-filter-clear" href="?">Clear</a>{% endif %}
     </form>
 </div>

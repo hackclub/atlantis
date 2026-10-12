@@ -450,6 +450,11 @@ QUEUE_FILTERS = {
     ],
 }
 
+# The tab a desk opens on when the URL names none. The timelapse desk opens on
+# Shipped, since those are the lapses holding a ship out of T1; its All tab is
+# then spelled `?filter=all`.
+DEFAULT_FILTERS = {"lookout": "shipped"}
+
 # Longest search a desk takes. Matching is a substring test over a page that is
 # already in memory, so this is about keeping the URL sensible, not the query.
 FILTER_SEARCH_MAX_LENGTH = 100
@@ -467,8 +472,9 @@ def filter_rows(request, queue_key, rows):
     """
     filters = QUEUE_FILTERS["lookout" if queue_key == "lookout" else "ship"]
     tests = {key: test for key, _label, test in filters}
+    default = DEFAULT_FILTERS.get(queue_key, "")
 
-    active = request.GET.get("filter", "")
+    active = request.GET.get("filter", default)
     if queue_key == "lookout" and request.GET.get("shipped") == "1":
         active = "shipped"
     if active not in tests:
@@ -494,10 +500,16 @@ def filter_rows(request, queue_key, rows):
     searched = [row for row in rows if matches(row)]
     shown = [row for row in searched if not active or tests[active](queue_key, row)]
 
+    def filter_param(filter_key):
+        """How `filter_key` is spelled in the URL: the default goes unsaid."""
+        if filter_key == default:
+            return ""
+        return filter_key or "all"
+
     def querystring(filter_key):
         params = {
             key: value
-            for key, value in (("filter", filter_key), ("q", query), ("scope", scope))
+            for key, value in (("filter", filter_param(filter_key)), ("q", query), ("scope", scope))
             if value
         }
         return "?" + urlencode(params) if params else "?"
@@ -520,8 +532,10 @@ def filter_rows(request, queue_key, rows):
     return shown, {
         "filter_options": options,
         "active_filter": active,
+        "active_filter_param": filter_param(active),
         "filter_query": query,
         "filtering": bool(active or query),
+        "clearable": bool(active != default or query),
         "filter_search_max": FILTER_SEARCH_MAX_LENGTH,
         "search_scope": scope,
         # With ?scope=all the search leaves the queue and looks everywhere;
