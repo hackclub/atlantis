@@ -9,14 +9,14 @@
     {% include "root/_messages_admin.html" %}
     {% include "root/_rv_queue_header.html" with blurb="Second pass: the hours HQ will be told about, and the justification for them." %}
 
+    <section class="chart-grid rq-charts">
+        {% include "root/_rv_leaderboard.html" with title="Top T2 reviewers" %}
+    </section>
+
     {% include "root/_rv_ship_queue.html" with empty_text="No projects awaiting T2 review." %}
     <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> to move through the queue, <kbd>&crarr;</kbd> to open, or <strong>Start reviewing</strong> to be handed the longest-waiting one.</p>
 
     {% include "root/_rv_all_reviews.html" %}
-
-    <section class="chart-grid rq-charts">
-        {% include "root/_rv_leaderboard.html" with title="Top T2 reviewers" %}
-    </section>
 </div>
 <script src="{% static 'atlantis_site/review.js' %}" defer></script>
 {% endblock %}

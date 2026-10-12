@@ -9,6 +9,10 @@
     {% include "root/_messages_admin.html" %}
     {% include "root/_rv_queue_header.html" with blurb="Internal only. Shippers are never told a lapse was reviewed, how much time came off it, or why. A project can't reach T1 until every one of its lapses is signed off here, but it can still ship while it waits." %}
 
+    <section class="chart-grid rq-charts">
+        {% include "root/_rv_leaderboard.html" with title="Top timelapse reviewers" %}
+    </section>
+
     <section class="rq-section">
         <div class="rq-section-head">
             <h2 class="rq-section-title">
@@ -86,10 +90,6 @@
     <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> to move through the queue, <kbd>&crarr;</kbd> to open, or <strong>Start reviewing</strong> to take the longest-waiting project from the top.</p>
 
     {% include "root/_rv_all_reviews.html" %}
-
-    <section class="chart-grid rq-charts">
-        {% include "root/_rv_leaderboard.html" with title="Top timelapse reviewers" %}
-    </section>
 </div>
 <script src="{% static 'atlantis_site/review.js' %}" defer></script>
 {% endblock %}
