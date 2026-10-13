@@ -31,7 +31,7 @@
 
     var TRACKED_PER_VIDEO_SECOND = 60;
     var RATE_KEY = 'lookout_playback_rate';
-    var RATES = [0.5, 1, 1.5, 2, 3, 4];
+    var RATES = [0.5, 1, 1.5, 2, 3, 4, 8];
     /* How close to a key point a drawn edge has to land before it snaps to it:
      * the wider of 1.5% of the video and three seconds. Below that it just
      * quantises to whole seconds, which is the finest offset that means
