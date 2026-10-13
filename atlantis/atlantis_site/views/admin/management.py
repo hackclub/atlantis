@@ -2,7 +2,6 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.views.decorators.http import require_POST
-from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Q, Sum
 from django.db import transaction
 from django.contrib import messages
@@ -15,7 +14,7 @@ import os
 
 from ... import airtable, challenge, weeks
 from ...models import Journal, Profile, Project, Ship, Timelapse
-from ..helpers import check_perms, invite_to_autojoin_channels_in_background, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, format_minutes, INT_FIELD_MAX, INT_FIELD_MIN, field_max_length, too_long
+from ..helpers import check_perms, staff_member_required, invite_to_autojoin_channels_in_background, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, format_minutes, INT_FIELD_MAX, INT_FIELD_MIN, field_max_length, too_long
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer"])
@@ -238,7 +237,15 @@ def edit_user(request, user_id):
         gid for gid in new["groups"] if gid.isdigit()
     ]))
     targetUser.groups.set(new_groups)
-    targetUser.is_staff = targetUser.groups.exists()
+    # Groups are the only thing this form edits, so they are the only thing
+    # allowed to take staff away. A superuser, or someone holding permissions
+    # granted directly rather than through a group, keeps the access the form
+    # never showed them.
+    targetUser.is_staff = (
+        targetUser.is_superuser
+        or targetUser.groups.exists()
+        or targetUser.user_permissions.exists()
+    )
 
     targetProfile.save()
     targetUser.save()

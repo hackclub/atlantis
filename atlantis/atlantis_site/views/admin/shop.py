@@ -1,6 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.utils import timezone
 from django.db import transaction
@@ -13,7 +12,7 @@ from ...hca import (
     IdentityUnavailable, extract_addresses, extract_contact, extract_phone,
     fetch_userinfo, select_address,
 )
-from ..helpers import check_perms, record_audit, run_in_background, send_slack_dm, is_valid_image_url, INT_FIELD_MAX, field_max_length, too_long
+from ..helpers import check_perms, staff_member_required, record_audit, run_in_background, send_slack_dm, is_valid_image_url, INT_FIELD_MAX, field_max_length, too_long
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])

@@ -157,6 +157,24 @@ class EditUserTests(BaseTestCase):
 		self.assertFalse(self.target.is_staff)
 		self.assertEqual(self.target.groups.count(), 0)
 
+	def test_superuser_without_groups_stays_staff(self):
+		self.target.is_superuser = True
+		self.target.is_staff = True
+		self.target.save()
+
+		self._edit()
+		self.target.refresh_from_db()
+		self.assertTrue(self.target.is_staff)
+
+	def test_direct_permissions_keep_staff_status(self):
+		grant_perms(self.target, "timelapse_review")
+		self.target.is_staff = True
+		self.target.save()
+
+		self._edit()
+		self.target.refresh_from_db()
+		self.assertTrue(self.target.is_staff)
+
 	def test_valid_pfp_url_updated(self):
 		self._edit(editSlackPfpUrl="https://example.com/new-pfp.png")
 		self.target.hackclub_profile.refresh_from_db()
@@ -652,3 +670,15 @@ class UnfinishedHoursCsvTests(BaseTestCase):
 		ET = ZoneInfo("America/New_York")
 		make_user("short", slack_id="U0SHORT")
 		self.assertEqual(self._rows(datetime(2026, 9, 1, tzinfo=ET)), [])
+
+
+class SignedOutRedirectTests(BaseTestCase):
+	def test_staff_page_sends_signed_out_visitor_to_front_page(self):
+		response = self.client.get(reverse("timelapse_review_dash"))
+		self.assertEqual(response.status_code, 302)
+		self.assertTrue(response["Location"].startswith(reverse("index") + "?next="))
+
+	def test_login_required_page_sends_signed_out_visitor_to_front_page(self):
+		response = self.client.get(reverse("dashboard"))
+		self.assertEqual(response.status_code, 302)
+		self.assertTrue(response["Location"].startswith(reverse("index") + "?next="))

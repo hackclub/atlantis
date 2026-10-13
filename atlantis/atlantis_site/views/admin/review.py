@@ -1,7 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.views.decorators.http import require_POST
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.conf import settings
 from django.db import transaction
@@ -18,7 +17,7 @@ from ...models import (
 )
 from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked_message
 from ...submissions import build_generated_justification, build_override_justification, submit_ship
-from ..helpers import check_perms, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
+from ..helpers import check_perms, staff_member_required, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
 from ...snack_grants import award_snack_grants_quietly
 from .queue import (

@@ -24,7 +24,6 @@ the thing that's authoritative.
 from dataclasses import dataclass
 from datetime import timedelta
 
-from django.contrib.admin.views.decorators import staff_member_required
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Count, Exists, Min, OuterRef, Prefetch, Q, Sum
@@ -42,7 +41,7 @@ from ...models import (
     TimelapseReview,
 )
 from ..helpers import (
-    approved_minutes_by_project, approved_minutes_for_journals, display_name, format_minutes,
+    staff_member_required, approved_minutes_by_project, approved_minutes_for_journals, display_name, format_minutes,
     payable_minutes_for_ship, timelapse_cleared_ships, tracked_minutes_for_journals,
 )
 

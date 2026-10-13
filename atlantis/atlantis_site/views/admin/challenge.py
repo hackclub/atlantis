@@ -9,7 +9,6 @@ the reason the organizer typed.
 """
 
 from django.contrib import messages
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
@@ -17,7 +16,7 @@ from django.views.decorators.http import require_POST
 
 from ... import challenge, weeks
 from ...models import SaverCredit, WeekOutcome
-from ..helpers import check_perms, display_name, record_audit
+from ..helpers import check_perms, staff_member_required, display_name, record_audit
 
 CHALLENGE_PERMS = ["atlantis_site.organizer"]
 

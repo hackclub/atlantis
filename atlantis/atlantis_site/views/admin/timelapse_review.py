@@ -23,7 +23,6 @@ space for something that spans the project rather than one recording.
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
-from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Exists, OuterRef
@@ -34,7 +33,7 @@ from ...models import (
     video_to_tracked,
 )
 from ..helpers import (
-    check_perms, display_name, format_minutes, record_audit, reviewer_leaderboards,
+    staff_member_required, check_perms, display_name, format_minutes, record_audit, reviewer_leaderboards,
 )
 from ...snack_grants import award_snack_grants_quietly
 from .queue import (

@@ -5,7 +5,6 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.conf import settings
-from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Count, Sum, Avg
 from django.db.models.functions import TruncDate, TruncWeek
 from django.contrib.auth import get_user_model
@@ -41,6 +40,7 @@ from ..helpers import (
     layers_for_minutes,
     reviewer_leaderboard,
     tracked_minutes_for_journals,
+    staff_member_required,
 )
 
 # How recently a user has to have been seen to count as here *now*. Presence is

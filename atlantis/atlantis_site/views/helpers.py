@@ -1,3 +1,4 @@
+from django.contrib.admin.views.decorators import staff_member_required as django_staff_member_required
 from django.contrib.auth.decorators import user_passes_test
 from django.conf import settings
 from django.contrib import messages
@@ -60,6 +61,16 @@ ALLOWED_URL_PORTS = {"http": 80, "https": 443}
 slack_client = WebClient(token=settings.SLACK_TOKEN, timeout=5)
 
 logger = logging.getLogger(__name__)
+
+def staff_member_required(view_func):
+    """Django's staff_member_required, bounced to our login rather than its own.
+
+    Left to its default, a signed-out visitor lands on /admin/login/ — a
+    username and password form for accounts that only ever sign in through
+    HCA, so an expired session mid-review left a reviewer stuck on a page they
+    had no way through.
+    """
+    return django_staff_member_required(view_func, login_url=settings.LOGIN_URL)
 
 def check_perms(perms):
     return user_passes_test(lambda user: any(user.has_perm(p) for p in perms))

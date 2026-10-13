@@ -275,6 +275,11 @@ USE_X_FORWARDED_HOST = True
 SECURE_SSL = os.environ.get("SECURE_SSL", "False" if DEBUG else "True") == "True"
 
 SECURE_SSL_REDIRECT = SECURE_SSL
+
+# Where a signed-out visitor is sent: the front page, whose button starts the
+# HCA sign-in. Django's default, /accounts/login/, is a page this site doesn't
+# have, so every @login_required view answered an expired session with a 404.
+LOGIN_URL = "index"
 SESSION_COOKIE_SECURE = SECURE_SSL
 CSRF_COOKIE_SECURE = SECURE_SSL
 if SECURE_SSL:

@@ -1,10 +1,9 @@
 from django.shortcuts import render
-from django.contrib.admin.views.decorators import staff_member_required
 from django.db.models import Q
 from django.core.paginator import Paginator
 
 from ...models import AuditLog
-from ..helpers import check_perms
+from ..helpers import check_perms, staff_member_required
 
 # What a reviewer lead audits: the decisions reviewers make and what is said
 # about them. The rest of the log (addresses viewed, users edited, orders) is
