@@ -13,9 +13,9 @@
        whatever the page happens to have open. */
     z-index: 1100;
     translate: -50% 0;
-    width: min(92vw, 620px);
-    padding: 0.35em 1em 0.5em;
-    border-radius: 12px;
+    width: min(92vw, 420px);
+    padding: 0.3em 0.8em 0.4em;
+    border-radius: 9px;
     background-color: rgba(53, 39, 15, 0.9);
     color: #FBEFD6;
     text-align: center;
@@ -31,7 +31,7 @@
 
 .message {
     margin: 0.1em 0;
-    font-size: clamp(16px, 1.35vw, 24px);
+    font-size: clamp(13px, 0.9vw, 16px);
 }
 
 @media (prefers-reduced-motion: reduce) {
