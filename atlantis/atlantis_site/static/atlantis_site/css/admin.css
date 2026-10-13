@@ -240,39 +240,6 @@
     color: var(--oc-tide-2);
 }
 
-/* ---------- messages ---------- */
-
-.root-page .messages {
-    display: grid;
-    gap: 8px;
-    margin: 0 0 22px;
-}
-
-.root-page .message {
-    padding: 10px 14px;
-    border: 1px solid var(--oc-line-2);
-    border-left: 4px solid var(--oc-tide);
-    border-radius: 10px;
-    background: var(--oc-tide-soft);
-    color: var(--oc-ink);
-    font-size: 14px;
-}
-
-.root-page .message.success {
-    border-left-color: var(--oc-good);
-    background: var(--oc-good-soft);
-}
-
-.root-page .message.warning {
-    border-left-color: var(--oc-warn);
-    background: var(--oc-warn-soft);
-}
-
-.root-page .message.error {
-    border-left-color: var(--oc-bad);
-    background: var(--oc-bad-soft);
-}
-
 /* ---------- tables ---------- */
 
 .root-page .table-scroll {

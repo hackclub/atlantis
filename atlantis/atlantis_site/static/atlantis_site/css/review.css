@@ -291,17 +291,6 @@
     font-weight: 600;
 }
 
-.root-page .rv-messages {
-    display: grid;
-    gap: 6px;
-    padding: 10px 16px 0;
-    flex-shrink: 0;
-}
-
-.root-page .rv-messages .message {
-    margin: 0;
-}
-
 /* ---------- the two columns ---------- */
 
 .root-page .rv-body {

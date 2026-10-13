@@ -4,7 +4,6 @@
 {% block content %}
 
 <div class="content metrics-page">
-    {% include "root/_messages_admin.html" %}
     <h1>Metrics</h1>
     <div class="metrics-toolbar">
         <p class="metrics-generated">{% if snapshot %}Snapshot taken{% else %}Generated{% endif %} {{ generated_at|date:"Y-m-d H:i" }}</p>

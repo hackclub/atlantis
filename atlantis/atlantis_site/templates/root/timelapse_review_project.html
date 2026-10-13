@@ -80,12 +80,6 @@
         </div>
     {% endif %}
 
-    {% if messages %}
-        <div class="rv-messages">
-            {% for message in messages %}<p class="message {{ message.tags }}">{{ message }}</p>{% endfor %}
-        </div>
-    {% endif %}
-
     {% if unchecked_count %}
         <div class="rv-banner rv-banner-quiet">
             Inactivity detection hasn&rsquo;t run over {{ unchecked_count }} of the

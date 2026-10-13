@@ -54,14 +54,6 @@
         </div>
     {% endif %}
 
-    {% if messages %}
-        <div class="rv-messages">
-            {% for message in messages %}
-                <p class="message {{ message.tags }}">{{ message }}</p>
-            {% endfor %}
-        </div>
-    {% endif %}
-
     <div class="rv-body">
         <main class="rv-evidence" id="rv-evidence">
             {% block evidence %}{% endblock %}
