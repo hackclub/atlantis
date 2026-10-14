@@ -172,12 +172,7 @@ def ping_changes_requested(ship, reviewer, feedback, tier="T1"):
 # What a T3 reviewer is told on approving. The Airtable record goes out after
 # they've moved on to the next ship, so this can only say where its outcome
 # will turn up, not what it was.
-AIRTABLE_QUEUED_MESSAGE = (
-    "Finalized. The Airtable record is being sent in the background: whether it "
-    "landed, and any error, shows in the Airtable card on this ship's T3 page. "
-    "A failed send is retried by the submit_airtable command; one Airtable "
-    "never answered is not, and wants checking by hand."
-)
+AIRTABLE_QUEUED_MESSAGE = "Finalized."
 
 
 def submit_finalized_ship(ship_id):
