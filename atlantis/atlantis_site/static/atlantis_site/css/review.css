@@ -992,7 +992,8 @@
     box-shadow: var(--oc-shadow);
 }
 
-.root-page .rv-form-busy {
+/* Sent and waiting (atlantis.js marks it). */
+.root-page .rv-form.is-busy {
     opacity: 0.65;
     pointer-events: none;
 }
@@ -1513,39 +1514,6 @@
     margin: 0;
     font-size: 13px;
     color: var(--oc-ink-2);
-}
-
-.root-page .rv-toasts {
-    position: fixed;
-    right: 18px;
-    bottom: 18px;
-    z-index: 60;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.root-page .rv-toast {
-    margin: 0;
-    padding: 9px 14px;
-    border: 1px solid var(--oc-line-2);
-    border-radius: 9px;
-    background: var(--oc-surface-2);
-    color: var(--oc-ink);
-    font-size: 13px;
-    box-shadow: var(--oc-shadow-modal);
-    transition: opacity 400ms ease, transform 400ms ease;
-}
-
-.root-page .rv-toast-bad {
-    border-color: var(--oc-bad-line);
-    background: var(--oc-bad-soft);
-    color: var(--oc-bad-strong);
-}
-
-.root-page .rv-toast-out {
-    opacity: 0;
-    transform: translateY(6px);
 }
 
 /* ============================================================

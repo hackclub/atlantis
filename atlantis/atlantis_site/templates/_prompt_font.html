@@ -1,0 +1,15 @@
+{% comment %}
+Prompt, the face the app shell, the guides and /root are set in. Asked for from
+the <head> rather than @imported from a stylesheet, so the browser starts on it
+while the page is still arriving instead of only once the CSS that named it has
+landed; the two preconnects open the sockets to the stylesheet's host and the
+fonts' host before either is needed.
+
+Only the styles the CSS actually reaches for: 300 to 700 upright, plus 400 and
+600 italic for the <em>s in the guides and the quiet notes and badges in /root.
+100, 200, 800 and 900 were only ever named by the .prompt-* helper classes in
+the old fonts.css, which nothing used.
+{% endcomment %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Prompt:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400;1,600&display=swap">

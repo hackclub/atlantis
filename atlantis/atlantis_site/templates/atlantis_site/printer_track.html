@@ -6,7 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ track.name }}</title>
     {% include '_favicon.html' %}
+    {% include '_hand_font_preload.html' %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    {# Ahead of the page's own sheets, so they dress the shared modal shell rather than the other way round. #}
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/modals.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/printer.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
 </head>
@@ -19,7 +22,7 @@
                 <a class="chart-back" href="{% url 'printer_select' %}">&larr; all charts</a>
 
                 <div class="chart-pearls" title="{{ profile.layers }} pearls">
-                    <span><img src="{% static 'atlantis_site/assets/img/dashboard/pearl.png' %}" alt="Pearls:"></span>
+                    <span><img src="{% static 'atlantis_site/assets/img/dashboard/pearl.webp' %}" alt="Pearls:"></span>
                     {{ profile.layers }}
                 </div>
             </div>
@@ -38,7 +41,7 @@
         <div class="chart-stage">
             <div id="chart">
                 <img id="chart-map"
-                     src="{% static 'atlantis_site/assets/img/printer/map_'|add:track.slug|add:'.png' %}"
+                     src="{% static 'atlantis_site/assets/img/printer/map_'|add:track.slug|add:'.webp' %}"
                      alt="{{ track.name }}'s {{ track.unit }}, drawn as {{ track.creature }}: {{ track.printers|length }} stars joined into a tree of upgrades.">
 
                 {% for printer in track.printers %}

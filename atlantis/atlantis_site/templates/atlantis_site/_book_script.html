@@ -154,14 +154,14 @@ everything a reader needs, with none of the owner's editing.
             const download = document.getElementById('zoom-download');
             let viewer = null;
 
+            // The viewer is fetched the first time a slip with a model opens
+            // (_stl_loader.html). If the slip has closed, or moved on to
+            // another lapse, by the time it lands, the box is gone and there
+            // is nothing to mount.
             function mountViewer(container) {
-                if (window.AtlantisSTL) {
-                    viewer = window.AtlantisSTL.init(container);
-                } else {
-                    document.addEventListener('atlantis:stl-ready', () => {
-                        if (container.isConnected) viewer = window.AtlantisSTL.init(container);
-                    }, { once: true });
-                }
+                window.atlantisSTL().then((stl) => {
+                    if (container.isConnected) viewer = stl.init(container);
+                });
             }
 
             document.addEventListener('click', (e) => {

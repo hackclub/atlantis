@@ -6,7 +6,7 @@ from django.core.cache import cache
 from django.db import connections
 from django.db.models import Count, Exists, F, IntegerField, OuterRef, Q, Sum
 from django.contrib.auth import get_user_model
-from django.http import JsonResponse
+from django.http import HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -525,6 +525,58 @@ def safe_redirect_back(request):
     return redirect("/")
 
 
+def wants_json(request):
+    """True when the page's own script is asking (atlantis.js sends the
+    header on every fetch and upload) rather than the browser navigating."""
+    return request.headers.get("X-Requested-With") == "XMLHttpRequest"
+
+
+def fetch_aware(view):
+    """Let a form view answer atlantis.js in JSON without changing its body.
+
+    These views all speak the same way: queue a message, then redirect. A
+    browser navigating gets exactly that, as before. A form sent by script —
+    an upload with a progress bar, a toggle that shouldn't reload the page —
+    gets the same answer as JSON instead:
+
+      - something went wrong (an error was queued): {"ok": false, "messages":
+        [...]}. The page stays put with the reader's input still in it, and
+        the messages are spent here so they don't turn up again on whatever
+        page loads next.
+      - otherwise: {"ok": true, "redirect": url}. The script goes there, and
+        the messages are left queued for that page to show, as they would
+        have been.
+
+    Anything that isn't a redirect (a 404, a JsonResponse the view built
+    itself) goes back untouched. Put it outermost, above login_required and
+    rate_limit, so their redirects are translated too.
+    """
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        response = view(request, *args, **kwargs)
+        if not wants_json(request) or not isinstance(response, HttpResponseRedirect):
+            return response
+
+        storage = messages.get_messages(request)
+        queued = list(storage)
+        failed = any(message.level >= messages.ERROR for message in queued)
+        if failed:
+            return JsonResponse(
+                {
+                    "ok": False,
+                    "messages": [
+                        {"level": message.level_tag, "text": str(message)}
+                        for message in queued
+                    ],
+                },
+                status=400,
+            )
+        # Reading them marked them shown; they haven't been yet.
+        storage.used = False
+        return JsonResponse({"ok": True, "redirect": response.url})
+    return wrapped
+
+
 def rate_limit(scope, seconds, methods=("POST",), json=False):
     def decorator(view):
         @wraps(view)
@@ -533,9 +585,14 @@ def rate_limit(scope, seconds, methods=("POST",), json=False):
                 key = _rate_limit_key(request, scope)
 
                 if not cache.add(key, 1, timeout=seconds):
-                    if json:
+                    if json or wants_json(request):
                         return JsonResponse(
-                            {"ok": False, "error": "rate_limited"}, status=429
+                            {
+                                "ok": False,
+                                "error": "rate_limited",
+                                "messages": [{"level": "error", "text": RATE_LIMIT_MESSAGE}],
+                            },
+                            status=429,
                         )
                     messages.error(request, RATE_LIMIT_MESSAGE)
                     return safe_redirect_back(request)

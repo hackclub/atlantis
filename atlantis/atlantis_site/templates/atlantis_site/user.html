@@ -5,17 +5,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@{{ user_viewed.hackclub_profile.slack_username }}</title>
-    <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
+    {% include '_styles_site.html' %}
+    {% include '_hand_font_preload.html' %}
     {% include '_favicon.html' %}
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
-            }
-        }
-    </script>
-    <script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
+    {% include "atlantis_site/_stl_loader.html" %}
 </head>
 <body id="user">
     <a id="back-link" href="{% url 'dashboard' %}">&larr; back</a>
@@ -110,15 +103,14 @@
         (function () {
             const viewers = new WeakMap();
 
+            // The first toggle fetches the viewer (_stl_loader.html). Closed
+            // again before it lands, the stage's URL has been cleared, so the
+            // stale request mounts nothing.
             function mount(stage, url) {
                 stage.dataset.stlUrl = url;
-                if (window.AtlantisSTL) {
-                    viewers.set(stage, window.AtlantisSTL.init(stage));
-                } else {
-                    document.addEventListener('atlantis:stl-ready', () => {
-                        if (stage.isConnected) viewers.set(stage, window.AtlantisSTL.init(stage));
-                    }, { once: true });
-                }
+                window.atlantisSTL().then((stl) => {
+                    if (stage.isConnected && stage.dataset.stlUrl === url) viewers.set(stage, stl.init(stage));
+                });
             }
 
             function dispose(stage) {

@@ -169,30 +169,33 @@ def ping_changes_requested(ship, reviewer, feedback, tier="T1"):
     )
     return True
 
-def report_submission(request, submission):
-    """Tell the reviewer what became of the Airtable record.
+# What a T3 reviewer is told on approving. The Airtable record goes out after
+# they've moved on to the next ship, so this can only say where its outcome
+# will turn up, not what it was.
+AIRTABLE_QUEUED_MESSAGE = (
+    "Finalized. The Airtable record is being sent in the background: whether it "
+    "landed, and any error, shows in the Airtable card on this ship's T3 page. "
+    "A failed send is retried by the submit_airtable command; one Airtable "
+    "never answered is not, and wants checking by hand."
+)
 
-    Finalization has already happened by the time this runs, so none of these
-    are errors that undo anything — they say whether HQ has the project yet and
-    what to do if not.
+
+def submit_finalized_ship(ship_id):
+    """The background half of a T3 approval: send the ship to Airtable.
+
+    Handed an id rather than the ship and re-read here, because submit_ship
+    reads half the database (the payable lapses, the T2 and T3 rows, the
+    shipper's HCA token) to build the payload, and an HCA round trip besides.
+    Building that on the request would leave the slow half of the wait in
+    place. It is safe to read here: the finalization was committed before
+    this was queued, so there is nothing half-written to see.
+
+    Whatever happens is recorded on the AirtableSubmission row, which is what
+    the T3 page, the metrics page and submit_airtable all read. A job that is
+    dropped before it runs (a worker killed outright) leaves that row pending,
+    and pending is exactly what submit_airtable picks up.
     """
-    Status = AirtableSubmission.Status
-    if submission.status == Status.SUBMITTED:
-        note = f" Note: {submission.notes}" if submission.notes else ""
-        messages.success(request, f"Submitted to Airtable as {submission.record_id}.{note}")
-    elif submission.status == Status.SENDING:
-        messages.warning(
-            request,
-            "Airtable never answered, so it's unclear whether the record was "
-            f"created ({submission.error}). Check the table before resubmitting. "
-            "This one will not retry on its own.",
-        )
-    else:
-        messages.error(
-            request,
-            f"The project was finalized but its Airtable record was not created: "
-            f"{submission.error} The submit_airtable command will retry it.",
-        )
+    submit_ship(Ship.objects.get(pk=ship_id))
 
 def t1_rollback_block(t1):
     """Why this T1 review can't be rolled back, or None when it can.
@@ -549,24 +552,30 @@ def ysws_review_project(request, ship_id):
 def t2_decision(request, ship_id):
     reviewer = request.user
     decision = request.POST.get("decision", "").strip()
+
+    # A mistake in the form sends the reviewer back to the item they were on,
+    # not to the desk to find it again; their draft is kept in the browser
+    # (review.js), so what they wrote is still there.
+    def back_to_item():
+        return redirect("ysws_review_project", ship_id=ship_id)
     deductions = request.POST.get("deductions", "0").strip()
 
     try:
         deductions = int(deductions) if deductions else 0
     except ValueError:
         messages.error(request, f"Expected integer, got {deductions}")
-        return redirect("ysws_review_dash")
+        return back_to_item()
 
     if deductions < 0:
         messages.error(request, f"Deductions can't be negative. (deductions: {deductions})")
-        return redirect("ysws_review_dash")
+        return back_to_item()
 
     feedback = request.POST.get("feedback", "").strip()
     justification = request.POST.get("justification", "").strip()
 
     if len(feedback) > T2_FIELD_MAX_LENGTH or len(justification) > T2_FIELD_MAX_LENGTH:
         messages.error(request, f"Feedback or justification length too long (max {T2_FIELD_MAX_LENGTH} char)")
-        return redirect("ysws_review_dash")
+        return back_to_item()
 
     with transaction.atomic():
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
@@ -577,7 +586,7 @@ def t2_decision(request, ship_id):
         total_time = payable_minutes_for_ship(ship)
         if total_time < deductions:
             messages.error(request, f"Deduction too large. (total_time: {total_time}, deductions: {deductions})")
-            return redirect("ysws_review_dash")
+            return back_to_item()
 
         if not ship.status == Ship.ShipStatus.T2_QUEUE:
             messages.error(request, "ship not in T2 queue")
@@ -603,7 +612,7 @@ def t2_decision(request, ship_id):
                 message = "changes requested"
             case _:
                 messages.error(request, f"How did we get here? (decision: {decision})")
-                return redirect("ysws_review_dash")
+                return back_to_item()
 
         ship.save()
 
@@ -820,11 +829,22 @@ def t3_decision(request, ship_id):
             justification=justification if decision == T3.Decision.APPROVE else "",
         )
 
+        # The pending row goes in with the finalization, so a finalized ship
+        # is never without one: the T3 page and the metrics' unsent count see
+        # it as owed from the moment it is, not once the send gets round to it.
+        if decision == T3.Decision.APPROVE:
+            AirtableSubmission.objects.get_or_create(ship=ship)
+
     # Outside the transaction on purpose: the ship is committed as finalized
     # before anything is sent to Airtable, so a submission that fails leaves a
     # finalized ship and a retryable row rather than rolling the finalization
-    # back. submit_ship is safe to call again and refuses to send twice.
-    submission = submit_ship(ship) if decision == T3.Decision.APPROVE else None
+    # back. submit_ship is safe to call again and refuses to send twice — its
+    # claim is one conditional UPDATE, so this racing a submit_airtable run
+    # still sends one record. In the background because it is an HCA call and
+    # an Airtable call back to back, which the reviewer has no reason to wait
+    # through on their way to the next ship.
+    if decision == T3.Decision.APPROVE:
+        run_in_background(submit_finalized_ship, ship.id)
 
     owner_profile = getattr(ship.project.owner, "hackclub_profile", None)
     owner_slack_id = owner_profile.slack_id if owner_profile else ""
@@ -849,13 +869,14 @@ def t3_decision(request, ship_id):
         # review wrote. The text itself is on the T3 row.
         "justification_edited": bool(t3.justification)
             and t3.justification != build_generated_justification(ship),
-        "airtable_status": submission.status if submission else "",
-        "airtable_record_id": submission.record_id if submission else "",
-        "airtable_error": submission.error if submission else "",
+        # Only that it was sent for: the send finishes after this is written,
+        # and its outcome (record id, error, attempts) lives on the ship's
+        # AirtableSubmission row.
+        "airtable_status": "queued" if decision == T3.Decision.APPROVE else "",
     })
 
-    if submission:
-        report_submission(request, submission)
+    if decision == T3.Decision.APPROVE:
+        messages.info(request, AIRTABLE_QUEUED_MESSAGE)
     return go_to_next(request, "t3", parse_skip(request) + [ship.id])
 
 @staff_member_required

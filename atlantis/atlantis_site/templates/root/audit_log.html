@@ -8,7 +8,7 @@
     <h1>{{ heading }}</h1>
     <h3>{{ subheading }}</h3>
 
-    <form method="get" class="audit-filters" id="auditFilters">
+    <form method="get" class="audit-filters" id="auditFilters" data-live-filter="#auditResults">
         <label>
             Action:
             <select name="action" id="auditActionFilter">
@@ -34,6 +34,8 @@
         <noscript><button type="submit">Filter</button></noscript>
     </form>
 
+    {# Everything the filters change, and nothing they don't: atlantis.js swaps just this. #}
+    <div id="auditResults" class="live-results">
     <p>{{ page.paginator.count }} total entr{{ page.paginator.count|pluralize:"y,ies" }}</p>
 
     {% if logs %}
@@ -118,32 +120,7 @@
     {% else %}
         <p>No audit log entries{% if action_filter or actor_filter or target_type_filter %} match your filters{% endif %}.</p>
     {% endif %}
+    </div>
 </div>
 
-<script>
-    (function () {
-        const form = document.getElementById('auditFilters');
-        const action = document.getElementById('auditActionFilter');
-        const targetType = document.getElementById('auditTargetTypeFilter');
-        const actor = document.getElementById('auditActorFilter');
-        if (!form) return;
-
-        if (action) action.addEventListener('change', () => form.submit());
-        if (targetType) targetType.addEventListener('change', () => form.submit());
-
-        if (actor) {
-            let timer;
-            actor.addEventListener('input', () => {
-                clearTimeout(timer);
-                timer = setTimeout(() => form.submit(), 300);
-            });
-
-            if (actor.value) {
-                actor.focus();
-                const end = actor.value.length;
-                actor.setSelectionRange(end, end);
-            }
-        }
-    })();
-</script>
 {% endblock %}

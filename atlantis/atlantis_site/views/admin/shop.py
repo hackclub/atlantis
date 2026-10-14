@@ -12,6 +12,7 @@ from ...hca import (
     IdentityUnavailable, extract_addresses, extract_contact, extract_phone,
     fetch_userinfo, select_address,
 )
+from .queue import forget_pending_counts
 from ..helpers import check_perms, staff_member_required, record_audit, run_in_background, send_slack_dm, is_valid_image_url, INT_FIELD_MAX, field_max_length, too_long
 
 @staff_member_required
@@ -138,6 +139,8 @@ def update_order_status(request, order_id):
         }
         run_in_background(send_slack_dm, dm_messages[order.status], owner_slack_id)
 
+    # The fulfillment badge is the one desk that doesn't end in go_to_next.
+    forget_pending_counts()
     messages.success(request, f"Order #{order.id} updated to {order.get_status_display().lower()}.")
     return redirect("fulfillment_dash")
 

@@ -7,7 +7,7 @@
         <a href="/root">admin</a>
     {% endif %}
     <form action="{% url 'logout' %}" method="post" id="logoutForm">
-        {% csrf_token %}    
-        <a href="javascript:void(0)" onclick="document.getElementById('logoutForm').submit();">log out</a>
+        {% csrf_token %}
+        <button type="submit" class="sidebar-link">log out</button>
     </form>
 </nav>

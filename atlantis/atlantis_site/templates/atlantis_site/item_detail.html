@@ -78,65 +78,36 @@
     // lands on with JavaScript disabled in the pop-up or a direct link.
     const saverForm = document.querySelector("[data-confirm-saver]");
     if (saverForm) {
+        let confirmed = false;
         saverForm.addEventListener("submit", function (event) {
+            if (confirmed) {
+                confirmed = false;
+                return;
+            }
+            event.preventDefault();
             const qty = parseInt(saverForm.querySelector("[name=quantity]").value, 10) || 1;
             const hours = qty === 1 ? "1 hour" : qty + " hours";
-            const ok = window.confirm(
+            const submitter = event.submitter;
+            window.Atlantis.confirm(
                 "Apply " + hours + " to " + saverForm.dataset.confirmSaver + "?\n\n"
-                + "This happens straight away and can't be undone from here."
-            );
-            if (!ok) event.preventDefault();
+                + "This happens straight away and can't be undone from here.",
+                { ok: "Apply" }
+            ).then(function (ok) {
+                if (!ok) return;
+                confirmed = true;
+                saverForm.requestSubmit(submitter);
+            });
         });
     }
 
     const btn = document.getElementById("view-address-btn");
     if (!btn) return;
     const box = document.getElementById("address-box");
-
-    function getCookie(name) {
-        const match = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
-        return match ? match.pop() : "";
-    }
-
-    btn.addEventListener("click", async function () {
-        if (!box.hidden) {
-            box.hidden = true;
-            btn.textContent = "View Address";
-            return;
-        }
-
-        btn.disabled = true;
-        try {
-            const resp = await fetch(btn.dataset.url, {
-                method: "POST",
-                headers: { "X-CSRFToken": getCookie("csrftoken") },
-            });
-            const data = await resp.json();
-            if (data.ok) {
-                box.textContent = "";
-                data.address.lines.forEach(function (line) {
-                    const div = document.createElement("div");
-                    div.textContent = line;
-                    box.appendChild(div);
-                });
-                box.hidden = false;
-                btn.textContent = "Hide Address";
-            } else if (data.error === "no_address") {
-                box.textContent = "No address on file. Complete address verification in your Hack Club identity.";
-                box.hidden = false;
-            } else if (data.error === "address_unavailable") {
-                box.textContent = "Couldn't reach your Hack Club identity. Log out and back in, then try again.";
-                box.hidden = false;
-            } else {
-                box.textContent = "Could not load address. Please try again.";
-                box.hidden = false;
-            }
-        } catch (err) {
-            box.textContent = "Could not load address. Please try again.";
-            box.hidden = false;
-        } finally {
-            btn.disabled = false;
-        }
+    btn.addEventListener("click", function () {
+        window.Atlantis.viewAddress(btn, box, {
+            noAddress: "No address on file. Complete address verification in your Hack Club identity.",
+            unavailable: "Couldn't reach your Hack Club identity. Log out and back in, then try again.",
+        });
     });
 })();
 </script>

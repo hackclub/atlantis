@@ -14,7 +14,8 @@ scroll wants for itself. Same reasoning as the /users page.
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Guides{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
+    {% include '_styles_site.html' %}
+    {% include '_hand_font_preload.html' %}
     {% include '_favicon.html' %}
 </head>
 <body id="guides">

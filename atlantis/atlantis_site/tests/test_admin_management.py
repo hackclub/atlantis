@@ -102,6 +102,24 @@ class UsersViewTests(BaseTestCase):
 		usernames = [u.username for u in response.context["users"]]
 		self.assertEqual(usernames, ["alice"])
 
+	@patch.object(management_views, "ADMIN_PAGE_SIZE", 2)
+	def test_paginates_and_keeps_the_search_in_the_links(self):
+		for name in ("alice-1", "alice-2", "alice-3"):
+			make_user(name, slack_username=f"{name}-slack")
+		response = self.client.get(reverse("users"), {"q": "alice"})
+		self.assertEqual(len(response.context["users"]), 2)
+		self.assertContains(response, 'href="?q=alice&amp;page=2"')
+		self.assertContains(response, "3 users")
+
+		second = self.client.get(reverse("users"), {"q": "alice", "page": 2})
+		self.assertEqual([u.username for u in second.context["users"]], ["alice-3"])
+		self.assertContains(second, 'href="?q=alice&amp;page=1"')
+		self.assertNotContains(second, "page=3")
+
+	def test_a_single_page_draws_no_pager(self):
+		response = self.client.get(reverse("users"))
+		self.assertNotContains(response, 'class="pagination"')
+
 
 class EditUserTests(BaseTestCase):
 	def setUp(self):
@@ -300,6 +318,21 @@ class ManageProjectsTests(BaseTestCase):
 		make_project(self.owner)
 		response = self.client.get(reverse("manage_projects"))
 		self.assertEqual(response.context["projects"][0].status_display, "No ships yet")
+
+	@patch.object(management_views, "ADMIN_PAGE_SIZE", 2)
+	def test_paginates_and_annotates_only_the_page(self):
+		projects = [make_project(self.owner, title=f"Owned {n}") for n in range(3)]
+		make_ship(projects[2], status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(60,))
+
+		response = self.client.get(reverse("manage_projects"), {"q": "owned"})
+		self.assertEqual([p.id for p in response.context["projects"]], [p.id for p in projects[:2]])
+		self.assertContains(response, 'href="?q=owned&amp;page=2"')
+
+		second = self.client.get(reverse("manage_projects"), {"q": "owned", "page": 2})
+		(last,) = second.context["projects"]
+		self.assertEqual(last.id, projects[2].id)
+		self.assertEqual(last.status_display, "Under T2 Review")
+		self.assertEqual(last.journal_count, 1)
 
 
 class AdminEditProjectTests(BaseTestCase):

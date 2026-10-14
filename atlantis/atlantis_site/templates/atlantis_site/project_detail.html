@@ -6,16 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ project.title }}</title>
     {% include '_favicon.html' %}
-    <script type="importmap">
-        {
-            "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
-            }
-        }
-    </script>
-    <script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
+    {% include "atlantis_site/_stl_loader.html" %}
+    {% include '_hand_font_preload.html' %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    {# Ahead of the page's own sheets, so they dress the shared modal shell rather than the other way round. #}
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/modals.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/desk.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/book.css' %}">
     {% if is_owner %}<link rel="stylesheet" href="{% static 'atlantis_site/css/lapse.css' %}">{% endif %}
@@ -33,7 +28,7 @@
         {% include "atlantis_site/_banner.html" %}
 
         <div class="book" id="book">
-            <img class="book-art" src="{% static 'atlantis_site/assets/img/projects/book_open.png' %}" alt="">
+            <img class="book-art" src="{% static 'atlantis_site/assets/img/projects/book_open.webp' %}" alt="">
 
             <div class="leaf leaf--left" id="leaf-left"></div>
             <div class="leaf leaf--right" id="leaf-right"></div>
@@ -63,17 +58,17 @@
                                 <span class="page-photo snap-frame"><img src="{{ project.image_display_url }}" alt="Screenshot of {{ project.title }}"></span>
                             {% endif %}
                         {% else %}
-                            <form class="page-photo" action="{% url 'update_project_image' project.id %}" method="post" enctype="multipart/form-data" data-drop="submit">
+                            <form class="page-photo" action="{% url 'update_project_image' project.id %}" method="post" enctype="multipart/form-data" data-drop="submit" data-upload>
                                 {% csrf_token %}
                                 <input type="hidden" name="next" value="detail">
                                 {% if project.image_url %}
                                     <label class="snap-frame" title="click or drop an image to replace this">
-                                        <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp">
+                                        <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" data-max-mb="5">
                                         <img src="{{ project.image_display_url }}" alt="Screenshot of {{ project.title }}">
                                     </label>
                                 {% else %}
                                     <label class="snap--empty" title="click or drop an image">
-                                        <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp">
+                                        <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" data-max-mb="5">
                                         <span>tape in a screenshot<br><span class="dim">or drop one here</span></span>
                                     </label>
                                 {% endif %}
@@ -128,17 +123,7 @@
 
                     <div class="page-actions page-actions--bottom">
                         {% if not is_owner %}
-                            {% if is_following %}
-                                <form action="{% url 'unfollow_project' project.id %}" method="post">
-                                    {% csrf_token %}
-                                    <button type="submit" class="ink-btn" title="stop getting a Slack DM for every lapse and ship">unfollow</button>
-                                </form>
-                            {% else %}
-                                <form action="{% url 'follow_project' project.id %}" method="post">
-                                    {% csrf_token %}
-                                    <button type="submit" class="ink-btn ink-btn--strong" title="get a Slack DM for every new lapse and ship">follow</button>
-                                </form>
-                            {% endif %}
+                            {% include "atlantis_site/_follow_button.html" %}
                             {% for link in review_links %}
                                 <a class="ink-btn ink-btn--strong" href="{{ link.url }}" title="this project is waiting in {{ link.queue.label|lower }}">{{ link.queue.short|lower }} review &rarr;</a>
                             {% endfor %}
@@ -196,7 +181,7 @@
                                 {# the next lapse's own space, written in where it will sit #}
                                 <li class="lapse lapse--compose">
                                     <label class="compose-photo" id="compose-photo" data-drop>
-                                        <input type="file" name="image" accept="image/*" form="new-lapse" required>
+                                        <input type="file" name="image" accept="image/*" form="new-lapse" data-max-mb="5" required>
                                         <span class="compose-photo-text">+ photo<br><span class="dim">or drop</span></span>
                                     </label>
                                     <div class="lapse-body">
@@ -217,12 +202,13 @@
 
                                         <div class="compose-line">
                                             <label class="chip chip--file">
-                                                <input type="file" name="STL" accept=".stl" form="new-lapse" required>
+                                                <input type="file" name="STL" accept=".stl" form="new-lapse" data-max-mb="300" required>
                                                 <span id="stl-name">upload stl</span>
                                             </label>
                                             <button type="submit" class="ink-btn ink-btn--strong" form="new-lapse">tape it in</button>
                                             <span class="compose-note" id="compose-note"></span>
                                         </div>
+                                        <div class="compose-progress" id="compose-progress"></div>
 
                                     </div>
                                 </li>
@@ -267,7 +253,8 @@
 
     {% if is_owner %}
     {# Lives outside the pages so its fields can sit across both of them. #}
-    <form id="new-lapse" action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data" hidden>
+    <form id="new-lapse" action="{% url 'create_journal' project.id %}" method="post" enctype="multipart/form-data"
+          data-upload data-progress="#compose-progress" hidden>
         {% csrf_token %}
     </form>
     {% endif %}
@@ -278,7 +265,7 @@
         {% if is_owner %}
         <div class="slip" id="slip-edit" hidden>
             <h2>Edit project</h2>
-            <form action="{% url 'edit_project' project.id %}" method="post">
+            <form action="{% url 'edit_project' project.id %}" method="post" data-ajax>
                 {% csrf_token %}
                 <label>
                     Title
@@ -303,12 +290,12 @@
         <div class="slip" id="slip-screenshot" hidden>
             <h2>Project screenshot</h2>
             <p>A screenshot of your model, shown on the cover. You need one before you can ship.</p>
-            <form action="{% url 'update_project_image' project.id %}" method="post" enctype="multipart/form-data">
+            <form action="{% url 'update_project_image' project.id %}" method="post" enctype="multipart/form-data" data-upload>
                 {% csrf_token %}
                 <input type="hidden" name="next" value="detail">
                 <label>
                     PNG, JPEG, GIF or WEBP, max 5MB
-                    <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" required>
+                    <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" data-max-mb="5" required>
                 </label>
                 <div class="slip-actions">
                     <button type="button" data-close>Cancel</button>
@@ -323,11 +310,11 @@
             {% if project.editor_model_url %}
                 <p class="slip-note">Currently {% if project.editor_name %}{{ project.editor_name }}{% else %}a source file{% endif %}. Uploading or linking again replaces it.</p>
             {% endif %}
-            <form action="{% url 'update_editor_model' project.id %}" method="post" enctype="multipart/form-data">
+            <form action="{% url 'update_editor_model' project.id %}" method="post" enctype="multipart/form-data" data-upload>
                 {% csrf_token %}
                 <label>
                     Upload the file
-                    <input type="file" name="editor_model_file" accept="{{ allowed_editor_extensions }}">
+                    <input type="file" name="editor_model_file" accept="{{ allowed_editor_extensions }}" data-max-mb="50">
                 </label>
                 <label>
                     Or paste a link
@@ -386,7 +373,7 @@
             <p>Read each one and tick it off. A reviewer is about to check the same
                 list, so anything you skip here comes back as a rejection.</p>
             {% endif %}
-            <form action="{% url 'ship_project' project.id %}" method="post">
+            <form action="{% url 'ship_project' project.id %}" method="post" data-ajax>
                 {% csrf_token %}
                 <ul class="slip-check">
                     {% for item in ship_checklist %}
@@ -421,7 +408,7 @@
             {% if journal.changeable %}
             <div class="slip" id="slip-lapse-edit-{{ journal.id }}" hidden>
                 <h2>Edit lapse</h2>
-                <form action="{% url 'edit_journal' project.id journal.id %}" method="post" enctype="multipart/form-data">
+                <form action="{% url 'edit_journal' project.id journal.id %}" method="post" enctype="multipart/form-data" data-upload>
                     {% csrf_token %}
                     <label>
                         Title
@@ -429,12 +416,12 @@
                     </label>
                     <label>
                         Replace photo
-                        <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp">
+                        <input type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" data-max-mb="5">
                         <span class="slip-hint">Leave empty to keep the current one. Max 5MB.</span>
                     </label>
                     <label>
                         Replace STL
-                        <input type="file" name="STL" accept=".stl">
+                        <input type="file" name="STL" accept=".stl" data-max-mb="300">
                         <span class="slip-hint">Leave empty to keep the current one. Max 300MB.</span>
                     </label>
                     <p class="slip-note">The timelapses behind this lapse can't be removed or swapped.</p>
@@ -536,7 +523,9 @@
                 // The project's own screenshot goes up the moment it lands.
                 if (zone.dataset.drop === 'submit') {
                     input.addEventListener('change', () => {
-                        if (input.files.length) zone.submit();
+                        // requestSubmit, so it goes the way any other upload does:
+                        // size-checked, with a bar, and not twice.
+                        if (input.files.length) zone.requestSubmit();
                     });
                 }
             });

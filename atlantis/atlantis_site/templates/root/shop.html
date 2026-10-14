@@ -6,7 +6,7 @@
 {% block content %}
 <div class="content">
     <h1>Manage Shop Items</h1>
-    <button type="button" id="openCreateItemModal">Create item</button>
+    <button type="button" id="openCreateItemModal" data-open-dialog="#createItemModal">Create item</button>
     {% if categories %}
     <section class="category-order">
         <h3>Category order</h3>
@@ -72,7 +72,7 @@
                                 <td>{{ item.cost }} pearls</td>
                                 <td>{% if item.unlimited_stock %}Unlimited{% else %}{{ item.stock }}{% endif %}</td>
                                 <td>
-                                    <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}" data-category="{{ item.category }}" data-stock="{{ item.stock }}" data-kind="{{ item.kind }}">Edit</button>
+                                    <button type="button" class="open-edit link-button" data-item-id="{{ item.id }}" data-name="{{ item.name }}" data-description="{{ item.description }}" data-cost="{{ item.cost }}" data-image-url="{{ item.imageUrl }}" data-category="{{ item.category }}" data-stock="{{ item.stock }}" data-kind="{{ item.kind }}" data-url="{% url 'edit_item' item.id %}">Edit</button>
                                     <br>
                                     <form action="{% url 'delete_item' item.id %}" method="post" class="delete-form" style="display: inline;">
                                         {% csrf_token %}
@@ -89,10 +89,8 @@
             <p>No items in the shop yet! Create one you filthy admin!!!!!</p>
         {% endif %}
     </section>
-    <div id="createItemModal" class="modal hidden" aria-hidden="true" hidden>
-    <div class="modal-backdrop" id="modalBackdrop"></div>
-
-    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="createItemTitle">
+    <dialog id="createItemModal" class="modal" aria-labelledby="createItemTitle">
+    <div class="modal-panel">
         <h3 id="createItemTitle">Create Item</h3>
 
         <form action="{% url 'create_item' %}" method="post">
@@ -142,17 +140,15 @@
             </label>
 
             <div class="modal-actions">
-                <button type="button" id="cancelCreateModal">Cancel</button>
+                <button type="button" data-close-dialog>Cancel</button>
                 <button type="submit">Create</button>
             </div>
         </form>
     </div>
-</div>
+</dialog>
 
-<div id="editItemModal" class="modal hidden" aria-hidden="true" hidden>
-    <div class="modal-backdrop" id="editModalBackdrop"></div>
-
-    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="editItemTitle">
+<dialog id="editItemModal" class="modal" aria-labelledby="editItemTitle">
+    <div class="modal-panel">
         <h3 id="editItemTitle">Edit Item</h3>
 
         <form id="editItemForm" action="" method="post">
@@ -202,12 +198,12 @@
             </label>
 
             <div class="modal-actions">
-                <button type="button" id="cancelEditModal">Cancel</button>
+                <button type="button" data-close-dialog>Cancel</button>
                 <button type="submit">Save</button>
             </div>
         </form>
     </div>
-</div>
+</dialog>
 
 <datalist id="categoryOptions">
     {% for category in categories %}
@@ -216,39 +212,8 @@
 </datalist>
 
 <script>
-    (function () {
-        const modal = document.getElementById("createItemModal");
-        const openBtn = document.getElementById("openCreateItemModal");
-        const cancelBtn = document.getElementById("cancelCreateModal");
-        const backdrop = document.getElementById("modalBackdrop");
-
-        function openModal() {
-            modal.classList.remove("hidden");
-            modal.hidden = false;
-            modal.setAttribute("aria-hidden", "false");
-
-            const firstInput = modal.querySelector("input, textarea, button");
-            if (firstInput) firstInput.focus();
-        }
-
-        function closeModal() {
-            modal.classList.add("hidden");
-            modal.hidden = true;
-            modal.setAttribute("aria-hidden", "true");
-            openBtn.focus();
-        }
-
-        if (openBtn) openBtn.addEventListener("click", openModal);
-        if (cancelBtn) cancelBtn.addEventListener("click", closeModal);
-        if (backdrop) backdrop.addEventListener("click", closeModal);
-
-        document.addEventListener("keydown", (e) => {
-            if (e.key === "Escape" && !modal.classList.contains("hidden")) {
-                closeModal();
-            }
-        });
-    })();
-
+    // The pop-ups are <dialog>s; opening, closing, Escape and the backdrop
+    // are atlantis.js's. Below only fills the edit one in from its button.
     (function () {
         function closeAllMenus() {
             document.querySelectorAll('.card-dropdown.open').forEach((dropdown) => {
@@ -279,7 +244,6 @@
         });
 
         const editModal = document.getElementById('editItemModal');
-        const editBackdrop = document.getElementById('editModalBackdrop');
         const editForm = document.getElementById('editItemForm');
         const editName = document.getElementById('editName');
         const editDescription = document.getElementById('editDescription');
@@ -287,28 +251,11 @@
         const editImageUrl = document.getElementById('editImageUrl');
         const editCategory = document.getElementById('editCategory');
         const editStock = document.getElementById('editStock');
-        const cancelEditBtn = document.getElementById('cancelEditModal');
-
-        function openEditModal() {
-            editModal.classList.remove('hidden');
-            editModal.hidden = false;
-            editModal.setAttribute('aria-hidden', 'false');
-
-            const firstInput = editModal.querySelector('input, textarea, button');
-            if (firstInput) firstInput.focus();
-        }
-
-        function closeEditModal() {
-            editModal.classList.add('hidden');
-            editModal.hidden = true;
-            editModal.setAttribute('aria-hidden', 'true');
-        }
 
         document.addEventListener('click', (e) => {
             const openEditBtn = e.target.closest('.open-edit');
             if (!openEditBtn) return;
 
-            const id = openEditBtn.dataset.itemId;
             const name = openEditBtn.dataset.name || '';
             const description = openEditBtn.dataset.description || '';
             const cost = openEditBtn.dataset.cost || '';
@@ -317,7 +264,7 @@
             const stock = openEditBtn.dataset.stock || '-1';
             const kind = openEditBtn.dataset.kind || 'regular';
 
-            editForm.action = '/shop/' + id + '/edit/';
+            editForm.action = openEditBtn.dataset.url;
             editName.value = name;
             editDescription.value = description;
             editCost.value = cost;
@@ -326,17 +273,8 @@
             editStock.value = stock;
             document.getElementById('editKind').value = kind;
 
-            openEditModal();
             closeAllMenus();
-        });
-
-        if (cancelEditBtn) cancelEditBtn.addEventListener('click', closeEditModal);
-        if (editBackdrop) editBackdrop.addEventListener('click', closeEditModal);
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && !editModal.classList.contains('hidden')) {
-                closeEditModal();
-            }
+            window.Atlantis.openDialog(editModal);
         });
     })();
 

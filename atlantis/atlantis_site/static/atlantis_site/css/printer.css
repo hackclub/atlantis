@@ -1,6 +1,6 @@
 /* The chart room and the constellation charts it opens.
    Linked straight from printer_select.html and printer_track.html rather than
-   through style.css, the same way dashboard.css is: these two are
+   through _styles_site.html, the same way dashboard.css is: these two are
    art-directed, dark, and share nothing with the .page shell. */
 
 :root {

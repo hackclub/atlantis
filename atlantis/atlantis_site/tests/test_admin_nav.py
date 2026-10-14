@@ -5,10 +5,14 @@ that owns it being open, so what's tested here is that they can't drift from
 those pages: same queue, same exclusions, and nothing shown for an empty desk.
 """
 
+from unittest.mock import patch
+
 from django.urls import reverse
 
 from ..models import Item, Order, Ship
+from ..templatetags import nav_badges
 from ..templatetags.nav_badges import nav_badge, pending_count
+from ..views.admin.queue import forget_pending_counts
 from .base import (
 	BaseTestCase,
 	grant_perms,
@@ -88,3 +92,49 @@ class NavBadgeTests(BaseTestCase):
 		self.assertIn("T1 review", rail)
 		self.assertNotIn("T2 review", rail)
 		self.assertNotIn("nav-badge", rail)
+
+
+class NavBadgeCacheTests(BaseTestCase):
+	"""The rail is on every admin page, so its counts are cached briefly —
+	but never across a decision the reviewer looking at it just made."""
+
+	def setUp(self):
+		super().setUp()
+		self.organizer = grant_perms(make_user("boss"), "organizer")
+		self.client.force_login(self.organizer)
+		self.project = make_project(make_user("author"), shippable=True)
+
+	def rail(self):
+		return self.client.get(reverse("admin_dash")).content.decode()
+
+	def test_counts_are_reused_within_the_window(self):
+		self.assertNotIn("nav-badge", self.rail())
+		make_ship(self.project)
+		# Somebody else's ship: up to PENDING_COUNT_TTL late, by design.
+		self.assertNotIn("nav-badge", self.rail())
+		forget_pending_counts()
+		self.assertIn('T1 review<span class="nav-badge" title="1 pending">1</span>', self.rail())
+
+	def test_a_warm_rail_counts_nothing(self):
+		self.rail()
+		with patch.object(nav_badges, "pending_count") as count:
+			self.rail()
+		count.assert_not_called()
+
+	def test_moving_on_from_a_decision_recounts(self):
+		ship = make_ship(self.project)
+		self.assertIn('title="1 pending"', self.rail())
+		Ship.objects.filter(pk=ship.pk).update(status=Ship.ShipStatus.T2_QUEUE)
+		# Every decision view finishes in go_to_next; "next" is the bare path
+		# through it.
+		self.client.get(reverse("review_next"))
+		rail = self.rail()
+		self.assertNotIn('T1 review<span class="nav-badge"', rail)
+		self.assertIn('T2 review<span class="nav-badge" title="1 pending">1</span>', rail)
+
+	def test_an_order_status_change_recounts_fulfillment(self):
+		item = Item.objects.create(name="Thing", description="x", cost=1)
+		order = Order.objects.create(owner=self.organizer, item=item)
+		self.assertIn('fulfillment<span class="nav-badge" title="1 pending">1</span>', self.rail())
+		self.client.post(reverse("update_order_status", args=[order.id]), {"action": "fulfilled"})
+		self.assertNotIn('fulfillment<span class="nav-badge"', self.rail())

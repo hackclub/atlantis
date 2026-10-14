@@ -7,7 +7,10 @@
     <title>Shop</title>
     {% include '_favicon.html' %}
 
+    {% include '_hand_font_preload.html' %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    {# Ahead of the page's own sheets, so they dress the shared modal shell rather than the other way round. #}
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/modals.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/desk.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/paper.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/shop.css' %}">
@@ -95,10 +98,8 @@
         {% endif %}
     </div>
 
-    <div id="orderModal" class="modal hidden" aria-hidden="true" hidden>
-        <div class="modal-backdrop" data-close-order></div>
-
-        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="orderTitle">
+    <dialog id="orderModal" class="modal" aria-labelledby="orderTitle">
+        <div class="modal-panel">
             <div class="order-head">
                 <img id="orderThumb" class="order-thumb" src="" alt="" hidden>
                 <div class="order-thumb-empty" id="orderThumbEmpty" hidden>no picture</div>
@@ -152,14 +153,13 @@
                 </div>
             </form>
         </div>
-    </div>
+    </dialog>
 
     <script>
         (function () {
             const BALANCE = parseInt("{{ profile.layers|default:0 }}", 10) || 0;
 
             const modal = document.getElementById("orderModal");
-            const panel = modal.querySelector(".modal-panel");
             const form = document.getElementById("orderForm");
             const thumb = document.getElementById("orderThumb");
             const thumbEmpty = document.getElementById("orderThumbEmpty");
@@ -181,7 +181,6 @@
 
             let unitCost = 0;
             let stock = null;
-            let opener = null;
             // The week a streak saver would land on, or "" for anything that
             // is an actual parcel. Drives both the note in the pop-up and the
             // extra confirmation on the way out.
@@ -219,7 +218,6 @@
             }
 
             function openOrder(btn) {
-                opener = btn;
                 unitCost = parseInt(btn.dataset.cost, 10) || 0;
                 stock = btn.dataset.stock ? parseInt(btn.dataset.stock, 10) : null;
                 saverWeek = btn.dataset.saver || "";
@@ -266,22 +264,23 @@
                 addressBtn.textContent = "View address";
                 recalc();
 
-                modal.classList.remove("hidden");
-                modal.hidden = false;
-                modal.setAttribute("aria-hidden", "false");
+                // A <dialog>: the browser keeps focus inside it, closes it
+                // on Escape and hands focus back to the button after.
+                modal.showModal();
                 document.body.style.overflow = "hidden";
                 qtyEl.focus();
                 qtyEl.select();
             }
 
             function closeOrder() {
-                modal.classList.add("hidden");
-                modal.hidden = true;
-                modal.setAttribute("aria-hidden", "true");
-                document.body.style.overflow = "";
-                if (opener) opener.focus();
-                opener = null;
+                if (modal.open) modal.close();
             }
+
+            // However it closed — Cancel, Escape, the backdrop — the page
+            // behind scrolls again.
+            modal.addEventListener("close", () => {
+                document.body.style.overflow = "";
+            });
 
             document.addEventListener("click", (e) => {
                 const btn = e.target.closest(".open-order");
@@ -294,46 +293,32 @@
                 if (e.target.closest("[data-close-order]")) closeOrder();
             });
 
-            document.addEventListener("keydown", (e) => {
-                if (e.key === "Escape" && !modal.classList.contains("hidden")) closeOrder();
-            });
-
-            panel.addEventListener("keydown", (e) => {
-                if (e.key !== "Tab") return;
-                const focusable = panel.querySelectorAll(
-                    'a[href], button:not([disabled]), input, textarea, [tabindex]:not([tabindex="-1"])'
-                );
-                if (!focusable.length) return;
-                const first = focusable[0];
-                const last = focusable[focusable.length - 1];
-                if (e.shiftKey && document.activeElement === first) {
-                    e.preventDefault();
-                    last.focus();
-                } else if (!e.shiftKey && document.activeElement === last) {
-                    e.preventDefault();
-                    first.focus();
-                }
-            });
-
             qtyEl.addEventListener("input", recalc);
 
+            // Savers are spent on the spot and there is no queue to cancel out
+            // of, so this is the last chance to stop — and it names the week,
+            // because buying the wrong one is the real mistake. A yes sends
+            // the form again, past the question.
+            let saverConfirmed = false;
             form.addEventListener("submit", (e) => {
-                // Savers are spent on the spot and there is no queue to cancel
-                // out of, so this is the last chance to stop — and it names the
-                // week, because buying the wrong one is the real mistake.
-                if (saverWeek) {
+                if (saverWeek && !saverConfirmed) {
+                    e.preventDefault();
                     const qty = parseInt(qtyEl.value, 10) || 1;
                     const hours = qty === 1 ? "1 hour" : qty + " hours";
-                    const ok = window.confirm(
+                    const submitter = e.submitter;
+                    window.Atlantis.confirm(
                         "Apply " + hours + " to " + saverWeek + " for "
                         + pearls(unitCost * qty) + "?\n\n"
-                        + "This happens straight away and can't be undone from here."
-                    );
-                    if (!ok) {
-                        e.preventDefault();
-                        return;
-                    }
+                        + "This happens straight away and can't be undone from here.",
+                        { ok: "Apply" }
+                    ).then((ok) => {
+                        if (!ok) return;
+                        saverConfirmed = true;
+                        form.requestSubmit(submitter);
+                    });
+                    return;
                 }
+                saverConfirmed = false;
 
                 submitBtn.disabled = true;
                 submitBtn.textContent = saverWeek ? "Applying…" : "Ordering…";
@@ -346,47 +331,11 @@
                 closeOrder();
             });
 
-            function getCookie(name) {
-                const match = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
-                return match ? match.pop() : "";
-            }
-
-            addressBtn.addEventListener("click", async function () {
-                if (!addressBox.hidden) {
-                    addressBox.hidden = true;
-                    addressBtn.textContent = "View address";
-                    return;
-                }
-
-                addressBtn.disabled = true;
-                try {
-                    const resp = await fetch(addressBtn.dataset.url, {
-                        method: "POST",
-                        headers: { "X-CSRFToken": getCookie("csrftoken") },
-                    });
-                    const data = await resp.json();
-                    if (data.ok) {
-                        addressBox.textContent = "";
-                        data.address.lines.forEach(function (line) {
-                            const div = document.createElement("div");
-                            div.textContent = line;
-                            addressBox.appendChild(div);
-                        });
-                        addressBtn.textContent = "Hide address";
-                    } else if (data.error === "no_address") {
-                        addressBox.textContent = "No address on file. Complete address verification in your Hack Club identity.";
-                    } else if (data.error === "address_unavailable") {
-                        addressBox.textContent = "Couldn't reach your Hack Club identity. Log out and back in, then try again.";
-                    } else {
-                        addressBox.textContent = "Could not load address. Please try again.";
-                    }
-                    addressBox.hidden = false;
-                } catch (err) {
-                    addressBox.textContent = "Could not load address. Please try again.";
-                    addressBox.hidden = false;
-                } finally {
-                    addressBtn.disabled = false;
-                }
+            addressBtn.addEventListener("click", function () {
+                window.Atlantis.viewAddress(addressBtn, addressBox, {
+                    noAddress: "No address on file. Complete address verification in your Hack Club identity.",
+                    unavailable: "Couldn't reach your Hack Club identity. Log out and back in, then try again.",
+                });
             });
         })();
     </script>

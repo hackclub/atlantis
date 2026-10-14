@@ -131,66 +131,13 @@
 </div>
 
 <script>
-(function () {
-    function getCookie(name) {
-        const match = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
-        return match ? match.pop() : "";
-    }
-
     document.querySelectorAll(".view-address-btn").forEach(function (btn) {
-        const box = btn.nextElementSibling;
-        btn.addEventListener("click", async function () {
-            if (!box.hidden) {
-                box.hidden = true;
-                btn.textContent = "View Address";
-                return;
-            }
-
-            btn.disabled = true;
-            try {
-                const resp = await fetch(btn.dataset.url, {
-                    method: "POST",
-                    headers: { "X-CSRFToken": getCookie("csrftoken") },
-                });
-                const data = await resp.json();
-                if (data.ok) {
-                    box.textContent = "";
-                    // Who the buyer is, per Hack Club identity, above where the
-                    // parcel goes. Any claim can be missing from a token, so
-                    // each line is only drawn when HCA actually gave one.
-                    const contact = data.contact || {};
-                    [contact.name, contact.email, contact.phone].forEach(function (value) {
-                        if (!value) return;
-                        const div = document.createElement("div");
-                        div.className = "address-contact";
-                        div.textContent = value;
-                        box.appendChild(div);
-                    });
-                    data.address.lines.forEach(function (line) {
-                        const div = document.createElement("div");
-                        div.textContent = line;
-                        box.appendChild(div);
-                    });
-                    box.hidden = false;
-                    btn.textContent = "Hide Address";
-                } else if (data.error === "no_address") {
-                    box.textContent = "No address on file for this order.";
-                    box.hidden = false;
-                } else if (data.error === "address_unavailable") {
-                    box.textContent = "Couldn't fetch this address from Hack Club identity. The buyer may need to log in again.";
-                    box.hidden = false;
-                } else {
-                    box.textContent = "Could not load address. Please try again.";
-                    box.hidden = false;
-                }
-            } catch (err) {
-                box.textContent = "Could not load address. Please try again.";
-                box.hidden = false;
-            } finally {
-                btn.disabled = false;
-            }
+        btn.addEventListener("click", function () {
+            window.Atlantis.viewAddress(btn, btn.nextElementSibling, {
+                noAddress: "No address on file for this order.",
+                unavailable: "Couldn't fetch this address from Hack Club identity. The buyer may need to log in again.",
+            });
         });
     });
-})();
 </script>
 {% endblock %}

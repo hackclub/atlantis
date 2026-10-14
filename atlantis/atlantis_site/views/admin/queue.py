@@ -185,6 +185,31 @@ QUEUES = {
 }
 
 
+# ------------------------------------------------------- pending counts
+
+# The admin rail's badges (templatetags/nav_badges.py) are cached this long, so
+# a page load costs five cache reads instead of five counts — the timelapse
+# desk's is a grouped aggregate over every lapse.
+PENDING_COUNT_TTL = 30
+# Every desk the rail counts, the shop's included, so one forget clears them
+# all: a T1 approval takes one off T1 and puts one on T2.
+PENDING_COUNT_KEYS = (*QUEUES, "fulfillment")
+
+
+def pending_count_cache_key(key):
+    return f"nav-badge:{key}"
+
+
+def forget_pending_counts():
+    """Drop the rail's cached counts so the next page load counts afresh.
+
+    Called on the way out of every decision (see go_to_next), which is when a
+    stale badge would be most confusing: the reviewer has just taken something
+    off a desk and the next page would still be wearing it.
+    """
+    cache.delete_many([pending_count_cache_key(key) for key in PENDING_COUNT_KEYS])
+
+
 # ---------------------------------------------------------------- claims
 
 def _claim_key(queue_key, item_id):
@@ -332,6 +357,10 @@ def go_to_next(request, queue_key, skip_ids=(), empty_message=None, items=None):
     # search so a re-entrant "next" can't hand them back the item they just
     # decided on.
     release_claim(request.user)
+    # Every decision ends here, after its transaction has committed, so this
+    # is where the rail's badges learn about it. A plain "next" with nothing
+    # decided clears them too, which costs one recount and nothing else.
+    forget_pending_counts()
     item_id = next_item_id(queue_key, skip_ids, request.user, items)
     if item_id is None:
         release_claim(request.user)

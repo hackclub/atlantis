@@ -1,0 +1,18 @@
+{% comment %}
+Follow / unfollow, on its own so the view can send back just this when the
+button is pressed (atlantis.js swaps it in by its id) instead of the reader
+reloading the whole book — three.js and all — to flip one word.
+{% endcomment %}
+<span class="follow-toggle" id="follow-toggle">
+    {% if is_following %}
+        <form action="{% url 'unfollow_project' project.id %}" method="post" data-ajax data-ajax-swap="#follow-toggle">
+            {% csrf_token %}
+            <button type="submit" class="ink-btn" title="stop getting a Slack DM for every lapse and ship">unfollow</button>
+        </form>
+    {% else %}
+        <form action="{% url 'follow_project' project.id %}" method="post" data-ajax data-ajax-swap="#follow-toggle">
+            {% csrf_token %}
+            <button type="submit" class="ink-btn ink-btn--strong" title="get a Slack DM for every new lapse and ship">follow</button>
+        </form>
+    {% endif %}
+</span>

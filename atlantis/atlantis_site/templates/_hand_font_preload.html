@@ -1,0 +1,8 @@
+{% comment %}
+For the pages whose first screen is set in Atlantis Hand. Without it the font
+is only found once fonts-hand.css is parsed and something on the page is laid
+out in it, which is late enough for the fallback to be seen first. Same URL as
+the stylesheet's url(), so the two are one download, not two.
+{% endcomment %}
+{% load static %}
+<link rel="preload" href="{% static 'atlantis_site/assets/fonts/atlantishand.woff2' %}" as="font" type="font/woff2" crossorigin>

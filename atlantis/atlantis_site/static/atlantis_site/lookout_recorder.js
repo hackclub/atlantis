@@ -674,10 +674,12 @@
 	}
 
 	async function onStop() {
-		if (!window.confirm(
-			"Finish this timelapse? You can't add more time to it afterwards. "
-			+ "Record a new one for your next session."
-		)) return;
+		const question = "Finish this timelapse? You can't add more time to it afterwards. "
+			+ "Record a new one for your next session.";
+		const ok = window.Atlantis
+			? await window.Atlantis.confirm(question, { ok: "Finish" })
+			: window.confirm(question);
+		if (!ok) return;
 		stopLoop();
 		try {
 			const res = await postControl("stop");

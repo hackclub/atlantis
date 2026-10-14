@@ -6,10 +6,10 @@ body {
 }
 
 /*
- * After dark the dashboard runs on the night art, which the page swaps in from
- * the visitor's own clock. Everything keyed off [data-night] here is the part
- * that isn't an <img>: the open water either side of the scene, and the blurred
- * backdrop that stands in for it on narrow screens.
+ * After dark the dashboard runs on the night art, chosen from the visitor's own
+ * clock by the script in the page's <head>. Everything that changes is keyed
+ * off [data-night] here: the open water either side of the scene, the blurred
+ * backdrop that stands in for it on narrow screens, and the scene's art below.
  */
 [data-night] body {
     background-color: #041427;
@@ -36,36 +36,60 @@ body {
     #backdrop {
         position: fixed;
         inset: 0;
-        background: url('../assets/img/dashboard/background.png') center / cover;
+        background: url('../assets/img/dashboard/background.webp') center / cover;
         filter: blur(28px) brightness(0.8);
         scale: 1.1;
     }
 
     [data-night] #backdrop {
-        background-image: url('../assets/img/dashboard/night/background_night.png');
+        background-image: url('../assets/img/dashboard/night/background_night.webp');
     }
 }
 
-#scene-bg {
-    display: block;
-    width: 100%;
-    height: 100%;
-}
-
+/*
+ * The scene's art is painted as backgrounds rather than <img>s, so the night
+ * set is chosen by the same [data-night] the page's <head> puts on <html>
+ * before anything is fetched. An <img> would have started downloading the day
+ * art before any script could say otherwise, and night visitors paid for both.
+ * Every piece is drawn on the scene's own 2500x1462 canvas, so each is
+ * stretched to the box exactly as the <img>s were.
+ */
+#scene-bg,
 .scene-art {
     position: absolute;
     inset: 0;
-    width: 100%;
-    height: 100%;
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+}
+
+#scene-bg {
+    background-image: url('../assets/img/dashboard/background.webp');
+}
+
+[data-night] #scene-bg {
+    background-image: url('../assets/img/dashboard/night/background_night.webp');
+}
+
+.scene-art {
     pointer-events: none;
 }
 
 #chest-art {
     transform-origin: 27.26% 79.92%;
+    background-image: url('../assets/img/dashboard/chest.webp');
+}
+
+[data-night] #chest-art {
+    background-image: url('../assets/img/dashboard/night/chest_night.webp');
 }
 
 #telescope-art {
     transform-origin: 84.78% 58.55%;
+    background-image: url('../assets/img/dashboard/telescope.webp');
+}
+
+[data-night] #telescope-art {
+    background-image: url('../assets/img/dashboard/night/telescope_night.webp');
 }
 
 .item {
@@ -104,7 +128,7 @@ body {
     width: calc(var(--u) * 6.36);
     height: calc(var(--u) * 2.258415);
     border-radius: calc(var(--u) * 0.35) 0 0 0;
-    background-image: url('../assets/img/dashboard/hotbar.png');
+    background-image: url('../assets/img/dashboard/hotbar.webp');
     background-repeat: no-repeat;
     background-size: 165.4534% 374.8718%;
     background-position: 90.1921% 60.3545%;

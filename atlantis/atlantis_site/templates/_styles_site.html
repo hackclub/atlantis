@@ -1,0 +1,24 @@
+{% comment %}
+The stylesheets the app shell, the guides, the profile page and the error pages
+share, one <link> each. They used to be @imports inside a single style.css,
+which the browser could only discover after that file had itself downloaded;
+listed here they are all requested at once. The order is the cascade order, so keep it.
+
+/root adds its own three after these: see _styles_root.html.
+{% endcomment %}
+{% load static %}
+{% include '_prompt_font.html' %}
+<link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/base.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/modals.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/cards.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/tables.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/detail.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/audit.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/labels.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/metrics.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/timelapse.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/profile.css' %}">
+<link rel="stylesheet" href="{% static 'atlantis_site/css/guides.css' %}">

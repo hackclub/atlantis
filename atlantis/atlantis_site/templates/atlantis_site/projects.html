@@ -6,7 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Projects</title>
     {% include '_favicon.html' %}
+    {% include '_hand_font_preload.html' %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    {# Ahead of the page's own sheets, so they dress the shared modal shell rather than the other way round. #}
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/modals.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/desk.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/paper.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/shelf.css' %}">
@@ -26,12 +29,12 @@
             {% for project in projects %}
                 <article class="book" data-project-id="{{ project.id }}">
                     <div class="book-face">
-                        <img class="book-art" src="{% static 'atlantis_site/assets/img/projects/book.png' %}" alt="">
+                        <img class="book-art" src="{% static 'atlantis_site/assets/img/projects/book.webp' %}" alt="">
                         <div class="book-content">
                             {% if project.image_url %}
                                 <span class="book-photo"><img src="{{ project.image_display_url }}" alt="Screenshot of {{ project.title }}" loading="lazy"></span>
                             {% elif not project.locked %}
-                                <button type="button" class="book-photo-empty open-screenshot" data-project-id="{{ project.id }}" data-title="{{ project.title }}">upload a screenshot to show here</button>
+                                <button type="button" class="book-photo-empty open-screenshot" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-url="{% url 'update_project_image' project.id %}">upload a screenshot to show here</button>
                             {% else %}
                                 <span class="book-photo-empty">no screenshot</span>
                             {% endif %}
@@ -51,8 +54,8 @@
                     {% else %}
                         <div class="card-controls">
                             <div class="card-dropdown" aria-hidden="true">
-                                <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-description="{{ project.description }}" data-printables="{{ project.printablesUrl|default_if_none:"" }}">edit</button>
-                                <button type="button" class="dropdown-item open-screenshot" data-project-id="{{ project.id }}" data-title="{{ project.title }}">screenshot</button>
+                                <button type="button" class="dropdown-item open-edit" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-description="{{ project.description }}" data-printables="{{ project.printablesUrl|default_if_none:"" }}" data-url="{% url 'edit_project' project.id %}">edit</button>
+                                <button type="button" class="dropdown-item open-screenshot" data-project-id="{{ project.id }}" data-title="{{ project.title }}" data-url="{% url 'update_project_image' project.id %}">screenshot</button>
                             </div>
                             <button type="button" class="menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="Options for {{ project.title }}">&#8943;</button>
                         </div>
@@ -72,7 +75,7 @@
                     </button>
                 </span>
             {% else %}
-                <button type="button" class="add-project" id="openCreateModal" aria-label="Add project">
+                <button type="button" class="add-project" id="openCreateModal" aria-label="Add project" data-open-dialog="#createProjectModal">
                     <svg viewBox="0 0 100 100" aria-hidden="true">
                         <rect x="37" y="7" width="26" height="86" rx="11"></rect>
                         <rect x="7" y="37" width="86" height="26" rx="11"></rect>
@@ -89,13 +92,11 @@
     </div>
 
     {% if not create_blocked_reason %}
-    <div id="createProjectModal" class="modal hidden" aria-hidden="true" hidden>
-        <div class="modal-backdrop" id="modalBackdrop"></div>
-
-        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="createProjectTitle">
+    <dialog id="createProjectModal" class="modal" aria-labelledby="createProjectTitle">
+        <div class="modal-panel">
             <h3 id="createProjectTitle">Create Project</h3>
 
-            <form action="{% url 'create_project' %}" method="post">
+            <form action="{% url 'create_project' %}" method="post" data-ajax>
                 {% csrf_token %}
                 <label>
                     Title
@@ -114,21 +115,19 @@
                 </label>
 
                 <div class="modal-actions">
-                    <button type="button" id="cancelCreateModal">Cancel</button>
+                    <button type="button" data-close-dialog>Cancel</button>
                     <button type="submit">Create</button>
                 </div>
             </form>
         </div>
-    </div>
+    </dialog>
     {% endif %}
 
-    <div id="editProjectModal" class="modal hidden" aria-hidden="true" hidden>
-        <div class="modal-backdrop" id="editModalBackdrop"></div>
-
-        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="editProjectTitle">
+    <dialog id="editProjectModal" class="modal" aria-labelledby="editProjectTitle">
+        <div class="modal-panel">
             <h3 id="editProjectTitle">Edit Project</h3>
 
-            <form id="editProjectForm" action="" method="post">
+            <form id="editProjectForm" action="" method="post" data-ajax>
                 {% csrf_token %}
                 <label>
                     Title
@@ -147,72 +146,37 @@
                 </label>
 
                 <div class="modal-actions">
-                    <button type="button" id="cancelEditModal">Cancel</button>
+                    <button type="button" data-close-dialog>Cancel</button>
                     <button type="submit">Save</button>
                 </div>
             </form>
         </div>
-    </div>
+    </dialog>
 
-    <div id="screenshotModal" class="modal hidden" aria-hidden="true" hidden>
-        <div class="modal-backdrop" id="screenshotModalBackdrop"></div>
-
-        <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="screenshotTitle">
+    <dialog id="screenshotModal" class="modal" aria-labelledby="screenshotTitle">
+        <div class="modal-panel">
             <h3 id="screenshotTitle">Project Screenshot</h3>
             <p>A screenshot of your model, shown on the cover. You need one before you can ship.</p>
 
-            <form id="screenshotForm" action="" method="post" enctype="multipart/form-data">
+            <form id="screenshotForm" action="" method="post" enctype="multipart/form-data" data-upload>
                 {% csrf_token %}
                 <label>
                     Screenshot (PNG, JPEG, GIF, or WEBP, max 5MB)
-                    <input id="screenshotFile" type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" required>
+                    <input id="screenshotFile" type="file" name="image" accept="image/png,image/jpeg,image/gif,image/webp" data-max-mb="5" required>
                 </label>
 
                 <div class="modal-actions">
-                    <button type="button" id="cancelScreenshotModal">Cancel</button>
+                    <button type="button" data-close-dialog>Cancel</button>
                     <button type="submit">Upload</button>
                 </div>
             </form>
         </div>
-    </div>
+    </dialog>
 
     <script>
-        (function () {
-            const modal = document.getElementById("createProjectModal");
-            const openBtn = document.getElementById("openCreateModal");
-            const cancelBtn = document.getElementById("cancelCreateModal");
-            const backdrop = document.getElementById("modalBackdrop");
-
-            // Neither is on the page when the reader isn't allowed to create.
-            if (!modal || !openBtn) return;
-
-            function openModal() {
-                modal.classList.remove("hidden");
-                modal.hidden = false;
-                modal.setAttribute("aria-hidden", "false");
-
-                const firstInput = modal.querySelector("input, textarea, button");
-                if (firstInput) firstInput.focus();
-            }
-
-            function closeModal() {
-                modal.classList.add("hidden");
-                modal.hidden = true;
-                modal.setAttribute("aria-hidden", "true");
-                openBtn.focus();
-            }
-
-            openBtn.addEventListener("click", openModal);
-            cancelBtn.addEventListener("click", closeModal);
-            backdrop.addEventListener("click", closeModal);
-
-            document.addEventListener("keydown", (e) => {
-                if (e.key === "Escape" && !modal.classList.contains("hidden")) {
-                    closeModal();
-                }
-            });
-        })();
-
+        // The pop-ups are <dialog>s: opening, closing, Escape and the
+        // backdrop are atlantis.js's. This only fills the two per-project
+        // ones in from the button that opened them.
         (function () {
             function closeAllMenus() {
                 document.querySelectorAll('.card-dropdown.open').forEach(d => {
@@ -243,72 +207,34 @@
             });
 
             const editModal = document.getElementById('editProjectModal');
-            const editBackdrop = document.getElementById('editModalBackdrop');
             const editForm = document.getElementById('editProjectForm');
             const editTitle = document.getElementById('editTitle');
             const editDescription = document.getElementById('editDescription');
             const editPrintables = document.getElementById('editPrintables');
-            const cancelEditBtn = document.getElementById('cancelEditModal');
 
             document.addEventListener('click', (e) => {
                 const openEditBtn = e.target.closest('.open-edit');
-                if (openEditBtn) {
-                    const id = openEditBtn.dataset.projectId;
-                    const title = openEditBtn.dataset.title || '';
-                    const description = openEditBtn.dataset.description || '';
-                    const printables = openEditBtn.dataset.printables || '';
-                    editForm.action = `/projects/${id}/edit/`;
-                    editTitle.value = title;
-                    editDescription.value = description;
-                    editPrintables.value = printables;
-                    editModal.classList.remove('hidden');
-                    editModal.hidden = false;
-                    editModal.setAttribute('aria-hidden', 'false');
-                    const first = editModal.querySelector('input, textarea, button');
-                    if (first) first.focus();
-                    closeAllMenus();
-                }
+                if (!openEditBtn) return;
+                editForm.action = openEditBtn.dataset.url;
+                editTitle.value = openEditBtn.dataset.title || '';
+                editDescription.value = openEditBtn.dataset.description || '';
+                editPrintables.value = openEditBtn.dataset.printables || '';
+                closeAllMenus();
+                window.Atlantis.openDialog(editModal);
             });
 
-            function closeEditModal() {
-                editModal.classList.add('hidden');
-                editModal.hidden = true;
-                editModal.setAttribute('aria-hidden', 'true');
-            }
-
-            if (cancelEditBtn) cancelEditBtn.addEventListener('click', closeEditModal);
-            if (editBackdrop) editBackdrop.addEventListener('click', closeEditModal);
-            document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !editModal.classList.contains('hidden')) closeEditModal(); });
-
             const screenshotModal = document.getElementById('screenshotModal');
-            const screenshotBackdrop = document.getElementById('screenshotModalBackdrop');
             const screenshotForm = document.getElementById('screenshotForm');
             const screenshotFile = document.getElementById('screenshotFile');
-            const cancelScreenshotBtn = document.getElementById('cancelScreenshotModal');
 
             document.addEventListener('click', (e) => {
                 const openScreenshotBtn = e.target.closest('.open-screenshot');
-                if (openScreenshotBtn) {
-                    const id = openScreenshotBtn.dataset.projectId;
-                    screenshotForm.action = `/projects/${id}/image/`;
-                    screenshotFile.value = '';
-                    screenshotModal.classList.remove('hidden');
-                    screenshotModal.hidden = false;
-                    screenshotModal.setAttribute('aria-hidden', 'false');
-                    screenshotFile.focus();
-                    closeAllMenus();
-                }
+                if (!openScreenshotBtn) return;
+                screenshotForm.action = openScreenshotBtn.dataset.url;
+                screenshotFile.value = '';
+                closeAllMenus();
+                window.Atlantis.openDialog(screenshotModal);
             });
-
-            function closeScreenshotModal() {
-                screenshotModal.classList.add('hidden');
-                screenshotModal.hidden = true;
-                screenshotModal.setAttribute('aria-hidden', 'true');
-            }
-
-            if (cancelScreenshotBtn) cancelScreenshotBtn.addEventListener('click', closeScreenshotModal);
-            if (screenshotBackdrop) screenshotBackdrop.addEventListener('click', closeScreenshotModal);
-            document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !screenshotModal.classList.contains('hidden')) closeScreenshotModal(); });
         })();
     </script>
 

@@ -2,14 +2,18 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.core.cache import cache
 from django.core.files.storage import default_storage
 from django.db import IntegrityError, transaction
-from django.db.models import Exists, OuterRef, Q, Sum
+from django.db.models import CharField, Exists, OuterRef, Q, Sum, Value
+from django.db.models.functions import MD5, Cast, Concat
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.urls import reverse
 from django.utils import timezone
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
+from django.template.loader import render_to_string
 
 from botocore.exceptions import ClientError
 
@@ -17,6 +21,7 @@ from datetime import datetime, timedelta, timezone as dt_timezone
 
 import logging
 import mimetypes
+import secrets
 
 from ...models import (
     Project, Ship, Journal, Timelapse, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, EDITOR_ARCHIVE_EXTENSIONS, UNLISTED_EDITOR_EXTENSIONS, LINKABLE_EDITORS, is_editor_model_file
@@ -29,7 +34,7 @@ from .timelapse import _apply_session_payload
 from ..helpers import (
     is_valid_printables_url, is_valid_editor_model_url, get_model_info, validate_file_size,
     sniff_image_extension, random_storage_key,
-    notify_followers, rate_limit, tracked_minutes_for_journals, format_minutes,
+    notify_followers, rate_limit, fetch_aware, wants_json, run_in_background, tracked_minutes_for_journals, format_minutes,
     can_bypass_ship_requirements, ship_block_reason, field_max_length, fit, too_long,
     INT_FIELD_MAX, NO_ADDRESS_MESSAGE, ADDRESS_UNAVAILABLE_MESSAGE,
 )
@@ -130,29 +135,64 @@ def _attachable_lookouts(project, user, ids=None):
 # The recorder page is not the only way a session ends — closing the tab
 # mid-flight used to leave its time unattachable — so the project page asks
 # Lookout itself, throttled so a reload storm can't hammer the API.
+#
+# It asks in the background. Up to three calls at a 10 second timeout each was
+# up to half a minute of somebody else's API in front of the owner's own book,
+# so the page renders from the rows we hold and the answer lands for the next
+# load. The cost is one load behind: a session that finished with the tab
+# closed still reads "recording" the first time the book is opened, and is
+# attachable the time after. The recorder it links to reads Lookout directly
+# and syncs our row back as it goes, so clicking through is never stale.
 LOOKOUT_REFRESH_AFTER = timedelta(seconds=20)
 LOOKOUT_REFRESH_LIMIT = 3
 
 
-def _refresh_lookouts(sessions):
-    """Bring our copy of any unfinished Lookout up to date, in place."""
+def _lookouts_due_refresh(sessions):
+    """The pks of the unfinished Lookouts worth asking about now, at most three.
+
+    Two throttles. `updated_at` says when we last heard from Lookout about a
+    session; the cache key says when a page load last *asked*. The second is
+    the one that matters when Lookout is down: a failed ask writes nothing, so
+    `updated_at` alone would send every reload after the same timeout again.
+    cache.add is the claim, so of two loads at once only one sends the job.
+    """
     stale_before = timezone.now() - LOOKOUT_REFRESH_AFTER
-    asked = 0
+    due = []
     for session in sessions:
+        if len(due) >= LOOKOUT_REFRESH_LIMIT:
+            break
         # A Lapse row has no session id to ask about, and arrives finished.
         if not session.is_lookout:
             continue
         if session.is_complete or session.status == Timelapse.Status.FAILED:
             continue
-        if session.updated_at > stale_before or asked >= LOOKOUT_REFRESH_LIMIT:
+        if session.updated_at > stale_before:
             continue
-        asked += 1
+        key = f"lookout-refresh:{session.pk}"
+        if not cache.add(key, True, int(LOOKOUT_REFRESH_AFTER.total_seconds())):
+            continue
+        due.append(session.pk)
+    return due
+
+
+def _refresh_lookouts(session_pks):
+    """Bring our copy of each of these Lookouts up to date. A background job.
+
+    Re-reads each row rather than trusting the request's copy: by the time this
+    runs the recorder may have synced it, or it may have been attached.
+    """
+    for session in Timelapse.objects.filter(
+        pk__in=session_pks, source=Timelapse.Source.LOOKOUT
+    ).order_by("pk"):
+        if session.is_complete or session.status == Timelapse.Status.FAILED:
+            continue
         try:
             data = lookout.get_internal_session(session.session_id)
         except lookout.LookoutError:
-            # Lookout being unreachable must not take the project page down with
-            # it, and if one call failed the rest will too — each costs a
-            # 10 second timeout, so stop asking.
+            # If one call failed the rest will too — each costs a 10 second
+            # timeout, which is a pool thread's time even off the request — so
+            # stop asking. The cache key keeps the next load from asking again
+            # straight away.
             break
         _apply_session_payload(
             session,
@@ -222,6 +262,7 @@ def projects(request):
         ),
     })
 
+@fetch_aware
 @login_required
 @require_POST
 @rate_limit("create_project", 2)
@@ -276,6 +317,7 @@ def create_project(request):
     return redirect("projects")
 
 
+@fetch_aware
 @login_required
 @require_POST
 @rate_limit("edit_project", 2)
@@ -325,6 +367,7 @@ def edit_project(request, project_id):
     return redirect("projects")
 
 
+@fetch_aware
 @login_required
 @require_POST
 @rate_limit("update_editor_model", 3)
@@ -401,6 +444,7 @@ def update_editor_model(request, project_id):
     return redirect("project_detail", project_id=project_id)
 
 
+@fetch_aware
 @login_required
 @require_POST
 @rate_limit("update_project_image", 2)
@@ -572,8 +616,8 @@ def project_detail(request, project_id):
     lapse_expired = bool(lapse_account and not lapse_account.is_usable)
 
     # The Lookout half is the legacy drawer, and it *is* rendered here: it is a
-    # finite list of rows we already hold, and there is no live service call to
-    # make for it beyond refreshing anything still recording.
+    # finite list of rows we already hold, and the only live service call it
+    # wants — refreshing anything still recording — goes to the background.
     attachable_timelapses = []
     unfinished_timelapses = []
     lookout_status = None
@@ -587,8 +631,6 @@ def project_detail(request, project_id):
             ).select_related("journal")
         )
         has_lookout_history = bool(timelapses)
-        _refresh_lookouts(timelapses)
-        # Re-read after the refresh: one of them may have just finished.
         attachable_timelapses = list(_attachable_lookouts(project, user))
         # Recordings that aren't ready to attach yet still need somewhere to be
         # picked back up from, so the book lists them alongside the picker.
@@ -621,6 +663,13 @@ def project_detail(request, project_id):
         requested = request.GET.get("record", "")
         if requested.isdigit() and any(str(t.pk) == requested for t in timelapses):
             record_session_url = reverse("record_timelapse", args=[int(requested)])
+
+        # Last, once everything above has been read: what Lookout says lands
+        # for the next load, and this one is drawn from one consistent set of
+        # rows (which also keeps it so under test, where the job runs inline).
+        due = _lookouts_due_refresh(timelapses)
+        if due:
+            run_in_background(_refresh_lookouts, due)
 
     pages = _book_pages(journals, allow_new=is_owner and not project.locked)
 
@@ -674,19 +723,48 @@ def project_detail(request, project_id):
         ),
     })
 
+# Eight shelves of three, four of two, or twenty-four of one: whichever the
+# window is showing, every shelf on a page is full and "more" stands alone.
+EXPLORE_PER_PAGE = 24
+EXPLORE_SEED_KEY = "explore_seed"
+
+
 @login_required
 def explore(request):
     profile = request.user.hackclub_profile
+
+    # Shuffled so every visit surfaces different projects first, but shuffled
+    # *once* per visit: order_by("?") deals a fresh hand per query, so page two
+    # would be a second random draw that repeats some of page one and never
+    # shows others. Instead each project is ranked by a hash of its id and a
+    # seed kept in the session. Arriving without a page deals a new seed; paging
+    # on keeps it, so the same session walks one fixed order end to end.
+    page_number = request.GET.get("page")
+    seed = request.session.get(EXPLORE_SEED_KEY)
+    if not page_number or not seed:
+        seed = secrets.token_hex(8)
+        request.session[EXPLORE_SEED_KEY] = seed
 
     projects_unlocked = Project.objects.filter(deleted=False).exclude(locked=True)
     # An empty book is nothing to browse: a project only reaches the shelf once
     # its owner has written at least one lapse into it.
     projects = projects_unlocked.exclude(owner=request.user).filter(
         Exists(Journal.objects.filter(project=OuterRef("pk")))
-    ).select_related("owner__hackclub_profile").order_by("?")  # shuffled so every visit surfaces different projects first
+    ).select_related("owner__hackclub_profile").annotate(
+        shuffle=MD5(Concat(Cast("id", CharField()), Value(seed)))
+    ).order_by("shuffle", "id")
 
-    return render(request, "atlantis_site/explore.html", {'profile': profile, 'projects': projects})
+    # get_page rather than page: a stale or hand-typed ?page=99 lands on the
+    # last shelf instead of a 404.
+    page = Paginator(projects, EXPLORE_PER_PAGE).get_page(page_number)
 
+    return render(request, "atlantis_site/explore.html", {
+        'profile': profile,
+        'projects': page,
+        'page_obj': page,
+    })
+
+@fetch_aware
 @login_required
 @require_POST
 @rate_limit("follow_project", 1)
@@ -699,19 +777,41 @@ def follow_project(request, project_id):
         return redirect("project_detail", project_id=project_id)
 
     project.followers.add(request.user)
-    messages.success(request, f'You are now following "{project.title}". You\'ll be notified of new journal entries and ships.')
-    return redirect("project_detail", project_id=project_id)
+    return _followed(
+        request, project, True,
+        f'You are now following "{project.title}". You\'ll be notified of new journal entries and ships.',
+    )
 
 
+@fetch_aware
 @login_required
 @require_POST
 @rate_limit("unfollow_project", 1)
 def unfollow_project(request, project_id):
     project = get_object_or_404(Project, id=project_id, deleted=False)
     project.followers.remove(request.user)
-    messages.success(request, f'You have unfollowed "{project.title}".')
-    return redirect("project_detail", project_id=project_id)
+    return _followed(request, project, False, f'You have unfollowed "{project.title}".')
 
+
+def _followed(request, project, following, said):
+    """The answer to follow/unfollow: the page again for a browser, or, for
+    the book's own script, just the button it should now show and what to
+    say about it — no reload to flip one word."""
+    if wants_json(request):
+        html = render_to_string(
+            "atlantis_site/_follow_button.html",
+            {"project": project, "is_following": following},
+            request=request,
+        )
+        return JsonResponse({
+            "ok": True,
+            "html": html,
+            "messages": [{"level": "success", "text": said}],
+        })
+    messages.success(request, said)
+    return redirect("project_detail", project_id=project.id)
+
+@fetch_aware
 @login_required
 @rate_limit("create_journal", 3)
 def create_journal(request, project_id):
@@ -955,6 +1055,7 @@ def _changeable_journal(request, project_id, journal_id):
     return journal, None
 
 
+@fetch_aware
 @login_required
 @require_POST
 @rate_limit("edit_journal", 2)
@@ -1011,6 +1112,7 @@ def edit_journal(request, project_id, journal_id):
     return redirect("project_detail", project_id=project_id)
 
 
+@fetch_aware
 @login_required
 @rate_limit("ship_project", 3)
 def ship_project(request, project_id):

@@ -121,7 +121,7 @@ stylesheet, so the grouping and the sizing can never disagree.
             }, { passive: true });
 
             function busy() {
-                return !!document.querySelector(".modal:not(.hidden)");
+                return !!document.querySelector("dialog[open]");
             }
 
             const KEYS = {
@@ -155,6 +155,32 @@ stylesheet, so the grouping and the sizing can never disagree.
                     }
                     build(page * perPage);
                 }, 120);
+            });
+
+            /* "more" is a link to the next page of the shuffle; with the
+               script here it deals those books onto the end of this shelf
+               instead, and moves to the first of them. The link stays a
+               link, so a middle-click or no script still just opens it. */
+            shelf.addEventListener("click", async (e) => {
+                const more = e.target.closest("[data-more]");
+                if (!more || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                e.preventDefault();
+                if (more.dataset.loading) return;
+                more.dataset.loading = "1";
+                more.classList.add("is-loading");
+                try {
+                    const response = await fetch(more.href, { credentials: "same-origin" });
+                    if (!response.ok) throw new Error(String(response.status));
+                    const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+                    const fresh = Array.from(doc.querySelectorAll("#shelf .book, #shelf [data-more]"));
+                    const first = items.indexOf(more);
+                    items.splice(first, 1, ...fresh.map((node) => document.importNode(node, true)));
+                    build(first);
+                } catch (err) {
+                    delete more.dataset.loading;
+                    more.classList.remove("is-loading");
+                    if (window.Atlantis) window.Atlantis.toast("Couldn't fetch more projects. Try again.", "bad");
+                }
             });
 
             document.body.classList.add("deck-ready");

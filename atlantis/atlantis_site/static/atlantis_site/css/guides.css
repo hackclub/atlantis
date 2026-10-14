@@ -10,7 +10,7 @@
 }
 
 #guides {
-    /* scroll.png is a 2500x1462 canvas on which the scroll itself only
+    /* scroll.webp is a 2500x1462 canvas on which the scroll itself only
        occupies (61, 36) to (878, 1436) — 817x1400 of mostly-empty frame.
        Every measurement below is derived from those six numbers, so the art
        (not its transparent margin) is what fills --rail-h. Re-exporting the
@@ -55,7 +55,7 @@
     position: fixed;
     inset: 0;
     z-index: -1;
-    background-image: url('../assets/img/guides/background.png');
+    background-image: url('../assets/img/guides/background.webp');
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -73,7 +73,7 @@
     height: var(--rail-h);
     /* Canvas scaled so its 1400px-tall scroll matches the box, then slid up
        and left so the box frames the scroll and nothing else. */
-    background-image: url('../assets/img/guides/scroll.png');
+    background-image: url('../assets/img/guides/scroll.webp');
     background-repeat: no-repeat;
     background-size:
         calc(var(--rail-h) * var(--art-w) / var(--roll-h))

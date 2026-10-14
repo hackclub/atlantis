@@ -1,0 +1,18 @@
+{% comment %}
+Previous / next for a paginated admin table. Takes `page` (a Paginator page)
+and `noun` (what the rows are, plural). The links are built with
+{% querystring %}, so whatever search or filter put the page here rides along
+to the next one and only `page` changes. Drawn in the audit log's .pagination
+look so every admin list pages the same way.
+{% endcomment %}
+{% if page.has_other_pages %}
+    <nav class="pagination" aria-label="Pages">
+        {% if page.has_previous %}
+            <a href="{% querystring page=page.previous_page_number %}" rel="prev">&laquo; Previous</a>
+        {% endif %}
+        <span>Page {{ page.number }} of {{ page.paginator.num_pages }} &middot; {{ page.paginator.count }} {{ noun }}</span>
+        {% if page.has_next %}
+            <a href="{% querystring page=page.next_page_number %}" rel="next">Next &raquo;</a>
+        {% endif %}
+    </nav>
+{% endif %}

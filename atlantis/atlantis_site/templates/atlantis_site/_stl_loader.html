@@ -1,0 +1,73 @@
+{% comment %}
+The 3D model viewer, fetched only when a model is actually wanted. three.js and
+its loaders are several hundred KB off a CDN, and most visits to a page that
+could show a model never open one, so nothing here downloads them up front.
+
+window.atlantisSTL() resolves to the viewer module (its `init(container)`
+mounts a viewer on a box with a data-stl-url); the first call fetches it, every
+later one shares that fetch. Viewers made on demand (the book's close-up slip,
+the profile's "View STL") call it when they open. Viewers already in the
+markup are started as they come within 200px of the window, so a review page
+with a dozen collapsed journals opens no WebGL context until one is shown.
+
+The import map costs nothing until something imports "three", so it stays.
+{% endcomment %}
+{% load static %}
+<script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+        }
+    }
+</script>
+<script>
+    (function () {
+        const src = "{% static 'atlantis_site/stl_viewer.js' %}";
+        let loading = null;
+
+        window.atlantisSTL = function () {
+            if (!loading) {
+                // A failed fetch is forgotten, so the next ask tries again
+                // rather than inheriting the rejection.
+                loading = import(src).catch((err) => {
+                    loading = null;
+                    throw err;
+                });
+            }
+            return loading;
+        };
+
+        function mount(stage) {
+            window.atlantisSTL().then((stl) => {
+                if (stage.isConnected && stage.dataset.stlUrl) stl.init(stage);
+            });
+        }
+
+        function watch() {
+            const stages = Array.from(document.querySelectorAll('.stl-viewer[data-stl-url]'))
+                .filter((stage) => stage.dataset.stlUrl);
+            if (!stages.length) return;
+
+            if (!('IntersectionObserver' in window)) {
+                stages.forEach(mount);
+                return;
+            }
+
+            const observer = new IntersectionObserver((entries) => {
+                for (const entry of entries) {
+                    if (!entry.isIntersecting) continue;
+                    observer.unobserve(entry.target);
+                    mount(entry.target);
+                }
+            }, { rootMargin: '200px' });
+            stages.forEach((stage) => observer.observe(stage));
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', watch);
+        } else {
+            watch();
+        }
+    })();
+</script>

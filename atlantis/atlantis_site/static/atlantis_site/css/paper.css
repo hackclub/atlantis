@@ -31,35 +31,15 @@
 
 /* ---------- panels ---------- */
 
-.modal {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    z-index: 20;
-    padding: clamp(12px, 2vw, 28px);
-    /* The body no longer scrolls, so a panel taller than a short window has
-       to scroll on its own. */
-    overflow-y: auto;
-}
-
-.modal.hidden {
-    display: none;
-}
+/* The shell — centring, the dimmed page behind, scrolling a tall panel — is
+   the <dialog>'s (modals.css); this is the paper the panel is written on. */
 
 [hidden] {
     display: none !important;
 }
 
-.modal-backdrop {
-    position: absolute;
-    inset: 0;
-    background-color: rgba(24, 15, 5, 0.5);
-}
-
 .modal-panel {
     position: relative;
-    z-index: 1;
     box-sizing: border-box;
     width: min(92vw, 520px);
     padding: 24px 26px;

@@ -5,11 +5,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Atlantis</title>
-    <link rel="stylesheet" href="{% static 'atlantis_site/style.css' %}">
     {% include '_favicon.html' %}
+    {% comment %}
+    Only what the landing page reaches for: Prompt and base.css for the FAQ's
+    body copy, the banner and the modal rules every page carries, and its own
+    sheet. The title is Waterlily and the line under it Atlantis Hand, so both
+    faces are preloaded; they are the first thing anyone reads here.
+    {% endcomment %}
+    {% include '_prompt_font.html' %}
+    {% include '_hand_font_preload.html' %}
+    <link rel="preload" href="{% static 'atlantis_site/assets/fonts/waterlily.woff2' %}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/base.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/banner.css' %}">
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/modals.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/landing.css' %}">
 </head>
 <body>
+    {% include "atlantis_site/_banner.html" %}
     <div id="parallax" aria-hidden="true">
         <div class="parallax-layer" id="layer-background" data-depth="7"></div>
         <div class="parallax-layer" id="layer-middleground" data-depth="18" data-flip="0"></div>
@@ -24,14 +37,14 @@
                 <p id="landing-text">ship 5 hours of CAD a week, <br> get a free 3D printer!</p>
                 <form action="{% url 'login' %}" method="post" id="loginForm">
                     {% csrf_token %}
-                    <a href="javascript:void(0)" onclick="document.getElementById('loginForm').submit();" id="login-button">log in</a>
+                    <button type="submit" id="login-button">log in</button>
                 </form>
             </div>
 
         </div>
 
         <div id="faq-transition" aria-hidden="true">
-            <img src="{% static 'atlantis_site/assets/img/landing/transition.png' %}" alt="">
+            <img src="{% static 'atlantis_site/assets/img/landing/transition.webp' %}" alt="">
         </div>
 
         <section id="faq">

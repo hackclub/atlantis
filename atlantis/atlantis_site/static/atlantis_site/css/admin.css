@@ -2,8 +2,8 @@
    /root admin theme — oceanic
 
    Everything here is scoped under `.root-page`, the class only
-   templates/root/_base_root.html puts on <body>. style.css is shared with
-   the public site, and a good number of the classes styled below
+   templates/root/_base_root.html puts on <body>. The sheets in
+   templates/_styles_site.html are shared with the public site, and a good number of the classes styled below
    (.page, .content, .sidebar, .modal-panel, .item-card, .address-box,
    .stl-viewer, ...) are used by both, so an unscoped rule here would leak
    straight into the public pages. Keep the prefix.
@@ -777,10 +777,6 @@
     margin: 0;
     font-size: 18px;
     color: var(--oc-ink);
-}
-
-.root-page .modal-backdrop {
-    background: var(--oc-scrim);
 }
 
 .root-page dialog::backdrop {

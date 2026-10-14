@@ -111,13 +111,5 @@
 {% endblock %}
 
 {% block page_scripts %}
-<script type="importmap">
-    {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
-        }
-    }
-</script>
-<script type="module" src="{% static 'atlantis_site/stl_viewer.js' %}"></script>
+{% include "atlantis_site/_stl_loader.html" %}
 {% endblock %}

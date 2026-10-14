@@ -170,6 +170,17 @@
             draft = JSON.parse(raw);
         } catch (e) { return; }
 
+        // A pass that was sent and came back to a page with no complaint on
+        // it went through; one that came back with a problem is still the
+        // reviewer's work in progress.
+        if (draft.sent) {
+            if (!document.querySelector('#message-banner .is-bad')) {
+                clearDraft();
+                return;
+            }
+            delete draft.sent;
+        }
+
         Object.keys(draft.recordings || {}).forEach(function (id) {
             var rec = recordings[id];
             if (!rec || !rec.editable) return;
@@ -185,6 +196,15 @@
 
         var notes = document.getElementById('ta-internal');
         if (notes && draft.notes && !notes.value) notes.value = draft.notes;
+    }
+
+    function markDraftSent() {
+        saveDraft();
+        try {
+            var draft = JSON.parse(localStorage.getItem(draftKey) || '{}');
+            draft.sent = true;
+            localStorage.setItem(draftKey, JSON.stringify(draft));
+        } catch (e) { /* private mode; nothing was kept to mark */ }
     }
 
     function clearDraft() {
@@ -1149,9 +1169,9 @@
             }
             serialise();
             form.dataset.submitted = '1';
-            // Only once the browser has accepted the submission: a draft
-            // cleared before a failed post would take the reviewer's work with it.
-            clearDraft();
+            // Marked, not cleared: the post may yet bounce, and the page it
+            // bounces back to decides (see loadDraft).
+            markDraftSent();
         });
     }
 

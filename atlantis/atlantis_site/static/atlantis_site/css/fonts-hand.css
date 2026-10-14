@@ -1,11 +1,19 @@
-/* The hand-lettered faces the art-directed pages are set in. */
+/* The hand-lettered faces the art-directed pages are set in. WOFF2 alone: it
+   is about a third the size of the TTF it is made from, and every browser the
+   rest of the site works in reads it (assets/fonts/README.md has the one-line
+   conversion). `swap` puts the words up in the fallback while the face is
+   still on its way, instead of leaving the page blank for up to three seconds;
+   the pages that open on these faces preload them, so the swap is rarely
+   seen. */
 
 @font-face {
     font-family: "Atlantis Hand";
-    src: url('../assets/fonts/atlantishand.ttf') format("truetype");
+    src: url('../assets/fonts/atlantishand.woff2') format("woff2");
+    font-display: swap;
 }
 
 @font-face {
     font-family: "Waterlily";
-    src: url('../assets/fonts/waterlily.ttf') format("truetype");
+    src: url('../assets/fonts/waterlily.woff2') format("woff2");
+    font-display: swap;
 }

@@ -1,34 +1,17 @@
+{% load static %}
 {% comment %}
 The one note the site leaves for the reader. Every page, admin included, has this
 once, inside <body>, and links css/banner.css.
+
+It also brings atlantis.js, the site's shared behaviour (notes, confirm, busy
+forms), which is why it sits outside the `if`: a page with nothing to say yet
+still needs to be able to say something later. The script dismisses each note
+on its own clock — a problem stays long enough to read — so with JavaScript off
+they simply stay.
 {% endcomment %}
-{% if messages %}
-    <div class="messages" id="message-banner" role="status">
-        {% for message in messages %}
-            <p class="message">{{ message }}</p>
-        {% endfor %}
-    </div>
-
-    <script>
-        (function () {
-            const note = document.getElementById('message-banner');
-            if (!note) return;
-
-            // Touching the note takes it away early; otherwise it leaves on its
-            // own. Removing it rather than hiding it keeps the fixed layer from
-            // sitting over the page once it has faded.
-            let leaving = false;
-            function dismiss() {
-                if (leaving) return;
-                leaving = true;
-                note.addEventListener('transitionend', () => note.remove(), { once: true });
-                note.classList.add('leaving');
-                // Belt and braces for the case where no transition runs at all.
-                setTimeout(() => note.remove(), 700);
-            }
-
-            note.addEventListener('click', dismiss);
-            setTimeout(dismiss, 2500);
-        })();
-    </script>
-{% endif %}
+<div class="messages" id="message-banner" role="status" aria-live="polite">
+    {% for message in messages %}
+        <p class="message{% if message.level >= DEFAULT_MESSAGE_LEVELS.WARNING %} is-bad{% elif message.level == DEFAULT_MESSAGE_LEVELS.SUCCESS %} is-ok{% endif %}"{% if message.level >= DEFAULT_MESSAGE_LEVELS.WARNING %} role="alert"{% endif %}>{{ message }}</p>
+    {% endfor %}
+</div>
+<script src="{% static 'atlantis_site/atlantis.js' %}"></script>

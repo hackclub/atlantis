@@ -2,9 +2,9 @@
    on explore so the two spreads never drift apart. Loaded after desk.css. */
 
 :root {
-    --desk-art: url('../assets/img/projects/background.png');
+    --desk-art: url('../assets/img/projects/background.webp');
 
-    /* Where the two pages meet in book_open.png, as a fraction of the cropped
+    /* Where the two pages meet in book_open.webp, as a fraction of the cropped
        art. Everything on the book is placed off this. */
     --page-top: 13.5%;
     --page-bottom: 71.5%;
@@ -61,7 +61,7 @@ textarea {
     translate: -50% -50%;
     /* The art's own ink, with its transparent margin cropped away. */
     aspect-ratio: 1429 / 903;
-    /* The desk's sheet of paper, measured on screen. background.png is
+    /* The desk's sheet of paper, measured on screen. background.webp is
        cover-sized, so it is scaled by whichever axis fills first, and the
        largest rectangle that never leaves the paper is 84.8% by 75.2% of the
        art. Whichever of the two the window clips wins. */
@@ -854,6 +854,34 @@ a.ink-btn {
 
 .compose-note.is-invalid {
     color: var(--ink-danger);
+}
+
+/* The follow button's wrapper only exists to be swapped (atlantis.js); it
+   mustn't count as a box in the row of page actions. */
+.follow-toggle {
+    display: contents;
+}
+
+/* Where the new lapse's upload shows how far along it is (atlantis.js draws
+   the bar); in the book's own ink rather than the site's brown. */
+.compose-progress:empty {
+    display: none;
+}
+
+.compose-progress .atl-progress-fill,
+.page-photo .atl-progress-fill {
+    background: var(--ink-link);
+}
+
+.compose-progress .atl-progress-label,
+.page-photo .atl-progress-label {
+    color: var(--ink-soft);
+    font-size: 1.3cqw;
+}
+
+body[data-mode="flow"] .compose-progress .atl-progress-label,
+body[data-mode="flow"] .page-photo .atl-progress-label {
+    font-size: 14px;
 }
 
 .chip--busy {

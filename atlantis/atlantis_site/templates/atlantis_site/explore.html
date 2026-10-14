@@ -6,7 +6,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Explore</title>
     {% include '_favicon.html' %}
+    {% include '_hand_font_preload.html' %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
+    {# Ahead of the page's own sheets, so they dress the shared modal shell rather than the other way round. #}
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/modals.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/desk.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/paper.css' %}">
     <link rel="stylesheet" href="{% static 'atlantis_site/css/shelf.css' %}">
@@ -21,12 +24,12 @@
 
         {% include "atlantis_site/_banner.html" %}
 
-        <div id="deck">
+        <div id="deck" data-live-region>
         <main id="shelf">
             {% for project in projects %}
                 <article class="book" data-project-id="{{ project.id }}">
                     <div class="book-face">
-                        <img class="book-art" src="{% static 'atlantis_site/assets/img/projects/book.png' %}" alt="">
+                        <img class="book-art" src="{% static 'atlantis_site/assets/img/projects/book.webp' %}" alt="">
                         <div class="book-content">
                             {% if project.image_url %}
                                 <span class="book-photo"><img src="{{ project.image_display_url }}" alt="Screenshot of {{ project.title }}" loading="lazy"></span>
@@ -45,6 +48,19 @@
                     <a class="book-link" href="{% url 'project_detail' project.id %}" aria-label="{{ project.title }}"></a>
                 </article>
             {% endfor %}
+            {% comment %}
+            The shelf is dealt out a page at a time in a shuffle that holds for
+            the visit (see views.client.projects.explore). "more" stands in the
+            grid like a book, so the deck puts it on the last shelf.
+            {% endcomment %}
+            {% if page_obj.has_next %}
+                <a class="more-books" href="?page={{ page_obj.next_page_number }}" data-more>
+                    <svg viewBox="0 0 100 100" aria-hidden="true">
+                        <path d="M18 30 L50 64 L82 30" fill="none" stroke="currentColor" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"></path>
+                    </svg>
+                    <span>more</span>
+                </a>
+            {% endif %}
         </main>
 
         <div class="deck-hint" aria-hidden="true">&#9662;</div>

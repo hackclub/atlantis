@@ -36,26 +36,105 @@
         return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
     }
 
+    // The note and the token are the site's (atlantis.js, loaded by the
+    // banner on every page); these are only the short names this file uses.
     function csrfToken() {
-        var field = document.querySelector('input[name="csrfmiddlewaretoken"]');
-        return field ? field.value : '';
+        return window.Atlantis.csrf();
     }
 
-    /* ---------------------------------------------------------------- toast */
-
     function toast(text, tone) {
-        var host = document.querySelector('.rv-toasts');
-        if (!host) {
-            host = document.createElement('div');
-            host.className = 'rv-toasts';
-            document.body.appendChild(host);
-        }
-        var node = document.createElement('p');
-        node.className = 'rv-toast' + (tone ? ' rv-toast-' + tone : '');
-        node.textContent = text;
-        host.appendChild(node);
-        setTimeout(function () { node.classList.add('rv-toast-out'); }, 2600);
-        setTimeout(function () { node.remove(); }, 3200);
+        window.Atlantis.toast(text, tone);
+    }
+
+    /* ------------------------------------------------------------- drafts */
+
+    /*
+     * What the reviewer has written into a decision form — the feedback, the
+     * justification, the deductions, the boxes ticked — is kept in this
+     * browser as they write it, per page. It used to live only in the form,
+     * so a mistake the server caught (a deduction too large, feedback over
+     * the limit) came back as an empty form and a rewrite.
+     *
+     * Sending doesn't throw the draft away, because the send may yet bounce;
+     * it marks it sent. The next page decides: one that arrives saying
+     * something went wrong (a .is-bad note from the server) gets the draft
+     * back, any other means the decision landed and the draft is spent. A
+     * draft that was never sent — a reload, a stray click away — always
+     * comes back. Old ones are dropped after a day either way.
+     */
+    var DRAFT_PREFIX = 'rv-draft:';
+    var DRAFT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+    function draftFields(form) {
+        return Array.prototype.filter.call(form.elements, function (el) {
+            if (!el.name || el.disabled || el.name === 'csrfmiddlewaretoken') return false;
+            if (el.type === 'checkbox') return true;
+            if (el.tagName === 'TEXTAREA') return true;
+            return el.tagName === 'INPUT' && (el.type === 'text' || el.type === 'number');
+        });
+    }
+
+    function draftFieldKey(el) {
+        return el.type === 'checkbox' ? el.name + '=' + el.value : el.name;
+    }
+
+    function readDraft(key) {
+        try {
+            var draft = JSON.parse(localStorage.getItem(key) || 'null');
+            if (draft && Date.now() - draft.at < DRAFT_MAX_AGE_MS) return draft;
+            localStorage.removeItem(key);
+        } catch (e) { /* private mode, or not ours; no draft */ }
+        return null;
+    }
+
+    function writeDraft(key, draft) {
+        try {
+            localStorage.setItem(key, JSON.stringify(draft));
+        } catch (e) { /* private mode; the form still submits */ }
+    }
+
+    function setupDrafts() {
+        var bounced = Boolean(document.querySelector('#message-banner .is-bad'));
+        document.querySelectorAll('form.rv-form').forEach(function (form, index) {
+            var key = DRAFT_PREFIX + window.location.pathname + '#' + index;
+            var fields = draftFields(form);
+            if (!fields.length) return;
+
+            var draft = readDraft(key);
+            if (draft && draft.sent && !bounced) {
+                try { localStorage.removeItem(key); } catch (e) { /* gone anyway */ }
+                draft = null;
+            }
+            if (draft) {
+                fields.forEach(function (el) {
+                    var saved = draft.values[draftFieldKey(el)];
+                    if (saved === undefined) return;
+                    if (el.type === 'checkbox') {
+                        if (el.checked === saved) return;
+                        el.checked = saved;
+                    } else {
+                        // Only into an empty box: the server's own value wins.
+                        if (el.value && el.value !== el.defaultValue) return;
+                        if (el.value === saved) return;
+                        el.value = saved;
+                    }
+                    // So the counters, the payout preview and the checklist
+                    // gate catch up with what was put back.
+                    el.dispatchEvent(new Event(el.type === 'checkbox' ? 'change' : 'input', { bubbles: true }));
+                });
+            }
+
+            var save = function (sent) {
+                var values = {};
+                fields.forEach(function (el) {
+                    values[draftFieldKey(el)] = el.type === 'checkbox' ? el.checked : el.value;
+                });
+                writeDraft(key, { at: Date.now(), sent: Boolean(sent), values: values });
+            };
+            form.addEventListener('input', function () { save(false); });
+            form.addEventListener('change', function () { save(false); });
+            form.addEventListener('submit', function () { save(true); });
+        });
     }
 
     /* ------------------------------------------------- collapsible panels */
@@ -308,42 +387,12 @@
 
     /* -------------------------------------------------- forms and decisions */
 
-    function setupForms() {
-        document.querySelectorAll('.rv-form').forEach(function (form) {
-            form.addEventListener('submit', function (event) {
-                var submitter = event.submitter;
-                if (submitter && submitter.dataset.confirm && !window.confirm(submitter.dataset.confirm)) {
-                    event.preventDefault();
-                    return;
-                }
-                if (form.dataset.submitted === '1') {
-                    event.preventDefault();
-                    return;
-                }
-                form.dataset.submitted = '1';
-                form.classList.add('rv-form-busy');
-                // Deferred: disabling a submit button before the browser has
-                // serialised the form drops its name and value, and that value
-                // *is* the decision.
-                setTimeout(function () {
-                    form.querySelectorAll('button[type="submit"]').forEach(function (button) {
-                        button.disabled = true;
-                    });
-                }, 0);
-            });
-        });
-
-        // The small forms beside the decision — lock, flag — ask too. They
-        // aren't .rv-form, so the handler above never sees them.
-        document.addEventListener('submit', function (event) {
-            var form = event.target;
-            if (!form || form.classList.contains('rv-form')) return;
-            var submitter = event.submitter;
-            if (submitter && submitter.dataset.confirm && !window.confirm(submitter.dataset.confirm)) {
-                event.preventDefault();
-            }
-        });
-    }
+    /*
+     * Decision forms ask before they post (`data-confirm`) and refuse to post
+     * twice; both are the site's now (atlantis.js), so every other form on the
+     * site gets them too and the lock and flag forms beside the decision
+     * aren't a special case.
+     */
 
     function setupCounters() {
         document.querySelectorAll('[data-counter-for]').forEach(function (counter) {
@@ -568,15 +617,31 @@
         var rows = Array.prototype.slice.call(document.querySelectorAll('.rq-row[data-href]'));
         if (!rows.length) return;
 
+        // A row behaves like the link it stands for: Cmd/Ctrl-click or a
+        // middle click opens it in a new tab, so a reviewer can line up
+        // several without losing the queue.
+        function openRow(row, event) {
+            if (event.metaKey || event.ctrlKey || event.button === 1) {
+                window.open(row.dataset.href, '_blank', 'noopener');
+            } else {
+                window.location.href = row.dataset.href;
+            }
+        }
+
         rows.forEach(function (row) {
             row.addEventListener('click', function (event) {
                 if (event.target.closest('a, button, input, label')) return;
-                window.location.href = row.dataset.href;
+                openRow(row, event);
+            });
+            row.addEventListener('auxclick', function (event) {
+                if (event.button !== 1 || event.target.closest('a, button, input, label')) return;
+                event.preventDefault();
+                openRow(row, event);
             });
             row.addEventListener('keydown', function (event) {
                 if (event.key === 'Enter') {
                     event.preventDefault();
-                    window.location.href = row.dataset.href;
+                    openRow(row, event);
                 }
             });
         });
@@ -651,8 +716,9 @@
     }
 
     function init() {
+        // First, so everything after it reads the restored fields.
+        setupDrafts();
         setupCards();
-        setupForms();
         setupChecklist();
         setupCounters();
         setupNotes();

@@ -7,7 +7,7 @@ from django.urls import reverse
 
 from ..models import Profile
 from ..views.client.auth import FORCE_REAUTH_COOKIE
-from .base import TEST_ENCRYPTION_KEY, User, make_user
+from .base import TEST_ENCRYPTION_KEY, TEST_STORAGES, User, make_user
 
 TOKEN = {
 	"access_token": "at-123",
@@ -76,7 +76,10 @@ class LogoutViewTests(TestCase):
 		self.assertEqual(self.client.get(reverse("dashboard")).status_code, 302)
 
 
-@override_settings(ADDRESS_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY)
+# Plain static storage, as BaseTestCase uses: the dashboard this logs into
+# resolves {% static %} URLs, and the manifest storage would make that depend on
+# whatever collectstatic last left in STATIC_ROOT on this machine.
+@override_settings(ADDRESS_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY, STORAGES=TEST_STORAGES)
 @patch.dict(os.environ, {"DEFAULT_PFP": "https://example.com/default.png"})
 @patch("atlantis_site.views.client.auth.slack_client.users_info")
 @patch("atlantis_site.views.client.auth.oauth.hackclub.authorize_access_token")

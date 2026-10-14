@@ -77,6 +77,17 @@ body {
     text-decoration: none;
 }
 
+/* "log out" is a form post, so a button — dressed as the links beside it. */
+.sidebar .sidebar-link {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+}
+
 .content {
     padding: 24px;
     min-width: 0;

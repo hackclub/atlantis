@@ -2,7 +2,7 @@
    one. Loaded after desk.css and paper.css. */
 
 :root {
-    --desk-art: url('../assets/img/shop/background.png');
+    --desk-art: url('../assets/img/shop/background.webp');
     --card-gap: clamp(16px, 2vw, 32px);
     --sheet-foot: clamp(48px, 7vw, 110px);
 }
@@ -73,7 +73,7 @@ body::before {
     height: 1.05em;
     flex: 0 0 auto;
     vertical-align: -0.15em;
-    background: url('../assets/img/dashboard/pearl.png') 29% 32% / 238% no-repeat;
+    background: url('../assets/img/dashboard/pearl.webp') 29% 32% / 238% no-repeat;
     filter: drop-shadow(0 1px 1px rgba(24, 13, 4, 0.35));
 }
 

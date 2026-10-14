@@ -66,7 +66,7 @@ class PrinterCostTests(BaseTestCase):
 	def test_every_track_has_its_artwork(self):
 		for spec in TRACKS:
 			with self.subTest(spec["slug"]):
-				self.assertTrue((ASSETS / f"map_{spec['slug']}.png").is_file())
+				self.assertTrue((ASSETS / f"map_{spec['slug']}.webp").is_file())
 				self.assertTrue((ASSETS / f"card_{spec['slug']}.webp").is_file())
 
 

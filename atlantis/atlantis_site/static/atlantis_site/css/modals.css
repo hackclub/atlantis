@@ -1,19 +1,55 @@
-.modal {
-    position: fixed;
-    inset: 0;
-    display: grid;
-    place-items: center;
-    z-index: 20;
+/* Pop-ups. Every one is a <dialog class="modal"> opened with showModal()
+   (atlantis.js wires the buttons), so the browser centres it, dims the page
+   behind with ::backdrop, keeps focus inside and closes it on Escape. The
+   dialog itself is only a shell the size of its .modal-panel; how the panel
+   looks belongs to the page it's on (paper.css, shop.css, admin.css). */
+
+dialog.modal {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    max-width: calc(100vw - 24px);
+    max-height: calc(100dvh - 24px);
+    /* The panel scrolls itself; the shell mustn't add a second bar. */
+    overflow: visible;
 }
 
-.modal.hidden {
-    display: none;
+dialog.modal::backdrop {
+    background: rgba(24, 15, 5, 0.5);
 }
 
-.modal-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
+/* The admin theme dresses every dialog as a panel; this one's panel is
+   inside it, so the shell stays bare there too. */
+.root-page dialog.modal {
+    background: transparent;
+    box-shadow: none;
+}
+
+dialog.modal[open] {
+    animation: modal-in 0.18s ease-out;
+}
+
+dialog.modal[open]::backdrop {
+    animation: modal-backdrop-in 0.18s ease-out;
+}
+
+@keyframes modal-in {
+    from { opacity: 0; translate: 0 10px; scale: 0.98; }
+}
+
+@keyframes modal-backdrop-in {
+    from { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    dialog.modal[open],
+    dialog.modal[open]::backdrop { animation: none; }
+}
+
+dialog.modal .modal-panel {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
 }
 
 .modal-panel {

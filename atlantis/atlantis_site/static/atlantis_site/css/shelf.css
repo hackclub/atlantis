@@ -3,7 +3,7 @@
    a cover belongs to the page loading this. */
 
 :root {
-    --desk-art: url('../assets/img/projects/background.png');
+    --desk-art: url('../assets/img/projects/background.webp');
     --deck-gap: clamp(20px, 3vw, 64px);
 }
 
@@ -258,7 +258,7 @@ body.deck-end .deck-hint {
     z-index: 1;
 }
 
-/* book.png is a small book on a big transparent canvas — pull the cover out
+/* book.webp is a small book on a big transparent canvas — pull the cover out
    of it the way the dashboard crops its dock items. */
 .book-art {
     position: absolute;

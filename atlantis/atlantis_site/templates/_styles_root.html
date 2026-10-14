@@ -1,0 +1,13 @@
+{% comment %}
+/root's stylesheets: everything the shared shell has, then the admin theme on
+top. Participant pages never load these three; every selector in them is
+scoped to .root-page, so they would only be dead weight there.
+{% endcomment %}
+{% load static %}
+{% include '_styles_site.html' %}
+{# Last so it can override the shared rules above. #}
+<link rel="stylesheet" href="{% static 'atlantis_site/css/admin.css' %}">
+{# Reviewer desks and the reviewer shell. After admin.css so it can specialise the admin card/table rules. #}
+<link rel="stylesheet" href="{% static 'atlantis_site/css/review.css' %}">
+{# The Lookout review page. After review.css because it leans on .rv-btn and the shortcut dialog. #}
+<link rel="stylesheet" href="{% static 'atlantis_site/css/timeaudit.css' %}">

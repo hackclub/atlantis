@@ -25,18 +25,18 @@ body {
 
 #layer-background {
     --scale: 1.06;
-    background-image: url('../assets/img/landing/background.png');
+    background-image: url('../assets/img/landing/background.webp');
 }
 
 #layer-middleground {
     --scale: 1.10;
-    background-image: url('../assets/img/landing/middleground.png');
+    background-image: url('../assets/img/landing/middleground.webp');
     transform: scale(var(--scale));
 }
 
 #layer-foreground {
     --scale: 1.20;
-    background-image: url('../assets/img/landing/foreground.png');
+    background-image: url('../assets/img/landing/foreground.webp');
     z-index: 2;
 }
 
@@ -97,6 +97,11 @@ body {
     border: var(--border-thin) solid #00528c;
     border-bottom-width: var(--border-thick);
     transition: border-bottom-width 0.03s ease-out, transform 0.03s ease-out;
+
+    /* A real button now, so the browser's own button type has to go. */
+    font-weight: inherit;
+    line-height: inherit;
+    cursor: pointer;
 }
 
 #login-button:active {
@@ -137,7 +142,7 @@ body {
     font-size: clamp(13px, 1.5vw, 38px);
 
     background-color: #036890;
-    background-image: url('../assets/img/landing/background_faq.png');
+    background-image: url('../assets/img/landing/background_faq.webp');
     background-repeat: no-repeat;
     background-position: center top;
     background-size: 100% auto;

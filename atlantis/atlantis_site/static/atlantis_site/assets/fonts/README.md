@@ -48,4 +48,18 @@ font.save("atlantishand.ttf")
 
 Advance widths are untouched, so swapping the file changes no layout.
 
-`waterlily.ttf` is unused.
+The pages are served the WOFF2 builds (`atlantishand.woff2`, `waterlily.woff2`),
+not the TTFs; `css/fonts-hand.css` points only at those. After regenerating
+`atlantishand.ttf`, rebuild its WOFF2 too (needs `pip install fonttools brotli`):
+
+```python
+from fontTools.ttLib import TTFont
+
+font = TTFont("atlantishand.ttf")
+font.flavor = "woff2"
+font.save("atlantishand.woff2")
+```
+
+`waterlily.woff2` is the landing page's title face. Only the WOFF2 is kept; the
+same three lines run backwards (`flavor = None`) give the TTF back if it is ever
+needed.

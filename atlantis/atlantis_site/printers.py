@@ -3,7 +3,7 @@
 Everyone starts by logging `ENTRY_HOURS` hours, which buys the cheapest
 printer on their track; from there each printer is unlocked by spending pearls
 on the step that leads to it. A track's map under
-assets/img/printer/map_<slug>.png draws that tree as a constellation, and the
+assets/img/printer/map_<slug>.webp draws that tree as a constellation, and the
 `x`/`y` on each printer is the percentage position of its dot on that image —
 the star overlay in printer_track.html is laid over the map at those points,
 so the two have to be edited together.

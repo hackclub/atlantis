@@ -4,7 +4,16 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const loader = new STLLoader();
 
+// One viewer per container. The page's loader and a slip can both ask for the
+// same box (the loader's observer sees it scroll in just as a click mounts
+// it), and a second renderer stacked on the first would hold its own WebGL
+// context for nothing — so a repeat ask gets the viewer already there.
+const mounted = new WeakMap();
+
 function initViewer(container) {
+    const existing = mounted.get(container);
+    if (existing) return existing;
+
     const stlUrl = container.dataset.stlUrl;
     if (!stlUrl) return null;
 
@@ -103,6 +112,7 @@ function initViewer(container) {
     function dispose() {
         if (disposed) return;
         disposed = true;
+        mounted.delete(container);
         if (frameId !== null) cancelAnimationFrame(frameId);
         observer.disconnect();
         controls.dispose();
@@ -116,11 +126,15 @@ function initViewer(container) {
         renderer.domElement.remove();
     }
 
-    return { dispose };
+    const viewer = { dispose };
+    mounted.set(container, viewer);
+    return viewer;
 }
 
-// Anything rendered on demand (the project book's close-ups) mounts its own.
+// Nothing mounts itself any more. The module is only fetched once a model is
+// wanted (templates/atlantis_site/_stl_loader.html), and whoever wanted it —
+// the loader's observer for viewers already in the markup, a slip or a toggle
+// for the ones made on demand — calls init on the box it means.
 window.AtlantisSTL = { init: initViewer };
-document.dispatchEvent(new CustomEvent('atlantis:stl-ready'));
 
-document.querySelectorAll('.stl-viewer').forEach(initViewer);
+export { initViewer as init };

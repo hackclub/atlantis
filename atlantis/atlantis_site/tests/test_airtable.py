@@ -18,6 +18,8 @@ from ..submissions import (
 	build_generated_justification, build_override_justification, pending_ships,
 	submit_ship,
 )
+from ..views.admin import review as review_views
+from ..views.admin.review import AIRTABLE_QUEUED_MESSAGE
 from .base import (
 	BaseTestCase,
 	approve_timelapse,
@@ -531,7 +533,38 @@ class T3FinalizationSubmitsTests(BaseTestCase):
 		self.assertEqual(
 			AirtableSubmission.objects.get(ship=self.ship).record_id, "recABC"
 		)
-		self.assertIn("Submitted to Airtable as recABC.", message_texts(response))
+		# The send runs after the redirect in production, so the reviewer is
+		# told where to look rather than how it went — even though, inline under
+		# test, it has already gone.
+		self.assertIn(AIRTABLE_QUEUED_MESSAGE, message_texts(response))
+
+	def test_a_send_that_never_runs_leaves_the_ship_owed(self):
+		# A worker killed with the job still queued: the finalization stands,
+		# and the ship is left exactly where submit_airtable will find it.
+		with patch.object(review_views, "run_in_background"), \
+				patch.object(airtable, "create_record") as create:
+			response = self._decide()
+
+		create.assert_not_called()
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.FINALIZED)
+		submission = AirtableSubmission.objects.get(ship=self.ship)
+		self.assertEqual(submission.status, AirtableSubmission.Status.PENDING)
+		self.assertTrue(submission.needs_retry)
+		self.assertIn(self.ship, list(pending_ships()))
+		self.assertIn(AIRTABLE_QUEUED_MESSAGE, message_texts(response))
+
+	def test_the_send_is_queued_by_id(self):
+		# By id, so the job re-reads a committed ship rather than carrying the
+		# request's copy into another thread.
+		with patch.object(review_views, "run_in_background") as queued:
+			self._decide()
+		submit_jobs = [
+			call for call in queued.call_args_list
+			if call.args[0] is review_views.submit_finalized_ship
+		]
+		self.assertEqual(len(submit_jobs), 1)
+		self.assertEqual(submit_jobs[0].args[1:], (self.ship.id,))
 
 	def test_the_edited_justification_is_what_hq_gets(self):
 		with patch.object(airtable, "create_record", return_value="recABC") as create:
@@ -607,8 +640,14 @@ class T3FinalizationSubmitsTests(BaseTestCase):
 		self.assertEqual(self.ship.status, Ship.ShipStatus.FINALIZED)
 		self.author.hackclub_profile.refresh_from_db()
 		self.assertEqual(self.author.hackclub_profile.layers, 32)
-		self.assertTrue(
-			any("Airtable record was not created" in text for text in message_texts(response))
+		submission = AirtableSubmission.objects.get(ship=self.ship)
+		self.assertEqual(submission.status, AirtableSubmission.Status.FAILED)
+		self.assertIn("422: nope", submission.error)
+		self.assertIn(AIRTABLE_QUEUED_MESSAGE, message_texts(response))
+		# Where the reviewer was told to look, the failure is there to read.
+		self.assertContains(
+			self.client.get(reverse("fraud_review_project", args=[self.ship.id])),
+			"422: nope",
 		)
 
 	def test_unconfigured_airtable_does_not_break_finalization(self):
@@ -617,21 +656,22 @@ class T3FinalizationSubmitsTests(BaseTestCase):
 
 		self.ship.refresh_from_db()
 		self.assertEqual(self.ship.status, Ship.ShipStatus.FINALIZED)
-		self.assertEqual(
-			AirtableSubmission.objects.get(ship=self.ship).status,
-			AirtableSubmission.Status.FAILED,
-		)
-		self.assertTrue(
-			any("AIRTABLE_PAT" in text for text in message_texts(response))
-		)
+		submission = AirtableSubmission.objects.get(ship=self.ship)
+		self.assertEqual(submission.status, AirtableSubmission.Status.FAILED)
+		self.assertIn("AIRTABLE_PAT", submission.error)
+		self.assertIn(AIRTABLE_QUEUED_MESSAGE, message_texts(response))
 
 	def test_audit_log_records_the_outcome(self):
 		with patch.object(airtable, "create_record", return_value="recABC"):
 			self._decide()
 
+		# The audit entry is written before the send finishes, so it records
+		# only that one was queued; the outcome is on the submission row.
 		log = AuditLog.objects.get(action="t3_decision")
-		self.assertEqual(log.metadata["airtable_record_id"], "recABC")
-		self.assertEqual(log.metadata["airtable_status"], "submitted")
+		self.assertEqual(log.metadata["airtable_status"], "queued")
+		self.assertEqual(
+			AirtableSubmission.objects.get(ship=self.ship).record_id, "recABC"
+		)
 
 	def test_the_token_is_never_put_in_front_of_the_reviewer(self):
 		with patch.object(

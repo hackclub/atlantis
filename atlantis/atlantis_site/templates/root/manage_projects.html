@@ -83,7 +83,8 @@
                         <br>
                         <a href="{% url 'project_detail' project.id %}" class="link-button" target="_blank" rel="noopener">view project</a>
                         <br>
-                        <form method="POST" action="{% url 'db_delete_project' project.id %}" class="db-delete-project-form" data-title="{{ project.title|default:'' }}" style="display:inline;">
+                        <form method="POST" action="{% url 'db_delete_project' project.id %}" class="db-delete-project-form" data-title="{{ project.title|default:'' }}"
+                              data-confirm="Permanently delete &quot;{{ project.title|default:'this project' }}&quot; from the database? This cannot be undone." data-confirm-ok="Delete" data-confirm-danger style="display:inline;">
                             {% csrf_token %}
                             <button type="submit" class="link-button danger">db delete</button>
                         </form>
@@ -93,7 +94,8 @@
             </tbody>
         </table>
     </div>
-    <p id="projectSearchEmpty" hidden>No projects match that search.</p>
+    {% include "root/_pager.html" with page=page noun="projects" %}
+    <p id="projectSearchEmpty" hidden>{% if page.has_other_pages %}No projects on this page match. Press Enter to search every page.{% else %}No projects match that search.{% endif %}</p>
 
     <dialog id="editProjectPopup">
         <form method="POST" id="editProjectForm" action="">
@@ -161,17 +163,6 @@
     })();
 
     (function () {
-        document.querySelectorAll('.db-delete-project-form').forEach((form) => {
-            form.addEventListener('submit', (event) => {
-                const title = form.dataset.title || 'this project';
-                if (!confirm('Permanently delete "' + title + '" from the database? This cannot be undone.')) {
-                    event.preventDefault();
-                }
-            });
-        });
-    })();
-
-    (function () {
         const bulkForm = document.getElementById('bulkDeleteForm');
         const selectAll = document.getElementById('selectAllProjects');
         const count = document.getElementById('bulkSelectedCount');
@@ -213,6 +204,9 @@
             sync();
         });
 
+        // The question names every project, so it's asked here rather than
+        // from a data-confirm; a yes sends the form again past this point.
+        let confirmed = false;
         bulkForm.addEventListener('submit', (event) => {
             const selected = checkedBoxes();
             if (!selected.length) {
@@ -220,11 +214,21 @@
                 return;
             }
 
-            const titles = selected.map((box) => box.dataset.title || ('#' + box.value));
-            if (!confirm('Permanently delete ' + selected.length + ' project(s) from the database?\n\n' + titles.join('\n') + '\n\nThis cannot be undone.')) {
+            if (!confirmed) {
                 event.preventDefault();
+                const titles = selected.map((box) => box.dataset.title || ('#' + box.value));
+                const submitter = event.submitter;
+                window.Atlantis.confirm(
+                    'Permanently delete ' + selected.length + ' project(s) from the database?\n\n' + titles.join('\n') + '\n\nThis cannot be undone.',
+                    { ok: 'Delete', danger: true }
+                ).then((ok) => {
+                    if (!ok) return;
+                    confirmed = true;
+                    bulkForm.requestSubmit(submitter);
+                });
                 return;
             }
+            confirmed = false;
 
             bulkForm.querySelectorAll('input[name="project_ids"]').forEach((input) => input.remove());
             selected.forEach((box) => {
@@ -245,7 +249,6 @@
         if (!input) return;
 
         const rows = Array.from(document.querySelectorAll('.users-table tbody tr'));
-        const searchForm = input.closest('form');
 
         function applyFilter() {
             const query = input.value.trim().toLowerCase();
@@ -261,7 +264,8 @@
             document.dispatchEvent(new CustomEvent('projects:filtered'));
         }
 
-        if (searchForm) searchForm.addEventListener('submit', (event) => event.preventDefault());
+        // Typing filters the rows on this page as you go; Enter submits the
+        // form, and the server searches every page.
         input.addEventListener('input', applyFilter);
         applyFilter();
     })();

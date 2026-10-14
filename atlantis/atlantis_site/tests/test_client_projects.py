@@ -1,13 +1,18 @@
+import importlib
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.core.cache import cache
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.html import escape
 
+from .. import lookout
 from ..hca import AddressUnavailable, IdentityUnavailable
 from ..models import Journal, Timelapse, Project, Ship
 from ..checklists import SHIP_CHECKLIST
+from ..views.client.projects import EXPLORE_PER_PAGE, EXPLORE_SEED_KEY
 from .base import (
 	VALID_EDITOR_LINK,
 	VALID_PRINTABLES_URL,
@@ -385,6 +390,184 @@ class ExploreTests(BaseTestCase):
 
 		response = self.client.get(reverse("explore"))
 		self.assertEqual(list(response.context["projects"]), [busy])
+
+
+# The module, not the `projects` view that views.client re-exports under the
+# same name.
+project_views = importlib.import_module("atlantis_site.views.client.projects")
+
+
+class ExplorePaginationTests(BaseTestCase):
+	"""The shelf comes a page at a time, in one shuffle per visit."""
+
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("explorer")
+		self.client.force_login(self.user)
+		other = make_user("other")
+		self.total = EXPLORE_PER_PAGE + 6
+		self.projects = []
+		for n in range(self.total):
+			project = make_project(other, title=f"Project {n}")
+			Journal.objects.create(project=project, title="Lapse")
+			self.projects.append(project)
+
+	def _page(self, page=None):
+		params = {"page": page} if page is not None else {}
+		return self.client.get(reverse("explore"), params)
+
+	def _ids(self, response):
+		return [project.id for project in response.context["projects"]]
+
+	def test_first_page_is_one_page_and_links_to_more(self):
+		response = self._page()
+		self.assertEqual(len(self._ids(response)), EXPLORE_PER_PAGE)
+		self.assertContains(response, 'href="?page=2" data-more')
+		self.assertContains(response, "data-live-region")
+
+	def test_paging_on_walks_every_project_exactly_once(self):
+		first = self._ids(self._page())
+		second_response = self._page(2)
+		second = self._ids(second_response)
+		self.assertEqual(len(second), self.total - EXPLORE_PER_PAGE)
+		self.assertEqual(sorted(first + second), sorted(p.id for p in self.projects))
+		self.assertFalse(second_response.context["page_obj"].has_next())
+		self.assertNotContains(second_response, 'class="more-books"')
+
+	def test_paging_keeps_the_order_and_a_fresh_visit_reshuffles(self):
+		self._page()
+		seed = self.client.session[EXPLORE_SEED_KEY]
+		page_one = self._ids(self._page(1))
+		self.assertEqual(self.client.session[EXPLORE_SEED_KEY], seed)
+		self.assertEqual(self._ids(self._page(1)), page_one)
+
+		self._page()
+		self.assertNotEqual(self.client.session[EXPLORE_SEED_KEY], seed)
+
+	def test_a_page_past_the_end_lands_on_the_last(self):
+		self._page()
+		response = self._page(99)
+		self.assertEqual(response.status_code, 200)
+		self.assertEqual(len(self._ids(response)), self.total - EXPLORE_PER_PAGE)
+
+	def test_paging_without_a_seed_still_works(self):
+		response = self._page(2)
+		self.assertEqual(response.status_code, 200)
+		self.assertIn(EXPLORE_SEED_KEY, self.client.session)
+
+
+class LookoutRefreshTests(BaseTestCase):
+	"""The book shows the Lookouts we hold and asks Lookout off the request."""
+
+	def setUp(self):
+		super().setUp()
+		self.user = make_user("recorder")
+		self.client.force_login(self.user)
+		self.project = make_project(self.user)
+		self.session = make_lookout(self.project, minutes=10, owner=self.user, status=Timelapse.Status.ACTIVE)
+		self._make_stale(self.session)
+
+	def _make_stale(self, session):
+		Timelapse.objects.filter(pk=session.pk).update(
+			updated_at=timezone.now() - timedelta(minutes=5)
+		)
+
+	def _detail(self):
+		return self.client.get(reverse("project_detail", args=[self.project.id]))
+
+	def _payload(self, status="complete", seconds=1800):
+		return {"session": {"status": status}, "trackedSeconds": seconds, "screenshotCount": 12}
+
+	def test_the_page_renders_before_lookout_is_asked(self):
+		with patch.object(project_views, "run_in_background") as queued, \
+				patch.object(project_views.lookout, "get_internal_session") as ask:
+			response = self._detail()
+
+		self.assertEqual(response.status_code, 200)
+		ask.assert_not_called()
+		queued.assert_called_once_with(project_views._refresh_lookouts, [self.session.pk])
+		# What we held is what was drawn.
+		self.assertEqual(response.context["lookout_status"]["label"], "recording")
+
+	def test_the_refresh_lands_for_the_next_load(self):
+		with patch.object(
+			project_views.lookout, "get_internal_session", return_value=self._payload()
+		) as ask:
+			first = self._detail()
+		ask.assert_called_once_with(self.session.session_id)
+		# Inline under test, the job still ran after the page was built from
+		# the stored rows, so this load is the one behind.
+		self.assertEqual(first.context["lookout_status"]["label"], "recording")
+
+		self.session.refresh_from_db()
+		self.assertEqual(self.session.status, Timelapse.Status.COMPLETE)
+		self.assertEqual(self.session.tracked_seconds, 1800)
+		second = self._detail()
+		self.assertIn(self.session, second.context["pickable_timelapses"])
+		self.assertIsNone(second.context["lookout_status"])
+
+	def test_reloads_inside_the_window_ask_once(self):
+		with patch.object(
+			project_views.lookout, "get_internal_session",
+			side_effect=lookout.LookoutError("down"),
+		) as ask:
+			self._detail()
+			self._detail()
+			self._detail()
+		# A failed ask writes nothing to the row, so without the cache key
+		# every one of those loads would have asked again.
+		self.assertEqual(ask.call_count, 1)
+
+	def test_the_window_reopens_once_the_key_expires(self):
+		with patch.object(
+			project_views.lookout, "get_internal_session",
+			side_effect=lookout.LookoutError("down"),
+		) as ask:
+			self._detail()
+			cache.delete(f"lookout-refresh:{self.session.pk}")
+			self._detail()
+		self.assertEqual(ask.call_count, 2)
+
+	def test_lookout_being_down_does_not_take_the_page_with_it(self):
+		with patch.object(
+			project_views.lookout, "get_internal_session",
+			side_effect=lookout.LookoutError("down"),
+		):
+			response = self._detail()
+		self.assertEqual(response.status_code, 200)
+
+	def test_a_recently_heard_from_session_is_not_asked_about(self):
+		Timelapse.objects.filter(pk=self.session.pk).update(updated_at=timezone.now())
+		with patch.object(project_views.lookout, "get_internal_session") as ask:
+			self._detail()
+		ask.assert_not_called()
+
+	def test_at_most_three_are_asked_about_per_load(self):
+		for _ in range(4):
+			self._make_stale(make_lookout(
+				self.project, minutes=10, owner=self.user, status=Timelapse.Status.ACTIVE
+			))
+		with patch.object(
+			project_views.lookout, "get_internal_session",
+			return_value=self._payload(status="active", seconds=600),
+		) as ask:
+			self._detail()
+		self.assertEqual(ask.call_count, project_views.LOOKOUT_REFRESH_LIMIT)
+
+	def test_a_session_that_finished_meanwhile_is_left_alone(self):
+		# The recorder synced it between the page queueing the job and the job
+		# running: the job re-reads the row and finds nothing to ask.
+		Timelapse.objects.filter(pk=self.session.pk).update(status=Timelapse.Status.COMPLETE)
+		with patch.object(project_views.lookout, "get_internal_session") as ask:
+			project_views._refresh_lookouts([self.session.pk])
+		ask.assert_not_called()
+
+	def test_a_visitor_never_triggers_a_refresh(self):
+		self.client.force_login(make_user("visitor"))
+		make_journal(self.project)
+		with patch.object(project_views.lookout, "get_internal_session") as ask:
+			self.assertEqual(self._detail().status_code, 200)
+		ask.assert_not_called()
 
 
 class ProjectDetailVisitorTests(BaseTestCase):

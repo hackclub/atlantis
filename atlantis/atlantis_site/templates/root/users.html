@@ -8,11 +8,13 @@
     <h1>Users</h1>
     <h3>Manage Users</h3>
     <div class="admin-actions">
-        <form method="POST" action="{% url 'backfill_emails' %}" id="backfillEmailsForm">
+        <form method="POST" action="{% url 'backfill_emails' %}" id="backfillEmailsForm"
+              data-confirm="Send every user's full name and email to the Airtable Emails table?" data-confirm-ok="Send">
             {% csrf_token %}
             <button type="submit">Backfill emails to Airtable</button>
         </form>
-        <form method="POST" action="{% url 'invite_to_channels' %}" id="inviteChannelsForm">
+        <form method="POST" action="{% url 'invite_to_channels' %}" id="inviteChannelsForm"
+              data-confirm="Add every Slack-linked user to #atlantis-bulletin, #atlantis, #atlantis-help, and #atlantis-checkpoint?" data-confirm-ok="Add them">
             {% csrf_token %}
             <button type="submit">Add Slack users to Atlantis channels</button>
         </form>
@@ -91,7 +93,8 @@
                             data-group-ids="{% for group in user.groups.all %}{{ group.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
                         >edit user</button>
                         {% if user.hackclub_profile %}
-                        <form method="POST" action="{% url 'set_user_ban' user.id %}" class="ban-user-form" data-username="{{ user.hackclub_profile.slack_username|default:user.id }}" data-banning="{{ user.hackclub_profile.banned|yesno:'0,1' }}">
+                        <form method="POST" action="{% url 'set_user_ban' user.id %}" class="ban-user-form" data-username="{{ user.hackclub_profile.slack_username|default:user.id }}" data-banning="{{ user.hackclub_profile.banned|yesno:'0,1' }}"
+                              data-confirm="{{ user.hackclub_profile.banned|yesno:'Unban,Ban' }} {{ user.hackclub_profile.slack_username|default:user.id }}?" data-confirm-ok="{{ user.hackclub_profile.banned|yesno:'Unban,Ban' }}"{% if not user.hackclub_profile.banned %} data-confirm-danger{% endif %}>
                             {% csrf_token %}
                             {% if user.hackclub_profile.banned %}
                             <input type="hidden" name="banned" value="0">
@@ -108,7 +111,8 @@
             </tbody>
         </table>
     </div>
-    <p id="userSearchEmpty" hidden>No users match that Slack username.</p>
+    {% include "root/_pager.html" with page=page noun="users" %}
+    <p id="userSearchEmpty" hidden>{% if page.has_other_pages %}No users on this page match. Press Enter to search every page.{% else %}No users match that Slack username.{% endif %}</p>
 
     <dialog id="editUserPopup">
         <form method="POST" id="editUserForm" action="">
@@ -169,35 +173,6 @@
 
 <script>
     (function () {
-        const form = document.getElementById('backfillEmailsForm');
-        if (!form) return;
-        form.addEventListener('submit', (event) => {
-            if (!confirm("Send every user's full name and email to the Airtable Emails table?")) {
-                event.preventDefault();
-            }
-        });
-    })();
-
-    (function () {
-        const form = document.getElementById('inviteChannelsForm');
-        if (!form) return;
-        form.addEventListener('submit', (event) => {
-            if (!confirm("Add every Slack-linked user to #atlantis-bulletin, #atlantis, #atlantis-help, and #atlantis-checkpoint?")) {
-                event.preventDefault();
-            }
-        });
-    })();
-
-    document.querySelectorAll('.ban-user-form').forEach((form) => {
-        form.addEventListener('submit', (event) => {
-            const verb = form.dataset.banning === '1' ? 'Ban' : 'Unban';
-            if (!confirm(verb + ' ' + form.dataset.username + '?')) {
-                event.preventDefault();
-            }
-        });
-    });
-
-    (function () {
         const dialog = document.getElementById('editUserPopup');
         const form = document.getElementById('editUserForm');
         const title = document.getElementById('editUserPopupTitle');
@@ -246,7 +221,6 @@
         if (!input) return;
 
         const rows = Array.from(document.querySelectorAll('.users-table tbody tr'));
-        const searchForm = input.closest('form');
 
         function applyFilter() {
             const query = input.value.trim().toLowerCase();
@@ -260,7 +234,8 @@
             if (empty) empty.hidden = visibleCount !== 0;
         }
 
-        if (searchForm) searchForm.addEventListener('submit', (event) => event.preventDefault());
+        // Typing filters the rows on this page as you go; Enter submits the
+        // form, and the server searches every page.
         input.addEventListener('input', applyFilter);
         applyFilter();
     })();

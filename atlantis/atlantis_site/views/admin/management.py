@@ -1,6 +1,7 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
+from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
 from django.db.models import Count, Q, Sum
 from django.db import transaction
@@ -15,6 +16,12 @@ import os
 from ... import airtable, challenge, weeks
 from ...models import Journal, Profile, Project, Ship, Timelapse
 from ..helpers import check_perms, staff_member_required, invite_to_autojoin_channels_in_background, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, format_minutes, INT_FIELD_MAX, INT_FIELD_MIN, field_max_length, too_long
+
+# Rows per page on the admin's user and project tables. Big enough that a
+# search usually lands on one page; small enough that the page isn't the
+# whole database.
+ADMIN_PAGE_SIZE = 100
+
 
 @staff_member_required
 @check_perms(["atlantis_site.organizer"])
@@ -31,11 +38,16 @@ def users(request):
     if search_query:
         users = users.filter(hackclub_profile__slack_username__icontains=search_query)
 
+    # A page at a time: every row carries its groups and an edit button's
+    # worth of data attributes, and the table is everyone who ever logged in.
+    page = Paginator(users, ADMIN_PAGE_SIZE).get_page(request.GET.get("page"))
+
     default_pfp_url = os.environ["DEFAULT_PFP"]
     all_groups = Group.objects.all()
 
     return render(request, "root/users.html", {
-        "users": users,
+        "users": page.object_list,
+        "page": page,
         "default_pfp_url": default_pfp_url,
         "all_groups": all_groups,
         "search_query": search_query,
@@ -294,9 +306,10 @@ def manage_projects(request):
             | Q(owner__hackclub_profile__slack_username__icontains=search_query)
         )
 
-    # Per-project figures as three grouped queries for the whole table rather
-    # than three per row.
-    projects = list(projects)
+    # Per-project figures as three grouped queries for the page rather than
+    # three per row — and for this page only, not every project there is.
+    page = Paginator(projects, ADMIN_PAGE_SIZE).get_page(request.GET.get("page"))
+    projects = list(page.object_list)
     project_ids = [project.id for project in projects]
     tracked = dict(
         Timelapse.objects.filter(journal__project_id__in=project_ids)
@@ -330,6 +343,7 @@ def manage_projects(request):
 
     return render(request, "root/manage_projects.html", {
         "projects": projects,
+        "page": page,
         "default_pfp_url": default_pfp_url,
         "search_query": search_query,
     })
