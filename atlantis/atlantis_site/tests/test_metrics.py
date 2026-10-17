@@ -516,6 +516,29 @@ class MetricsStreakTests(BaseTestCase):
 		# Whoever is out isn't counted against this week.
 		self.assertEqual(stats["short"], 2)
 
+	def test_projects_and_ships_are_averaged_over_those_still_in(self):
+		# Wednesday of week 3: weeks 1 and 2 have closed.
+		now = datetime(2026, 10, 7, 12, tzinfo=EASTERN)
+		week_1 = datetime(2026, 9, 23, 10, tzinfo=EASTERN)
+		week_2 = datetime(2026, 9, 30, 10, tzinfo=EASTERN)
+		survivor = self._builder("survivor", (300, week_1), (300, week_2))
+		make_ship(survivor.projects.get())
+		make_ship(make_project(survivor))
+		make_project(survivor, deleted=True)
+		self._builder("steady", (300, week_1), (300, week_2))
+		# Out of the program: their projects and ships don't count.
+		dropped = self._builder("dropped", (60, week_1))
+		make_ship(dropped.projects.get())
+
+		stats = build_streak_stats(now)
+
+		self.assertEqual(stats["still_in"], 2)
+		# survivor's two live projects plus steady's one; the deleted one is left out.
+		self.assertEqual(stats["still_in_projects"], 3)
+		self.assertEqual(stats["still_in_shipped"], 2)
+		self.assertEqual(stats["avg_projects_still_in"], 1.5)
+		self.assertEqual(stats["avg_shipped_still_in"], 1.0)
+
 	def test_completed_by_week_counts_logged_hours_and_averages_them(self):
 		# Wednesday of week 2: week 1 has closed, week 2 is live.
 		now = datetime(2026, 10, 1, 12, tzinfo=EASTERN)

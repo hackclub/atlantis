@@ -168,6 +168,18 @@
                 <div class="stat-label">Weeks rescued</div>
                 <div class="stat-sub">closed short on logged time, met by savers or override</div>
             </div>
+            {% if streaks.avg_projects_still_in is not None %}{# absent from snapshots taken before it existed #}
+            <div class="stat-card">
+                <div class="stat-value">{{ streaks.avg_projects_still_in }}</div>
+                <div class="stat-label">Projects per person still in</div>
+                <div class="stat-sub">{{ streaks.still_in_projects }} project{{ streaks.still_in_projects|pluralize }} between them, deleted not counted</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ streaks.avg_shipped_still_in }}</div>
+                <div class="stat-label">Shipped projects per person still in</div>
+                <div class="stat-sub">{{ streaks.still_in_shipped }} shipped at least once, any review outcome</div>
+            </div>
+            {% endif %}
             {% if streaks.ended %}
             <div class="stat-card good">
                 <div class="stat-value">{{ streaks.printer_unlocked }}</div>

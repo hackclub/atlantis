@@ -118,9 +118,18 @@ def build_streak_stats(now):
     pace" is the dropping-out forecast: someone whose hours so far, carried on
     at the same rate to Sunday midnight, come up short of the five.
     """
-    field = list(challenge.standings(now).values())
+    standings = challenge.standings(now)
+    field = list(standings.values())
     still_in = [s for s in field if not s.eliminated]
+    still_in_ids = [owner for owner, s in standings.items() if not s.eliminated]
     live_index = weeks.current_week(now)
+
+    # What the people still in have built: their projects, deleted ones left
+    # out, and how many of those have gone out in a ship at all, whatever
+    # review made of it — the same "shipped" the funnel counts.
+    their_projects = Project.objects.filter(owner_id__in=still_in_ids, deleted=False)
+    still_in_projects = their_projects.count()
+    still_in_shipped = their_projects.filter(ships__isnull=False).distinct().count()
 
     stats = {
         "started": weeks.has_started(now),
@@ -133,6 +142,10 @@ def build_streak_stats(now):
         "live_label": weeks.week_label(live_index) if live_index else "",
         "weekly_hours": weeks.WEEKLY_HOURS,
         "printer_unlocked": sum(1 for s in still_in if s.printer_unlocked),
+        "still_in_projects": still_in_projects,
+        "still_in_shipped": still_in_shipped,
+        "avg_projects_still_in": _avg(still_in_projects, len(still_in)),
+        "avg_shipped_still_in": _avg(still_in_shipped, len(still_in)),
     }
 
     # Weeks that closed short on logged time and were met anyway: savers,
