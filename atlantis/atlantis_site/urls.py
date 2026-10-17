@@ -83,6 +83,7 @@ urlpatterns = [
     path("root/users", users, name="users"),
     path("root/users/edit/<int:user_id>", edit_user, name="edit_user"),
     path("root/users/ban/<int:user_id>", set_user_ban, name="set_user_ban"),
+    path("root/users/<int:user_id>/address/", view_user_address, name="view_user_address"),
     path("root/users/backfill_emails", backfill_emails, name="backfill_emails"),
     path("root/users/invite_to_channels", invite_to_channels, name="invite_to_channels"),
     path("root/users/unfinished_hours.csv", unfinished_hours_csv, name="unfinished_hours_csv"),

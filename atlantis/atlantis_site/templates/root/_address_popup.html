@@ -1,0 +1,114 @@
+{% comment %}
+One popup for every "View address" button on the page, so looking one up
+never reflows a table. Any `.view-address-btn` is wired to it:
+  data-url              the POST endpoint (view_order_address, view_user_address)
+  data-address-label    the line under "Ship to": whose address, for what
+  data-address-confirm  optional; asked first, and nothing is fetched on a no
+
+Fetched on a click rather than a hover: each look is an audit-logged read of
+someone's address, and a hover would log every passing mouse. Once open, each
+line is blurred until it is hovered (or focused, for keyboards and taps), so
+an address on a shared screen isn't read over a shoulder.
+{% endcomment %}
+<dialog class="rv-shortcuts address-popup" id="address-popup">
+    <h2>Ship to</h2>
+    <p class="address-popup-order" data-address-order></p>
+    <div class="address-box" data-address-box hidden></div>
+    <p class="address-popup-hint" data-address-hint hidden>Hover a line to reveal it</p>
+    <div class="address-popup-actions">
+        {# autofocus, or showModal focuses the first line and reveals it on open. #}
+        <form method="dialog"><button class="rv-btn rv-btn-primary" autofocus>Done</button></form>
+    </div>
+</dialog>
+
+<template id="address-copy-icon">
+    <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect>
+        <path d="M10.5 5.5V3.5A1.5 1.5 0 0 0 9 2H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2"></path>
+    </svg>
+</template>
+
+<script>
+    (function () {
+        var dialog = document.getElementById("address-popup");
+        var box = dialog.querySelector("[data-address-box]");
+        var hint = dialog.querySelector("[data-address-hint]");
+        var icon = document.getElementById("address-copy-icon");
+
+        // viewAddress draws one bare div per line. Each becomes its own
+        // veiled text with a copy button beside it, so revealing or copying
+        // the street doesn't show the phone number too.
+        function veilLines() {
+            box.querySelectorAll(":scope > div").forEach(function (line) {
+                var value = line.textContent;
+                line.textContent = "";
+                line.classList.add("address-line");
+
+                var text = document.createElement("span");
+                text.className = "address-line-text";
+                text.tabIndex = 0;
+                text.textContent = value;
+
+                var copy = document.createElement("button");
+                copy.type = "button";
+                copy.className = "address-line-copy";
+                copy.title = "Copy";
+                copy.setAttribute("aria-label", "Copy this line");
+                copy.appendChild(icon.content.cloneNode(true));
+                copy.addEventListener("click", function () {
+                    navigator.clipboard.writeText(value).then(function () {
+                        copy.classList.add("is-copied");
+                        setTimeout(function () { copy.classList.remove("is-copied"); }, 1200);
+                    }, function () {
+                        window.Atlantis.toast("Couldn't copy. Select the line instead.", "bad");
+                    });
+                });
+
+                line.appendChild(text);
+                line.appendChild(copy);
+            });
+        }
+
+        function show(btn) {
+            // viewAddress toggles a box it owns; here the box is shared and
+            // the dialog does the showing, so start it closed each time and
+            // put the button's label back afterwards.
+            box.hidden = true;
+            dialog.querySelector("[data-address-order]").textContent = btn.dataset.addressLabel || "";
+            return window.Atlantis.viewAddress(btn, box, {
+                noAddress: btn.dataset.addressNone || "No address on file.",
+                unavailable: "Couldn't fetch this address from Hack Club identity. They may need to log in again.",
+            }).then(function () {
+                btn.textContent = btn.dataset.atlShowLabel;
+                // Only an address is veiled; a "no address on file" reads as is.
+                var found = Boolean(box.querySelector("div:not(.address-contact)"));
+                if (found) veilLines();
+                hint.hidden = !found;
+                dialog.showModal();
+            });
+        }
+
+        document.querySelectorAll(".view-address-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                if (!btn.dataset.addressConfirm) return show(btn);
+                window.Atlantis.confirm(btn.dataset.addressConfirm, { ok: "View address" }).then(function (ok) {
+                    if (ok) show(btn);
+                });
+            });
+        });
+
+        // Nothing typed in here, so a click on the backdrop can safely close it.
+        // The dialog's own padding is also the dialog, hence the bounds check.
+        dialog.addEventListener("click", function (event) {
+            if (event.target !== dialog) return;
+            var r = dialog.getBoundingClientRect();
+            var inside = event.clientX >= r.left && event.clientX <= r.right
+                && event.clientY >= r.top && event.clientY <= r.bottom;
+            if (!inside) dialog.close();
+        });
+        dialog.addEventListener("close", function () {
+            box.textContent = "";
+            box.hidden = true;
+        });
+    })();
+</script>

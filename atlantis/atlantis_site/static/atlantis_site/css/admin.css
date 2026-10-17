@@ -804,13 +804,6 @@
     color: var(--oc-on-accent);
 }
 
-/* Sits outside the .order-actions form, so it needs its own gap to line up
-   with the action links stacked above it. */
-.root-page .view-address-btn {
-    display: block;
-    margin-top: 8px;
-}
-
 .root-page .address-box {
     margin-top: 8px;
     padding: 10px 12px;

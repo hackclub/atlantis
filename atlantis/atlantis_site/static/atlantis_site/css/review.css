@@ -36,6 +36,12 @@
     --rv-accent-soft: var(--oc-sand);
 }
 
+/* Fulfillment: not a review desk, but laid out like one. */
+.root-page .rv-accent-good {
+    --rv-accent: var(--oc-good);
+    --rv-accent-soft: var(--oc-good-soft);
+}
+
 /* ============================================================
    The shell
    ============================================================ */
@@ -2043,6 +2049,189 @@
     color: var(--oc-ink-3);
     font-size: 12px;
     font-weight: 500;
+}
+
+/* ---------- the fulfillment desk ---------- */
+
+/* The desk's tables, with the rows left as rows: an order has no page of its
+   own to open, so nothing here is a link the way a ship row is. */
+.root-page .ff-table td {
+    vertical-align: middle;
+}
+
+.root-page .ff-cover {
+    width: 42px;
+    height: 42px;
+}
+
+.root-page .ff-kind {
+    margin-top: 4px;
+}
+
+/* What the buyer typed at checkout, and what an admin (or snack_grants.py)
+   left on the order — the two read differently, so they are labelled. */
+.root-page .ff-note {
+    display: block;
+    margin-top: 4px;
+    max-width: 46ch;
+    font-size: 12px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .ff-note-label {
+    margin-right: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--oc-ink-3);
+}
+
+.root-page .ff-note-admin {
+    color: var(--oc-sand-ink);
+}
+
+.root-page .ff-buyer .view-address-btn {
+    display: inline-flex;
+    margin: 4px 0 0 -9px;
+}
+
+
+.root-page .ff-col-actions {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.root-page .ff-actions {
+    display: flex;
+    gap: 6px;
+    margin: 0;
+}
+
+/* Order statuses in the verdict chip's shape and colours. */
+.root-page .ff-status-F {
+    border-color: var(--oc-good);
+    background: var(--oc-good-soft);
+    color: var(--oc-good);
+}
+
+.root-page .ff-status-D {
+    border-color: var(--oc-bad);
+    background: var(--oc-bad-soft);
+    color: var(--oc-bad);
+}
+
+.root-page .ff-status-R {
+    border-color: var(--oc-warn);
+    background: var(--oc-warn-soft);
+    color: var(--oc-warn);
+}
+
+/* ---------- the address popup ---------- */
+
+/* _address_popup.html, on fulfillment and the users page: the shortcut
+   sheet's frame, with the address box inside it drawn as the card it is
+   everywhere else. Here rather than admin.css because it specialises
+   .rv-shortcuts, which this file defines. */
+.root-page .address-popup {
+    width: min(380px, 92vw);
+}
+
+.root-page .address-popup h2 {
+    margin-bottom: 4px;
+}
+
+.root-page .address-popup-order {
+    margin: 0 0 12px;
+    font-size: 12.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .address-popup .address-box {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+/* One line of the address: its text, veiled until that line is hovered or
+   focused, and a copy button that stays sharp beside it. */
+.root-page .address-line {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 0 -6px;
+    padding: 1px 6px;
+    border-radius: 5px;
+}
+
+.root-page .address-line:hover,
+.root-page .address-line:focus-within {
+    background: var(--oc-shallow);
+}
+
+.root-page .address-line-text {
+    min-width: 0;
+    filter: blur(5px);
+    cursor: default;
+    transition: filter 120ms ease;
+}
+
+.root-page .address-line-text:focus {
+    outline: none;
+}
+
+.root-page .address-line:hover .address-line-text,
+.root-page .address-line:focus-within .address-line-text {
+    filter: none;
+}
+
+.root-page .address-line-copy {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: none;
+    color: var(--oc-ink-3);
+    cursor: pointer;
+}
+
+.root-page .address-line-copy:hover {
+    border-color: var(--oc-line-2);
+    background: var(--oc-surface-2);
+    color: var(--oc-ink);
+}
+
+.root-page .address-line-copy:focus-visible {
+    outline: 2px solid var(--oc-tide);
+    outline-offset: 1px;
+}
+
+.root-page .address-line-copy.is-copied {
+    border-color: var(--oc-good);
+    color: var(--oc-good);
+}
+
+.root-page .address-popup-hint {
+    margin: 6px 0 0;
+    font-size: 11.5px;
+    color: var(--oc-ink-3);
+}
+
+.root-page .address-popup-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.root-page .address-popup-actions form {
+    margin: 0;
 }
 
 /* ============================================================

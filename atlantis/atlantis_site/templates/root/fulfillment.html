@@ -4,140 +4,114 @@
 {% block title %}Fulfillment{% endblock %}
 
 {% block content %}
-<div class="content">
-    <h1>Fulfillment</h1>
-    <section class="order-list">
-        <h3>Pending</h3>
-        {% if pending_orders %}
-            <div class="table-scroll">
-                <table class="users-table">
-                    <thead>
-                        <tr>
-                            <th>Item</th>
-                            <th>Cost</th>
-                            <th>Ordered by</th>
-                            <th>Qty</th>
-                            <th>Status</th>
-                            <th>User notes</th>
-                            <th>Fulfiller</th>
-                            <th>Admin notes</th>
-                            <th>Created</th>
-                            <th>Fulfilled</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for order in pending_orders %}
-                        <tr data-order-id="{{ order.id }}">
-                            <td>
-                                {% if order.item.imageUrl %}
-                                    <img src="{{ order.item.imageUrl }}" alt="{{ order.item.name }}" loading="lazy" style="width: 40px; height: 40px; object-fit: cover; display: inline-block; vertical-align: middle; margin-right: 6px;">
-                                {% endif %}
-                                <a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
-                            </td>
-                            <td>{{ order.item.cost }} pearl</td>
-                            <td>{{ order.owner.get_full_name|default:order.owner.username }}</td>
-                            <td>{{ order.quantity }}</td>
-                            <td>{{ order.get_status_display }}</td>
-                            <td>{{ order.user_notes|default:"None" }}</td>
-                            <td>{{ order.fulfiller }}</td>
-                            <td>{{ order.admin_notes|default:"None" }}</td>
-                            <td>{{ order.created_at|date:"M j, Y" }}</td>
-                            <td>{% if order.fulfilled_at %}{{ order.fulfilled_at|date:"M j, Y" }}{% else %}not yet{% endif %}</td>
-                            <td>
-                                <form action="{% url 'update_order_status' order.id %}" method="post" class="order-actions">
-                                    {% csrf_token %}
-                                    <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
-                                        <button type="submit" name="action" value="pending" class="link-button">Mark pending</button>
-                                        <button type="submit" name="action" value="fulfilled" class="link-button">Mark fulfilled</button>
-                                        <button type="submit" name="action" value="denied" class="link-button">Deny</button>
-                                        <button type="submit" name="action" value="refunded" class="link-button">Refund</button>
-                                    </div>
-                                </form>
-                                <button type="button" class="link-button view-address-btn"
-                                        data-url="{% url 'view_order_address' order.id %}">View Address</button>
-                                <div class="address-box" hidden></div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        {% else %}
-            <p>No pending orders yet.</p>
-        {% endif %}
+<div class="content rq ff">
+    {% include "root/_rv_queue_header.html" with blurb="Shop orders, printer claims and snack grants waiting to be sent out. Oldest first." %}
+
+    <div class="rq-filters">
+        <form class="rq-search" method="get" role="search">
+            {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
+            <input type="search" name="q" value="{{ filter_query }}" maxlength="{{ filter_search_max }}"
+                   placeholder="Search item, #order or buyer" aria-label="Search orders">
+            {% if filter_query %}<a class="rq-filter-clear" href="{% querystring q=None page=None %}">Clear</a>{% endif %}
+        </form>
+    </div>
+
+    <section class="rq-section">
+        <div class="rq-section-head">
+            <h2 class="rq-section-title">
+                Pending orders
+                {% if pending_orders %}<span class="rq-count">{{ pending_orders|length }}</span>{% endif %}
+            </h2>
+        </div>
+
+        <div class="rq-table-wrap">
+            <table class="rq-table ff-table">
+                <thead>
+                    <tr>
+                        <th class="rq-col-num">#</th>
+                        <th>Item</th>
+                        <th>Buyer</th>
+                        <th class="rq-col-num">Qty</th>
+                        <th>Cost</th>
+                        <th>Waiting</th>
+                        <th class="ff-col-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in pending_orders %}
+                        {% include "root/_ff_order_row.html" with pending=True %}
+                    {% empty %}
+                        <tr><td colspan="7" class="rq-empty">{% if filter_query %}No pending orders match that search.{% else %}Nothing waiting. Every order has been sent out.{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </section>
-    <section class="order-list">
-        <h3>Other Orders</h3>
-        {% if other_orders %}
-            <div class="table-scroll">
-                <table class="users-table">
-                    <thead>
-                        <tr>
-                            <th>Item</th>
-                            <th>Cost</th>
-                            <th>Ordered by</th>
-                            <th>Qty</th>
-                            <th>Status</th>
-                            <th>User notes</th>
-                            <th>Fulfiller</th>
-                            <th>Admin notes</th>
-                            <th>Created</th>
-                            <th>Fulfilled</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for order in other_orders %}
-                        <tr data-order-id="{{ order.id }}">
-                            <td>
-                                {% if order.item.imageUrl %}
-                                    <img src="{{ order.item.imageUrl }}" alt="{{ order.item.name }}" loading="lazy" style="width: 40px; height: 40px; object-fit: cover; display: inline-block; vertical-align: middle; margin-right: 6px;">
-                                {% endif %}
-                                <a href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
-                            </td>
-                            <td>{{ order.item.cost }} pearls</td>
-                            <td>{{ order.owner.get_full_name|default:order.owner.username }}</td>
-                            <td>{{ order.quantity }}</td>
-                            <td>{{ order.get_status_display }}</td>
-                            <td>{{ order.user_notes|default:"None" }}</td>
-                            <td>{{ order.fulfiller.hackclub_profile.slack_username }}</td>
-                            <td>{{ order.admin_notes|default:"None" }}</td>
-                            <td>{{ order.created_at|date:"M j, Y" }}</td>
-                            <td>{% if order.fulfilled_at %}{{ order.fulfilled_at|date:"M j, Y" }}{% else %}not yet{% endif %}</td>
-                            <td>
-                                <form action="{% url 'update_order_status' order.id %}" method="post" class="order-actions">
-                                    {% csrf_token %}
-                                    <div style="display: flex; flex-direction: column; gap: 8px; align-items: flex-start;">
-                                        <button type="submit" name="action" value="pending" class="link-button">Mark pending</button>
-                                        <button type="submit" name="action" value="fulfilled" class="link-button">Mark fulfilled</button>
-                                        <button type="submit" name="action" value="denied" class="link-button">Deny</button>
-                                        <button type="submit" name="action" value="refunded" class="link-button">Refund</button>
-                                    </div>
-                                </form>
-                                <button type="button" class="link-button view-address-btn"
-                                        data-url="{% url 'view_order_address' order.id %}">View Address</button>
-                                <div class="address-box" hidden></div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+
+    <section class="rq-section">
+        <div class="rq-section-head">
+            <h2 class="rq-section-title">Decided orders</h2>
+            <nav class="rq-filter" aria-label="Filter by status">
+                {% for option in filter_options %}
+                    <a href="{% querystring status=option.value|default:None page=None %}"{% if option.active %} aria-current="true"{% endif %}>
+                        {{ option.label }}<span class="rq-filter-count">{{ option.count }}</span>
+                    </a>
+                {% endfor %}
+            </nav>
+        </div>
+
+        <div class="rq-table-wrap">
+            <table class="rq-table ff-table">
+                <thead>
+                    <tr>
+                        <th class="rq-col-num">#</th>
+                        <th>Item</th>
+                        <th>Buyer</th>
+                        <th class="rq-col-num">Qty</th>
+                        <th>Cost</th>
+                        <th>Status</th>
+                        <th class="ff-col-actions">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in other_page %}
+                        {% include "root/_ff_order_row.html" with pending=False %}
+                    {% empty %}
+                        <tr><td colspan="7" class="rq-empty">{% if filter_query or status_filter %}No decided orders match that filter.{% else %}Nothing decided yet.{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if other_page.paginator.count %}
+            <div class="rq-pager">
+                <span class="rq-pager-count">
+                    {% if other_page.paginator.num_pages > 1 %}
+                        Showing {{ other_page.start_index }}&ndash;{{ other_page.end_index }}
+                        of {{ other_page.paginator.count }} orders
+                    {% else %}
+                        {{ other_page.paginator.count }} order{{ other_page.paginator.count|pluralize }}
+                    {% endif %}
+                </span>
+                {% if other_page.paginator.num_pages > 1 %}
+                    <span class="rq-pager-nav">
+                        {% if other_page.has_previous %}
+                            <a class="rv-btn rv-btn-sm" href="{% querystring page=other_page.previous_page_number %}">Previous</a>
+                        {% else %}
+                            <span class="rv-btn rv-btn-sm" aria-disabled="true">Previous</span>
+                        {% endif %}
+                        <span class="rq-pager-at">{{ other_page.number }} / {{ other_page.paginator.num_pages }}</span>
+                        {% if other_page.has_next %}
+                            <a class="rv-btn rv-btn-sm" href="{% querystring page=other_page.next_page_number %}">Next</a>
+                        {% else %}
+                            <span class="rv-btn rv-btn-sm" aria-disabled="true">Next</span>
+                        {% endif %}
+                    </span>
+                {% endif %}
             </div>
-        {% else %}
-            <p>No other orders yet.</p>
         {% endif %}
     </section>
 </div>
 
-<script>
-    document.querySelectorAll(".view-address-btn").forEach(function (btn) {
-        btn.addEventListener("click", function () {
-            window.Atlantis.viewAddress(btn, btn.nextElementSibling, {
-                noAddress: "No address on file for this order.",
-                unavailable: "Couldn't fetch this address from Hack Club identity. The buyer may need to log in again.",
-            });
-        });
-    });
-</script>
+{% include "root/_address_popup.html" %}
 {% endblock %}

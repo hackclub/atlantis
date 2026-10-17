@@ -1,3 +1,4 @@
+import os
 from unittest.mock import patch
 
 from django.urls import reverse
@@ -303,6 +304,55 @@ class FulfillmentDashTests(BaseTestCase):
 		self.assertEqual(list(response.context["pending_orders"]), [pending])
 		self.assertEqual(list(response.context["other_orders"]), [fulfilled])
 
+	def test_pending_is_oldest_first(self):
+		first = Order.objects.create(owner=self.buyer, item=self.item)
+		second = Order.objects.create(owner=self.buyer, item=self.item)
+		response = self.client.get(reverse("fulfillment_dash"))
+		self.assertEqual(response.context["pending_orders"], [first, second])
+
+	def test_search_narrows_both_tables(self):
+		other_item = Item.objects.create(name="Widget", description="x", cost=5)
+		match = Order.objects.create(owner=self.buyer, item=other_item)
+		Order.objects.create(owner=self.buyer, item=self.item)
+		response = self.client.get(reverse("fulfillment_dash"), {"q": "widg"})
+		self.assertEqual(response.context["pending_orders"], [match])
+		response = self.client.get(reverse("fulfillment_dash"), {"q": f"#{match.id}"})
+		self.assertEqual(response.context["pending_orders"], [match])
+
+	def test_status_tab_filters_decided_orders(self):
+		Order.objects.create(owner=self.buyer, item=self.item, status=Order.OrderStatus.FULFILLED)
+		denied = Order.objects.create(owner=self.buyer, item=self.item, status=Order.OrderStatus.DENIED)
+		response = self.client.get(reverse("fulfillment_dash"), {"status": "D"})
+		self.assertEqual(list(response.context["other_page"]), [denied])
+		counts = {o["label"]: o["count"] for o in response.context["filter_options"]}
+		self.assertEqual(counts, {"All": 2, "Fulfilled": 1, "Denied": 1, "Refunded": 0})
+
+	def test_renders_every_kind_of_row(self):
+		printer = Item.objects.create(name="Printer", description="x", cost=0, kind=Item.Kind.PRINTER, printer_key="t:p")
+		Order.objects.create(owner=self.buyer, item=printer, user_notes="leave at door", admin_notes="from T1")
+		for status in Order.OrderStatus.values:
+			Order.objects.create(owner=self.buyer, item=self.item, status=status, refunded=status == "R")
+		response = self.client.get(reverse("fulfillment_dash"))
+		self.assertContains(response, "printer claim")
+		self.assertContains(response, "leave at door")
+		self.assertContains(response, "Refunded, locked")
+
+	def test_status_change_returns_to_the_same_view(self):
+		order = Order.objects.create(owner=self.buyer, item=self.item)
+		back = reverse("fulfillment_dash") + "?status=F&page=2"
+		response = self.client.post(
+			reverse("update_order_status", args=[order.id]), {"action": "fulfilled", "next": back}
+		)
+		self.assertRedirects(response, back, fetch_redirect_response=False)
+
+	def test_status_change_ignores_an_offsite_next(self):
+		order = Order.objects.create(owner=self.buyer, item=self.item)
+		response = self.client.post(
+			reverse("update_order_status", args=[order.id]),
+			{"action": "fulfilled", "next": "https://evil.example/"},
+		)
+		self.assertRedirects(response, reverse("fulfillment_dash"), fetch_redirect_response=False)
+
 
 class UpdateOrderStatusTests(BaseTestCase):
 	def setUp(self):
@@ -512,3 +562,71 @@ class ViewOrderAddressTests(BaseTestCase):
 		self.assertEqual(
 			self.client.post(reverse("view_order_address", args=[9999])).status_code, 404
 		)
+
+
+class ViewUserAddressTests(BaseTestCase):
+	"""The users page's lookup: same HCA fetch, its own audit trail."""
+
+	def setUp(self):
+		super().setUp()
+		self.admin = grant_perms(make_user("organizer"), "organizer")
+		self.client.force_login(self.admin)
+		self.person = make_user("person", slack_id="U0PERSON")
+
+
+	def _view(self, user=None):
+		return self.client.post(reverse("view_user_address", args=[(user or self.person).id]))
+
+	def test_organizer_perm_required(self):
+		# Fulfillment can see a buyer's address on an order, not anyone's.
+		self.client.force_login(grant_perms(make_user("fulfiller"), "fulfillment"))
+		self.assertEqual(self._view().status_code, 302)
+
+	def test_get_not_allowed(self):
+		self.assertEqual(
+			self.client.get(reverse("view_user_address", args=[self.person.id])).status_code, 405
+		)
+
+	@patch.object(admin_shop, "fetch_userinfo", return_value=USERINFO)
+	def test_returns_the_users_primary_address_and_contact(self, mock_fetch):
+		body = self._view().json()
+		self.assertEqual(body["address"]["lines"], [
+			"Test Person", "15 Falls Rd", "Shelburne, VT 05482", "US",
+		])
+		self.assertEqual(body["contact"]["email"], "test.person@example.com")
+		self.assertEqual(mock_fetch.call_args.args[0].user, self.person)
+
+	@patch.object(admin_shop, "fetch_userinfo", return_value=USERINFO)
+	def test_viewing_an_address_is_audit_logged(self, mock_fetch):
+		self._view()
+		log = AuditLog.objects.get(action="view_user_address")
+		self.assertEqual(log.actor, self.admin)
+		self.assertEqual(log.target, f"User #{self.person.id}")
+		self.assertEqual(log.metadata["user_id"], self.person.id)
+		self.assertEqual(log.metadata["address_id"], "adr_1")
+
+	@patch.object(admin_shop, "fetch_userinfo", return_value={"name": "Test Person"})
+	def test_user_without_an_address_is_not_audit_logged(self, mock_fetch):
+		response = self._view()
+		self.assertEqual(response.status_code, 404)
+		self.assertEqual(response.json()["error"], "no_address")
+		self.assertFalse(AuditLog.objects.filter(action="view_user_address").exists())
+
+	@patch.object(admin_shop, "fetch_userinfo", side_effect=IdentityUnavailable("token expired"))
+	def test_unavailable_identity_is_not_audit_logged(self, mock_fetch):
+		self.assertEqual(self._view().status_code, 503)
+		self.assertFalse(AuditLog.objects.filter(action="view_user_address").exists())
+
+	def test_unknown_user_404(self):
+		self.assertEqual(
+			self.client.post(reverse("view_user_address", args=[999999])).status_code, 404
+		)
+
+	def test_users_page_asks_before_fetching(self):
+		with patch.dict(os.environ, {"DEFAULT_PFP": "https://example.com/pfp.png"}):
+			response = self.client.get(reverse("users"))
+		self.assertContains(response, reverse("view_user_address", args=[self.person.id]))
+		self.assertContains(response, "data-address-confirm=")
+		self.assertContains(response, 'id="address-popup"')
+		# Rendering the page fetches nothing and logs nothing.
+		self.assertFalse(AuditLog.objects.filter(action="view_user_address").exists())

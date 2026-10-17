@@ -1,10 +1,14 @@
+from datetime import timedelta
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.contrib import messages
+from django.core.paginator import Paginator
+from django.urls import reverse
 from django.utils import timezone
 from django.db import transaction
 from django.http import JsonResponse
-from django.db.models import Exists, OuterRef
+from django.db.models import Count, Exists, Min, OuterRef, Q
 
 from ...models import Profile, Item, Order, SaverCredit, ShopCategory
 from ...crypto import format_address
@@ -12,7 +16,7 @@ from ...hca import (
     IdentityUnavailable, extract_addresses, extract_contact, extract_phone,
     fetch_userinfo, select_address,
 )
-from .queue import forget_pending_counts
+from .queue import age_bucket, age_display, forget_pending_counts
 from ..helpers import check_perms, staff_member_required, record_audit, run_in_background, send_slack_dm, is_valid_image_url, INT_FIELD_MAX, field_max_length, too_long
 
 @staff_member_required
@@ -36,19 +40,142 @@ def shop_dash(request):
         "printer_item_count": Item.objects.filter(kind=Item.Kind.PRINTER, deleted=False).count(),
     })
 
+# Days an order may wait before its row is called out as overdue. Nothing
+# enforces it; it only decides when the waiting time turns amber, then red.
+FULFILLMENT_SLA_DAYS = 7
+
+# One page of the decided-orders table. The pending queue is never paged: it
+# is the work, and all of it should be on screen.
+ORDERS_PER_PAGE = 50
+
+ORDER_SEARCH_MAX_LENGTH = 100
+
+# The decided table's status tabs, in the order they are drawn.
+DECIDED_FILTERS = (
+    ("", "All"),
+    (Order.OrderStatus.FULFILLED, "Fulfilled"),
+    (Order.OrderStatus.DENIED, "Denied"),
+    (Order.OrderStatus.REFUNDED, "Refunded"),
+)
+
+
+def _search_orders(orders, query):
+    """Narrow orders to those matching `query`: an #id, an item, or a buyer."""
+    if not query:
+        return orders
+    order_id = query.lstrip("#")
+    if order_id.isdigit():
+        return orders.filter(id=int(order_id))
+    return orders.filter(
+        Q(item__name__icontains=query)
+        | Q(owner__username__icontains=query)
+        | Q(owner__first_name__icontains=query)
+        | Q(owner__last_name__icontains=query)
+        | Q(owner__hackclub_profile__slack_username__icontains=query)
+    )
+
+
+def _order_rows(orders):
+    """Stamp each order with what its row prints that isn't a field."""
+    for order in orders:
+        order.total_cost = order.cost * order.quantity
+        order.age_display = age_display(order.created_at)
+        order.age_bucket = age_bucket(order.created_at, FULFILLMENT_SLA_DAYS)
+    return orders
+
+
 @staff_member_required
 @check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])
-def fulfillment_dash(request):    
-    orders = Order.objects.select_related("item", "owner").order_by("-created_at")
-    pending_orders = orders.filter(status=Order.OrderStatus.PENDING)
-    other_orders = orders.exclude(status=Order.OrderStatus.PENDING)
-    profile = request.user.hackclub_profile
+def fulfillment_dash(request):
+    query = request.GET.get("q", "").strip()[:ORDER_SEARCH_MAX_LENGTH]
+    status_filter = request.GET.get("status", "")
+    if status_filter not in dict(DECIDED_FILTERS):
+        status_filter = ""
+
+    orders = _search_orders(
+        Order.objects.select_related(
+            "item", "owner__hackclub_profile", "fulfiller__hackclub_profile"
+        ),
+        query,
+    )
+    # The queue is worked oldest first, like every other desk; what has been
+    # decided reads newest first.
+    pending_orders = _order_rows(list(
+        orders.filter(status=Order.OrderStatus.PENDING).order_by("created_at")
+    ))
+    other_orders = orders.exclude(status=Order.OrderStatus.PENDING).order_by("-created_at")
+
+    decided_counts = dict(
+        other_orders.order_by().values_list("status").annotate(n=Count("id"))
+    )
+    filter_options = [
+        {
+            "value": value,
+            "label": label,
+            "count": sum(decided_counts.values()) if not value else decided_counts.get(value, 0),
+            "active": value == status_filter,
+        }
+        for value, label in DECIDED_FILTERS
+    ]
+    if status_filter:
+        other_orders = other_orders.filter(status=status_filter)
+    other_page = Paginator(other_orders, ORDERS_PER_PAGE).get_page(request.GET.get("page"))
+    _order_rows(other_page.object_list)
+
+    # The header is about the queue as a whole, so it ignores the search.
+    all_pending = Order.objects.filter(status=Order.OrderStatus.PENDING)
+    oldest = all_pending.aggregate(oldest=Min("created_at"))["oldest"]
+    week_ago = timezone.now() - timedelta(days=7)
+    stat_cards = [
+        {
+            "label": "Waiting",
+            "value": all_pending.count(),
+            "description": "orders not yet sent out",
+        },
+        {
+            "label": "Oldest",
+            "value": age_display(oldest) if oldest else None,
+            "description": f"against a {FULFILLMENT_SLA_DAYS}d SLA",
+            "breached": oldest is not None and age_bucket(oldest, FULFILLMENT_SLA_DAYS) == "overdue",
+        },
+        {
+            "label": "Fulfilled this week",
+            "value": Order.objects.filter(
+                status=Order.OrderStatus.FULFILLED, fulfilled_at__gte=week_ago
+            ).count(),
+            "description": "marked fulfilled in the last 7 days",
+        },
+        {
+            "label": "Yours this week",
+            "value": Order.objects.filter(
+                status=Order.OrderStatus.FULFILLED, fulfilled_at__gte=week_ago,
+                fulfiller=request.user,
+            ).count(),
+            "description": "fulfilled by you in the last 7 days",
+        },
+    ]
 
     return render(request, "root/fulfillment.html", {
         "pending_orders": pending_orders,
         "other_orders": other_orders,
-        "profile": profile,
+        "other_page": other_page,
+        "filter_options": filter_options,
+        "status_filter": status_filter,
+        "filter_query": query,
+        "filter_search_max": ORDER_SEARCH_MAX_LENGTH,
+        "stat_cards": stat_cards,
+        "sla_days": FULFILLMENT_SLA_DAYS,
+        "queue_label": "Fulfillment",
+        "queue_short": "Shop",
+        "queue_accent": "good",
     })
+
+def _back_to_dash(request):
+    """Back to the dash as it was: same search, same tab, same page."""
+    next_url = request.POST.get("next", "")
+    if next_url.startswith(reverse("fulfillment_dash")):
+        return redirect(next_url)
+    return redirect("fulfillment_dash")
 
 @staff_member_required
 @require_POST
@@ -65,7 +192,7 @@ def update_order_status(request, order_id):
 
     if action not in status_map:
         messages.error(request, "Invalid order action.")
-        return redirect("fulfillment_dash")
+        return _back_to_dash(request)
     
     order = get_object_or_404(Order, id=order_id)
 
@@ -83,11 +210,11 @@ def update_order_status(request, order_id):
         if order.refunded:
             order.status = prev_status
             messages.error(request, "This order has already been refunded and cannot be further edited.")
-            return redirect("fulfillment_dash")
+            return _back_to_dash(request)
         if prev_status == order.status:
             order.status = prev_status
             messages.error(request, f"Order status is already { {'P': 'pending', 'D': 'denied', 'F': 'fulfilled', 'R': 'refunded'}.get(order.status) }!")
-            return redirect("fulfillment_dash")
+            return _back_to_dash(request)
 
         order.fulfiller = request.user
         amount_refunded = None
@@ -142,50 +269,55 @@ def update_order_status(request, order_id):
     # The fulfillment badge is the one desk that doesn't end in go_to_next.
     forget_pending_counts()
     messages.success(request, f"Order #{order.id} updated to {order.get_status_display().lower()}.")
-    return redirect("fulfillment_dash")
+    return _back_to_dash(request)
 
-@staff_member_required
-@require_POST
-@check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])
-def view_order_address(request, order_id):
-    """Fetch and return the buyer's shipping address and contact details.
+def address_lookup(user, address_id=""):
+    """`(status, body)` for the JSON a "View address" button reads.
 
     The address, full name, email and phone number are pulled live from HCA
-    with the buyer's stored token — none of it is stored on our side — and
-    access to a customer's plaintext address is audit-logged since it is PII.
+    with the user's stored token — none of it is stored on our side.
+    `address_id` picks which of their addresses (an order's); without one it
+    is the primary. Callers audit-log a 200, since that is a plaintext
+    address handed to someone.
     """
-    order = get_object_or_404(Order.objects.select_related("owner"), id=order_id)
-    profile = getattr(order.owner, "hackclub_profile", None)
+    profile = getattr(user, "hackclub_profile", None)
 
-    # One userinfo call for all of it: the address the parcel goes to and the
-    # name, email and phone to reach the buyer at come out of the same
-    # response.
+    # One userinfo call for all of it: the address and the name, email and
+    # phone to reach the person at come out of the same response.
     userinfo = {}
     if profile is not None:
         try:
             userinfo = fetch_userinfo(profile)
         except IdentityUnavailable:
-            return JsonResponse({"ok": False, "error": "address_unavailable"}, status=503)
+            return 503, {"ok": False, "error": "address_unavailable"}
 
-    address = format_address(select_address(extract_addresses(userinfo), order.address_id))
-
+    address = format_address(select_address(extract_addresses(userinfo), address_id))
     if address is None:
-        return JsonResponse({"ok": False, "error": "no_address"}, status=404)
+        return 404, {"ok": False, "error": "no_address"}
 
     name, email = extract_contact(userinfo)
-    phone = extract_phone(userinfo, order.address_id)
-
-    record_audit(request, "view_order_address", target=f"Order #{order.id}", metadata={
-        "order_id": order.id,
-        "owner": order.owner.username,
-        "address_id": address.get("id", ""),
-    })
-
-    return JsonResponse({
+    return 200, {
         "ok": True,
         "address": address,
-        "contact": {"name": name, "email": email, "phone": phone},
-    })
+        "contact": {"name": name, "email": email, "phone": extract_phone(userinfo, address_id)},
+    }
+
+
+@staff_member_required
+@require_POST
+@check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment"])
+def view_order_address(request, order_id):
+    """The buyer's shipping address for this order, and how to reach them."""
+    order = get_object_or_404(Order.objects.select_related("owner"), id=order_id)
+    status, body = address_lookup(order.owner, order.address_id)
+
+    if status == 200:
+        record_audit(request, "view_order_address", target=f"Order #{order.id}", metadata={
+            "order_id": order.id,
+            "owner": order.owner.username,
+            "address_id": body["address"].get("id", ""),
+        })
+    return JsonResponse(body, status=status)
 
 
 # Item names, costs and stock arrive as free text on the shop form, and every

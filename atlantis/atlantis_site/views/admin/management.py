@@ -7,7 +7,7 @@ from django.db.models import Count, Q, Sum
 from django.db import transaction
 from django.contrib import messages
 from django.conf import settings
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
 
 import csv
@@ -15,6 +15,7 @@ import os
 
 from ... import airtable, challenge, weeks
 from ...models import Journal, Profile, Project, Ship, Timelapse
+from .shop import address_lookup
 from ..helpers import check_perms, staff_member_required, invite_to_autojoin_channels_in_background, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, format_minutes, INT_FIELD_MAX, INT_FIELD_MIN, field_max_length, too_long
 
 # Rows per page on the admin's user and project tables. Big enough that a
@@ -52,6 +53,26 @@ def users(request):
         "all_groups": all_groups,
         "search_query": search_query,
     })
+
+@staff_member_required
+@require_POST
+@check_perms(["atlantis_site.organizer"])
+def view_user_address(request, user_id):
+    """A user's primary address and contact details, live from HCA.
+
+    The users page asks before it calls this, and every address handed out is
+    audit-logged, the same as fulfillment's per-order lookup.
+    """
+    user = get_object_or_404(get_user_model(), id=user_id)
+    status, body = address_lookup(user)
+
+    if status == 200:
+        record_audit(request, "view_user_address", target=f"User #{user.id}", metadata={
+            "user_id": user.id,
+            "username": user.username,
+            "address_id": body["address"].get("id", ""),
+        })
+    return JsonResponse(body, status=status)
 
 @staff_member_required
 @require_POST

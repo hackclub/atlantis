@@ -1,0 +1,70 @@
+{% comment %}
+One order on the fulfillment desk. Shared by the pending queue and the decided
+table; `pending` swaps the waiting-time column for the status one.
+expects: order (stamped by _order_rows), pending
+{% endcomment %}
+<tr data-order-id="{{ order.id }}">
+    <td class="rq-col-num">{{ order.id }}</td>
+    <td>
+        <div class="rq-project-cell">
+            {% if order.item.has_image %}
+                <img class="rq-cover ff-cover" src="{{ order.item.imageUrl }}" alt="" loading="lazy">
+            {% else %}
+                <span class="rq-cover ff-cover" aria-hidden="true"></span>
+            {% endif %}
+            <div>
+                <a class="rq-project" href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
+                {% if order.item.kind == "printer" %}<span class="rv-chip rv-chip-quiet ff-kind">printer claim</span>
+                {% elif order.item.kind == "snack_grant" %}<span class="rv-chip rv-chip-quiet ff-kind">snack grant</span>
+                {% elif order.item.kind == "saver_current" or order.item.kind == "saver_past" %}<span class="rv-chip rv-chip-quiet ff-kind">streak saver</span>{% endif %}
+                {% if order.user_notes %}<span class="ff-note"><span class="ff-note-label">Buyer</span>{{ order.user_notes }}</span>{% endif %}
+                {% if order.admin_notes %}<span class="ff-note ff-note-admin"><span class="ff-note-label">Admin</span>{{ order.admin_notes }}</span>{% endif %}
+            </div>
+        </div>
+    </td>
+    <td class="ff-buyer">
+        <span class="rq-owner">{{ order.owner.hackclub_profile.slack_username|default:order.owner.username }}</span>
+        {% if order.owner.get_full_name %}<span class="rq-since">{{ order.owner.get_full_name }}</span>{% endif %}
+        <button type="button" class="rv-btn rv-btn-sm rv-btn-ghost view-address-btn"
+                data-url="{% url 'view_order_address' order.id %}"
+                data-address-label="Order #{{ order.id }} &middot; {{ order.quantity }}&times; {{ order.item.name }}"
+                data-address-none="No address on file for this order.">View address</button>
+    </td>
+    <td class="rq-col-num">{{ order.quantity }}</td>
+    <td class="rq-num">
+        {{ order.total_cost }} pearl{{ order.total_cost|pluralize }}
+        {% if order.quantity > 1 %}<span class="rq-since">{{ order.cost }} each</span>{% endif %}
+    </td>
+    {% if pending %}
+        <td class="rq-num">
+            <span class="rv-age-{{ order.age_bucket }}">{{ order.age_display }}</span>
+            <span class="rq-since">since {{ order.created_at|date:"M j" }}</span>
+        </td>
+    {% else %}
+        <td>
+            <span class="rv-sibling ff-status-{{ order.status }}">{{ order.get_status_display|lower }}</span>
+            <span class="rq-since">
+                {% if order.fulfilled_at %}{{ order.fulfilled_at|date:"M j" }}{% else %}ordered {{ order.created_at|date:"M j" }}{% endif %}{% if order.fulfiller %} &middot; {{ order.fulfiller.hackclub_profile.slack_username|default:order.fulfiller.username }}{% endif %}
+            </span>
+        </td>
+    {% endif %}
+    <td class="ff-col-actions">
+        {% if order.refunded %}
+            <span class="rq-quiet">Refunded, locked</span>
+        {% else %}
+            <form action="{% url 'update_order_status' order.id %}" method="post" class="ff-actions">
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                {% if order.status == "P" %}
+                    <button type="submit" name="action" value="fulfilled" class="rv-btn rv-btn-sm rv-btn-primary">Fulfill</button>
+                    <button type="submit" name="action" value="denied" class="rv-btn rv-btn-sm rv-btn-danger"
+                            data-confirm="Deny {{ order.quantity }}&times; {{ order.item.name }} for {{ order.owner.hackclub_profile.slack_username|default:order.owner.username }}? Their pearls are not returned unless you also refund.">Deny</button>
+                {% else %}
+                    <button type="submit" name="action" value="pending" class="rv-btn rv-btn-sm">Reopen</button>
+                {% endif %}
+                <button type="submit" name="action" value="refunded" class="rv-btn rv-btn-sm rv-btn-danger"
+                        data-confirm="Refund {{ order.total_cost }} pearl{{ order.total_cost|pluralize }} to {{ order.owner.hackclub_profile.slack_username|default:order.owner.username }}? A refunded order can't be changed again.">Refund</button>
+            </form>
+        {% endif %}
+    </td>
+</tr>

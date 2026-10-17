@@ -104,6 +104,11 @@
                             <button type="submit" class="link-button">ban user</button>
                             {% endif %}
                         </form>
+                        <button type="button" class="view-address-btn link-button"
+                                data-url="{% url 'view_user_address' user.id %}"
+                                data-address-label="User #{{ user.id }} &middot; {{ user.hackclub_profile.slack_username|default:user.username }}"
+                                data-address-none="No address on file for this user."
+                                data-address-confirm="View {{ user.hackclub_profile.slack_username|default:user.username }}'s address? It's fetched live from Hack Club identity, and the lookup is recorded in the audit log.">view address</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -170,6 +175,8 @@
         </form>
     </dialog>
 </div>
+
+{% include "root/_address_popup.html" %}
 
 <script>
     (function () {

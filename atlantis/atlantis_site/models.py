@@ -1605,6 +1605,12 @@ class Item(models.Model):
 		return self.unlimited_stock or self.stock > 0
 
 	@property
+	def has_image(self):
+		"""False on rows still carrying the placeholder URL, which is every
+		printer and snack grant: nothing makes those with a picture."""
+		return bool(self.imageUrl) and self.imageUrl != self._meta.get_field("imageUrl").default
+
+	@property
 	def is_saver(self):
 		return self.kind in (self.Kind.SAVER_CURRENT, self.Kind.SAVER_PAST)
 
