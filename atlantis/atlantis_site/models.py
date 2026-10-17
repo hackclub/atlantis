@@ -421,6 +421,32 @@ class Ship(models.Model):
 		"""
 		return not self.journals.filter(timelapse_review__isnull=True).exists()
 
+	def save(self, *args, **kwargs):
+		# The views hold an uncleared ship out of T1 already; this is the floor
+		# under them, for whatever path forgets to (a shell, a script, a view
+		# that doesn't exist yet). Every way out of the T1 queue is a T1
+		# decision, so no ship may leave it with a lapse still unreviewed.
+		if self.pk is not None and self.status != self.ShipStatus.T1_QUEUE:
+			previous = Ship.objects.filter(pk=self.pk).values_list("status", flat=True).first()
+			if previous == self.ShipStatus.T1_QUEUE and not self.timelapse_cleared:
+				raise LapsesUnreviewed(self)
+		super().save(*args, **kwargs)
+
+
+class LapsesUnreviewed(Exception):
+	"""A ship was about to get through T1 with a lapse nobody had signed off.
+
+	Raised by the models themselves rather than left to the views, so that no
+	code path can record a T1 decision on, or move out of the T1 queue, a ship
+	whose footage hasn't been through timelapse review. Inside a transaction it
+	takes the whole decision down with it.
+	"""
+
+	def __init__(self, ship):
+		super().__init__(f"Ship #{ship.pk} has lapses that haven't passed timelapse review")
+		self.ship = ship
+
+
 class T1(models.Model):
 	ship = models.ForeignKey(
 		Ship,
@@ -440,6 +466,13 @@ class T1(models.Model):
 	# Only ever set alongside approved=False: the reviewer sent the ship back to
 	# the shipper for fixes rather than rejecting it.
 	changes_requested = models.BooleanField(default=False)
+
+	def save(self, *args, **kwargs):
+		# Whatever the verdict: a ship nobody may review at T1 can't be
+		# approved, rejected or sent back from it either. See Ship.save.
+		if self._state.adding and not self.ship.timelapse_cleared:
+			raise LapsesUnreviewed(self.ship)
+		super().save(*args, **kwargs)
 
 	@property
 	def verdict(self):
@@ -884,6 +917,25 @@ class Timelapse(models.Model):
 
 	def __str__(self):
 		return f"{self.get_source_display()} timelapse {self.external_id} for project {self.project_id}"
+
+	def save(self, *args, **kwargs):
+		# A signed-off lapse is what lets its ship into T1, so footage taped
+		# onto one afterwards would ride through on a review that never saw
+		# it. Nothing in the app does this (footage only ever goes onto a
+		# brand-new lapse), which is exactly why it is refused here and not
+		# just left unbuilt.
+		update_fields = kwargs.get("update_fields")
+		if self.journal_id is not None and (update_fields is None or "journal" in update_fields):
+			previous = (
+				None if self._state.adding
+				else Timelapse.objects.filter(pk=self.pk).values_list("journal_id", flat=True).first()
+			)
+			if previous != self.journal_id and TimelapseReview.objects.filter(journal_id=self.journal_id).exists():
+				raise ValueError(
+					f"Lapse #{self.journal_id} has already been through timelapse review; "
+					"footage can't be added to it."
+				)
+		super().save(*args, **kwargs)
 
 	# ---- which recorder --------------------------------------------------
 	@property

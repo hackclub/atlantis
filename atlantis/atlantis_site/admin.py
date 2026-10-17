@@ -22,9 +22,17 @@ class TimelapseAdmin(admin.ModelAdmin):
         "source", "lapse_id", "session_id", "name", "playback_url",
         "lapse_thumbnail_url", "recorded_at", "tracked_seconds",
         "screenshot_count", "total_active_seconds", "created_at", "updated_at",
+        # Which lapse a recording is on decides which timelapse review covers
+        # it. Moving it here would hand footage nobody watched to a lapse that
+        # was already signed off, and through it into T1.
+        "journal",
     )
     exclude = ("token",)
     date_hierarchy = "created_at"
+
+    def has_add_permission(self, request):
+        # A row comes off Lapse or Lookout at the attach, never off a form.
+        return False
 
     @admin.display(description="ID", ordering="lapse_id")
     def external_id(self, obj):
