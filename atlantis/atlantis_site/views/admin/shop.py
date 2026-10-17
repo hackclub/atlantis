@@ -12,6 +12,7 @@ from django.db.models import Count, Exists, Min, OuterRef, Q
 
 from ...models import Profile, Item, Order, SaverCredit, ShopCategory
 from ...crypto import format_address
+from ...snack_grants import hcb_grant_url
 from ...hca import (
     IdentityUnavailable, extract_addresses, extract_contact, extract_phone,
     fetch_userinfo, select_address,
@@ -81,6 +82,8 @@ def _order_rows(orders):
         order.total_cost = order.cost * order.quantity
         order.age_display = age_display(order.created_at)
         order.age_bucket = age_bucket(order.created_at, FULFILLMENT_SLA_DAYS)
+        if order.item.kind == Item.Kind.SNACK_GRANT:
+            order.hcb_grant_url = hcb_grant_url(order)
     return orders
 
 

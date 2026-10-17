@@ -56,6 +56,10 @@ expects: order (stamped by _order_rows), pending
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 {% if order.status == "P" %}
+                    {% if order.hcb_grant_url %}
+                        <a class="rv-btn rv-btn-sm" href="{{ order.hcb_grant_url }}" target="_blank" rel="noopener noreferrer"
+                           title="Open HCB's card grant form, prefilled for {{ order.owner.email }}">Send on HCB</a>
+                    {% endif %}
                     <button type="submit" name="action" value="fulfilled" class="rv-btn rv-btn-sm rv-btn-primary">Fulfill</button>
                     <button type="submit" name="action" value="denied" class="rv-btn rv-btn-sm rv-btn-danger"
                             data-confirm="Deny {{ order.quantity }}&times; {{ order.item.name }} for {{ order.owner.hackclub_profile.slack_username|default:order.owner.username }}? Their pearls are not returned unless you also refund.">Deny</button>

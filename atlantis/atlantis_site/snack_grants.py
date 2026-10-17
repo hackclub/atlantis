@@ -12,6 +12,7 @@ migration table, so nothing has to be kept in step with a deploy by hand.
 """
 
 import logging
+from urllib.parse import urlencode
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -31,6 +32,9 @@ GRANT_ITEM_CATEGORY = "Reviewer grants"
 LAPSE_SECONDS_PER_GRANT = 100 * 60 * 60
 T1_REVIEWS_PER_GRANT = 65
 T2_REVIEWS_PER_GRANT = 25
+
+GRANT_AMOUNT_CENTS = 1000
+HCB_CARD_GRANT_URL = "https://hcb.hackclub.com/ysws-atlantis/card-grants/new"
 
 _launched_at = None
 
@@ -61,6 +65,23 @@ def grant_item():
             stock=-1,
         )
     return item
+
+
+def hcb_grant_url(order):
+    """HCB's new-card-grant form, prefilled to pay out this grant order.
+
+    None when the reviewer has no email on file, since HCB sends the grant
+    to an email and there is nothing to prefill it with.
+    """
+    email = order.owner.email
+    if not email:
+        return None
+    return HCB_CARD_GRANT_URL + "?" + urlencode({
+        "email": email,
+        "amount_cents": GRANT_AMOUNT_CENTS * order.quantity,
+        "purpose": "Snack Grant",
+        "instructions": "buy snacks!!",
+    })
 
 
 def _earned(reviewer, since):

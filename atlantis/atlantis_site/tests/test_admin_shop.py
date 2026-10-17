@@ -337,6 +337,27 @@ class FulfillmentDashTests(BaseTestCase):
 		self.assertContains(response, "leave at door")
 		self.assertContains(response, "Refunded, locked")
 
+	def test_snack_grant_row_links_to_prefilled_hcb_grant(self):
+		self.buyer.email = "reviewer+snacks@gmail.com"
+		self.buyer.save()
+		grant = Item.objects.create(name="$10 Snack Grant", description="x", cost=0, kind=Item.Kind.SNACK_GRANT)
+		Order.objects.create(owner=self.buyer, item=grant)
+		Order.objects.create(owner=self.buyer, item=self.item)
+		response = self.client.get(reverse("fulfillment_dash"))
+		url = (
+			"https://hcb.hackclub.com/ysws-atlantis/card-grants/new?email=reviewer%2Bsnacks%40gmail.com"
+			"&amp;amount_cents=1000&amp;purpose=Snack+Grant&amp;instructions=buy+snacks%21%21"
+		)
+		self.assertContains(response, url, count=1)
+
+	def test_snack_grant_without_email_has_no_hcb_link(self):
+		self.buyer.email = ""
+		self.buyer.save()
+		grant = Item.objects.create(name="$10 Snack Grant", description="x", cost=0, kind=Item.Kind.SNACK_GRANT)
+		Order.objects.create(owner=self.buyer, item=grant)
+		response = self.client.get(reverse("fulfillment_dash"))
+		self.assertNotContains(response, "Send on HCB")
+
 	def test_status_change_returns_to_the_same_view(self):
 		order = Order.objects.create(owner=self.buyer, item=self.item)
 		back = reverse("fulfillment_dash") + "?status=F&page=2"
