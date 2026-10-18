@@ -546,6 +546,12 @@ def build_metrics(now):
     finalized_minutes = tracked_minutes_for_journals(
         shipped_journals.filter(ship__status=Ship.ShipStatus.FINALIZED)
     )
+    # The shipped hours still waiting on a reviewer, across every queue the
+    # pipeline chart counts.
+    queued_journals = shipped_journals.filter(ship__status__in=[
+        Ship.ShipStatus.T1_QUEUE, Ship.ShipStatus.T2_QUEUE, Ship.ShipStatus.T3_QUEUE,
+    ])
+    queued_minutes = tracked_minutes_for_journals(queued_journals)
 
     # What HQ's Airtable was actually told: the override hours on each record
     # we created, which is the approving T3's airtable_time. Picked per ship
@@ -578,6 +584,8 @@ def build_metrics(now):
         "finalized": finalized_ships,
         "rejected": rejected_ships,
         "backlog_total": backlog_total,
+        "queued_hours": _hours(queued_minutes),
+        "queued_devlogs": queued_journals.count(),
         "pipeline": pipeline,
     }
 

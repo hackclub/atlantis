@@ -301,6 +301,20 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(ships["shipped_devlogs"], 4)
 		self.assertEqual(ships["finalized_hours"], 2.0)
 
+	def test_queued_hours_sum_every_review_queue(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		make_ship(project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(60,))
+		make_ship(project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(30, 30))
+		make_ship(project, status=Ship.ShipStatus.T3_QUEUE, journal_minutes=(90,))
+		# Out of the queues either way: not counted.
+		make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(120,))
+		make_ship(project, status=Ship.ShipStatus.REJECTED, journal_minutes=(60,))
+
+		ships = self.client.get(reverse("metrics")).context["ships"]
+
+		self.assertEqual(ships["queued_hours"], 3.5)
+		self.assertEqual(ships["queued_devlogs"], 4)
+
 	def test_airtable_hours_are_what_each_created_record_was_sent(self):
 		project = make_project(make_user("builder", slack_id="U1"))
 		reviewer = make_user("t3", slack_id="U-t3")

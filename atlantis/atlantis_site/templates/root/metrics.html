@@ -341,6 +341,11 @@
                 <div class="stat-value">{{ ships.backlog_total }}</div>
                 <div class="stat-label">In queue right now</div>
             </div>
+            <div class="stat-card warn">
+                <div class="stat-value">{{ ships.queued_hours|default:0 }}h</div>
+                <div class="stat-label">Hours in review queues</div>
+                <div class="stat-sub">{{ ships.queued_devlogs|default:0 }} lapse{{ ships.queued_devlogs|pluralize }} across T1, T2 &amp; T3</div>
+            </div>
             <div class="stat-card good">
                 <div class="stat-value">{{ ships.finalized }}</div>
                 <div class="stat-label">Finalized</div>
