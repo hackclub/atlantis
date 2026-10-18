@@ -151,7 +151,7 @@ def award_snack_grants(reviewer):
             run_in_background(
                 send_slack_dm,
                 f"Thanks for reviewing! You've earned a $10 snack grant "
-                f"({SnackGrant.Desk(grant.desk).label.lower()}) — it's on its way.",
+                f"({SnackGrant.Desk(grant.desk).label.lower()}). It's on its way!",
                 slack_id,
             )
     return grants

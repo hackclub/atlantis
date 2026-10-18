@@ -15,6 +15,7 @@ many rows that filter would leave, within the current search. Searching
     {% endif %}
     <form class="rq-search" method="get" role="search">
         {% if active_filter_param and not search_scope %}<input type="hidden" name="filter" value="{{ active_filter_param }}">{% endif %}
+        {% if active_sort %}<input type="hidden" name="sort" value="{{ active_sort }}">{% endif %}
         <select name="scope" aria-label="Search where">
             <option value=""{% if not search_scope %} selected{% endif %}>This queue</option>
             <option value="all"{% if search_scope == "all" %} selected{% endif %}>All projects</option>

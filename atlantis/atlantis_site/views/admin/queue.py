@@ -434,7 +434,8 @@ def decorate_rows(queue_key, items):
                 lapse.ship_id for lapse in row.lapses if lapse.ship_id
             })
         else:
-            row.time_spent_display = format_minutes(approved[row.project_id])
+            row.approved_minutes = approved[row.project_id]
+            row.time_spent_display = format_minutes(row.approved_minutes)
 
     # Which rows are another go at a project that has shipped before, for the
     # re-ship filter. One query for the page, not one per row.
@@ -483,13 +484,31 @@ QUEUE_FILTERS = {
 # then spelled `?filter=all`.
 DEFAULT_FILTERS = {"lookout": "shipped"}
 
+# The orders a desk's table can be put in, by `?sort=`. The queue's own order,
+# oldest first, goes unsaid. Hours are the column the table already shows:
+# approved project time on the ship desks, tracked footage on the timelapse
+# desk. Ties keep their queue order, so the longest-waiting of two equal rows
+# still comes first.
+QUEUE_SORTS = {
+    "hours": ("Most hours first", True),
+    "hours_asc": ("Fewest hours first", False),
+}
+
+
+def _hours_of(queue_key, row):
+    if queue_key == "lookout":
+        return row.tracked_seconds_total
+    return row.approved_minutes
+
+
 # Longest search a desk takes. Matching is a substring test over a page that is
 # already in memory, so this is about keeping the URL sensible, not the query.
 FILTER_SEARCH_MAX_LENGTH = 100
 
 
 def filter_rows(request, queue_key, rows):
-    """Narrow a desk's decorated rows by `?filter=` and `?q=`.
+    """Narrow a desk's decorated rows by `?filter=` and `?q=`, and put them in
+    `?sort=` order.
 
     Only the table is narrowed. Rows keep their place number in the whole
     queue, and the stats above the table still describe all of it. Returns the
@@ -507,6 +526,10 @@ def filter_rows(request, queue_key, rows):
         active = "shipped"
     if active not in tests:
         active = ""
+
+    sort = request.GET.get("sort", "")
+    if sort not in QUEUE_SORTS:
+        sort = ""
 
     query = request.GET.get("q", "").strip()[:FILTER_SEARCH_MAX_LENGTH]
     scope = "all" if request.GET.get("scope") == "all" else ""
@@ -527,6 +550,9 @@ def filter_rows(request, queue_key, rows):
 
     searched = [row for row in rows if matches(row)]
     shown = [row for row in searched if not active or tests[active](queue_key, row)]
+    if sort:
+        _label, descending = QUEUE_SORTS[sort]
+        shown.sort(key=lambda row: _hours_of(queue_key, row), reverse=descending)
 
     def filter_param(filter_key):
         """How `filter_key` is spelled in the URL: the default goes unsaid."""
@@ -534,13 +560,18 @@ def filter_rows(request, queue_key, rows):
             return ""
         return filter_key or "all"
 
-    def querystring(filter_key):
+    def querystring(filter_key, sort_key=sort):
         params = {
             key: value
-            for key, value in (("filter", filter_param(filter_key)), ("q", query), ("scope", scope))
+            for key, value in (
+                ("filter", filter_param(filter_key)), ("q", query), ("scope", scope), ("sort", sort_key),
+            )
             if value
         }
         return "?" + urlencode(params) if params else "?"
+
+    # The Hours header steps through most, fewest, then back to queue order.
+    next_sort = {"": "hours", "hours": "hours_asc", "hours_asc": ""}[sort]
 
     options = [{
         "key": "", "label": "All", "count": len(searched), "active": not active,
@@ -565,6 +596,9 @@ def filter_rows(request, queue_key, rows):
         "filtering": bool(active or query),
         "clearable": bool(active != default or query),
         "filter_search_max": FILTER_SEARCH_MAX_LENGTH,
+        "active_sort": sort,
+        "sort_label": QUEUE_SORTS[sort][0] if sort else "",
+        "hours_sort_href": querystring(active, next_sort),
         "search_scope": scope,
         # With ?scope=all the search leaves the queue and looks everywhere;
         # the table above shows those matches in place of the queue's rows.

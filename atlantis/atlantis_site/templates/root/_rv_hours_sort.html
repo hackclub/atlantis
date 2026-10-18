@@ -1,0 +1,5 @@
+{% comment %}
+The hours column's header, as the link that sorts the table by it: most
+first, then fewest, then back to queue order. See QUEUE_SORTS.
+{% endcomment %}
+<a class="rq-sort" href="{{ hours_sort_href }}" title="{% if active_sort == 'hours' %}Sort fewest hours first{% elif active_sort == 'hours_asc' %}Back to queue order{% else %}Sort most hours first{% endif %}">{{ label }}{% if active_sort == "hours" %}<span aria-hidden="true">&darr;</span>{% elif active_sort == "hours_asc" %}<span aria-hidden="true">&uarr;</span>{% endif %}</a>

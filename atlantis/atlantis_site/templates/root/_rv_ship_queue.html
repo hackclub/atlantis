@@ -22,7 +22,7 @@
                     <th class="rq-col-num">#</th>
                     <th>Project</th>
                     <th>Owner</th>
-                    <th class="rq-col-num">Hours</th>
+                    <th class="rq-col-num"{% if active_sort %} aria-sort="{% if active_sort == 'hours' %}descending{% else %}ascending{% endif %}"{% endif %}>{% include "root/_rv_hours_sort.html" with label="Hours" %}</th>
                     <th>Reviewer</th>
                     <th>Waiting</th>
                     <th>Flags</th>

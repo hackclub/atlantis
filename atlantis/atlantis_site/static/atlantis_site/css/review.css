@@ -1919,6 +1919,21 @@
     box-shadow: inset 0 0 0 1px var(--oc-tide);
 }
 
+/* The hours header, which sorts the table by it. */
+.root-page .rq-sort {
+    color: inherit;
+    text-decoration: none;
+}
+
+.root-page .rq-sort:hover,
+.root-page th[aria-sort] .rq-sort {
+    color: var(--oc-ink);
+}
+
+.root-page .rq-sort span {
+    margin-left: 3px;
+}
+
 .root-page .rq-col-num {
     width: 40px;
     color: var(--oc-ink-3);

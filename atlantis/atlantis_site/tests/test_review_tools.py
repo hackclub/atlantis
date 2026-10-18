@@ -146,6 +146,56 @@ class DeskFilterTests(BaseTestCase):
 		self.assertEqual([p.id for p in response.context["projects"]], [flagged.id])
 
 
+class DeskSortTests(BaseTestCase):
+	"""?sort= orders a desk's table by its hours column."""
+
+	def setUp(self):
+		super().setUp()
+		self.client.force_login(grant_perms(make_user("t1rev", slack_id="U-t1"), "t1_review"))
+		self.short = make_ship(make_project(make_user("s", slack_id="U-s"), shippable=True), journal_minutes=(60,))
+		self.long = make_ship(make_project(make_user("l", slack_id="U-l"), shippable=True), journal_minutes=(300,))
+		self.middle = make_ship(make_project(make_user("m", slack_id="U-m"), shippable=True), journal_minutes=(120,))
+
+	def _ids(self, query=""):
+		response = self.client.get(reverse("review_dash") + query)
+		return [ship.id for ship in response.context["ships"]], response
+
+	def test_unsorted_is_queue_order(self):
+		self.assertEqual(self._ids()[0], [self.short.id, self.long.id, self.middle.id])
+
+	def test_most_and_fewest_hours_first(self):
+		self.assertEqual(self._ids("?sort=hours")[0], [self.long.id, self.middle.id, self.short.id])
+		ids, response = self._ids("?sort=hours_asc")
+		self.assertEqual(ids, [self.short.id, self.middle.id, self.long.id])
+		# Sorting doesn't renumber: each row keeps its place in the queue.
+		self.assertEqual([ship.queue_index for ship in response.context["ships"]], [1, 3, 2])
+
+	def test_the_header_cycles_and_the_filters_keep_the_sort(self):
+		_, response = self._ids()
+		self.assertEqual(response.context["hours_sort_href"], "?sort=hours")
+		_, response = self._ids("?sort=hours&filter=unclaimed")
+		self.assertEqual(response.context["hours_sort_href"], "?filter=unclaimed&sort=hours_asc")
+		hrefs = {option["key"]: option["href"] for option in response.context["filter_options"]}
+		self.assertEqual(hrefs["flagged"], "?filter=flagged&sort=hours")
+		_, response = self._ids("?sort=hours_asc")
+		self.assertEqual(response.context["hours_sort_href"], "?")
+
+	def test_an_unknown_sort_is_ignored(self):
+		ids, response = self._ids("?sort=bogus")
+		self.assertEqual(ids, [self.short.id, self.long.id, self.middle.id])
+		self.assertEqual(response.context["active_sort"], "")
+
+	def test_the_timelapse_desk_sorts_by_tracked_time(self):
+		self.client.force_login(grant_perms(make_user("tl", slack_id="U-tl"), "timelapse_review"))
+		little = make_project(make_user("little", slack_id="U-li"))
+		make_journal(little, time_spent=30)
+		lots = make_project(make_user("lots", slack_id="U-lo"))
+		make_journal(lots, time_spent=240)
+		response = self.client.get(reverse("timelapse_review_dash") + "?filter=all&sort=hours")
+		self.assertEqual([p.id for p in response.context["projects"]], [lots.id, little.id])
+		self.assertContains(response, 'aria-sort="descending"')
+
+
 class SearchEverythingTests(BaseTestCase):
 	"""?scope=all looks past the queue to every ship or project."""
 
