@@ -1551,9 +1551,12 @@ class UpdateEditorModelTests(BaseTestCase):
 	@override_settings(ALLOW_JOURNALING=True)
 	def test_oversized_file_rejected(self):
 		from django.core.files.uploadedfile import SimpleUploadedFile
-		big = SimpleUploadedFile("part.f3d", b"\0" * (50 * 1024 * 1024 + 1))
-		response = self._update(editor_model_file=big)
-		self.assertIn("Editor model file too large. Max 50MB.", message_texts(response))
+		# A real 500MB upload is too heavy for a test, so the size check is
+		# stubbed and only the limit it is asked about is asserted.
+		with patch("atlantis_site.views.client.projects.validate_file_size", return_value=False) as validate:
+			response = self._update(editor_model_file=SimpleUploadedFile("part.f3d", b"data"))
+		self.assertEqual(validate.call_args.args[1], 500)
+		self.assertIn("Editor model file too large. Max 500MB.", message_texts(response))
 
 	def test_direct_link_to_a_source_file_accepted(self):
 		"""Solidworks and FreeCAD have no share domain, so a direct link is the

@@ -402,8 +402,8 @@ def update_editor_model(request, project_id):
                 messages.error(request, f"Unsupported editor model file. Supported editors: {', '.join(ALLOWED_EDITORS)}. You can also upload a .zip of your project files.")
                 return redirect("project_detail", project_id=project_id)
             
-            if not validate_file_size(editor_model_file, 50):
-                messages.error(request, f"Editor model file too large. Max 50MB.")
+            if not validate_file_size(editor_model_file, 500):
+                messages.error(request, f"Editor model file too large. Max 500MB.")
                 return redirect("project_detail", project_id=project_id)
             
             editor_ext = os.path.splitext(editor_model_file.name)[1].lower()
