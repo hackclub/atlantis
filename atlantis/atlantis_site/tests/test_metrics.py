@@ -315,6 +315,25 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(ships["queued_hours"], 3.5)
 		self.assertEqual(ships["queued_devlogs"], 4)
 
+	def test_shipped_hours_by_status_add_up_to_the_shipped_total(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		make_ship(project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(60,))
+		make_ship(project, status=Ship.ShipStatus.CHANGES_REQUESTED, journal_minutes=(30, 60))
+		make_ship(project, status=Ship.ShipStatus.REJECTED, journal_minutes=(120,))
+		make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(30,))
+
+		ships = self.client.get(reverse("metrics")).context["ships"]
+		rows = {row["label"]: row for row in ships["hours_by_status"]}
+
+		self.assertEqual(rows["Under T1 Review"]["value"], 1.0)
+		self.assertEqual(rows["Changes requested"]["value"], 1.5)
+		self.assertEqual(rows["Changes requested"]["sub"], "2 lapses")
+		self.assertEqual(rows["Rejected"]["value"], 2.0)
+		self.assertEqual(rows["Rejected"]["sub"], "1 lapse")
+		self.assertEqual(rows["Finalized"]["value"], 0.5)
+		self.assertEqual(rows["Under T2 Review"]["value"], 0)
+		self.assertEqual(sum(row["value"] for row in rows.values()), ships["shipped_hours"])
+
 	def test_airtable_hours_are_what_each_created_record_was_sent(self):
 		project = make_project(make_user("builder", slack_id="U1"))
 		reviewer = make_user("t3", slack_id="U-t3")

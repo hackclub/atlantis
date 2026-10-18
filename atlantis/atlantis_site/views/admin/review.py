@@ -17,7 +17,7 @@ from ...models import (
 )
 from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked_message
 from ...submissions import build_generated_justification, build_override_justification, submit_ship
-from ..helpers import check_perms, staff_member_required, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
+from ..helpers import check_perms, staff_member_required, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, claim_reviewed_unshipped_journals, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
 from ...snack_grants import award_snack_grants_quietly
 from .queue import (
@@ -759,6 +759,7 @@ def t3_decision(request, ship_id):
 
         payout_layers = 0
         payout_detail = []
+        claimed_journals = []
         match decision:
             case T3.Decision.RETURN_T1:
                 ship.status = Ship.ShipStatus.T1_QUEUE
@@ -785,6 +786,11 @@ def t3_decision(request, ship_id):
                 # row; paying them out used to be a DoesNotExist.
                 owner_profile, _ = Profile.objects.get_or_create(user=ship.project.owner)
                 profile = Profile.objects.select_for_update().get(pk=owner_profile.pk)
+                # Lapses logged since the ship went out that have already
+                # passed timelapse review are paid, and justified to HQ, with
+                # it; attaching them is what keeps the next ship from paying
+                # them again.
+                claimed_journals = claim_reviewed_unshipped_journals(ship)
                 # Priced inside the lock and against brackets read inside it:
                 # two ships of the same shipper finalizing at once must not
                 # both spend the same week's base-rate allowance.
@@ -858,6 +864,8 @@ def t3_decision(request, ship_id):
         # Which weeks the pearls came out of and at what rate — the only
         # record of how a split payout was arrived at.
         "payout_breakdown": payout_detail,
+        # Reviewed lapses logged after the ship went out, attached to it here.
+        "claimed_journal_ids": claimed_journals,
         "new_ship_status": ship.status,
         "checklist": ticked(T3_CHECKLIST, request),
         # Whether HQ was sent something other than what T2 and the timelapse

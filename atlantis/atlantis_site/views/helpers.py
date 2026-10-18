@@ -166,6 +166,13 @@ def payable_journals_for_ship(ship):
     this ship's journals, plus those of every ship after the most recent
     finalized one. On a project that has never been finalized that is the whole
     project; on an update it is only what the update added.
+
+    Until the ship is finalized it also covers the journals logged since it
+    went out that have already passed timelapse review: nothing else would pay
+    for them until the next ship, and they are as signed off as the rest.
+    Finalizing attaches them to this ship (see claim_reviewed_unshipped_journals),
+    which is what keeps them here afterwards and out of the next payout.
+    Unreviewed ones are left for the next ship.
     """
     last_paid_id = (
         ship.project.ships
@@ -174,12 +181,37 @@ def payable_journals_for_ship(ship):
         .values_list("id", flat=True)
         .first()
     )
-    # Bounded above by this ship, which also leaves out the journals written
-    # since it went out: they belong to the next ship, not this payout.
+    # Bounded above by this ship: a later ship's journals are its own payout.
     journals = Journal.objects.filter(ship__project=ship.project, ship_id__lte=ship.id)
     if last_paid_id is not None:
         journals = journals.filter(ship_id__gt=last_paid_id)
+    if ship.status != Ship.ShipStatus.FINALIZED:
+        journals = journals | reviewed_unshipped_journals(ship.project)
     return journals
+
+def reviewed_unshipped_journals(project):
+    """Journals on no ship yet that have already passed timelapse review."""
+    return Journal.objects.filter(
+        project=project,
+        ship__isnull=True,
+        timelapse_review__isnull=False,
+    )
+
+def claim_reviewed_unshipped_journals(ship):
+    """Attach the reviewed, unshipped journals to `ship` as it is finalized.
+
+    Called inside the finalization transaction, before the payout is priced.
+    Rows are locked first so a timelapse review landing at the same moment
+    can't slip a journal in between pricing and attaching.
+    """
+    ids = list(
+        reviewed_unshipped_journals(ship.project)
+        .select_for_update(of=("self",))
+        .values_list("id", flat=True)
+    )
+    if ids:
+        Journal.objects.filter(id__in=ids).update(ship=ship)
+    return ids
 
 def payable_minutes_for_ship(ship):
     return approved_minutes_for_journals(payable_journals_for_ship(ship))

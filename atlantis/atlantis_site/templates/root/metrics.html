@@ -359,6 +359,7 @@
         <div class="chart-grid">
             {% include "root/_metric_chart.html" with title="Live pipeline (waiting now)" rows=ships.pipeline fill_class="lagoon" empty="Nothing in the pipeline" %}
             {% include "root/_metric_chart.html" with title="All ships by status" rows=ships.by_status %}
+            {% include "root/_metric_chart.html" with title="Shipped hours by status" rows=ships.hours_by_status fill_class="warn" empty="Nothing shipped yet" %}
         </div>
     </section>
 

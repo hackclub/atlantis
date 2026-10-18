@@ -553,6 +553,27 @@ def build_metrics(now):
     ])
     queued_minutes = tracked_minutes_for_journals(queued_journals)
 
+    # The shipped hours split by where each ship stands now, so the cards
+    # above can be read off it: every shipped lapse lands in exactly one row.
+    shipped_seconds_by_status = dict(
+        Timelapse.objects.filter(journal__ship__isnull=False)
+        .values_list("journal__ship__status")
+        .order_by()
+        .annotate(total=Sum("tracked_seconds"))
+    )
+    shipped_devlogs_by_status = dict(
+        shipped_journals.values_list("ship__status").order_by().annotate(n=Count("id"))
+    )
+    shipped_hours_by_status = []
+    for code, label in status_labels.items():
+        n = shipped_devlogs_by_status.get(code, 0)
+        shipped_hours_by_status.append({
+            "label": label,
+            "value": _hours((shipped_seconds_by_status.get(code) or 0) // 60),
+            "sub": f"{n} lapse{'' if n == 1 else 's'}",
+        })
+    add_bars(shipped_hours_by_status)
+
     # What HQ's Airtable was actually told: the override hours on each record
     # we created, which is the approving T3's airtable_time. Picked per ship
     # the way submissions.approving_t3 picks it (the latest approval, else the
@@ -581,6 +602,7 @@ def build_metrics(now):
         "finalized_hours": _hours(finalized_minutes),
         "last_7": ships_last_7,
         "by_status": ship_by_status,
+        "hours_by_status": shipped_hours_by_status,
         "finalized": finalized_ships,
         "rejected": rejected_ships,
         "backlog_total": backlog_total,
