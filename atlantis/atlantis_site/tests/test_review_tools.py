@@ -127,6 +127,40 @@ class DeskFilterTests(BaseTestCase):
 		again = make_ship(project)
 		self.assertEqual(self._ids("?filter=reship")[0], [again.id])
 
+	def test_the_project_type_filter(self):
+		fusion = make_ship(make_project(
+			make_user("fusion", slack_id="U-fu"), shippable=True,
+			editor_model_url="https://a360.co/abc", flagged=True, flag_reason="hmm",
+		))
+		archive = make_ship(make_project(
+			make_user("zipper", slack_id="U-z"), shippable=True, editor_model_url="model.zip",
+		))
+		self.assertEqual(self._ids("?type=onshape")[0], [self.plain.id, self.flagged.id])
+		self.assertEqual(self._ids("?type=fusion-360")[0], [fusion.id])
+		self.assertEqual(self._ids("?type=other")[0], [archive.id])
+
+		# It narrows alongside the filter tabs, and each bar counts within the other.
+		ids, response = self._ids("?filter=flagged&type=onshape")
+		self.assertEqual(ids, [self.flagged.id])
+		counts = {option["key"]: option["count"] for option in response.context["filter_options"]}
+		self.assertEqual((counts[""], counts["flagged"]), (2, 1))
+		types = {option["key"]: option for option in response.context["type_options"]}
+		self.assertEqual(types[""]["count"], 2)
+		self.assertEqual(types["fusion-360"]["count"], 1)
+		self.assertEqual(types["other"]["count"], 0)
+		self.assertEqual(types["fusion-360"]["href"], "?filter=flagged&type=fusion-360")
+		self.assertEqual(types[""]["href"], "?filter=flagged")
+
+	def test_an_unknown_project_type_is_ignored(self):
+		ids, response = self._ids("?type=blender")
+		self.assertEqual(len(ids), 2)
+		self.assertEqual(response.context["active_type"], "")
+
+	def test_the_timelapse_desk_has_no_project_types(self):
+		self.client.force_login(grant_perms(make_user("tl", slack_id="U-tl"), "timelapse_review"))
+		response = self.client.get(reverse("timelapse_review_dash"))
+		self.assertEqual(response.context["type_options"], [])
+
 	def test_the_t2_and_t3_desks_filter_too(self):
 		for status, perm, dash in (
 			(Ship.ShipStatus.T2_QUEUE, "t2_review", "ysws_review_dash"),

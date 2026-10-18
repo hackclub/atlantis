@@ -1,6 +1,7 @@
 {% comment %}
 The narrowings over a desk's table, built by filter_rows. Each count is how
-many rows that filter would leave, within the current search. Searching
+many rows that filter would leave, within the current search and whatever the
+other bar has narrowed to. Searching
 "All projects" looks past the queue, so the filters step aside for it.
 {% endcomment %}
 <div class="rq-filters">
@@ -12,9 +13,19 @@ many rows that filter would leave, within the current search. Searching
                 </a>
             {% endfor %}
         </nav>
+        {% if type_options %}
+            <nav class="rq-filter" aria-label="Project type">
+                {% for option in type_options %}
+                    <a href="{{ option.href }}"{% if option.active %} aria-current="true"{% endif %}>
+                        {{ option.label }}<span class="rq-filter-count">{{ option.count }}</span>
+                    </a>
+                {% endfor %}
+            </nav>
+        {% endif %}
     {% endif %}
     <form class="rq-search" method="get" role="search">
         {% if active_filter_param and not search_scope %}<input type="hidden" name="filter" value="{{ active_filter_param }}">{% endif %}
+        {% if active_type and not search_scope %}<input type="hidden" name="type" value="{{ active_type }}">{% endif %}
         {% if active_sort %}<input type="hidden" name="sort" value="{{ active_sort }}">{% endif %}
         <select name="scope" aria-label="Search where">
             <option value=""{% if not search_scope %} selected{% endif %}>This queue</option>

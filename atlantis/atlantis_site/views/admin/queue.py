@@ -37,7 +37,7 @@ from django.utils.http import urlencode
 from django.views.decorators.http import require_POST
 
 from ...models import (
-    Journal, Timelapse, Project, Ship, T1, T2, T3, TimelapseAnnotation,
+    ALLOWED_EDITORS, Journal, Timelapse, Project, Ship, T1, T2, T3, TimelapseAnnotation,
     TimelapseReview,
 )
 from ..helpers import (
@@ -479,6 +479,22 @@ QUEUE_FILTERS = {
     ],
 }
 
+# The project types a ship desk's table can be narrowed to, by `?type=`, as
+# key -> label. A project's type is the editor its source file came from, which
+# detect_editor already works out for the Flags column. Archives and anything
+# else it can't name are "other". The timelapse desk has none of these: its
+# projects mostly haven't attached a source file yet.
+PROJECT_TYPES = {
+    **{editor.lower().replace(" ", "-"): editor for editor in ALLOWED_EDITORS},
+    "other": "Other",
+}
+_PROJECT_TYPE_OF_EDITOR = {editor: key for key, editor in PROJECT_TYPES.items()}
+
+
+def _project_type_of(queue_key, row):
+    return _PROJECT_TYPE_OF_EDITOR.get(_project_of(queue_key, row).editor_name, "other")
+
+
 # The tab a desk opens on when the URL names none. The timelapse desk opens on
 # Shipped, since those are the lapses holding a ship out of T1; its All tab is
 # then spelled `?filter=all`.
@@ -507,8 +523,8 @@ FILTER_SEARCH_MAX_LENGTH = 100
 
 
 def filter_rows(request, queue_key, rows):
-    """Narrow a desk's decorated rows by `?filter=` and `?q=`, and put them in
-    `?sort=` order.
+    """Narrow a desk's decorated rows by `?filter=`, `?type=` and `?q=`, and
+    put them in `?sort=` order.
 
     Only the table is narrowed. Rows keep their place number in the whole
     queue, and the stats above the table still describe all of it. Returns the
@@ -526,6 +542,11 @@ def filter_rows(request, queue_key, rows):
         active = "shipped"
     if active not in tests:
         active = ""
+
+    types = {} if queue_key == "lookout" else PROJECT_TYPES
+    project_type = request.GET.get("type", "")
+    if project_type not in types:
+        project_type = ""
 
     sort = request.GET.get("sort", "")
     if sort not in QUEUE_SORTS:
@@ -548,8 +569,17 @@ def filter_rows(request, queue_key, rows):
         ])).lower()
         return query.lower() in haystack
 
+    def of_type(row, type_key):
+        return not type_key or _project_type_of(queue_key, row) == type_key
+
+    def passes(row, filter_key):
+        return not filter_key or tests[filter_key](queue_key, row)
+
+    # Type and filter narrow together, so each bar counts within the other.
     searched = [row for row in rows if matches(row)]
-    shown = [row for row in searched if not active or tests[active](queue_key, row)]
+    typed = [row for row in searched if of_type(row, project_type)]
+    filtered = [row for row in searched if passes(row, active)]
+    shown = [row for row in typed if passes(row, active)]
     if sort:
         _label, descending = QUEUE_SORTS[sort]
         shown.sort(key=lambda row: _hours_of(queue_key, row), reverse=descending)
@@ -560,11 +590,12 @@ def filter_rows(request, queue_key, rows):
             return ""
         return filter_key or "all"
 
-    def querystring(filter_key, sort_key=sort):
+    def querystring(filter_key, sort_key=sort, type_key=project_type):
         params = {
             key: value
             for key, value in (
-                ("filter", filter_param(filter_key)), ("q", query), ("scope", scope), ("sort", sort_key),
+                ("filter", filter_param(filter_key)), ("type", type_key), ("q", query),
+                ("scope", scope), ("sort", sort_key),
             )
             if value
         }
@@ -574,27 +605,43 @@ def filter_rows(request, queue_key, rows):
     next_sort = {"": "hours", "hours": "hours_asc", "hours_asc": ""}[sort]
 
     options = [{
-        "key": "", "label": "All", "count": len(searched), "active": not active,
+        "key": "", "label": "All", "count": len(typed), "active": not active,
         "href": querystring(""),
     }]
     options += [
         {
             "key": key,
             "label": label,
-            "count": sum(1 for row in searched if test(queue_key, row)),
+            "count": sum(1 for row in typed if test(queue_key, row)),
             "active": key == active,
             "href": querystring(key),
         }
         for key, label, test in filters
+    ]
+    type_options = [{
+        "key": "", "label": "Any type", "count": len(filtered), "active": not project_type,
+        "href": querystring(active, type_key=""),
+    }] if types else []
+    type_options += [
+        {
+            "key": key,
+            "label": label,
+            "count": sum(1 for row in filtered if of_type(row, key)),
+            "active": key == project_type,
+            "href": querystring(active, type_key=key),
+        }
+        for key, label in types.items()
     ]
     current = querystring(active)
     return shown, {
         "filter_options": options,
         "active_filter": active,
         "active_filter_param": filter_param(active),
+        "type_options": type_options,
+        "active_type": project_type,
         "filter_query": query,
-        "filtering": bool(active or query),
-        "clearable": bool(active != default or query),
+        "filtering": bool(active or project_type or query),
+        "clearable": bool(active != default or project_type or query),
         "filter_search_max": FILTER_SEARCH_MAX_LENGTH,
         "active_sort": sort,
         "sort_label": QUEUE_SORTS[sort][0] if sort else "",
