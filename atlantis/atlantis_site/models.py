@@ -1642,14 +1642,14 @@ class Item(models.Model):
 	# exist only so a claim can become an ordinary Order that fulfillment
 	# already knows how to handle.
 	printer_key = models.CharField(max_length=80, blank=True, default="")
-	# What `cost` is counted in on a REVIEWER row, "" on everything else,
-	# whose cost is in pearls. Lapse costs are whole hours of footage.
-	review_currency = models.CharField(
-		max_length=16,
-		choices=ReviewCurrency.choices,
-		blank=True,
-		default="",
-	)
+	# What a REVIEWER row costs in each review currency, None where it can't
+	# be bought with that one; the buyer picks which to pay in. Named
+	# "<currency>_cost" so review_cost() can find them. A REVIEWER row's
+	# `cost` is left at 0: it would be in pearls, which buy nothing here.
+	# Lapse costs are whole hours of footage.
+	lapse_hours_cost = models.PositiveIntegerField(null=True, blank=True)
+	t1_reviews_cost = models.PositiveIntegerField(null=True, blank=True)
+	t2_reviews_cost = models.PositiveIntegerField(null=True, blank=True)
 
 	class Meta:
 		constraints = [
@@ -1690,20 +1690,44 @@ class Item(models.Model):
 	def is_reviewer_item(self):
 		return self.kind == self.Kind.REVIEWER
 
-	def price_label(self, amount):
-		"""`amount` of whatever this item is paid in, worded for a page."""
+	@staticmethod
+	def review_cost_field(currency):
+		return f"{currency}_cost"
+
+	def review_cost(self, currency):
+		"""What this costs in `currency`, or None if it can't be paid in it."""
+		return getattr(self, self.review_cost_field(currency))
+
+	@property
+	def review_costs(self):
+		"""{currency: cost} for every currency this can be paid in."""
+		return {
+			currency: cost for currency in self.ReviewCurrency
+			if (cost := self.review_cost(currency)) is not None
+		}
+
+	def price_label(self, amount, currency=""):
+		"""`amount` of whatever this item is paid in, worded for a page.
+
+		A reviewer item can be paid in more than one currency, so it takes
+		the one being counted in.
+		"""
 		if self.is_reviewer_item:
 			unit = {
 				self.ReviewCurrency.LAPSE_HOURS: "lapse hour",
 				self.ReviewCurrency.T1_REVIEWS: "T1 review",
 				self.ReviewCurrency.T2_REVIEWS: "T2 review",
-			}.get(self.review_currency, "review")
+			}.get(currency, "review")
 		else:
 			unit = "pearl"
 		return f"{amount} {unit}{'' if amount == 1 else 's'}"
 
 	def __str__(self):
-		return f"{self.name} ({self.description}) for {self.price_label(self.cost)}"
+		if self.is_reviewer_item:
+			price = " or ".join(self.price_label(cost, currency) for currency, cost in self.review_costs.items())
+		else:
+			price = self.price_label(self.cost)
+		return f"{self.name} ({self.description}) for {price}"
 	
 class Order(models.Model):
 	owner = models.ForeignKey(
@@ -1744,12 +1768,24 @@ class Order(models.Model):
 	created_at = models.DateTimeField(auto_now_add=True)
 	quantity = models.PositiveIntegerField(default=1)
 	cost = models.PositiveIntegerField(blank=True)
+	# Which of the item's review currencies a reviewer shop order was paid in,
+	# and so what `cost` is counted in. "" on everything else (pearls).
+	review_currency = models.CharField(
+		max_length=16,
+		choices=Item.ReviewCurrency.choices,
+		blank=True,
+		default="",
+	)
 	refunded = models.BooleanField(blank=True, null=True)
 
 	def save(self, *args, **kwargs):
 		if self.cost is None and self.item:
 			self.cost = self.item.cost
 		super().save(*args, **kwargs)
+
+	def price_label(self, amount):
+		"""`amount` of what this order was paid in, worded for a page."""
+		return self.item.price_label(amount, self.review_currency)
 
 
 class PrinterClaim(models.Model):

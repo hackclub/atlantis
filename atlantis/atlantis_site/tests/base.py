@@ -42,10 +42,14 @@ def during_week(index=1):
 	"""override_settings putting `timezone.now()` inside challenge week `index`.
 
 	Anchored on this week's Monday in the program's own timezone, so the run is
-	always somewhere in the middle of the named week whatever day it is.
+	always somewhere in the middle of the named week whatever day it is. In the
+	first hours of a Monday that would leave the last week's buffer open, so
+	then the weeks are made to start on the Sunday instead.
 	"""
-	today = timezone.now().astimezone(weeks.zone()).date()
-	monday = today - timedelta(days=today.weekday())
+	now = timezone.now().astimezone(weeks.zone())
+	monday = now.date() - timedelta(days=now.weekday())
+	if now.weekday() == 0 and now.time() < weeks.BUFFER_ENDS:
+		monday -= timedelta(days=1)
 	return override_settings(
 		CHALLENGE_START_DATE=(monday - timedelta(weeks=index - 1)).isoformat()
 	)

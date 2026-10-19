@@ -45,16 +45,27 @@
                                     </div>
                                 </div>
                             </td>
-                            <td class="rq-num">{{ item.price }}</td>
+                            <td class="rq-num">
+                                {% for price in item.prices %}<span class="rs-price">{{ price.label }}</span>{% endfor %}
+                            </td>
                             <td class="rq-col-num">{% if item.unlimited_stock %}&infin;{% else %}{{ item.stock }}{% endif %}</td>
                             <td class="ff-col-actions">
                                 {% if not item.in_stock %}
                                     <span class="rq-quiet">Out of stock</span>
                                 {% else %}
                                     <form action="{% url 'buy_reviewer_item' item.id %}" method="post" class="ff-actions rs-buy"
-                                          data-confirm="Order {{ item.name }} for {{ item.price }}?">
+                                          data-confirm="Order {{ item.name }}?">
                                         {% csrf_token %}
                                         <input type="number" name="quantity" value="1" min="1" aria-label="Quantity of {{ item.name }}">
+                                        {% if item.prices|length == 1 %}
+                                            <input type="hidden" name="currency" value="{{ item.prices.0.currency }}">
+                                        {% else %}
+                                            <select name="currency" aria-label="Pay for {{ item.name }} with">
+                                                {% for price in item.prices %}
+                                                    <option value="{{ price.currency }}"{% if not price.affordable %} disabled{% endif %}>{{ price.label }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        {% endif %}
                                         <input type="text" name="user_notes" maxlength="100" placeholder="Notes (optional)" aria-label="Notes for {{ item.name }}">
                                         <button type="submit" class="rv-btn rv-btn-sm rv-btn-primary"{% if not item.affordable %} disabled title="Not enough to spend yet"{% endif %}>Buy</button>
                                     </form>
@@ -66,7 +77,9 @@
                                         <button type="button" class="rv-btn rv-btn-sm open-edit"
                                                 data-url="{% url 'edit_reviewer_item' item.id %}"
                                                 data-name="{{ item.name }}" data-description="{{ item.description }}"
-                                                data-cost="{{ item.cost }}" data-currency="{{ item.review_currency }}"
+                                                data-lapse-hours-cost="{{ item.lapse_hours_cost|default_if_none:'' }}"
+                                                data-t1-reviews-cost="{{ item.t1_reviews_cost|default_if_none:'' }}"
+                                                data-t2-reviews-cost="{{ item.t2_reviews_cost|default_if_none:'' }}"
                                                 data-stock="{{ item.stock }}" data-image-url="{% if item.has_image %}{{ item.imageUrl }}{% endif %}">Edit</button>
                                         <form action="{% url 'delete_reviewer_item' item.id %}" method="post"
                                               data-confirm="Take {{ item.name }} off the reviewer shop? Orders already placed are kept." data-confirm-danger>
@@ -164,8 +177,9 @@
             form.action = button.dataset.url;
             form.elements.name.value = button.dataset.name || '';
             form.elements.description.value = button.dataset.description || '';
-            form.elements.cost.value = button.dataset.cost || '';
-            form.elements.review_currency.value = button.dataset.currency || '';
+            form.elements.lapse_hours_cost.value = button.dataset.lapseHoursCost || '';
+            form.elements.t1_reviews_cost.value = button.dataset.t1ReviewsCost || '';
+            form.elements.t2_reviews_cost.value = button.dataset.t2ReviewsCost || '';
             form.elements.stock.value = button.dataset.stock || '-1';
             form.elements.imageUrl.value = button.dataset.imageUrl || '';
             window.Atlantis.openDialog(modal);

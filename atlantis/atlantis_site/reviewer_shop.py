@@ -1,9 +1,10 @@
 """Balances for the reviewer shop, where review work is the currency.
 
 A reviewer earns in three currencies, one per desk: hours of lapse footage
-reviewed, T1 reviews and T2 reviews. Each reviewer shop item is priced in one
-of them. A balance is everything earned on that desk since launch, less what
-has been spent on it — orders for items in that currency, unless refunded.
+reviewed, T1 reviews and T2 reviews. Each reviewer shop item is priced in any
+of them, and the buyer picks which to pay in. A balance is everything earned
+on that desk since launch, less what has been spent on it — orders paid in
+that currency, unless refunded.
 Nothing is stored: a refund hands the work back simply by no longer counting,
 and a rolled-back review comes off the balance the same way.
 
@@ -51,7 +52,7 @@ def launched_at():
 
 def items():
     """Reviewer shop items still on sale."""
-    return Item.objects.filter(kind=Item.Kind.REVIEWER, deleted=False).order_by("review_currency", "cost", "id")
+    return Item.objects.filter(kind=Item.Kind.REVIEWER, deleted=False).order_by("id")
 
 
 def _earned(reviewer, since):
@@ -72,7 +73,7 @@ def _spent(reviewer):
     rows = (
         Order.objects.filter(owner=reviewer, item__kind=Item.Kind.REVIEWER)
         .exclude(status=Order.OrderStatus.REFUNDED)
-        .values_list("item__review_currency")
+        .values_list("review_currency")
         .annotate(total=Sum(F("cost") * F("quantity")))
     )
     return {currency: (total or 0) * UNIT_SIZE.get(currency, 1) for currency, total in rows}
@@ -92,9 +93,15 @@ def balances(reviewer):
     return {currency: earned[currency] - spent.get(currency, 0) for currency in Currency}
 
 
-def price(item, quantity=1):
-    """What `quantity` of `item` costs, in its currency's base units."""
-    return item.cost * quantity * UNIT_SIZE[item.review_currency]
+def price(item, currency, quantity=1):
+    """What `quantity` of `item` costs paid in `currency`, in its base units.
+
+    None if `item` can't be paid in `currency`.
+    """
+    cost = item.review_cost(currency)
+    if cost is None:
+        return None
+    return cost * quantity * UNIT_SIZE[currency]
 
 
 def display_amount(currency, base_units):

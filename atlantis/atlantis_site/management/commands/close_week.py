@@ -79,8 +79,9 @@ class Command(BaseCommand):
 
             for index in closed:
                 week = state.weeks[index - 1]
-                # Week 1 short is still live until week 2 closes (the grace
-                # pair), so there's nothing to write down about it yet.
+                # A short week is still live until its buffer closes at 2am,
+                # and week 1 short until week 2 closes too (the grace pair),
+                # so there's nothing to write down about it yet.
                 if week.pending:
                     continue
                 row = existing.get(index)

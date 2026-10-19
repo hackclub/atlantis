@@ -177,6 +177,43 @@ def deadline(index):
     return week_bounds(index)[1] - timedelta(seconds=1)
 
 
+# The two hours after a week closes, up to 2am local on the Monday. Work
+# recorded in them goes to the week that just closed if it closed short, and to
+# the new one if it didn't — challenge.py decides which, since it needs the
+# hours. The deadline everyone is shown is still Sunday midnight: this is slack
+# for a session that ran over, not a later deadline.
+BUFFER_ENDS = time(2, 0)
+
+
+def buffer_bounds(index):
+    """(start, end) of the buffer after week `index`. End is exclusive.
+
+    Built from the local date like every other boundary here, not by adding
+    two hours to midnight; neither DST change lands in a Monday's first hours,
+    but that keeps it a non-question.
+    """
+    start, end = week_bounds(index)
+    monday = end.astimezone(zone()).date()
+    return end, datetime.combine(monday, BUFFER_ENDS, tzinfo=zone()).replace(fold=0)
+
+
+def buffer_week(moment):
+    """The week whose buffer `moment` falls in, or None.
+
+    Includes the buffer after the last week, when week_for already says None.
+    """
+    if moment is None:
+        return None
+    if timezone.is_naive(moment):
+        moment = timezone.make_aware(moment, timezone.get_default_timezone())
+    local = moment.astimezone(zone())
+    days = (local.date() - start_date()).days
+    if days <= 0 or days % 7 or local.time() >= BUFFER_ENDS:
+        return None
+    index = days // 7
+    return index if index <= week_count() else None
+
+
 # When the "hours left" DM goes out: Saturday evening, local, a day and a bit
 # before the week closes.
 REMINDER_DAY = 5  # Monday is 0

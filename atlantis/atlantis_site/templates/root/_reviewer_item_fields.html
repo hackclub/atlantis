@@ -1,6 +1,6 @@
 {% comment %}
 The fields of a reviewer shop item, shared by the add and edit dialogs.
-expects: currencies
+expects: currencies, as (cost field, label) pairs
 {% endcomment %}
 <label>
     Name
@@ -12,18 +12,16 @@ expects: currencies
     <textarea name="description" maxlength="500" placeholder="What the reviewer gets" required></textarea>
 </label>
 
-<label>
-    Paid in
-    <select name="review_currency" required>
-        {% for value, label in currencies %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-    </select>
-</label>
-
-<label>
-    Cost
-    <input name="cost" type="number" min="1" placeholder="65" required>
-    <small>Whole lapse hours, or a number of reviews.</small>
-</label>
+<fieldset class="rs-costs">
+    <legend>Cost</legend>
+    <small>Fill in any of these; the buyer pays in whichever they pick. Leave one blank and the item can't be bought with it.</small>
+    {% for field, label in currencies %}
+        <label>
+            {{ label }}
+            <input name="{{ field }}" type="number" min="1" placeholder="Optional">
+        </label>
+    {% endfor %}
+</fieldset>
 
 <label>
     Stock

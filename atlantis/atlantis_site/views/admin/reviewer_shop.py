@@ -48,8 +48,15 @@ def reviewer_shop_dash(request):
 
     items = list(reviewer_shop.items())
     for item in items:
-        item.price = item.price_label(item.cost)
-        item.affordable = balances[item.review_currency] >= reviewer_shop.price(item)
+        item.prices = [
+            {
+                "currency": currency,
+                "label": item.price_label(cost, currency),
+                "affordable": balances[currency] >= reviewer_shop.price(item, currency),
+            }
+            for currency, cost in item.review_costs.items()
+        ]
+        item.affordable = any(p["affordable"] for p in item.prices)
 
     orders = list(
         Order.objects.filter(owner=request.user, item__kind=Item.Kind.REVIEWER)
@@ -57,14 +64,14 @@ def reviewer_shop_dash(request):
         .order_by("-created_at")[:RECENT_ORDERS]
     )
     for order in orders:
-        order.total_label = order.item.price_label(order.cost * order.quantity)
+        order.total_label = order.price_label(order.cost * order.quantity)
 
     return render(request, "root/reviewer_shop.html", {
         "stat_cards": stat_cards,
         "items": items,
         "orders": orders,
         "is_shopkeeper": _is_shopkeeper(request.user),
-        "currencies": Item.ReviewCurrency.choices,
+        "currencies": [(Item.review_cost_field(c), c.label) for c in Item.ReviewCurrency],
         "queue_label": "Reviewer shop",
         "queue_short": "Shop",
         "queue_accent": "good",
@@ -78,6 +85,7 @@ def reviewer_shop_dash(request):
 def buy_reviewer_item(request, item_id):
     item = get_object_or_404(reviewer_shop.items(), id=item_id)
     quantity = request.POST.get("quantity", "").strip() or "1"
+    currency = request.POST.get("currency", "").strip()
     user_notes = request.POST.get("user_notes", "").strip()
 
     try:
@@ -89,6 +97,10 @@ def buy_reviewer_item(request, item_id):
         return redirect("reviewer_shop_dash")
     if quantity > INT_FIELD_MAX:
         messages.error(request, "That's more than anyone can order at once.")
+        return redirect("reviewer_shop_dash")
+
+    if currency not in Item.ReviewCurrency.values or item.review_cost(currency) is None:
+        messages.error(request, f"{item.name} can't be paid for in that.")
         return redirect("reviewer_shop_dash")
 
     if too_long(user_notes, Order, "user_notes"):
@@ -119,12 +131,18 @@ def buy_reviewer_item(request, item_id):
             )
             return redirect("reviewer_shop_dash")
 
-        balance = reviewer_shop.balances(request.user)[item.review_currency]
-        if balance < reviewer_shop.price(item, quantity):
+        # Read again under the lock: a shopkeeper may have repriced it.
+        cost = item.review_cost(currency)
+        if cost is None:
+            messages.error(request, f"{item.name} can't be paid for in that.")
+            return redirect("reviewer_shop_dash")
+
+        balance = reviewer_shop.balances(request.user)[currency]
+        if balance < reviewer_shop.price(item, currency, quantity):
             messages.error(
                 request,
-                f"{quantity}x {item.name} costs {item.price_label(item.cost * quantity)} and you have "
-                f"{reviewer_shop.display_amount(item.review_currency, balance)} to spend.",
+                f"{quantity}x {item.name} costs {item.price_label(cost * quantity, currency)} and you have "
+                f"{reviewer_shop.display_amount(currency, balance)} to spend.",
             )
             return redirect("reviewer_shop_dash")
 
@@ -136,6 +154,8 @@ def buy_reviewer_item(request, item_id):
             owner=request.user,
             item=item,
             quantity=quantity,
+            cost=cost,
+            review_currency=currency,
             user_notes=user_notes,
             address_id=address_id,
         )
@@ -144,8 +164,8 @@ def buy_reviewer_item(request, item_id):
         "item_id": item.id,
         "order_id": order.id,
         "quantity": quantity,
-        "currency": item.review_currency,
-        "cost": item.cost * quantity,
+        "currency": currency,
+        "cost": cost * quantity,
     })
     messages.success(request, f"Ordered {quantity}x {item.name}! It's in the fulfillment queue.")
     return redirect("reviewer_shop_dash")
@@ -157,23 +177,33 @@ def _read_item_form(request):
         "name": request.POST.get("name", "").strip(),
         "description": request.POST.get("description", "").strip(),
         "imageUrl": request.POST.get("imageUrl", "").strip(),
-        "review_currency": request.POST.get("review_currency", "").strip(),
     }
-    cost = request.POST.get("cost", "").strip()
     stock = request.POST.get("stock", "").strip() or "-1"
 
     if not fields["name"]:
         return None, "Name is required."
     if not fields["description"]:
         return None, "Description is required."
-    if fields["review_currency"] not in Item.ReviewCurrency.values:
-        return None, "Pick what the item costs: lapse hours, T1 reviews or T2 reviews."
-    try:
-        fields["cost"] = int(cost)
-    except ValueError:
-        return None, "Cost must be a whole number."
-    if fields["cost"] <= 0:
-        return None, "Cost must be at least 1."
+
+    # Each currency's cost is optional, and left blank the item can't be
+    # paid in it; it has to be payable in at least one.
+    for currency in Item.ReviewCurrency:
+        field = Item.review_cost_field(currency)
+        cost = request.POST.get(field, "").strip()
+        if not cost:
+            fields[field] = None
+            continue
+        try:
+            fields[field] = int(cost)
+        except ValueError:
+            return None, f"Cost in {currency.label} must be a whole number."
+        if fields[field] <= 0:
+            return None, f"Cost in {currency.label} must be at least 1, or left blank."
+        if fields[field] > INT_FIELD_MAX:
+            return None, f"Cost in {currency.label} must be {INT_FIELD_MAX} or less."
+    if all(fields[Item.review_cost_field(c)] is None for c in Item.ReviewCurrency):
+        return None, "Give the item a cost in at least one of lapse hours, T1 reviews or T2 reviews."
+
     try:
         fields["stock"] = int(stock)
     except ValueError:
@@ -191,7 +221,7 @@ def _read_item_form(request):
 
     error = _item_field_error(
         fields["name"], fields["description"], reviewer_shop.ITEM_CATEGORY,
-        fields["imageUrl"], fields["cost"], fields["stock"],
+        fields["imageUrl"], 0, fields["stock"],
     )
     if error:
         return None, error
@@ -209,6 +239,7 @@ def create_reviewer_item(request):
 
     item = Item.objects.create(
         **fields,
+        cost=0,
         kind=Item.Kind.REVIEWER,
         category=reviewer_shop.ITEM_CATEGORY,
     )

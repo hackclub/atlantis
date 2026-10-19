@@ -2128,7 +2128,8 @@
     align-items: center;
 }
 
-.root-page .rs-buy input {
+.root-page .rs-buy input,
+.root-page .rs-buy select {
     padding: 4px 8px;
     border: 1px solid var(--oc-line-2);
     border-radius: 8px;
@@ -2144,6 +2145,20 @@
 
 .root-page .rs-buy input[type="text"] {
     width: 160px;
+}
+
+/* An item priced in more than one currency lists each on its own line. */
+.root-page .rs-price {
+    display: block;
+}
+
+/* The add/edit dialog's three optional costs, grouped under one heading. */
+.root-page .rs-costs {
+    display: grid;
+    gap: 8px;
+    margin: 0;
+    padding: 0;
+    border: 0;
 }
 
 /* Order statuses in the verdict chip's shape and colours. */

@@ -79,8 +79,8 @@ def _order_rows(orders):
     """Stamp each order with what its row prints that isn't a field."""
     for order in orders:
         order.total_cost = order.cost * order.quantity
-        order.total_label = order.item.price_label(order.total_cost)
-        order.each_label = order.item.price_label(order.cost)
+        order.total_label = order.price_label(order.total_cost)
+        order.each_label = order.price_label(order.cost)
         order.age_display = age_display(order.created_at)
         order.age_bucket = age_bucket(order.created_at, FULFILLMENT_SLA_DAYS)
     return orders
@@ -268,7 +268,7 @@ def update_order_status(request, order_id):
             Order.OrderStatus.DENIED: f"Your order for {order.quantity}x {order.item.name} was denied. Ask in #atlantis-help for more details.",
             Order.OrderStatus.REFUNDED: (
                 f"Your order for {order.quantity}x {order.item.name} was refunded and "
-                f"{order.item.price_label(amount_refunded or 0)} "
+                f"{order.price_label(amount_refunded or 0)} "
                 f"{'have' if amount_refunded != 1 else 'has'} been added back to your "
                 f"{'reviewer shop ' if order.item.is_reviewer_item else ''}balance."
             ),

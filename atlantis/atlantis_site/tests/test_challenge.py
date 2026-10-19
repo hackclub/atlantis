@@ -119,6 +119,107 @@ class WeekMathTests(BaseTestCase):
         self.assertEqual(weeks.printer_hours(), 40)
 
 
+@override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+class BufferTests(BaseTestCase):
+    """The two hours after a week closes, up to 2am Eastern on the Monday.
+
+    Week 3 here runs Oct 5-11, so its buffer is Mon Oct 12, midnight to 2am.
+    Week 3 rather than 1, so the grace pair's ten isn't in play.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.user = make_user("shipper")
+        self.project = make_project(self.user)
+
+    def _log(self, minutes, when):
+        journal = make_journal(self.project, time_spent=0)
+        return make_timelapse(self.project, journal=journal, minutes=minutes, recorded_at=when)
+
+    def _weeks(self, now="2026-10-14 12:00"):
+        state = challenge.standing(self.user, et(now))
+        return state, state.weeks[2], state.weeks[3]
+
+    def test_the_buffer_runs_from_midnight_to_two_on_the_monday(self):
+        self.assertIsNone(weeks.buffer_week(et("2026-10-11 23:59")))
+        self.assertEqual(weeks.buffer_week(et("2026-10-12 00:00")), 3)
+        self.assertEqual(weeks.buffer_week(et("2026-10-12 01:59")), 3)
+        self.assertIsNone(weeks.buffer_week(et("2026-10-12 02:00")))
+        self.assertIsNone(weeks.buffer_week(et("2026-10-13 01:00")))
+        self.assertEqual(weeks.buffer_bounds(3), (et("2026-10-12 00:00"), et("2026-10-12 02:00")))
+
+    def test_the_buffer_is_two_hours_either_side_of_the_dst_change(self):
+        # Week 6 is the one with the fall-back in it; its buffer is after it.
+        start, end = weeks.buffer_bounds(6)
+        self.assertEqual(end - start, timedelta(hours=2))
+        self.assertEqual(weeks.buffer_week(et("2026-11-02 01:30")), 6)
+
+    def test_there_is_a_buffer_after_the_last_week(self):
+        self.assertEqual(weeks.buffer_week(et("2026-11-16 01:00")), 8)
+        self.assertIsNone(weeks.buffer_week(et("2026-09-21 01:00")))
+
+    def test_buffer_time_saves_a_week_that_closed_short(self):
+        self._log(240, et("2026-10-08 12:00"))
+        self._log(90, et("2026-10-12 01:00"))
+        _state, week3, week4 = self._weeks()
+        self.assertEqual((week3.tracked_minutes, week4.tracked_minutes), (330, 0))
+        self.assertTrue(week3.met)
+        self.assertFalse(week3.missed)
+
+    def test_buffer_time_goes_to_the_new_week_once_the_old_one_is_met(self):
+        self._log(300, et("2026-10-08 12:00"))
+        self._log(90, et("2026-10-12 01:00"))
+        _state, week3, week4 = self._weeks()
+        self.assertEqual((week3.tracked_minutes, week4.tracked_minutes), (300, 90))
+
+    def test_savers_count_towards_whether_the_week_was_met(self):
+        self._log(240, et("2026-10-08 12:00"))
+        self._log(90, et("2026-10-12 01:00"))
+        SaverCredit.objects.create(user=self.user, week_index=3)
+        _state, week3, week4 = self._weeks()
+        self.assertEqual((week3.tracked_minutes, week4.tracked_minutes), (240, 90))
+        self.assertTrue(week3.met)
+
+    def test_an_organizers_pass_sends_the_buffer_forward(self):
+        self._log(60, et("2026-10-12 01:00"))
+        WeekOutcome.objects.create(user=self.user, week_index=3, override=WeekOutcome.Override.PASS)
+        _state, week3, week4 = self._weeks()
+        self.assertEqual((week3.tracked_minutes, week4.tracked_minutes), (0, 60))
+
+    def test_a_buffer_sent_forward_counts_towards_the_next_week(self):
+        self._log(300, et("2026-10-08 12:00"))
+        self._log(60, et("2026-10-12 01:00"))
+        self._log(240, et("2026-10-15 12:00"))
+        self._log(30, et("2026-10-19 01:00"))
+        state = challenge.standing(self.user, et("2026-10-21 12:00"))
+        # Week 4 has five with week 3's buffer in it, so its own goes to week 5.
+        self.assertEqual([w.tracked_minutes for w in state.weeks[2:5]], [300, 300, 30])
+
+    def test_a_short_week_is_not_missed_until_its_buffer_closes(self):
+        self._log(240, et("2026-10-08 12:00"))
+        state, week3, _week4 = self._weeks("2026-10-12 00:30")
+        self.assertTrue(week3.closed)
+        self.assertTrue(week3.pending)
+        self.assertFalse(week3.missed)
+        self.assertEqual(state.current.index, 4)
+
+        _state, week3, _week4 = self._weeks("2026-10-12 02:00")
+        self.assertTrue(week3.missed)
+
+    def test_the_buffer_after_week_two_keeps_the_grace_pair_open(self):
+        self._log(240, et("2026-09-24 12:00"))
+        state = challenge.standing(self.user, et("2026-10-05 01:00"))
+        self.assertFalse(state.eliminated)
+        self.assertTrue(challenge.standing(self.user, et("2026-10-05 02:00")).eliminated)
+
+    def test_the_buffer_counts_against_close_weeks_already_settled(self):
+        """Applies to weeks long gone: nothing is cached, so it's retroactive."""
+        self._log(240, et("2026-10-08 12:00"))
+        self._log(60, et("2026-10-12 01:30"))
+        WeekOutcome.objects.create(user=self.user, week_index=3, real_minutes=240, passed=False)
+        self.assertFalse(challenge.standing(self.user, et("2026-11-01 12:00")).weeks[2].missed)
+
+
 class StandingTests(BaseTestCase):
     """What the bars say, and who is still in."""
 
@@ -1090,7 +1191,9 @@ class StreakPanelTests(BaseTestCase):
         with during_week(3):
             self._log(600, in_week(1))
             response = self.client.get(reverse("dashboard"))
-            self.assertContains(response, "ends Sun 11:59 PM")
+            # Sunday, unless during_week had to start the weeks a day early.
+            day = weeks.deadline(3).astimezone(weeks.zone()).strftime("%a")
+            self.assertContains(response, f"ends {day} 11:59 PM")
 
     def test_before_the_start_it_says_so_instead_of_counting_down(self):
         response = self.client.get(reverse("dashboard"))

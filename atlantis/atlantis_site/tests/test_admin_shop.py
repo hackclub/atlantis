@@ -339,10 +339,10 @@ class FulfillmentDashTests(BaseTestCase):
 
 	def test_reviewer_shop_row_is_priced_in_reviews(self):
 		grant = Item.objects.create(
-			name="$10 Snack Grant", description="x", cost=65,
-			kind=Item.Kind.REVIEWER, review_currency=Item.ReviewCurrency.T1_REVIEWS,
+			name="$10 Snack Grant", description="x", cost=0,
+			kind=Item.Kind.REVIEWER, t1_reviews_cost=65, t2_reviews_cost=25,
 		)
-		Order.objects.create(owner=self.buyer, item=grant)
+		Order.objects.create(owner=self.buyer, item=grant, cost=65, review_currency=Item.ReviewCurrency.T1_REVIEWS)
 		response = self.client.get(reverse("fulfillment_dash"))
 		self.assertContains(response, "reviewer shop")
 		self.assertContains(response, "65 T1 reviews")
@@ -418,10 +418,10 @@ class UpdateOrderStatusTests(BaseTestCase):
 
 	def test_refunding_a_reviewer_item_returns_no_pearls(self):
 		item = Item.objects.create(
-			name="Grant", description="x", cost=3,
-			kind=Item.Kind.REVIEWER, review_currency=Item.ReviewCurrency.LAPSE_HOURS,
+			name="Grant", description="x", cost=0,
+			kind=Item.Kind.REVIEWER, lapse_hours_cost=3,
 		)
-		order = Order.objects.create(owner=self.buyer, item=item)
+		order = Order.objects.create(owner=self.buyer, item=item, cost=3, review_currency=Item.ReviewCurrency.LAPSE_HOURS)
 		self._update("refunded", order=order)
 		order.refresh_from_db()
 		self.assertTrue(order.refunded)
@@ -430,8 +430,8 @@ class UpdateOrderStatusTests(BaseTestCase):
 
 	def test_reviewer_items_cannot_be_edited_from_the_shop_page(self):
 		item = Item.objects.create(
-			name="Grant", description="x", cost=3,
-			kind=Item.Kind.REVIEWER, review_currency=Item.ReviewCurrency.T2_REVIEWS,
+			name="Grant", description="x", cost=0,
+			kind=Item.Kind.REVIEWER, t2_reviews_cost=3,
 		)
 		self.client.post(reverse("edit_item", args=[item.id]), {
 			"name": "Hacked", "description": "x", "cost": "1", "kind": "regular",

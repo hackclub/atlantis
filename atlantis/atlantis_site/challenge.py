@@ -13,7 +13,9 @@ Three numbers come out of here and they are deliberately different things:
                    the streak and elimination are judged on, and it uses
                    *tracked* time because internal timelapse review runs days
                    behind and a week has to settle on Sunday night. Weeks 1
-                   and 2 are the exception: ten across the pair will do.
+                   and 2 are the exception: ten across the pair will do. Time
+                   in the two hours after a week closes (weeks.buffer_bounds)
+                   goes to that week if it closed short, else to the next.
   printer hours    five per week survived, and no more however long you worked.
                    Forty of them buys a printer, which is exactly every week.
   pearls           paid at T3 finalization off *approved* time, split across
@@ -65,8 +67,8 @@ def _all_logged_timelapses():
 	)
 
 
-def tracked_minutes_by_week(user):
-	"""{week index or PREP: tracked minutes}, over everything this user logged.
+def tracked_seconds_by_week(user):
+	"""_bucket_by_week over everything this user logged.
 
 	Bucketed in Python rather than SQL so that weeks.week_for stays the single
 	answer to which week a moment is in — the boundaries are local midnights in
@@ -77,12 +79,54 @@ def tracked_minutes_by_week(user):
 
 
 def _bucket_by_week(rows):
-	"""{week index or PREP: minutes} from (moment, seconds) pairs."""
-	totals = {}
+	"""({week index or PREP: seconds}, {week index: seconds in its buffer})
+	from (moment, seconds) pairs.
+
+	Buffer time is kept apart because which week it belongs to depends on the
+	hours, not the clock; _settle_buffers hands it out. Seconds rather than
+	minutes so that split doesn't round a minute away.
+	"""
+	totals, buffered = {}, {}
 	for at, seconds in rows:
+		index = weeks.buffer_week(at)
+		if index is not None:
+			buffered[index] = buffered.get(index, 0) + (seconds or 0)
+			continue
 		key = PREP if weeks.is_prep(at) else weeks.week_for(at)
 		totals[key] = totals.get(key, 0) + (seconds or 0)
-	return {key: seconds // 60 for key, seconds in totals.items()}
+	return totals, buffered
+
+
+def _settle_buffers(tracked, savers, overrides):
+	"""{week index or PREP: tracked minutes}, each week's buffer handed out.
+
+	`tracked` is _bucket_by_week's pair. A buffer goes to the week that just
+	closed if, without it, that week was short of its own five — so a session
+	that ran past midnight can still save it — and to the week after if it
+	wasn't. Oldest first, since a buffer that went forward counts towards the
+	next week's five when its own buffer is decided.
+
+	A grace week is judged on its own five here, not the pair's ten: either way
+	the time stays inside the pair, so the pair's total is the same.
+	"""
+	seconds, buffered = tracked
+	seconds = dict(seconds)
+	for index in sorted(buffered):
+		credited = seconds.get(index, 0) // 60 + savers.get(index, 0) * 60
+		override = overrides.get(index, "")
+		met = override == WeekOutcome.Override.PASS or (
+			override != WeekOutcome.Override.FAIL and credited >= weeks.WEEKLY_MINUTES
+		)
+		if not met:
+			target = index
+		elif index < weeks.week_count():
+			target = index + 1
+		else:
+			# After the last week: wherever the calendar puts it, as it would
+			# have without a buffer.
+			target = weeks.week_for(weeks.buffer_bounds(index)[0])
+		seconds[target] = seconds.get(target, 0) + buffered[index]
+	return {key: total // 60 for key, total in seconds.items()}
 
 
 def saver_hours_by_week(user):
@@ -113,6 +157,8 @@ class Week:
 	saver_hours: int = 0
 	closed: bool = False
 	current: bool = False
+	# Closed, but its buffer hasn't: what's recorded now can still meet it.
+	buffer_open: bool = False
 	override: str = ""
 	# Weeks 1 and 2 are judged as a pair (weeks.GRACE_WEEKS). For a week in
 	# the pair, grace_minutes is what the whole pair has credited and
@@ -160,14 +206,18 @@ class Week:
 	def missed(self):
 		"""Only a week that is over can be missed; a live one is just unfinished.
 
-		A grace week isn't missed until the whole pair has closed: week 1 short
-		is still recoverable all through week 2.
+		Nor is one whose buffer is still open, which can still fill it. A grace
+		week isn't missed until the whole pair has closed: week 1 short is
+		still recoverable all through week 2.
 		"""
-		return self.closed and not self.met and not (self.grace and self.grace_open)
+		return (
+			self.closed and not self.met and not self.buffer_open
+			and not (self.grace and self.grace_open)
+		)
 
 	@property
 	def pending(self):
-		"""Closed short, but waiting on the rest of its grace pair."""
+		"""Closed short, but waiting on its buffer or the rest of its grace pair."""
 		return self.closed and not self.met and not self.missed
 
 	@property
@@ -365,7 +415,7 @@ def standing(user, now=None):
 	now = now or timezone.now()
 	overrides = {index: row.override for index, row in _overrides(user).items()}
 	return _build_standing(
-		tracked_minutes_by_week(user), saver_hours_by_week(user), overrides, now
+		tracked_seconds_by_week(user), saver_hours_by_week(user), overrides, now
 	)
 
 
@@ -393,7 +443,7 @@ def standings_for(user_ids, now=None):
 
 
 def _ledger():
-	"""Everyone's ({week: tracked minutes}, {week: saver hours}, {week: override}),
+	"""Everyone's (_bucket_by_week pair, {week: saver hours}, {week: override}),
 	each keyed by user id."""
 	rows = {}
 	for owner, at, seconds in _all_logged_timelapses().values_list("owner", "at", "tracked_seconds"):
@@ -420,7 +470,7 @@ def _standings_for(user_ids, tracked, savers, overrides, now):
 	calendar = _calendar(now)
 	return {
 		owner: _build_standing(
-			tracked.get(owner, {}), savers.get(owner, {}), overrides.get(owner, {}), now,
+			tracked.get(owner, ({}, {})), savers.get(owner, {}), overrides.get(owner, {}), now,
 			calendar,
 		)
 		for owner in user_ids
@@ -437,6 +487,7 @@ def _calendar(now):
 	return {
 		"closed": set(weeks.closed_weeks(now)),
 		"live": weeks.current_week(now),
+		"buffering": weeks.buffer_week(now),
 		"grace": weeks.grace_weeks(),
 		"started": weeks.has_started(now),
 		"ended": weeks.has_ended(now),
@@ -444,14 +495,16 @@ def _calendar(now):
 
 
 def _build_standing(tracked, savers, overrides, now, calendar=None):
-	"""A Standing from one user's {week: minutes}, {week: saver hours} and
-	{week: override}."""
+	"""A Standing from one user's _bucket_by_week pair, {week: saver hours}
+	and {week: override}."""
 	calendar = calendar or _calendar(now)
 	closed = calendar["closed"]
 	live = calendar["live"]
+	buffering = calendar["buffering"]
 	grace = calendar["grace"]
+	tracked = _settle_buffers(tracked, savers, overrides)
 	grace_minutes = sum(tracked.get(i, 0) + savers.get(i, 0) * 60 for i in grace)
-	grace_open = any(i not in closed for i in grace)
+	grace_open = any(i not in closed or i == buffering for i in grace)
 
 	return Standing(
 		weeks=[
@@ -461,6 +514,7 @@ def _build_standing(tracked, savers, overrides, now, calendar=None):
 				saver_hours=savers.get(index, 0),
 				closed=index in closed,
 				current=index == live,
+				buffer_open=index == buffering,
 				override=overrides.get(index, ""),
 				grace=index in grace,
 				grace_minutes=grace_minutes if index in grace else 0,
