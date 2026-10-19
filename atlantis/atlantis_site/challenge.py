@@ -97,7 +97,7 @@ def _bucket_by_week(rows):
 	return totals, buffered
 
 
-def _settle_buffers(tracked, savers, overrides):
+def _settle_buffers(tracked, savers, overrides, buffer=True):
 	"""{week index or PREP: tracked minutes}, each week's buffer handed out.
 
 	`tracked` is _bucket_by_week's pair. A buffer goes to the week that just
@@ -108,6 +108,9 @@ def _settle_buffers(tracked, savers, overrides):
 
 	A grace week is judged on its own five here, not the pair's ten: either way
 	the time stays inside the pair, so the pair's total is the same.
+
+	buffer=False puts every buffer where the calendar does, as though there
+	were none — what rescued_by_buffer compares against.
 	"""
 	seconds, buffered = tracked
 	seconds = dict(seconds)
@@ -117,7 +120,7 @@ def _settle_buffers(tracked, savers, overrides):
 		met = override == WeekOutcome.Override.PASS or (
 			override != WeekOutcome.Override.FAIL and credited >= weeks.WEEKLY_MINUTES
 		)
-		if not met:
+		if buffer and not met:
 			target = index
 		elif index < weeks.week_count():
 			target = index + 1
@@ -442,6 +445,31 @@ def standings_for(user_ids, now=None):
 	return _standings_for(user_ids, tracked, savers, overrides, now)
 
 
+def rescued_by_buffer(now=None):
+	"""{user id: (standing, without)} for everyone the buffer keeps in.
+
+	`standing` is where they are; `without` is where they'd be had every
+	buffer gone by the calendar, which has them out. The weeks it saved are
+	the ones `without` has missed and `standing` doesn't.
+	"""
+	now = now or timezone.now()
+	tracked, savers, overrides = _ledger()
+	calendar = _calendar(now)
+	rescued = {}
+	for owner in tracked.keys() | savers.keys():
+		args = (
+			tracked.get(owner, ({}, {})), savers.get(owner, {}), overrides.get(owner, {}),
+			now, calendar,
+		)
+		state = _build_standing(*args)
+		if state.eliminated:
+			continue
+		without = _build_standing(*args, buffer=False)
+		if without.eliminated:
+			rescued[owner] = (state, without)
+	return rescued
+
+
 def _ledger():
 	"""Everyone's (_bucket_by_week pair, {week: saver hours}, {week: override}),
 	each keyed by user id."""
@@ -494,15 +522,16 @@ def _calendar(now):
 	}
 
 
-def _build_standing(tracked, savers, overrides, now, calendar=None):
+def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True):
 	"""A Standing from one user's _bucket_by_week pair, {week: saver hours}
-	and {week: override}."""
+	and {week: override}. buffer=False judges it as though there were no
+	buffer after each week."""
 	calendar = calendar or _calendar(now)
 	closed = calendar["closed"]
 	live = calendar["live"]
-	buffering = calendar["buffering"]
+	buffering = calendar["buffering"] if buffer else None
 	grace = calendar["grace"]
-	tracked = _settle_buffers(tracked, savers, overrides)
+	tracked = _settle_buffers(tracked, savers, overrides, buffer)
 	grace_minutes = sum(tracked.get(i, 0) + savers.get(i, 0) * 60 for i in grace)
 	grace_open = any(i not in closed or i == buffering for i in grace)
 

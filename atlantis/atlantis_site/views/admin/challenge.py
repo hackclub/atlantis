@@ -1,21 +1,26 @@
 """Where organizers watch the streaks and, when they have to, overrule them.
 
 Two pages. The roster is every participant against every week, so "who is out
-and why" is one glance rather than a query. The per-user page is where a wrong
+and why" is one glance rather than a query; it also lists, and exports, who
+the two-hour buffer after each week put back in. The per-user page is where a wrong
 call gets fixed: grant saver hours, or force a week to pass or fail outright.
 
 Every one of those is a thumb on the scale, so all three are audit-logged with
 the reason the organizer typed.
 """
 
+import csv
+
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.db.models import Q
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from ... import challenge, weeks
 from ...models import SaverCredit, WeekOutcome
+from ...models import Profile
 from ..helpers import check_perms, staff_member_required, display_name, record_audit
 
 CHALLENGE_PERMS = ["atlantis_site.organizer"]
@@ -40,10 +45,13 @@ def challenge_dash(request):
 
     users = list(users)
     states = challenge.standings_for([user.id for user in users])
+    rescued = challenge.rescued_by_buffer()
     rows = []
     for user in users:
         state = states[user.id]
         if only == "out" and not state.eliminated:
+            continue
+        if only == "buffer" and user.id not in rescued:
             continue
         if only == "at-risk" and (state.eliminated or not _at_risk(state)):
             continue
@@ -54,6 +62,7 @@ def challenge_dash(request):
             "name": display_name(user),
             "standing": state,
             "at_risk": _at_risk(state),
+            "buffer_weeks": _buffer_weeks(*rescued[user.id]) if user.id in rescued else [],
         })
 
     # Out first, then those about to be, then everyone else: the list is read
@@ -66,7 +75,53 @@ def challenge_dash(request):
         "current_week": weeks.current_week(),
         "search": search,
         "show": only,
+        "rescued_count": len(rescued),
     })
+
+
+def _buffer_weeks(state, without):
+    """The weeks the buffer saved, from rescued_by_buffer's pair."""
+    return [week.index for week in without.missed if not state.weeks[week.index - 1].missed]
+
+
+def _buffer_minutes(state, without, indexes):
+    """How much buffer time those weeks kept, which is what saved them."""
+    return sum(
+        state.weeks[i - 1].tracked_minutes - without.weeks[i - 1].tracked_minutes
+        for i in indexes
+    )
+
+
+@staff_member_required
+@check_perms(CHALLENGE_PERMS)
+def buffer_rescued_csv(request):
+    """Everyone the buffer put back in the program, and the weeks it saved."""
+    rescued = challenge.rescued_by_buffer()
+
+    response = HttpResponse(content_type="text/csv")
+    response["Content-Disposition"] = 'attachment; filename="back_in_from_buffer.csv"'
+    writer = csv.writer(response)
+    writer.writerow(["slack_id", "username", "user_id", "weeks_saved", "buffer_time"])
+
+    profiles = {
+        profile.user_id: profile
+        for profile in Profile.objects.filter(user_id__in=rescued.keys())
+    }
+    users = get_user_model().objects.filter(id__in=rescued.keys()).order_by("id")
+    for user in users:
+        state, without = rescued[user.id]
+        saved = _buffer_weeks(state, without)
+        profile = profiles.get(user.id)
+        writer.writerow([
+            profile.slack_id if profile else "",
+            display_name(user),
+            user.id,
+            " ".join(str(i) for i in saved),
+            challenge.format_minutes(_buffer_minutes(state, without, saved)),
+        ])
+
+    record_audit(request, "export_buffer_rescued", metadata={"count": len(rescued)})
+    return response
 
 
 def _at_risk(state):

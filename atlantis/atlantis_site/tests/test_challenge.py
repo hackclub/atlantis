@@ -11,6 +11,8 @@ timelapses and saver rows on every read — so these tests assert against that
 rather than against anything written down at the moment a week closed.
 """
 
+import csv
+import io
 from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
 from io import StringIO
@@ -25,7 +27,7 @@ from django.utils import timezone
 
 from .. import challenge, weeks
 from ..models import (
-    Item, Order, PrinterClaim, Profile, SaverCredit, Ship, WeekOutcome,
+    AuditLog, Item, Order, PrinterClaim, Profile, SaverCredit, Ship, WeekOutcome,
     WeekReminder,
 )
 from ..printers import item_key
@@ -1025,6 +1027,66 @@ class RemindWeekCommandTests(BaseTestCase):
         self._log(600, et("2026-09-23 10:00"))
         self._run("2026-10-10 18:05")
         self.dm.assert_not_called()
+
+
+@override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+class BufferRescuedTests(BaseTestCase):
+    """The roster's list of who the buffer put back in, and its CSV.
+
+    Now is in week 4; week 3's buffer is Mon Oct 12, midnight to 2am.
+    """
+
+    NOW = et("2026-10-14 12:00")
+
+    def setUp(self):
+        super().setUp()
+        self.organizer = grant_perms(make_user("organizer", slack_id="U0ORG"), "organizer")
+        self.client.force_login(self.organizer)
+        # Ten across the grace pair, then week 3 short until its buffer.
+        self.rescued = self._user("rescued", "U0RESC", (600, "2026-09-24 12:00"), (240, "2026-10-08 12:00"), (90, "2026-10-12 01:00"))
+        # Week 3 short with nothing in the buffer: out either way.
+        self.out = self._user("out", "U0OUT", (600, "2026-09-24 12:00"), (240, "2026-10-08 12:00"))
+        # Week 3 met on its own: the buffer went to week 4 and changed nothing.
+        self.fine = self._user("fine", "U0FINE", (600, "2026-09-24 12:00"), (300, "2026-10-08 12:00"), (90, "2026-10-12 01:00"))
+
+    def _user(self, name, slack_id, *logs):
+        user = make_user(name, slack_id=slack_id)
+        project = make_project(user)
+        for minutes, when in logs:
+            journal = make_journal(project, time_spent=0)
+            make_timelapse(project, journal=journal, minutes=minutes, recorded_at=et(when))
+        return user
+
+    def _get(self, name, **params):
+        with patch("django.utils.timezone.now", return_value=self.NOW):
+            return self.client.get(reverse(name), params)
+
+    def test_only_people_out_without_the_buffer_and_in_with_it(self):
+        with patch("django.utils.timezone.now", return_value=self.NOW):
+            rescued = challenge.rescued_by_buffer()
+        self.assertEqual(set(rescued), {self.rescued.id})
+
+    def test_the_roster_filters_to_them_and_names_the_week(self):
+        response = self._get("challenge_dash", show="buffer")
+        rows = response.context["rows"]
+        self.assertEqual([row["user"].username for row in rows], ["rescued"])
+        self.assertEqual(rows[0]["buffer_weeks"], [3])
+        self.assertEqual(response.context["rescued_count"], 1)
+        self.assertContains(response, "back in via buffer: W3")
+
+    def test_the_csv_lists_them(self):
+        response = self._get("buffer_rescued_csv")
+        self.assertEqual(response["Content-Type"], "text/csv")
+        rows = list(csv.DictReader(io.StringIO(response.content.decode())))
+        self.assertEqual(rows, [{
+            "slack_id": "U0RESC", "username": "rescued", "user_id": str(self.rescued.id),
+            "weeks_saved": "3", "buffer_time": "1h 30m",
+        }])
+        self.assertTrue(AuditLog.objects.filter(action="export_buffer_rescued").exists())
+
+    def test_the_csv_needs_the_organizer_permission(self):
+        self.client.force_login(grant_perms(make_user("t1", slack_id="U0T1"), "t1_review"))
+        self.assertEqual(self._get("buffer_rescued_csv").status_code, 302)
 
 
 class ChallengeAdminTests(BaseTestCase):

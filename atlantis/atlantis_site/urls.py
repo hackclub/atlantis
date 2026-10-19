@@ -98,6 +98,7 @@ urlpatterns = [
     path("root/projects/delete/<int:project_id>/", db_delete_project, name="db_delete_project"),
     path("root/metrics/", metrics, name="metrics"),
     path("root/challenge/", challenge_dash, name="challenge_dash"),
+    path("root/challenge/back_in_from_buffer.csv", buffer_rescued_csv, name="buffer_rescued_csv"),
     path("root/challenge/<int:user_id>/", challenge_user, name="challenge_user"),
     path("root/challenge/<int:user_id>/saver/", grant_saver, name="grant_saver"),
     path("root/challenge/<int:user_id>/override/", override_week, name="override_week"),

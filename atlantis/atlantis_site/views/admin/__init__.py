@@ -10,7 +10,7 @@ from ...views.admin.timelapse_review import timelapse_review_dash, timelapse_rev
 from ...views.admin.shop import shop_dash, create_item, edit_item, delete_item, reorder_categories, fulfillment_dash, update_order_status, view_order_address
 from ...views.admin.reviewer_shop import reviewer_shop_dash, buy_reviewer_item, create_reviewer_item, edit_reviewer_item, delete_reviewer_item
 from ...views.admin.management import users, backfill_emails, invite_to_channels, unfinished_hours_csv, edit_user, set_user_ban, view_user_address, manage_projects, admin_edit_project, db_delete_project, db_delete_projects
-from ...views.admin.challenge import challenge_dash, challenge_user, grant_saver, override_week
+from ...views.admin.challenge import challenge_dash, challenge_user, grant_saver, override_week, buffer_rescued_csv
 
 __all__ = [
     "admin_dash", 
@@ -24,5 +24,5 @@ __all__ = [
     "shop_dash", "create_item", "edit_item", "delete_item", "reorder_categories", "fulfillment_dash", "update_order_status", "view_order_address",
     "reviewer_shop_dash", "buy_reviewer_item", "create_reviewer_item", "edit_reviewer_item", "delete_reviewer_item",
     "users", "backfill_emails", "invite_to_channels", "unfinished_hours_csv", "edit_user", "set_user_ban", "view_user_address", "manage_projects", "admin_edit_project", "db_delete_project", "db_delete_projects",
-    "challenge_dash", "challenge_user", "grant_saver", "override_week",
+    "challenge_dash", "challenge_user", "grant_saver", "override_week", "buffer_rescued_csv",
 ]

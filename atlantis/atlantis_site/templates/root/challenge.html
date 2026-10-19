@@ -19,10 +19,17 @@
             <option value="out" {% if show == 'out' %}selected{% endif %}>Out of the program</option>
             <option value="at-risk" {% if show == 'at-risk' %}selected{% endif %}>Short this week</option>
             <option value="met" {% if show == 'met' %}selected{% endif %}>Done this week</option>
+            <option value="buffer" {% if show == 'buffer' %}selected{% endif %}>Back in thanks to the buffer ({{ rescued_count }})</option>
         </select>
         <button type="submit">Filter</button>
         {% if search or show %}<a href="{% url 'challenge_dash' %}" class="link-button">Clear</a>{% endif %}
     </form>
+
+    <div class="admin-actions">
+        <form method="GET" action="{% url 'buffer_rescued_csv' %}">
+            <button type="submit">Export users back in thanks to the buffer (CSV)</button>
+        </form>
+    </div>
 
     <div class="table-scroll">
         <table class="users-table challenge-table">
@@ -66,6 +73,8 @@
                         <td>
                             {% if row.standing.eliminated %}
                                 <span class="pill pill-bad">out, needs {{ row.standing.saver_hours_needed }}h</span>
+                            {% elif row.buffer_weeks %}
+                                <span class="pill pill-good" title="Out without the two hours after each week">back in via buffer: {% for index in row.buffer_weeks %}W{{ index }}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
                             {% elif row.at_risk %}
                                 <span class="pill pill-warn">short this week</span>
                             {% else %}
