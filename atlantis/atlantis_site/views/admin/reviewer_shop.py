@@ -14,6 +14,7 @@ from ..helpers import (
 )
 
 # Everyone who reviews anything, plus the shopkeepers who stock the shelf.
+# Reviewer leads run the shelf for their reviewers, so they stock it too.
 REVIEWER_PERMS = [
     "atlantis_site.organizer",
     "atlantis_site.fulfillment",
@@ -23,7 +24,7 @@ REVIEWER_PERMS = [
     "atlantis_site.timelapse_review",
     "atlantis_site.reviewer_lead",
 ]
-SHOPKEEPER_PERMS = ["atlantis_site.organizer", "atlantis_site.fulfillment"]
+SHOPKEEPER_PERMS = ["atlantis_site.organizer", "atlantis_site.fulfillment", "atlantis_site.reviewer_lead"]
 
 # Your own reviewer orders listed under the shelf, newest first.
 RECENT_ORDERS = 20

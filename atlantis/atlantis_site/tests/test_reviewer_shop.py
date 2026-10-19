@@ -173,11 +173,13 @@ class ReviewerShopPageTests(ReviewWorkMixin, BaseTestCase):
 		self.assertContains(response, f'<option value="{Currency.T2_REVIEWS}" disabled>')
 
 	def test_shopkeepers_see_the_management_controls(self):
-		self.client.force_login(grant_perms(make_user("keeper"), "fulfillment"))
 		reviewer_item()
-		response = self.client.get(reverse("reviewer_shop_dash"))
-		self.assertContains(response, "Add item")
-		self.assertContains(response, "editReviewerItemModal")
+		for perm in ("fulfillment", "reviewer_lead"):
+			with self.subTest(perm=perm):
+				self.client.force_login(grant_perms(make_user(f"keeper_{perm}"), perm))
+				response = self.client.get(reverse("reviewer_shop_dash"))
+				self.assertContains(response, "Add item")
+				self.assertContains(response, "editReviewerItemModal")
 
 	def test_nav_links_the_reviewer_shop(self):
 		response = self.client.get(reverse("admin_dash"))
@@ -316,10 +318,23 @@ class ManageItemTests(BaseTestCase):
 		item.refresh_from_db()
 		self.assertTrue(item.deleted)
 
+	def test_reviewer_leads_can_manage_items(self):
+		self.client.force_login(grant_perms(make_user("lead"), "reviewer_lead"))
+		item = reviewer_item()
+		self.client.post(reverse("create_reviewer_item"), self._form(name="Lead's pick"))
+		self.client.post(reverse("edit_reviewer_item", args=[item.id]), self._form(t1_reviews_cost="1"))
+		item.refresh_from_db()
+		self.assertEqual(item.review_costs, {Currency.T1_REVIEWS: 1})
+		self.assertTrue(Item.objects.filter(name="Lead's pick", kind=Item.Kind.REVIEWER).exists())
+
+		self.client.post(reverse("delete_reviewer_item", args=[item.id]))
+		item.refresh_from_db()
+		self.assertTrue(item.deleted)
+
 	def test_reviewers_cannot_manage_items(self):
-		# Every review grant short of the shopkeepers' own, the lead included.
+		# Every review grant short of the shopkeepers' own.
 		self.client.force_login(grant_perms(
-			make_user("rev"), "t1_review", "t2_review", "t3_review", "timelapse_review", "reviewer_lead",
+			make_user("rev"), "t1_review", "t2_review", "t3_review", "timelapse_review",
 		))
 		item = reviewer_item()
 		self.client.post(reverse("create_reviewer_item"), self._form(name="Free stuff"))
