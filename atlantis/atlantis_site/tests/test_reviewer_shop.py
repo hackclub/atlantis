@@ -47,10 +47,13 @@ class ReviewWorkMixin:
 			for _ in range(n)
 		])
 
-	def lapse_minutes(self, *minutes):
+	def lapse_minutes(self, *minutes, shipped=True):
+		journals = []
 		for m in minutes:
-			journal = make_journal(self.project, time_spent=m)
+			journal = make_journal(self.project, ship=self.ship if shipped else None, time_spent=m)
 			TimelapseReview.objects.create(journal=journal, reviewer=self.reviewer)
+			journals.append(journal)
+		return journals
 
 
 class BalanceTests(ReviewWorkMixin, BaseTestCase):
@@ -112,6 +115,14 @@ class BalanceTests(ReviewWorkMixin, BaseTestCase):
 	def test_other_reviewers_work_is_not_counted(self):
 		self.t1s(5, reviewer=make_user("other"))
 		self.assertEqual(reviewer_shop.balances(self.reviewer)[Currency.T1_REVIEWS], 0)
+
+	def test_unshipped_lapses_pay_only_once_they_ship(self):
+		self.lapse_minutes(60)
+		[unshipped] = self.lapse_minutes(90, shipped=False)
+		self.assertEqual(reviewer_shop.balances(self.reviewer)[Currency.LAPSE_HOURS], 60 * 60)
+		unshipped.ship = self.ship
+		unshipped.save()
+		self.assertEqual(reviewer_shop.balances(self.reviewer)[Currency.LAPSE_HOURS], 150 * 60)
 
 	def test_lapse_hours_display_rounded_down_to_a_tenth(self):
 		self.assertEqual(reviewer_shop.display_amount(Currency.LAPSE_HOURS, 3 * 3600 + 3599), "3.9")

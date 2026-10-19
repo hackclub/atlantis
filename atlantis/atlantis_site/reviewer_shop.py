@@ -5,6 +5,11 @@ reviewed, T1 reviews and T2 reviews. Each reviewer shop item is priced in any
 of them, and the buyer picks which to pay in. A balance is everything earned
 on that desk since the start date, less what has been spent on it since then —
 orders paid in that currency, unless refunded.
+
+Lapse footage only pays once it has shipped. Lapses can be reviewed while
+still unshipped, and those hours are held back until the lapse goes out on a
+ship; one deleted before it ever ships never pays.
+
 Nothing is stored: a refund hands the work back simply by no longer counting,
 and a rolled-back review comes off the balance the same way.
 
@@ -49,6 +54,7 @@ def items():
 def _earned(reviewer, since):
     """Work done on each desk since `since`, in base units."""
     lapse_seconds = Timelapse.objects.filter(
+        journal__ship__isnull=False,
         journal__timelapse_review__reviewer=reviewer,
         journal__timelapse_review__reviewed_at__gte=since,
     ).aggregate(total=Sum("tracked_seconds"))["total"] or 0
