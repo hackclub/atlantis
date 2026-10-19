@@ -84,43 +84,42 @@ def _buffer_weeks(state, without):
     return [week.index for week in without.missed if not state.weeks[week.index - 1].missed]
 
 
-def _buffer_minutes(state, without, indexes):
-    """How much buffer time those weeks kept, which is what saved them."""
-    return sum(
-        state.weeks[i - 1].tracked_minutes - without.weeks[i - 1].tracked_minutes
-        for i in indexes
-    )
-
-
 @staff_member_required
 @check_perms(CHALLENGE_PERMS)
 def buffer_rescued_csv(request):
-    """Everyone the buffer put back in the program, and the weeks it saved."""
+    """Everyone the buffer put back in the program, for the mass-DM script.
+
+    The columns are unfinished_hours_csv's, which scripts/dm_unfinished_hours.py
+    reads: `week` is the weeks the buffer saved, `progress` what each of them
+    has now, and `left` is nothing, since that's what saved them. One row per
+    person however many weeks it saved, so nobody is DMed twice, and nobody
+    banned, who isn't back in anything.
+    """
     rescued = challenge.rescued_by_buffer()
 
     response = HttpResponse(content_type="text/csv")
     response["Content-Disposition"] = 'attachment; filename="back_in_from_buffer.csv"'
     writer = csv.writer(response)
-    writer.writerow(["slack_id", "username", "user_id", "weeks_saved", "buffer_time"])
+    writer.writerow(["slack_id", "username", "user_id", "week", "progress", "left"])
 
-    profiles = {
-        profile.user_id: profile
-        for profile in Profile.objects.filter(user_id__in=rescued.keys())
-    }
-    users = get_user_model().objects.filter(id__in=rescued.keys()).order_by("id")
-    for user in users:
-        state, without = rescued[user.id]
-        saved = _buffer_weeks(state, without)
-        profile = profiles.get(user.id)
+    profiles = (
+        Profile.objects.select_related("user")
+        .filter(user_id__in=rescued.keys(), banned=False)
+        .order_by("user_id")
+    )
+    for profile in profiles:
+        state, without = rescued[profile.user_id]
+        saved = [state.weeks[i - 1] for i in _buffer_weeks(state, without)]
         writer.writerow([
-            profile.slack_id if profile else "",
-            display_name(user),
-            user.id,
-            " ".join(str(i) for i in saved),
-            challenge.format_minutes(_buffer_minutes(state, without, saved)),
+            profile.slack_id,
+            profile.slack_username or profile.user.username,
+            profile.user_id,
+            ", ".join(str(week.index) for week in saved),
+            ", ".join(week.credited_display for week in saved),
+            challenge.format_minutes(0),
         ])
 
-    record_audit(request, "export_buffer_rescued", metadata={"count": len(rescued)})
+    record_audit(request, "export_buffer_rescued", metadata={"count": profiles.count()})
     return response
 
 

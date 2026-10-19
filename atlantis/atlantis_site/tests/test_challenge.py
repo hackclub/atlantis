@@ -1078,11 +1078,18 @@ class BufferRescuedTests(BaseTestCase):
         response = self._get("buffer_rescued_csv")
         self.assertEqual(response["Content-Type"], "text/csv")
         rows = list(csv.DictReader(io.StringIO(response.content.decode())))
+        # The columns dm_unfinished_hours.py reads.
         self.assertEqual(rows, [{
             "slack_id": "U0RESC", "username": "rescued", "user_id": str(self.rescued.id),
-            "weeks_saved": "3", "buffer_time": "1h 30m",
+            "week": "3", "progress": "5h 30m", "left": "0h 0m",
         }])
         self.assertTrue(AuditLog.objects.filter(action="export_buffer_rescued").exists())
+
+    def test_the_csv_leaves_out_the_banned(self):
+        self.rescued.hackclub_profile.banned = True
+        self.rescued.hackclub_profile.save()
+        response = self._get("buffer_rescued_csv")
+        self.assertEqual(list(csv.DictReader(io.StringIO(response.content.decode()))), [])
 
     def test_the_csv_needs_the_organizer_permission(self):
         self.client.force_login(grant_perms(make_user("t1", slack_id="U0T1"), "t1_review"))

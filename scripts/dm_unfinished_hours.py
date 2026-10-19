@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
-"""DM everyone in a CSV exported from the Atlantis users page
-("Export users short on hours") asking if they need help finishing their hours.
+"""DM everyone in a CSV exported from Atlantis.
+
+Two kinds of CSV, the same columns, a different DM for each:
+
+  unfinished  (default) "Export users short on hours" on the users page: asks
+              if they need help finishing their hours.
+  buffer      "Export users back in thanks to the buffer" on the streaks page:
+              tells them the time they logged before 2am Monday counted, so
+              they're back in.
 
 Sends as whoever owns SLACK_TOKEN (a user token, so the DMs come from you).
 
 Env:
   SLACK_TOKEN               user token (xoxp-...) with im:write, chat:write
+  DM_KIND                   unfinished or buffer; each keeps its own sent log
   TEST_SLACK_USER_REDIRECT  send every DM to this Slack ID instead
   TEST_ONLY_SLACK_ID        send exactly one DM to this Slack ID (CSV optional, they
                             don't need to be in it) and don't log it
@@ -22,7 +30,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-SENT_LOG_FILE = "sent_unfinished_hours.txt"
+DM_KIND = os.environ.get("DM_KIND", "unfinished").strip() or "unfinished"
+SENT_LOG_FILES = {
+    "unfinished": "sent_unfinished_hours.txt",
+    "buffer": "sent_buffer_rescued.txt",
+}
+SENT_LOG_FILE = SENT_LOG_FILES.get(DM_KIND, "")
 SLACK_TOKEN = os.environ.get("SLACK_TOKEN", "")
 TEST_SLACK_USER_REDIRECT = os.environ.get("TEST_SLACK_USER_REDIRECT", "")
 TEST_ONLY_SLACK_ID = os.environ.get("TEST_ONLY_SLACK_ID", "").strip()
@@ -123,7 +136,24 @@ def send_slack_dm(channel_id: str, message: str) -> bool:
         return False
 
 
-def build_message(slack_id: str) -> str:
+def weeks_phrase(week: str) -> str:
+    """"week 3" or "weeks 3 and 5", from the CSV's "3" or "3, 5"."""
+    indexes = [w.strip() for w in week.split(",") if w.strip()]
+    if len(indexes) <= 1:
+        return f"week {''.join(indexes) or '?'}"
+    return f"weeks {', '.join(indexes[:-1])} and {indexes[-1]}"
+
+
+def build_message(row: dict[str, str]) -> str:
+    slack_id = row.get("slack_id", "").strip()
+    if DM_KIND == "buffer":
+        return (
+            f"hi <@{slack_id}>! good news: anything you track between sunday 11:59PM "
+            "and 2am ET monday now counts towards the week that just ended if you "
+            f"were short on it. that covered your hours for {weeks_phrase(row.get('week', ''))}, "
+            "so you're back in atlantis :) \n \n"
+            "thank you for participating in atlantis :ohneheart:"
+        )
     return (
         f"hi <@{slack_id}>. it's kc! i noticed you haven't finished your 5 hours "
         "for week 3 for atlantis yet. is there any way i can help you finish the "
@@ -139,6 +169,10 @@ def main() -> None:
         sys.exit(1)
 
     csv_file = sys.argv[1] if len(sys.argv) >= 2 else None
+
+    if DM_KIND not in SENT_LOG_FILES:
+        print(f"❌ DM_KIND must be one of {', '.join(SENT_LOG_FILES)}, not {DM_KIND!r}.")
+        sys.exit(1)
 
     if not SLACK_TOKEN:
         print("❌ SLACK_TOKEN environment variable not set.")
@@ -204,7 +238,7 @@ def main() -> None:
             print("❌ Could not open DM. User NOT logged as sent.")
             continue
 
-        message = build_message(slack_id)
+        message = build_message(row)
 
         print(f"\n{'─' * 60}")
         print(message)
