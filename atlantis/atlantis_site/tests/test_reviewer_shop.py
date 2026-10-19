@@ -93,11 +93,21 @@ class BalanceTests(ReviewWorkMixin, BaseTestCase):
 		reviewer_order(self.reviewer, item, status=Order.OrderStatus.DENIED)
 		self.assertEqual(reviewer_shop.balances(self.reviewer)[Currency.T1_REVIEWS], 6)
 
-	def test_reviews_from_before_launch_do_not_count(self):
+	def test_reviews_from_before_the_start_do_not_count(self):
 		self.t1s(5)
-		T1.objects.update(reviewed_at=reviewer_shop.launched_at() - timedelta(minutes=1))
+		T1.objects.update(reviewed_at=reviewer_shop.counts_from() - timedelta(minutes=1))
 		self.t1s(2)
 		self.assertEqual(reviewer_shop.balances(self.reviewer)[Currency.T1_REVIEWS], 2)
+
+	def test_orders_from_before_the_start_do_not_count(self):
+		self.t1s(5)
+		reviewer_order(self.reviewer, reviewer_item(cost=4))
+		Order.objects.update(created_at=reviewer_shop.counts_from() - timedelta(minutes=1))
+		self.assertEqual(reviewer_shop.balances(self.reviewer)[Currency.T1_REVIEWS], 5)
+
+	def test_start_is_local_midnight(self):
+		with self.settings(REVIEWER_SHOP_START_DATE="2026-10-19", CHALLENGE_TIMEZONE="America/New_York"):
+			self.assertEqual(reviewer_shop.counts_from().isoformat(), "2026-10-19T00:00:00-04:00")
 
 	def test_other_reviewers_work_is_not_counted(self):
 		self.t1s(5, reviewer=make_user("other"))

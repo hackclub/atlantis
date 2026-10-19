@@ -37,6 +37,10 @@ TEST_ENCRYPTION_KEY = Fernet.generate_key().decode()
 # `during_week` below and say which week they mean.
 TEST_CHALLENGE_START = "2099-01-05"  # a Monday
 
+# Long past, so review work and orders a test makes now count towards reviewer
+# shop balances whatever today's date is.
+TEST_REVIEWER_SHOP_START = "2000-01-03"
+
 
 def during_week(index=1):
 	"""override_settings putting `timezone.now()` inside challenge week `index`.
@@ -309,6 +313,7 @@ TEST_HCA_ADDRESS = {
 	MEDIA_URL="/media/",
 	ADDRESS_ENCRYPTION_KEY=TEST_ENCRYPTION_KEY,
 	CHALLENGE_START_DATE=TEST_CHALLENGE_START,
+	REVIEWER_SHOP_START_DATE=TEST_REVIEWER_SHOP_START,
 )
 class BaseTestCase(TestCase):
 	# Keyed explicitly rather than derived from the last-but-one path segment:

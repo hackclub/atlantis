@@ -3,23 +3,23 @@
 A reviewer earns in three currencies, one per desk: hours of lapse footage
 reviewed, T1 reviews and T2 reviews. Each reviewer shop item is priced in any
 of them, and the buyer picks which to pay in. A balance is everything earned
-on that desk since launch, less what has been spent on it — orders paid in
-that currency, unless refunded.
+on that desk since the start date, less what has been spent on it since then —
+orders paid in that currency, unless refunded.
 Nothing is stored: a refund hands the work back simply by no longer counting,
 and a rolled-back review comes off the balance the same way.
 
-"Launch" is when snack grants (which this replaced) went live, read back from
-Django's own migration table. Grants already paid out were re-priced as
-reviewer shop orders by the migration that removed them, so the work they
-paid for stays spent and progress towards the next one carries over.
+The start date is settings.REVIEWER_SHOP_START_DATE, local midnight in the
+program's timezone. Work and orders from before it are both left out, so
+moving it forward wipes every balance back to zero at once.
 """
 
-from django.db.migrations.recorder import MigrationRecorder
+from datetime import date, datetime, time
+
+from django.conf import settings
 from django.db.models import F, Sum
 
+from . import weeks
 from .models import Item, Order, T1, T2, Timelapse
-
-LAUNCH_MIGRATION = ("atlantis_site", "0074_snack_grants")
 
 ITEM_CATEGORY = "Reviewer shop"
 
@@ -34,20 +34,11 @@ UNIT_SIZE = {
     Currency.T2_REVIEWS: 1,
 }
 
-_launched_at = None
 
-
-def launched_at():
-    """When reviewer earnings started counting, or None if never."""
-    global _launched_at
-    if _launched_at is None:
-        app, name = LAUNCH_MIGRATION
-        _launched_at = (
-            MigrationRecorder.Migration.objects.filter(app=app, name=name)
-            .values_list("applied", flat=True)
-            .first()
-        )
-    return _launched_at
+def counts_from():
+    """The instant reviewer earnings and spending start counting."""
+    on = date.fromisoformat(settings.REVIEWER_SHOP_START_DATE)
+    return datetime.combine(on, time.min, tzinfo=weeks.zone())
 
 
 def items():
@@ -68,10 +59,10 @@ def _earned(reviewer, since):
     }
 
 
-def _spent(reviewer):
-    """What reviewer shop orders have cost, per currency, in base units."""
+def _spent(reviewer, since):
+    """What reviewer shop orders since `since` have cost, per currency, in base units."""
     rows = (
-        Order.objects.filter(owner=reviewer, item__kind=Item.Kind.REVIEWER)
+        Order.objects.filter(owner=reviewer, item__kind=Item.Kind.REVIEWER, created_at__gte=since)
         .exclude(status=Order.OrderStatus.REFUNDED)
         .values_list("review_currency")
         .annotate(total=Sum(F("cost") * F("quantity")))
@@ -85,11 +76,9 @@ def balances(reviewer):
     Can be negative: a review rolled back after it was spent leaves a hole
     that new work fills before anything else can be bought.
     """
-    since = launched_at()
-    if since is None:
-        return {currency: 0 for currency in Currency}
+    since = counts_from()
     earned = _earned(reviewer, since)
-    spent = _spent(reviewer)
+    spent = _spent(reviewer, since)
     return {currency: earned[currency] - spent.get(currency, 0) for currency in Currency}
 
 

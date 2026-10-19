@@ -121,6 +121,10 @@ CHALLENGE_TIMEZONE = os.environ.get("CHALLENGE_TIMEZONE", "America/New_York")
 # ISO date of the Monday week 1 opens on, at 00:00 in CHALLENGE_TIMEZONE.
 CHALLENGE_START_DATE = os.environ.get("CHALLENGE_START_DATE", "2026-09-21")
 CHALLENGE_WEEKS = int(os.environ.get("CHALLENGE_WEEKS", 8))
+# ISO date reviewer shop balances start counting from, at 00:00 in
+# CHALLENGE_TIMEZONE. Review work and reviewer shop orders from before it don't
+# count, so moving it forward gives every reviewer a fresh start.
+REVIEWER_SHOP_START_DATE = os.environ.get("REVIEWER_SHOP_START_DATE", "2026-10-19")
 
 STORAGES = {
     "default": {
