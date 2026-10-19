@@ -13,9 +13,13 @@ expects: order (stamped by _order_rows), pending
                 <span class="rq-cover ff-cover" aria-hidden="true"></span>
             {% endif %}
             <div>
-                <a class="rq-project" href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
+                {% if order.item.is_reviewer_item %}
+                    <a class="rq-project" href="{% url 'reviewer_shop_dash' %}">{{ order.item.name }}</a>
+                {% else %}
+                    <a class="rq-project" href="{% url 'item_detail' order.item.id %}">{{ order.item.name }}</a>
+                {% endif %}
                 {% if order.item.kind == "printer" %}<span class="rv-chip rv-chip-quiet ff-kind">printer claim</span>
-                {% elif order.item.kind == "snack_grant" %}<span class="rv-chip rv-chip-quiet ff-kind">snack grant</span>
+                {% elif order.item.is_reviewer_item %}<span class="rv-chip rv-chip-quiet ff-kind">reviewer shop</span>
                 {% elif order.item.kind == "saver_current" or order.item.kind == "saver_past" %}<span class="rv-chip rv-chip-quiet ff-kind">streak saver</span>{% endif %}
                 {% if order.user_notes %}<span class="ff-note"><span class="ff-note-label">Buyer</span>{{ order.user_notes }}</span>{% endif %}
                 {% if order.admin_notes %}<span class="ff-note ff-note-admin"><span class="ff-note-label">Admin</span>{{ order.admin_notes }}</span>{% endif %}
@@ -32,8 +36,8 @@ expects: order (stamped by _order_rows), pending
     </td>
     <td class="rq-col-num">{{ order.quantity }}</td>
     <td class="rq-num">
-        {{ order.total_cost }} pearl{{ order.total_cost|pluralize }}
-        {% if order.quantity > 1 %}<span class="rq-since">{{ order.cost }} each</span>{% endif %}
+        {{ order.total_label }}
+        {% if order.quantity > 1 %}<span class="rq-since">{{ order.each_label }} each</span>{% endif %}
     </td>
     {% if pending %}
         <td class="rq-num">
@@ -56,18 +60,14 @@ expects: order (stamped by _order_rows), pending
                 {% csrf_token %}
                 <input type="hidden" name="next" value="{{ request.get_full_path }}">
                 {% if order.status == "P" %}
-                    {% if order.hcb_grant_url %}
-                        <a class="rv-btn rv-btn-sm" href="{{ order.hcb_grant_url }}" target="_blank" rel="noopener noreferrer"
-                           title="Open HCB's card grant form, prefilled for {{ order.owner.email }}">Send on HCB</a>
-                    {% endif %}
                     <button type="submit" name="action" value="fulfilled" class="rv-btn rv-btn-sm rv-btn-primary">Fulfill</button>
                     <button type="submit" name="action" value="denied" class="rv-btn rv-btn-sm rv-btn-danger"
-                            data-confirm="Deny {{ order.quantity }}&times; {{ order.item.name }} for {{ order.owner.hackclub_profile.slack_username|default:order.owner.username }}? Their pearls are not returned unless you also refund.">Deny</button>
+                            data-confirm="Deny {{ order.quantity }}&times; {{ order.item.name }} for {{ order.owner.hackclub_profile.slack_username|default:order.owner.username }}? {% if order.item.is_reviewer_item %}Their reviews are{% else %}Their pearls are{% endif %} not returned unless you also refund.">Deny</button>
                 {% else %}
                     <button type="submit" name="action" value="pending" class="rv-btn rv-btn-sm">Reopen</button>
                 {% endif %}
                 <button type="submit" name="action" value="refunded" class="rv-btn rv-btn-sm rv-btn-danger"
-                        data-confirm="Refund {{ order.total_cost }} pearl{{ order.total_cost|pluralize }} to {{ order.owner.hackclub_profile.slack_username|default:order.owner.username }}? A refunded order can't be changed again.">Refund</button>
+                        data-confirm="Refund {{ order.total_label }} to {{ order.owner.hackclub_profile.slack_username|default:order.owner.username }}? A refunded order can't be changed again.">Refund</button>
             </form>
         {% endif %}
     </td>

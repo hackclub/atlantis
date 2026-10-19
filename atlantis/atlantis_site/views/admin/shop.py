@@ -12,7 +12,6 @@ from django.db.models import Count, Exists, Min, OuterRef, Q
 
 from ...models import Profile, Item, Order, SaverCredit, ShopCategory
 from ...crypto import format_address
-from ...snack_grants import hcb_grant_url
 from ...hca import (
     IdentityUnavailable, extract_addresses, extract_contact, extract_phone,
     fetch_userinfo, select_address,
@@ -26,8 +25,8 @@ def shop_dash(request):
     # Printer rows are left out: they are generated from printers.py by
     # sync_printer_items, nothing here can edit them, and there are dozens of
     # them. Their prices live on the charts, which is where they are decided.
-    # The snack grant row is left out too: it is made by snack_grants.py and
-    # is only there to hang reviewers' grant orders on.
+    # Reviewer items are left out too: they are priced in review work, not
+    # pearls, and are managed on the reviewer shop.
     items = Item.objects.exclude(kind__in=Item.HIDDEN_KINDS).order_by("id")
     # Categories a rename or a delete left behind are still listed, flagged as
     # unused: they hold their slot for whenever an item lands back in them.
@@ -80,10 +79,10 @@ def _order_rows(orders):
     """Stamp each order with what its row prints that isn't a field."""
     for order in orders:
         order.total_cost = order.cost * order.quantity
+        order.total_label = order.item.price_label(order.total_cost)
+        order.each_label = order.item.price_label(order.cost)
         order.age_display = age_display(order.created_at)
         order.age_bucket = age_bucket(order.created_at, FULFILLMENT_SLA_DAYS)
-        if order.item.kind == Item.Kind.SNACK_GRANT:
-            order.hcb_grant_url = hcb_grant_url(order)
     return orders
 
 
@@ -237,8 +236,11 @@ def update_order_status(request, order_id):
         saver_hours_reversed = 0
         if order.status == Order.OrderStatus.REFUNDED:
             amount_refunded = order.cost * order.quantity
-            profile.layers += amount_refunded
-            profile.save()
+            # A reviewer item was paid for in review work, which comes back on
+            # its own: reviewer_shop.py stops counting a refunded order as spent.
+            if not order.item.is_reviewer_item:
+                profile.layers += amount_refunded
+                profile.save()
             order.refunded = True
             # Savers are spent the moment they are bought, so refunding one has
             # to take the hours back with the pearls — otherwise a refund is a
@@ -264,7 +266,12 @@ def update_order_status(request, order_id):
         dm_messages = {
             Order.OrderStatus.FULFILLED: f"Your order for {order.quantity}x {order.item.name} has been fulfilled!",
             Order.OrderStatus.DENIED: f"Your order for {order.quantity}x {order.item.name} was denied. Ask in #atlantis-help for more details.",
-            Order.OrderStatus.REFUNDED: f"Your order for {order.quantity}x {order.item.name} was refunded and {amount_refunded} pearls have been added back to your balance.",
+            Order.OrderStatus.REFUNDED: (
+                f"Your order for {order.quantity}x {order.item.name} was refunded and "
+                f"{order.item.price_label(amount_refunded or 0)} "
+                f"{'have' if amount_refunded != 1 else 'has'} been added back to your "
+                f"{'reviewer shop ' if order.item.is_reviewer_item else ''}balance."
+            ),
             Order.OrderStatus.PENDING: f"Your order for {order.quantity}x {order.item.name} has been marked as pending again.",
         }
         run_in_background(send_slack_dm, dm_messages[order.status], owner_slack_id)
@@ -442,8 +449,8 @@ def edit_item(request, item_id):
     if item.kind == Item.Kind.PRINTER:
         messages.error(request, "Printer items are generated from the tech trees and can't be edited here.")
         return redirect("shop_dash")
-    if item.kind == Item.Kind.SNACK_GRANT:
-        messages.error(request, "The snack grant item is managed automatically and can't be edited here.")
+    if item.is_reviewer_item:
+        messages.error(request, "Reviewer shop items are edited on the reviewer shop.")
         return redirect("shop_dash")
 
     name = request.POST.get("name", "").strip()

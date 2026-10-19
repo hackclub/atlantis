@@ -19,7 +19,6 @@ from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked
 from ...submissions import build_generated_justification, build_override_justification, submit_ship
 from ..helpers import check_perms, staff_member_required, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, claim_reviewed_unshipped_journals, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
-from ...snack_grants import award_snack_grants_quietly
 from .queue import (
     QUEUES, annotate_recordings, dash_context, decorate_rows, filter_rows,
     go_to_next, is_own_item, journal_stats, owner_snapshot, parse_skip,
@@ -378,8 +377,6 @@ def t1_decision(request, ship_id):
             changes_requested=changes_requested,
         )
 
-    award_snack_grants_quietly(reviewer)
-
     if changes_requested:
         ping_changes_requested(ship, reviewer, feedback)
     else:
@@ -619,8 +616,6 @@ def t2_decision(request, ship_id):
             feedback=feedback,
             justification=justification
         )
-
-    award_snack_grants_quietly(reviewer)
 
     if decision == T2.Decision.CHANGES:
         ping_changes_requested(ship, reviewer, feedback, tier="T2")

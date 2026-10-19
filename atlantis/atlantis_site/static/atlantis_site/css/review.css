@@ -2083,7 +2083,7 @@
     margin-top: 4px;
 }
 
-/* What the buyer typed at checkout, and what an admin (or snack_grants.py)
+/* What the buyer typed at checkout, and what an admin
    left on the order — the two read differently, so they are labelled. */
 .root-page .ff-note {
     display: block;
@@ -2121,6 +2121,29 @@
     display: flex;
     gap: 6px;
     margin: 0;
+}
+
+/* The reviewer shop's inline order form: quantity, notes, buy. */
+.root-page .rs-buy {
+    align-items: center;
+}
+
+.root-page .rs-buy input {
+    padding: 4px 8px;
+    border: 1px solid var(--oc-line-2);
+    border-radius: 8px;
+    background: var(--oc-shallow);
+    color: var(--oc-ink);
+    font: inherit;
+    font-size: 12.5px;
+}
+
+.root-page .rs-buy input[type="number"] {
+    width: 56px;
+}
+
+.root-page .rs-buy input[type="text"] {
+    width: 160px;
 }
 
 /* Order statuses in the verdict chip's shape and colours. */

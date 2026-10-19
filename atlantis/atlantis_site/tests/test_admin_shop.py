@@ -337,26 +337,15 @@ class FulfillmentDashTests(BaseTestCase):
 		self.assertContains(response, "leave at door")
 		self.assertContains(response, "Refunded, locked")
 
-	def test_snack_grant_row_links_to_prefilled_hcb_grant(self):
-		self.buyer.email = "reviewer+snacks@gmail.com"
-		self.buyer.save()
-		grant = Item.objects.create(name="$10 Snack Grant", description="x", cost=0, kind=Item.Kind.SNACK_GRANT)
-		Order.objects.create(owner=self.buyer, item=grant)
-		Order.objects.create(owner=self.buyer, item=self.item)
-		response = self.client.get(reverse("fulfillment_dash"))
-		url = (
-			"https://hcb.hackclub.com/ysws-atlantis/card-grants/new?email=reviewer%2Bsnacks%40gmail.com"
-			"&amp;amount_cents=1000&amp;purpose=Snack+Grant&amp;instructions=buy+snacks%21%21"
+	def test_reviewer_shop_row_is_priced_in_reviews(self):
+		grant = Item.objects.create(
+			name="$10 Snack Grant", description="x", cost=65,
+			kind=Item.Kind.REVIEWER, review_currency=Item.ReviewCurrency.T1_REVIEWS,
 		)
-		self.assertContains(response, url, count=1)
-
-	def test_snack_grant_without_email_has_no_hcb_link(self):
-		self.buyer.email = ""
-		self.buyer.save()
-		grant = Item.objects.create(name="$10 Snack Grant", description="x", cost=0, kind=Item.Kind.SNACK_GRANT)
 		Order.objects.create(owner=self.buyer, item=grant)
 		response = self.client.get(reverse("fulfillment_dash"))
-		self.assertNotContains(response, "Send on HCB")
+		self.assertContains(response, "reviewer shop")
+		self.assertContains(response, "65 T1 reviews")
 
 	def test_status_change_returns_to_the_same_view(self):
 		order = Order.objects.create(owner=self.buyer, item=self.item)
@@ -426,6 +415,30 @@ class UpdateOrderStatusTests(BaseTestCase):
 		self.assertEqual(self.order.status, Order.OrderStatus.REFUNDED)
 		self.assertTrue(self.order.refunded)
 		self.assertEqual(self._buyer_layers(), 50)
+
+	def test_refunding_a_reviewer_item_returns_no_pearls(self):
+		item = Item.objects.create(
+			name="Grant", description="x", cost=3,
+			kind=Item.Kind.REVIEWER, review_currency=Item.ReviewCurrency.LAPSE_HOURS,
+		)
+		order = Order.objects.create(owner=self.buyer, item=item)
+		self._update("refunded", order=order)
+		order.refresh_from_db()
+		self.assertTrue(order.refunded)
+		self.assertEqual(self._buyer_layers(), 0)
+		self.assertIn("3 lapse hours", self.slack_dm_mocks["shop"].call_args.args[0])
+
+	def test_reviewer_items_cannot_be_edited_from_the_shop_page(self):
+		item = Item.objects.create(
+			name="Grant", description="x", cost=3,
+			kind=Item.Kind.REVIEWER, review_currency=Item.ReviewCurrency.T2_REVIEWS,
+		)
+		self.client.post(reverse("edit_item", args=[item.id]), {
+			"name": "Hacked", "description": "x", "cost": "1", "kind": "regular",
+		})
+		item.refresh_from_db()
+		self.assertEqual(item.name, "Grant")
+		self.assertEqual(item.kind, Item.Kind.REVIEWER)
 
 	def test_refunded_order_cannot_be_edited_again(self):
 		self._update("refunded")

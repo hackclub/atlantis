@@ -1,0 +1,176 @@
+{% extends 'root/_base_root.html' %}
+
+{% block page_id %}admin-reviewer-shop-page{% endblock %}
+{% block title %}Reviewer shop{% endblock %}
+
+{% block content %}
+<div class="content rq ff rs">
+    {% include "root/_rv_queue_header.html" with blurb="Spend the reviewing you've done. Every hour of lapse footage, T1 review and T2 review you've written since launch counts towards your balance, and orders go to fulfillment like any other." %}
+
+    <section class="rq-section">
+        <div class="rq-section-head">
+            <h2 class="rq-section-title">
+                Items
+                {% if items %}<span class="rq-count">{{ items|length }}</span>{% endif %}
+            </h2>
+            {% if is_shopkeeper %}
+                <button type="button" class="rv-btn rv-btn-sm rv-btn-primary" data-open-dialog="#createReviewerItemModal">Add item</button>
+            {% endif %}
+        </div>
+
+        <div class="rq-table-wrap">
+            <table class="rq-table ff-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Cost</th>
+                        <th class="rq-col-num">Stock</th>
+                        <th class="ff-col-actions">Order</th>
+                        {% if is_shopkeeper %}<th class="ff-col-actions">Manage</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                        <tr data-item-id="{{ item.id }}">
+                            <td>
+                                <div class="rq-project-cell">
+                                    {% if item.has_image %}
+                                        <img class="rq-cover ff-cover" src="{{ item.imageUrl }}" alt="" loading="lazy">
+                                    {% else %}
+                                        <span class="rq-cover ff-cover" aria-hidden="true"></span>
+                                    {% endif %}
+                                    <div>
+                                        <span class="rq-project">{{ item.name }}</span>
+                                        <span class="ff-note">{{ item.description }}</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="rq-num">{{ item.price }}</td>
+                            <td class="rq-col-num">{% if item.unlimited_stock %}&infin;{% else %}{{ item.stock }}{% endif %}</td>
+                            <td class="ff-col-actions">
+                                {% if not item.in_stock %}
+                                    <span class="rq-quiet">Out of stock</span>
+                                {% else %}
+                                    <form action="{% url 'buy_reviewer_item' item.id %}" method="post" class="ff-actions rs-buy"
+                                          data-confirm="Order {{ item.name }} for {{ item.price }}?">
+                                        {% csrf_token %}
+                                        <input type="number" name="quantity" value="1" min="1" aria-label="Quantity of {{ item.name }}">
+                                        <input type="text" name="user_notes" maxlength="100" placeholder="Notes (optional)" aria-label="Notes for {{ item.name }}">
+                                        <button type="submit" class="rv-btn rv-btn-sm rv-btn-primary"{% if not item.affordable %} disabled title="Not enough to spend yet"{% endif %}>Buy</button>
+                                    </form>
+                                {% endif %}
+                            </td>
+                            {% if is_shopkeeper %}
+                                <td class="ff-col-actions">
+                                    <div class="ff-actions">
+                                        <button type="button" class="rv-btn rv-btn-sm open-edit"
+                                                data-url="{% url 'edit_reviewer_item' item.id %}"
+                                                data-name="{{ item.name }}" data-description="{{ item.description }}"
+                                                data-cost="{{ item.cost }}" data-currency="{{ item.review_currency }}"
+                                                data-stock="{{ item.stock }}" data-image-url="{% if item.has_image %}{{ item.imageUrl }}{% endif %}">Edit</button>
+                                        <form action="{% url 'delete_reviewer_item' item.id %}" method="post"
+                                              data-confirm="Take {{ item.name }} off the reviewer shop? Orders already placed are kept." data-confirm-danger>
+                                            {% csrf_token %}
+                                            <button type="submit" class="rv-btn rv-btn-sm rv-btn-danger">Delete</button>
+                                        </form>
+                                    </div>
+                                </td>
+                            {% endif %}
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="{% if is_shopkeeper %}5{% else %}4{% endif %}" class="rq-empty">Nothing on the shelf yet.{% if is_shopkeeper %} Add the first item above.{% endif %}</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="rq-section">
+        <div class="rq-section-head">
+            <h2 class="rq-section-title">Your orders</h2>
+        </div>
+        <div class="rq-table-wrap">
+            <table class="rq-table ff-table">
+                <thead>
+                    <tr>
+                        <th class="rq-col-num">#</th>
+                        <th>Item</th>
+                        <th class="rq-col-num">Qty</th>
+                        <th>Cost</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in orders %}
+                        <tr>
+                            <td class="rq-col-num">{{ order.id }}</td>
+                            <td>{{ order.item.name }}</td>
+                            <td class="rq-col-num">{{ order.quantity }}</td>
+                            <td class="rq-num">{{ order.total_label }}</td>
+                            <td>
+                                <span class="rv-sibling ff-status-{{ order.status }}">{{ order.get_status_display|lower }}</span>
+                                <span class="rq-since">ordered {{ order.created_at|date:"M j" }}</span>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="5" class="rq-empty">You haven't ordered anything yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+</div>
+
+{% if is_shopkeeper %}
+<dialog id="createReviewerItemModal" class="modal" aria-labelledby="createReviewerItemTitle">
+    <div class="modal-panel">
+        <h3 id="createReviewerItemTitle">Add reviewer shop item</h3>
+        <form action="{% url 'create_reviewer_item' %}" method="post">
+            {% csrf_token %}
+            {% include "root/_reviewer_item_fields.html" %}
+            <div class="modal-actions">
+                <button type="button" data-close-dialog>Cancel</button>
+                <button type="submit">Add</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<dialog id="editReviewerItemModal" class="modal" aria-labelledby="editReviewerItemTitle">
+    <div class="modal-panel">
+        <h3 id="editReviewerItemTitle">Edit reviewer shop item</h3>
+        <form id="editReviewerItemForm" action="" method="post">
+            {% csrf_token %}
+            {% include "root/_reviewer_item_fields.html" %}
+            <div class="modal-actions">
+                <button type="button" data-close-dialog>Cancel</button>
+                <button type="submit">Save</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<script>
+    // Opening, closing and confirming are atlantis.js's; this only fills the
+    // edit dialog in from the row's button.
+    (function () {
+        const modal = document.getElementById('editReviewerItemModal');
+        const form = document.getElementById('editReviewerItemForm');
+
+        document.addEventListener('click', (e) => {
+            const button = e.target.closest('.open-edit');
+            if (!button) return;
+
+            form.action = button.dataset.url;
+            form.elements.name.value = button.dataset.name || '';
+            form.elements.description.value = button.dataset.description || '';
+            form.elements.cost.value = button.dataset.cost || '';
+            form.elements.review_currency.value = button.dataset.currency || '';
+            form.elements.stock.value = button.dataset.stock || '-1';
+            form.elements.imageUrl.value = button.dataset.imageUrl || '';
+            window.Atlantis.openDialog(modal);
+        });
+    })();
+</script>
+{% endif %}
+{% endblock %}

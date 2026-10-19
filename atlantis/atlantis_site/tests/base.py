@@ -314,7 +314,6 @@ class BaseTestCase(TestCase):
 		"review": "atlantis_site.views.admin.review.send_slack_dm",
 		"shop": "atlantis_site.views.admin.shop.send_slack_dm",
 		"client_shop": "atlantis_site.views.client.shop.send_slack_dm",
-		"snack_grants": "atlantis_site.snack_grants.send_slack_dm",
 	}
 	SLACK_MESSAGE_TARGETS = [
 		"atlantis_site.views.admin.review.send_slack_message",
@@ -326,6 +325,7 @@ class BaseTestCase(TestCase):
 	IMAGE_URL_TARGETS = [
 		"atlantis_site.views.admin.shop.is_valid_image_url",
 		"atlantis_site.views.admin.management.is_valid_image_url",
+		"atlantis_site.views.admin.reviewer_shop.is_valid_image_url",
 	]
 
 	def setUp(self):

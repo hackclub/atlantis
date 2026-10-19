@@ -35,7 +35,6 @@ from ...models import (
 from ..helpers import (
     staff_member_required, check_perms, display_name, format_minutes, record_audit, reviewer_leaderboards,
 )
-from ...snack_grants import award_snack_grants_quietly
 from .queue import (
     QUEUES, dash_context, decorate_lapses, decorate_rows, filter_rows, go_to_next,
     is_own_item, next_item_id, owner_snapshot, parse_skip, refuse_own_item,
@@ -557,8 +556,6 @@ def timelapse_decision(request, project_id):
             if sessions[session_id].journal_id in reviews
         ]
         TimelapseAnnotation.objects.bulk_create(annotations)
-
-    award_snack_grants_quietly(request.user)
 
     removed_seconds = sum(removal.duration_seconds for removal in kept)
     dropped = len(removals) - len(kept)

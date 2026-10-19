@@ -6,47 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Atlantis</title>
     {% include '_favicon.html' %}
-    {% comment %}
-    The scene keeps the visitor's own hours. Only the browser knows what time it
-    is where they are — nothing server-side records a timezone — so the call has
-    to be made here. It runs in the <head>, ahead of the stylesheets, and only
-    marks <html> with data-night: every piece of art that differs by night is a
-    CSS background keyed off that attribute, so the browser fetches the one set
-    it is going to paint and never the other. The backdrop is the largest thing
-    on the page and is only found once dashboard.css is parsed, so the right
-    one is preloaded from here as well.
-    {% endcomment %}
-    <script>
-        (function () {
-            // Dusk and dawn, in minutes past the visitor's local midnight.
-            const NIGHTFALL = 19 * 60 + 30;
-            const DAYBREAK = 7 * 60 + 30;
-
-            function isNight() {
-                const now = new Date();
-                const minutes = now.getHours() * 60 + now.getMinutes();
-                // The window wraps around midnight, so either side of it counts.
-                return minutes >= NIGHTFALL || minutes < DAYBREAK;
-            }
-
-            function setHour() {
-                document.documentElement.toggleAttribute('data-night', isNight());
-            }
-
-            setHour();
-
-            const preload = document.createElement('link');
-            preload.rel = 'preload';
-            preload.as = 'image';
-            preload.href = isNight()
-                ? "{% static 'atlantis_site/assets/img/dashboard/night/background_night.webp' %}"
-                : "{% static 'atlantis_site/assets/img/dashboard/background.webp' %}";
-            document.head.appendChild(preload);
-
-            // A dashboard left open on the desk should still turn in for the night.
-            setInterval(setHour, 30000);
-        })();
-    </script>
     {% include '_hand_font_preload.html' %}
     <link rel="stylesheet" href="{% static 'atlantis_site/css/fonts-hand.css' %}">
     {# Ahead of the page's own sheets, so they dress the shared modal shell rather than the other way round. #}
@@ -60,36 +19,43 @@
     <div id="backdrop" aria-hidden="true"></div>
 
     <div id="scene">
-        {# The art itself is in dashboard.css, day or night by <html data-night>. #}
-        <div id="scene-bg" role="img" aria-label="The bow of a boat at sea, carrying a treasure chest and a telescope."></div>
+        <img id="scene-bg" src="{% static 'atlantis_site/assets/img/dashboard/background.webp' %}" fetchpriority="high" alt="A sunken city on the sea floor, behind a bank of kelp.">
 
-        <a class="item" id="item-chest" href="{% url 'shop' %}" aria-label="Shop">
-            <span class="item-label-frame"><span class="item-label">shop</span></span>
-        </a>
-        <div class="scene-art" id="chest-art" aria-hidden="true"></div>
+        {% comment %}
+        The five ways off the dashboard rest on the kelp along the bottom of the
+        scene: two on the bank left of the stream, three on the bank right of it.
+        {% endcomment %}
+        <nav id="shelf" aria-label="Places to go">
+            <div class="bank" id="bank-left">
+                <a class="item" id="item-chest" href="{% url 'shop' %}" aria-label="Shop">
+                    <img src="{% static 'atlantis_site/assets/img/dashboard/chest.webp' %}" alt="">
+                    <span class="item-label-frame"><span class="item-label">shop</span></span>
+                </a>
 
-        <a class="item" id="item-telescope" href="{% url 'explore' %}" aria-label="Explore">
-            <span class="item-label-frame"><span class="item-label">explore</span></span>
-        </a>
-        <div class="scene-art" id="telescope-art" aria-hidden="true"></div>
+                <a class="item flip" id="item-telescope" href="{% url 'explore' %}" aria-label="Explore">
+                    <img src="{% static 'atlantis_site/assets/img/dashboard/telescope.webp' %}" alt="">
+                    <span class="item-label-frame"><span class="item-label">explore</span></span>
+                </a>
+            </div>
+
+            <div class="bank" id="bank-right">
+                <a class="item flip" id="item-scroll" href="{% url 'guides' %}" aria-label="Guides">
+                    <img src="{% static 'atlantis_site/assets/img/dashboard/scroll.webp' %}" alt="">
+                    <span class="item-label-frame"><span class="item-label">guides/faq</span></span>
+                </a>
+
+                <a class="item" id="item-map" href="{% url 'printer_select' %}" aria-label="Pick your printer">
+                    <img src="{% static 'atlantis_site/assets/img/dashboard/map.webp' %}" alt="">
+                    <span class="item-label-frame"><span class="item-label">printers</span></span>
+                </a>
+
+                <a class="item" id="item-book" href="{% url 'projects' %}" aria-label="Projects">
+                    <img src="{% static 'atlantis_site/assets/img/dashboard/book.webp' %}" alt="">
+                    <span class="item-label-frame"><span class="item-label">projects</span></span>
+                </a>
+            </div>
+        </nav>
     </div>
-
-    <nav id="dock" aria-label="Ship's locker">
-        <a class="item" id="item-scroll" href="{% url 'guides' %}" aria-label="Guides">
-            <img src="{% static 'atlantis_site/assets/img/dashboard/scroll.webp' %}" alt="">
-            <span class="item-label-frame"><span class="item-label">guides/faq</span></span>
-        </a>
-
-        <a class="item" id="item-book" href="{% url 'projects' %}" aria-label="Projects">
-            <img src="{% static 'atlantis_site/assets/img/dashboard/book.webp' %}" alt="">
-            <span class="item-label-frame"><span class="item-label">projects</span></span>
-        </a>
-
-        <a class="item" id="item-map" href="{% url 'printer_select' %}" aria-label="Pick your printer">
-            <img src="{% static 'atlantis_site/assets/img/dashboard/map.webp' %}" alt="">
-            <span class="item-label-frame"><span class="item-label">printers</span></span>
-        </a>
-    </nav>
 
     <a class="hud" id="hud-profile" href="{% url 'user_profile' user.id %}">
         <img src="{{ profile.slack_pfp_url }}" alt="">

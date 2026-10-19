@@ -691,14 +691,16 @@ def build_metrics(now):
     ])
 
     pending_orders = order_counts.get(Order.OrderStatus.PENDING, 0)
+    # Reviewer shop orders are priced in review work, not pearls.
+    pearl_orders = Order.objects.exclude(item__kind=Item.Kind.REVIEWER)
     pending_value = (
-        Order.objects.filter(status=Order.OrderStatus.PENDING).aggregate(t=Sum("cost"))["t"] or 0
+        pearl_orders.filter(status=Order.OrderStatus.PENDING).aggregate(t=Sum("cost"))["t"] or 0
     )
     layers_spent = (
-        Order.objects.filter(status=Order.OrderStatus.FULFILLED).aggregate(t=Sum("cost"))["t"] or 0
+        pearl_orders.filter(status=Order.OrderStatus.FULFILLED).aggregate(t=Sum("cost"))["t"] or 0
     )
     refunded_layers = (
-        Order.objects.filter(status=Order.OrderStatus.REFUNDED).aggregate(t=Sum("cost"))["t"] or 0
+        pearl_orders.filter(status=Order.OrderStatus.REFUNDED).aggregate(t=Sum("cost"))["t"] or 0
     )
 
     top_items = add_bars([

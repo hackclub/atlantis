@@ -1,18 +1,8 @@
 body {
     margin: 0;
     overflow: hidden;
-    background-color: #1b7fc4;
+    background-color: #20668f;
     font-family: "Atlantis Hand", sans-serif;
-}
-
-/*
- * After dark the dashboard runs on the night art, chosen from the visitor's own
- * clock by the script in the page's <head>. Everything that changes is keyed
- * off [data-night] here: the open water either side of the scene, the blurred
- * backdrop that stands in for it on narrow screens, and the scene's art below.
- */
-[data-night] body {
-    background-color: #041427;
 }
 
 #scene {
@@ -24,6 +14,7 @@ body {
     width: 100vw;
     min-width: calc(100vh * 2500 / 1462);
     min-width: calc(100dvh * 2500 / 1462);
+    container-type: inline-size;
 }
 
 @media (max-aspect-ratio: 6 / 5) {
@@ -40,71 +31,82 @@ body {
         filter: blur(28px) brightness(0.8);
         scale: 1.1;
     }
-
-    [data-night] #backdrop {
-        background-image: url('../assets/img/dashboard/night/background_night.webp');
-    }
-}
-
-/*
- * The scene's art is painted as backgrounds rather than <img>s, so the night
- * set is chosen by the same [data-night] the page's <head> puts on <html>
- * before anything is fetched. An <img> would have started downloading the day
- * art before any script could say otherwise, and night visitors paid for both.
- * Every piece is drawn on the scene's own 2500x1462 canvas, so each is
- * stretched to the box exactly as the <img>s were.
- */
-#scene-bg,
-.scene-art {
-    position: absolute;
-    inset: 0;
-    background-repeat: no-repeat;
-    background-size: 100% 100%;
 }
 
 #scene-bg {
-    background-image: url('../assets/img/dashboard/background.webp');
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
 }
 
-[data-night] #scene-bg {
-    background-image: url('../assets/img/dashboard/night/background_night.webp');
+/*
+ * The items rest on the kelp along the bottom of the scene, a bank either side
+ * of the stream. The shelf spans the viewport rather than the scene, so when a
+ * screen narrower than the art crops its sides, the banks are pulled in with
+ * it instead of being cut off. --u is a hundredth of the scene's width, capped
+ * so that the right bank, the wider of the two, still fits at the narrowest
+ * crop before the scene stops covering the screen.
+ */
+#shelf {
+    --u: min(1cqw, 1.15vw);
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    translate: -50% 0;
+    width: 100vw;
 }
 
-.scene-art {
-    pointer-events: none;
+.bank {
+    position: absolute;
+    left: var(--at);
+    bottom: calc(var(--u) * 0.6);
+    translate: -50% 0;
+    display: flex;
+    align-items: flex-end;
 }
 
-#chest-art {
-    transform-origin: 27.26% 79.92%;
-    background-image: url('../assets/img/dashboard/chest.webp');
+/* Centred on their kelp, but never so close to an edge that they run off it. */
+#bank-left {
+    --at: max(22.5%, calc(var(--u) * 13.5));
+    gap: calc(var(--u) * 2.5);
 }
 
-[data-night] #chest-art {
-    background-image: url('../assets/img/dashboard/night/chest_night.webp');
+#bank-right {
+    --at: min(77.8%, calc(100% - var(--u) * 17.6));
+    gap: calc(var(--u) * 1.3);
 }
 
-#telescope-art {
-    transform-origin: 84.78% 58.55%;
-    background-image: url('../assets/img/dashboard/telescope.webp');
-}
+/*
+ * A phone held upright shrinks the whole scene to a strip across the middle,
+ * and the items with it, too small to tap. There they are let grow past the
+ * art's own proportions, up to the size that still fits five across.
+ */
+@media (max-aspect-ratio: 6 / 5) {
+    #shelf {
+        --u: max(1cqw, min(1.5vw, 6px));
+    }
 
-[data-night] #telescope-art {
-    background-image: url('../assets/img/dashboard/night/telescope_night.webp');
+    /* Packed that tight, the scroll's label would run into the map's. */
+    #item-scroll {
+        --label-x: 25%;
+    }
 }
 
 .item {
     position: relative;
-    width: var(--w);
+    flex: none;
+    width: calc(var(--u) * var(--w));
     rotate: var(--tilt, 0deg);
     transition: scale 0.15s ease-out;
 }
 
-.item img,
-.scene-art {
-    filter: drop-shadow(0 0 0.32vw rgba(255, 244, 199, 0.8));
-    transition: filter 0.15s ease-out, scale 0.15s ease-out;
-}
-
+/*
+ * Each piece of art sits somewhere on a larger transparent canvas. The item is
+ * sized to the art alone, and the canvas is drawn over it at --art times its
+ * width, shifted so the art lands on the item: --art-x and --art-y are the
+ * art's offset into the canvas, as fractions of the item's width and height.
+ */
 .item img {
     display: block;
     position: absolute;
@@ -113,82 +115,54 @@ body {
     width: calc(var(--art) * 100%);
     height: auto;
     pointer-events: none;
+    filter: drop-shadow(0 0 0.32vw rgba(255, 244, 199, 0.8));
+    transition: filter 0.15s ease-out;
 }
 
-#dock {
-    --u: clamp(50px, min(7vw, 12.5vh), 135px);
-    --u0: calc(var(--u) * 0.8);
-    position: fixed;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: calc(var(--u0) * 0.38);
-    width: calc(var(--u) * 6.36);
-    height: calc(var(--u) * 2.258415);
-    border-radius: calc(var(--u) * 0.35) 0 0 0;
-    background-image: url('../assets/img/dashboard/hotbar.webp');
-    background-repeat: no-repeat;
-    background-size: 165.4534% 374.8718%;
-    background-position: 90.1921% 60.3545%;
-}
-
-#item-scroll {
-    --w: calc(var(--u0) * 0.9);
-    --art: 1.86013; --art-x: 0.51135; --art-y: 0.23483;
-    aspect-ratio: 1101 / 1533;
-}
-
-#item-scroll img {
+/* Mirrored about the canvas's centre, so --art-x is measured on the flipped canvas. */
+.item.flip img {
     transform: scaleX(-1);
 }
 
-#item-map {
-    --w: calc(var(--u0) * 1.9);
-    --art: 1.50257; --art-x: 0.28100; --art-y: 0.48234;
-    aspect-ratio: 1363 / 1161;
-}
-
-#item-book {
-    --w: calc(var(--u0) * 2);
-    --art: 1.99028; --art-x: 0.35277; --art-y: 0.89691;
-    aspect-ratio: 1029 / 776;
-}
-
 #item-chest {
-    position: absolute;
-    left: 18.96%;
-    top: 63.95%;
-    --w: 16.60%;
-    height: 31.94%;
+    --w: 10.6;
+    --art: 6.02410; --art-x: 1.14217; --art-y: 2.00214;
+    aspect-ratio: 415 / 467;
 }
 
 #item-telescope {
-    position: absolute;
-    left: 77.64%;
-    top: 46.72%;
-    --w: 14.28%;
-    height: 23.67%;
+    --w: 11.9;
+    --art: 7.04225; --art-x: 0.57183; --art-y: 1.98837;
+    aspect-ratio: 355 / 344;
 }
 
-/* The chest and the telescope are hotspots over the scene art, so hovering
-   one lights the piece of art that follows it. */
+#item-scroll {
+    --w: 6.9;
+    --art: 1.86013; --art-x: 0.34877; --art-y: 0.23564;
+    aspect-ratio: 1101 / 1532;
+}
+
+#item-map {
+    --w: 12.2;
+    --art: 1.50367; --art-x: 0.28194; --art-y: 0.48276;
+    aspect-ratio: 1362 / 1160;
+}
+
+/* Turned to lie along the kelp. */
+#item-book {
+    --w: 12.2;
+    --tilt: 21deg;
+    --art: 1.99028; --art-x: 0.35277; --art-y: 0.89806;
+    aspect-ratio: 1029 / 775;
+}
+
 .item:hover img,
-.item:focus-visible img,
-#item-chest:hover ~ #chest-art,
-#item-chest:focus-visible ~ #chest-art,
-#item-telescope:hover ~ #telescope-art,
-#item-telescope:focus-visible ~ #telescope-art {
+.item:focus-visible img {
     filter: brightness(1.08) drop-shadow(0 0 0.7vw rgba(255, 244, 199, 0.95));
 }
 
 .item:hover,
-.item:focus-visible,
-#item-chest:hover ~ #chest-art,
-#item-chest:focus-visible ~ #chest-art,
-#item-telescope:hover ~ #telescope-art,
-#item-telescope:focus-visible ~ #telescope-art {
+.item:focus-visible {
     scale: 1.04;
 }
 
@@ -226,6 +200,13 @@ body {
 @media (hover: none) {
     .item-label {
         opacity: 1;
+    }
+}
+
+/* And on an upright phone, small enough that five of them fit side by side. */
+@media (max-aspect-ratio: 6 / 5) {
+    .item-label {
+        font-size: clamp(12px, 3.4vw, 15px);
     }
 }
 

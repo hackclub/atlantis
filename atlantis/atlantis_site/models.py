@@ -1608,11 +1608,18 @@ class Item(models.Model):
 		SAVER_CURRENT = "saver_current", "Streak saver: this week"
 		SAVER_PAST = "saver_past", "Streak saver: earliest missed week"
 		PRINTER = "printer", "Printer claim (hidden from the shop)"
-		SNACK_GRANT = "snack_grant", "Reviewer snack grant (hidden from the shop)"
+		REVIEWER = "reviewer", "Reviewer shop item (hidden from the shop)"
 
-	# Rows that are Items only so that something can become an ordinary Order
-	# for fulfillment. Never on a shelf, and never typed in on the shop page.
-	HIDDEN_KINDS = (Kind.PRINTER, Kind.SNACK_GRANT)
+	class ReviewCurrency(models.TextChoices):
+		"""What a REVIEWER item is paid for with. See reviewer_shop.py."""
+		LAPSE_HOURS = "lapse_hours", "Lapse review hours"
+		T1_REVIEWS = "t1_reviews", "T1 reviews"
+		T2_REVIEWS = "t2_reviews", "T2 reviews"
+
+	# Rows that never sit on the public shop's shelves or its admin page:
+	# printers become orders through a claim, and reviewer items are bought
+	# and managed on the reviewer shop with review work rather than pearls.
+	HIDDEN_KINDS = (Kind.PRINTER, Kind.REVIEWER)
 
 	name = models.CharField(max_length=60)
 	description = models.CharField(max_length=500)
@@ -1635,6 +1642,14 @@ class Item(models.Model):
 	# exist only so a claim can become an ordinary Order that fulfillment
 	# already knows how to handle.
 	printer_key = models.CharField(max_length=80, blank=True, default="")
+	# What `cost` is counted in on a REVIEWER row, "" on everything else,
+	# whose cost is in pearls. Lapse costs are whole hours of footage.
+	review_currency = models.CharField(
+		max_length=16,
+		choices=ReviewCurrency.choices,
+		blank=True,
+		default="",
+	)
 
 	class Meta:
 		constraints = [
@@ -1659,7 +1674,7 @@ class Item(models.Model):
 	@property
 	def has_image(self):
 		"""False on rows still carrying the placeholder URL, which is every
-		printer and snack grant: nothing makes those with a picture."""
+		printer and any reviewer item made without one."""
 		return bool(self.imageUrl) and self.imageUrl != self._meta.get_field("imageUrl").default
 
 	@property
@@ -1671,8 +1686,24 @@ class Item(models.Model):
 		"""True when ordering this resolves immediately instead of queueing."""
 		return self.is_saver
 
+	@property
+	def is_reviewer_item(self):
+		return self.kind == self.Kind.REVIEWER
+
+	def price_label(self, amount):
+		"""`amount` of whatever this item is paid in, worded for a page."""
+		if self.is_reviewer_item:
+			unit = {
+				self.ReviewCurrency.LAPSE_HOURS: "lapse hour",
+				self.ReviewCurrency.T1_REVIEWS: "T1 review",
+				self.ReviewCurrency.T2_REVIEWS: "T2 review",
+			}.get(self.review_currency, "review")
+		else:
+			unit = "pearl"
+		return f"{amount} {unit}{'' if amount == 1 else 's'}"
+
 	def __str__(self):
-		return f"{self.name} ({self.description}) for {self.cost} layers"
+		return f"{self.name} ({self.description}) for {self.price_label(self.cost)}"
 	
 class Order(models.Model):
 	owner = models.ForeignKey(
@@ -1755,40 +1786,6 @@ class PrinterClaim(models.Model):
 
 	def __str__(self):
 		return f"{self.user_id} claimed {self.printer_name} ({self.track_slug})"
-
-
-class SnackGrant(models.Model):
-	"""One $10 snack grant a reviewer earned, and the Order that pays it out.
-
-	The ledger snack_grants.py checks before issuing: a reviewer is owed
-	(work on a desk since launch // that desk's threshold) grants per desk,
-	minus the rows already here. A grant stays issued whatever happens to its
-	order, and a rolled-back review doesn't take one back — it only means the
-	next one takes longer to earn.
-	"""
-
-	class Desk(models.TextChoices):
-		T1 = "t1", "T1 reviews"
-		T2 = "t2", "T2 reviews"
-		LAPSE = "lapse", "Lapse review hours"
-
-	reviewer = models.ForeignKey(
-		settings.AUTH_USER_MODEL,
-		on_delete=models.CASCADE,
-		related_name="snack_grants",
-	)
-	desk = models.CharField(max_length=8, choices=Desk.choices)
-	order = models.OneToOneField(
-		Order,
-		on_delete=models.SET_NULL,
-		related_name="snack_grant",
-		null=True,
-		blank=True,
-	)
-	created_at = models.DateTimeField(auto_now_add=True)
-
-	def __str__(self):
-		return f"Snack grant for {self.reviewer_id} ({self.desk})"
 
 
 class AuditLog(models.Model):

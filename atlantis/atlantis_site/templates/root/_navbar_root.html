@@ -9,6 +9,9 @@
         <a href="/root/shop">shop management</a>
         <a href="/root/fulfillment" class="nav-counted">fulfillment{% nav_badge 'fulfillment' %}</a>
     {% endif %}
+    {% if perms.atlantis_site.organizer or perms.atlantis_site.fulfillment or perms.atlantis_site.t1_review or perms.atlantis_site.t2_review or perms.atlantis_site.t3_review or perms.atlantis_site.timelapse_review or perms.atlantis_site.reviewer_lead %}
+        <a href="/root/reviewer-shop/">reviewer shop</a>
+    {% endif %}
     {% if perms.atlantis_site.t1_review or perms.atlantis_site.organizer or perms.atlantis_site.t2_review or perms.atlantis_site.t3_review or perms.atlantis_site.reviewer_lead %}
         <a href="/root/review" class="nav-counted">T1 review{% nav_badge 't1' %}</a>
     {% endif %}

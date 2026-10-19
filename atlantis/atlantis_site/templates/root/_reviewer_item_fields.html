@@ -1,0 +1,37 @@
+{% comment %}
+The fields of a reviewer shop item, shared by the add and edit dialogs.
+expects: currencies
+{% endcomment %}
+<label>
+    Name
+    <input name="name" maxlength="60" placeholder="$10 Snack Grant" required>
+</label>
+
+<label>
+    Description
+    <textarea name="description" maxlength="500" placeholder="What the reviewer gets" required></textarea>
+</label>
+
+<label>
+    Paid in
+    <select name="review_currency" required>
+        {% for value, label in currencies %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+    </select>
+</label>
+
+<label>
+    Cost
+    <input name="cost" type="number" min="1" placeholder="65" required>
+    <small>Whole lapse hours, or a number of reviews.</small>
+</label>
+
+<label>
+    Stock
+    <input name="stock" type="number" min="-1" value="-1">
+    <small>-1 means unlimited</small>
+</label>
+
+<label>
+    Image URL
+    <input type="url" name="imageUrl" placeholder="https://example.com (optional)">
+</label>

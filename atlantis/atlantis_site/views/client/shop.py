@@ -20,9 +20,9 @@ from ..helpers import (
 def shoppable():
     """Items a shopper can actually see on a shelf.
 
-    Printer and snack grant rows are Items only so that a claim or a grant
-    becomes an ordinary order that fulfillment already knows how to post; they
-    are not merchandise and have no business on the shop page.
+    Printer rows are Items only so that a claim becomes an ordinary order
+    that fulfillment already knows how to post, and reviewer items are paid
+    for in review work on the reviewer shop; neither belongs on this page.
     """
     return Item.objects.filter(deleted=False).exclude(kind__in=Item.HIDDEN_KINDS)
 
