@@ -15,9 +15,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .. import challenge, weeks
-from ..models import ActiveDay, AirtableSubmission, Journal, Ship, T3, MetricsSnapshot, Profile, SaverCredit
+from ..models import ActiveDay, AirtableSubmission, Item, Journal, Order, Ship, T3, MetricsSnapshot, Profile, SaverCredit, WeekOutcome
 from ..presence import WRITE_EVERY, record_seen
-from ..views.admin.metrics import build_streak_stats
+from ..views.admin.metrics import build_streak_stats, take_snapshot
 from .base import (
 	BaseTestCase,
 	approve_timelapse,
@@ -543,7 +543,7 @@ class MetricsStreakTests(BaseTestCase):
 		self.assertEqual(stats["participants"], 3)
 		self.assertEqual(stats["out"], 1)
 		self.assertEqual(stats["still_in"], 2)
-		self.assertEqual(stats["weeks_rescued"], 1)
+		self.assertEqual(stats["weeks_assisted"], 1)
 		self.assertEqual(stats["survived_by_week"][0]["value"], 2)
 		self.assertEqual(stats["survived_by_week"][0]["sub"], "1 missed")
 		# Whoever is out isn't counted against this week.
@@ -594,6 +594,211 @@ class MetricsStreakTests(BaseTestCase):
 		self.assertEqual(rows[1]["sub"], "avg 6h 0m so far")
 		self.assertEqual(stats["completed_this_week"], 1)
 		self.assertEqual(stats["avg_completed_display"], "6h 0m")
+
+	def test_organic_grace_pooling_stays_unassisted_after_every_later_deadline(self):
+		self._builder("organic-grace",
+			(420, weeks.week_bounds(1)[0]),
+			(180, weeks.week_bounds(2)[0]),
+			*((300, weeks.week_bounds(index)[0]) for index in range(3, 9)))
+
+		for closed_week in range(2, 9):
+			with self.subTest(closed_week=closed_week):
+				stats = build_streak_stats(weeks.week_bounds(closed_week)[1])
+				self.assertEqual((stats["still_in"], stats["out"]), (1, 0))
+				self.assertEqual([row["value"] for row in stats["survived_by_week"]], [1] * closed_week)
+				self.assertEqual([row["value"] for row in stats["completed_by_week"][:2]], [1, 0])
+				self.assertEqual(stats["weeks_assisted"], 0)
+
+	def test_every_week_after_grace_requires_its_own_five_hours(self):
+		for short_week in range(3, 9):
+			with self.subTest(short_week=short_week):
+				# Plenty of opening hours and a later 7h+3h pair cannot pool
+				# into a pass once the grace period has ended.
+				neighbor = short_week + 1 if short_week < 8 else 7
+				user = self._builder(f"strict-week-{short_week}",
+					(1200, weeks.week_bounds(1)[0]),
+					*((180 if index == short_week else 420 if index == neighbor else 300,
+						weeks.week_bounds(index)[0]) for index in range(3, 9)))
+				baseline = build_streak_stats(weeks.ends_at())
+				self.assertEqual((baseline["participants"], baseline["still_in"], baseline["out"]), (1, 0, 1))
+				self.assertEqual(baseline["weeks_assisted"], 0)
+				self.assertEqual(baseline["survived_by_week"][short_week - 1]["value"], 0)
+				SaverCredit.objects.bulk_create([SaverCredit(user=user, week_index=short_week) for _ in range(2)])
+
+				assisted = build_streak_stats(weeks.ends_at())
+				self.assertEqual((assisted["participants"], assisted["still_in"], assisted["out"]), (1, 1, 0))
+				self.assertEqual(assisted["weeks_assisted"], 1)
+				self.assertEqual([row["value"] for row in assisted["survived_by_week"]], [1] * 8)
+				self.assertEqual(assisted["completed_by_week"], baseline["completed_by_week"])
+				user.delete()
+
+	def test_grace_assistance_can_come_from_the_other_week(self):
+		user = self._builder("pooled-saver",
+			(420, datetime(2026, 9, 23, 10, tzinfo=EASTERN)),
+			(120, datetime(2026, 9, 30, 10, tzinfo=EASTERN)))
+		SaverCredit.objects.create(user=user, week_index=1)
+		now = datetime(2026, 10, 7, 12, tzinfo=EASTERN)
+
+		stats = build_streak_stats(now)
+
+		self.assertEqual(stats["still_in"], 1)
+		self.assertEqual(stats["weeks_assisted"], 1)
+		self.assertEqual([row["value"] for row in stats["survived_by_week"]], [1, 1])
+		self.assertEqual([row["value"] for row in stats["completed_by_week"]], [1, 0, 0])
+		# Once the pair has ten real hours, the same saver is no longer needed.
+		journal = make_journal(user.projects.get(), time_spent=0)
+		make_timelapse(user.projects.get(), journal=journal, minutes=60,
+			recorded_at=datetime(2026, 9, 30, 11, tzinfo=EASTERN))
+		self.assertEqual(build_streak_stats(now)["weeks_assisted"], 0)
+
+	def test_repeated_past_recoveries_count_target_weeks_without_double_counting(self):
+		user = self._builder("recovering",
+			(600, weeks.week_bounds(1)[0]),
+			(240, weeks.week_bounds(3)[0]),
+			(180, weeks.week_bounds(4)[0]))
+		now = weeks.week_bounds(5)[0] + timedelta(days=1)
+		baseline = build_streak_stats(now)
+		self.assertEqual(baseline["out"], 1)
+		self.assertEqual(baseline["weeks_assisted"], 0)
+		# A stale closer record must not hide a later recovery.
+		WeekOutcome.objects.create(user=user, week_index=3, passed=False, real_minutes=240)
+		self.assertEqual(challenge.apply_saver(user, Item.Kind.SAVER_PAST, now=now), [3])
+		partial = build_streak_stats(now)
+		self.assertEqual(partial["out"], 1)
+		self.assertEqual(partial["weeks_assisted"], 1)
+		self.assertEqual(challenge.apply_saver(user, Item.Kind.SAVER_PAST, hours=2, now=now), [4, 4])
+
+		stats = build_streak_stats(now)
+
+		self.assertEqual((stats["participants"], stats["still_in"], stats["out"]), (1, 1, 0))
+		self.assertEqual(stats["weeks_assisted"], 2)
+		self.assertEqual([row["value"] for row in stats["survived_by_week"]], [1, 1, 1, 1])
+		self.assertEqual(stats["completed_by_week"], baseline["completed_by_week"])
+		self.assertEqual(stats["saver_hours_this_week"], 0)
+
+	def test_current_savers_and_grants_do_not_inflate_logged_completion(self):
+		now = weeks.week_bounds(1)[0] + timedelta(days=2)
+		saver_only = make_user("saver-only", slack_id="U-saver-only")
+		challenge.apply_saver(saver_only, Item.Kind.SAVER_CURRENT, hours=5, now=now)
+		organic = self._builder("organic-and-saver", (360, now))
+		challenge.apply_saver(organic, Item.Kind.SAVER_CURRENT, now=now)
+		granted = self._builder("granted", (240, now))
+		challenge.grant_saver_hours(granted, 1, 1, organic)
+
+		stats = build_streak_stats(now)
+
+		self.assertEqual((stats["participants"], stats["still_in"], stats["done"]), (3, 3, 3))
+		self.assertEqual(stats["completed_this_week"], 1)
+		self.assertEqual(stats["avg_completed_display"], "6h 0m")
+		self.assertEqual(stats["saver_hours_this_week"], 7)
+		self.assertEqual(stats["weeks_assisted"], 0)  # no week has closed
+
+	def test_orders_without_applied_credits_have_no_streak_effect(self):
+		now = weeks.week_bounds(1)[0] + timedelta(days=2)
+		item = Item.objects.create(name="Saver", cost=1, kind=Item.Kind.SAVER_CURRENT)
+		for status in Order.OrderStatus.values:
+			user = make_user(f"order-{status}", slack_id=f"U-order-{status}")
+			Order.objects.create(owner=user, item=item, quantity=5, status=status)
+		self.assertEqual(build_streak_stats(now)["participants"], 0)
+		# Order status alone does not revoke applied credits; the refund path does.
+		order = Order.objects.get(status=Order.OrderStatus.DENIED)
+		challenge.apply_saver(order.owner, item.kind, hours=5, order=order, now=now)
+		stats = build_streak_stats(now)
+		self.assertEqual((stats["participants"], stats["done"]), (1, 1))
+		self.assertEqual(stats["completed_this_week"], 0)
+
+	def test_purchase_and_refund_update_recovery_metrics_immediately(self):
+		now = weeks.week_bounds(4)[0] + timedelta(days=2)
+		user = self._builder("buyer", (600, weeks.week_bounds(1)[0]), (240, weeks.week_bounds(3)[0]))
+		Profile.objects.filter(user=user).update(layers=10)
+		item = Item.objects.create(name="Past saver", cost=1, stock=-1, kind=Item.Kind.SAVER_PAST)
+		self.client.force_login(user)
+		with patch("django.utils.timezone.now", return_value=now):
+			response = self.client.post(reverse("order_item", args=[item.id]), {"quantity": "1"})
+		self.assertEqual(response.status_code, 302)
+		order = Order.objects.get(owner=user)
+		self.assertEqual(order.status, Order.OrderStatus.FULFILLED)
+		self.assertEqual(list(order.saver_credits.values_list("week_index", flat=True)), [3])
+		stats = build_streak_stats(now)
+		self.assertEqual((stats["still_in"], stats["weeks_assisted"]), (1, 1))
+		organizer = grant_perms(make_user("refunder", slack_id="U-refunder"), "organizer")
+		self.client.force_login(organizer)
+		self.client.post(reverse("update_order_status", args=[order.id]), {"action": "refunded"})
+		self.assertFalse(order.saver_credits.exists())
+		stats = build_streak_stats(now)
+		self.assertEqual((stats["out"], stats["weeks_assisted"]), (1, 0))
+
+	def test_week_boundary_and_dst_keep_savers_on_their_target_week(self):
+		user = self._builder("boundary", *[(300, weeks.week_bounds(i)[0]) for i in range(1, 6)])
+		# Week 6 contains the fall DST change; Monday midnight is 05:00 UTC.
+		boundary = datetime(2026, 11, 2, 5, tzinfo=ZoneInfo("UTC"))
+		before = boundary - timedelta(microseconds=1)
+		self.assertEqual(challenge.apply_saver(user, Item.Kind.SAVER_CURRENT, hours=4, now=before), [6] * 4)
+		self.assertEqual(build_streak_stats(before)["out"], 0)
+		self.assertEqual(build_streak_stats(boundary)["out"], 1)
+		self.assertEqual(challenge.apply_saver(user, Item.Kind.SAVER_CURRENT, now=boundary), [7])
+		self.assertEqual(build_streak_stats(boundary)["out"], 1)
+		self.assertEqual(challenge.apply_saver(user, Item.Kind.SAVER_PAST, now=boundary), [6])
+		stats = build_streak_stats(boundary)
+		self.assertEqual((stats["still_in"], stats["weeks_assisted"]), (1, 1))
+		self.assertEqual(stats["saver_hours_this_week"], 1)
+
+	def test_overrides_and_organic_completers_with_savers_are_not_double_counted(self):
+		now = weeks.week_bounds(4)[0]
+		for name, minutes, override in [
+			("passed", 60, WeekOutcome.Override.PASS),
+			("failed", 240, WeekOutcome.Override.FAIL),
+			("natural", 300, WeekOutcome.Override.NONE),
+		]:
+			user = self._builder(name, (600, weeks.week_bounds(1)[0]), (minutes, weeks.week_bounds(3)[0]))
+			WeekOutcome.objects.create(user=user, week_index=3, override=override)
+			SaverCredit.objects.create(user=user, week_index=3)
+		stats = build_streak_stats(now)
+		self.assertEqual((stats["still_in"], stats["out"], stats["weeks_assisted"]), (2, 1, 1))
+		self.assertEqual(stats["survived_by_week"][2]["value"], 2)
+		self.assertEqual(stats["completed_by_week"][2]["value"], 1)
+
+	def test_finished_program_keeps_organic_and_assisted_weeks_separate(self):
+		self._builder("all-organic", *[(300, weeks.week_bounds(i)[0]) for i in range(1, 9)])
+		assisted = self._builder("last-week-saver",
+			*[(300, weeks.week_bounds(i)[0]) for i in range(1, 8)],
+			(240, weeks.week_bounds(8)[0]))
+		SaverCredit.objects.create(user=assisted, week_index=8)
+
+		stats = build_streak_stats(weeks.ends_at())
+
+		self.assertTrue(stats["ended"])
+		self.assertIsNone(stats["live_week"])
+		self.assertEqual((stats["still_in"], stats["printer_unlocked"]), (2, 2))
+		self.assertEqual(stats["weeks_assisted"], 1)
+		self.assertEqual([row["value"] for row in stats["survived_by_week"]], [2] * 8)
+		self.assertEqual([row["value"] for row in stats["completed_by_week"]], [2] * 7 + [1])
+
+	def test_snapshots_keep_historical_counts_and_legacy_labels(self):
+		now = weeks.week_bounds(4)[0] + timedelta(days=2)
+		user = self._builder("snapshot-buyer", (600, weeks.week_bounds(1)[0]), (240, weeks.week_bounds(3)[0]))
+		organizer = grant_perms(make_user("viewer", slack_id="U-viewer"), "organizer")
+		self.client.force_login(organizer)
+		snapshot = take_snapshot(now)
+		challenge.apply_saver(user, Item.Kind.SAVER_PAST, now=now)
+		with patch("django.utils.timezone.now", return_value=now):
+			live = self.client.get(reverse("metrics"))
+		past = self.client.get(reverse("metrics"), {"day": snapshot.day.isoformat()})
+		self.assertEqual(live.context["streaks"]["out"], 0)
+		self.assertEqual(past.context["streaks"]["out"], 1)
+		self.assertContains(live, "Weeks met with assistance")
+		self.assertContains(live, "Met each closed week, including savers")
+		self.assertContains(live, "Weeks 1–2 share a 10h target; from week 3, each week requires 5h.")
+		self.assertContains(live, "5h+ logged each week, with their average")
+		self.assertContains(past, "Weeks met with assistance")  # includes a zero value
+		# Old snapshots counted the naturally pooled second grace week too.
+		del snapshot.data["streaks"]["weeks_assisted"]
+		snapshot.data["streaks"]["weeks_rescued"] = 1
+		snapshot.save(update_fields=["data"])
+		legacy = self.client.get(reverse("metrics"), {"day": snapshot.day.isoformat()})
+		self.assertEqual(legacy.context["streaks"]["weeks_rescued"], 1)
+		self.assertContains(legacy, "Weeks met below 5h logged")
+		self.assertNotContains(legacy, "Weeks met with assistance")
 
 	def test_the_grace_pair_counts_ten_between_the_weeks_until_it_closes(self):
 		# Wednesday of week 2.
