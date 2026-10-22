@@ -368,6 +368,96 @@ class LookoutReviewPageTests(BaseTestCase):
 		self.assertEqual(self._page().status_code, 404)
 
 
+class FilteredSessionTests(BaseTestCase):
+	"""A session started from a filtered desk walks that table, not the whole queue."""
+
+	def setUp(self):
+		super().setUp()
+		self.reviewer = grant_perms(make_user("t1rev"), "t1_review")
+		self.client.force_login(self.reviewer)
+		plain = make_project(make_user("plain", slack_id="U-p"), shippable=True)
+		odd = make_project(
+			make_user("odd", slack_id="U-o"), shippable=True, flagged=True, flag_reason="hmm",
+		)
+		self.plain_old = ages(make_ship(plain), days=9)
+		self.flagged_first = ages(make_ship(odd), days=6)
+		self.plain_mid = ages(make_ship(plain), days=4)
+		self.flagged_second = ages(make_ship(odd), days=2)
+
+	def _approve(self, ship, query=""):
+		return self.client.post(
+			reverse("t1_decision", args=[ship.id]) + query,
+			{"feedback": "nice", "internal_notes": "ok", "approved": "approved", **t1_checklist()},
+		)
+
+	def test_the_desk_hands_its_filter_to_the_session(self):
+		response = self.client.get(reverse("review_dash"), {"filter": "flagged"})
+		self.assertEqual(response.context["review_query"], "filter=flagged")
+		self.assertContains(response, f'{reverse("review_next")}?filter=flagged')
+
+	def test_next_stays_inside_the_filter(self):
+		response = self.client.get(reverse("review_next"), {"filter": "flagged"})
+		self.assertRedirects(
+			response,
+			f"{reverse('review_project', args=[self.flagged_first.id])}?filter=flagged",
+			fetch_redirect_response=False,
+		)
+
+	def test_a_decision_lands_on_the_next_row_of_the_filter(self):
+		response = self._approve(self.flagged_first, query="?filter=flagged")
+		self.assertRedirects(
+			response,
+			f"{reverse('review_project', args=[self.flagged_second.id])}"
+			f"?skip={self.flagged_first.id}&filter=flagged",
+			fetch_redirect_response=False,
+		)
+
+	def test_the_end_of_the_filter_goes_back_to_the_filtered_desk(self):
+		response = self._approve(
+			self.flagged_second, query=f"?skip={self.flagged_first.id}&filter=flagged"
+		)
+		self.assertRedirects(
+			response, f"{reverse('review_dash')}?filter=flagged", fetch_redirect_response=False
+		)
+		self.assertIn(
+			"Nothing else waiting in project review that matches this filter.",
+			message_texts(response),
+		)
+
+	def test_the_review_page_counts_within_the_filter(self):
+		response = self.client.get(
+			reverse("review_project", args=[self.flagged_second.id]), {"filter": "flagged"}
+		)
+		self.assertEqual(response.context["queue_position"], 2)
+		self.assertEqual(response.context["queue_total"], 2)
+		self.assertEqual(response.context["session_query"], "filter=flagged")
+		self.assertEqual(
+			response.context["skip_url"],
+			f"{reverse('review_next')}?skip={self.flagged_second.id}&filter=flagged",
+		)
+		self.assertEqual(response.context["queue_dash_url"], f"{reverse('review_dash')}?filter=flagged")
+
+	def test_the_sort_is_walked_in_its_order(self):
+		# Newest in the queue, but the most hours of anything in it.
+		long = make_ship(
+			make_project(make_user("long", slack_id="U-l"), shippable=True),
+			journal_minutes=(600, 600),
+		)
+		response = self.client.get(reverse("review_next"), {"sort": "hours"})
+		self.assertRedirects(
+			response,
+			f"{reverse('review_project', args=[long.id])}?sort=hours",
+			fetch_redirect_response=False,
+		)
+
+	def test_the_timelapse_desk_names_its_default_tab(self):
+		self.client.force_login(grant_perms(make_user("lapserev"), "timelapse_review"))
+		response = self.client.get(reverse("timelapse_review_dash"))
+		self.assertEqual(response.context["review_query"], "filter=shipped")
+		response = self.client.get(reverse("timelapse_review_dash"), {"filter": "all"})
+		self.assertEqual(response.context["review_query"], "")
+
+
 class ClaimTests(BaseTestCase):
 	"""One reviewer at a time, held in the cache and expiring on its own."""
 

@@ -87,7 +87,7 @@
 
 {% block decision %}
 <form class="rv-form" method="POST"
-      action="{% url 't3_decision' ship.id %}{% if skip_value %}?skip={{ skip_value }}{% endif %}">
+      action="{% url 't3_decision' ship.id %}{% if session_query %}?{{ session_query }}{% endif %}">
     {% csrf_token %}
     <h2 class="rv-form-title">Submit Review</h2>
     <p class="rv-form-note">Approving is the end of the line: the ship is finalized, the

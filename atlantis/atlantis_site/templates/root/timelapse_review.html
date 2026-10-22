@@ -19,7 +19,7 @@
                 {% if pending_count %}<span class="rq-count">{{ pending_count }}</span>{% endif %}
             </h2>
             {% if has_pending %}
-                <a class="rq-start" href="{{ start_url }}" data-key="enter">Start reviewing<kbd>&crarr;</kbd></a>
+                <a class="rq-start" href="{{ start_url }}{% if review_query %}?{{ review_query }}{% endif %}" data-key="enter">Start reviewing<kbd>&crarr;</kbd></a>
             {% endif %}
         </div>
 
@@ -44,10 +44,10 @@
                 </thead>
                 <tbody>
                     {% for project in projects %}
-                        <tr class="rq-row" tabindex="0" data-href="{% url 'timelapse_review_project' project.id %}">
+                        <tr class="rq-row" tabindex="0" data-href="{% url 'timelapse_review_project' project.id %}{% if review_query %}?{{ review_query }}{% endif %}">
                             <td class="rq-col-num">{{ project.queue_index }}</td>
                             <td>
-                                <a class="rq-project" href="{% url 'timelapse_review_project' project.id %}">{{ project.title }}</a>
+                                <a class="rq-project" href="{% url 'timelapse_review_project' project.id %}{% if review_query %}?{{ review_query }}{% endif %}">{{ project.title }}</a>
                                 <span class="rq-desc">
                                     {{ project.lapse_count }} journal{{ project.lapse_count|pluralize }} &middot;
                                     {{ project.recording_count }} timelapse{{ project.recording_count|pluralize }}

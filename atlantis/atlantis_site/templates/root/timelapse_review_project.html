@@ -108,7 +108,7 @@
     {% if pending %}
         <form class="ta-form" method="POST" id="timelapse-review-form"
               data-tracked-seconds="{{ tracked_seconds }}"
-              action="{% url 'timelapse_decision' project.id %}{% if skip_value %}?skip={{ skip_value }}{% endif %}">
+              action="{% url 'timelapse_decision' project.id %}{% if session_query %}?{{ session_query }}{% endif %}">
             {% csrf_token %}
             <div data-removal-inputs></div>
         </form>

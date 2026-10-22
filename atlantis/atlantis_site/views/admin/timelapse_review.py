@@ -38,7 +38,7 @@ from ..helpers import (
 from .queue import (
     QUEUES, dash_context, decorate_lapses, decorate_rows, filter_rows, go_to_next,
     is_own_item, next_item_id, owner_snapshot, parse_skip, refuse_own_item,
-    review_context,
+    review_context, session_narrowing,
 )
 
 # Its own permission, not a tier of the T1/T2/T3 ladder. Organizers keep their
@@ -606,10 +606,13 @@ def timelapse_decision(request, project_id):
             "signed off the lapse they were on while this pass was open.",
         )
 
-    # On to the next project rather than back to the desk — one holding a ship
-    # out of T1 first, since that's a shipper waiting on us, and only once
+    # On to the next project rather than back to the desk. A session started
+    # from a narrowed desk walks that table; otherwise one holding a ship out
+    # of T1 goes first, since that's a shipper waiting on us, and only once
     # those are clear the rest of the queue in its usual order.
     skip = parse_skip(request) + [project.id]
+    if session_narrowing(request, "lookout") is not None:
+        return go_to_next(request, "lookout", skip)
     holding = _holding_ships(QUEUES["lookout"].pending())
     if next_item_id("lookout", skip, request.user, holding) is not None:
         return go_to_next(request, "lookout", skip, items=holding)

@@ -328,15 +328,68 @@ def skip_param(skip_ids):
     return ",".join(str(i) for i in skip_ids)
 
 
-def next_item_id(queue_key, skip_ids=(), user=None, items=None):
+# A review session walks the table it was started from. The desk's narrowing —
+# its filter tab, project type, search and sort — rides along on every URL in
+# the session the same way the skip list does, so "next" is the next row the
+# reviewer was looking at, not the next thing in the whole queue.
+
+def session_narrowing(request, queue_key):
+    """The narrowing a review URL carries, or None for the whole queue.
+
+    Unlike the desk, a review URL names its filter or has none: none is the
+    whole queue, even on the timelapse desk, whose table opens on Shipped. The
+    desk spells its tab out on the links it hands a session for that reason.
+    """
+    narrowing = parse_narrowing(request, queue_key)
+    return narrowing if any(narrowing.values()) else None
+
+
+def session_query(skip_ids, narrowing):
+    """The querystring every URL in a session carries, without its `?`."""
+    parts = [f"skip={skip_param(skip_ids)}"] if skip_ids else []
+    params = {key: value for key, value in (narrowing or {}).items() if value}
+    if params:
+        parts.append(urlencode(params))
+    return "&".join(parts)
+
+
+def session_dash_url(queue_key, narrowing):
+    """The desk, showing the table the session was walking."""
+    url = QUEUES[queue_key].dash_url()
+    if narrowing is None:
+        return url
+    params = {key: value for key, value in narrowing.items() if value}
+    # No filter is the All tab, which a desk with a default tab has to name.
+    if not narrowing["filter"] and DEFAULT_FILTERS.get(queue_key):
+        params = {"filter": "all", **params}
+    return f"{url}?{urlencode(params)}"
+
+
+def session_ids(queue_key, narrowing, user=None):
+    """The ids of the desk's table under `narrowing`, in the table's order."""
+    rows = decorate_rows(queue_key, QUEUES[queue_key].pending())
+    if user is not None:
+        for row in rows:
+            # The reviewer's own lease is on the item they're looking at, which
+            # is still unclaimed as far as they're concerned.
+            if row.claim and row.claim.get("user_id") == user.id:
+                row.claim = None
+    return [row.id for row in narrow_rows(queue_key, rows, narrowing)]
+
+
+def next_item_id(queue_key, skip_ids=(), user=None, items=None, narrowing=None):
     """The next item to work: first unskipped, unclaimed thing in the queue.
 
     `items` narrows the search to part of the queue; it defaults to all of it.
+    `narrowing` narrows it to a desk's table, and walks it in the table's order.
     """
     queue = QUEUES[queue_key]
     if items is None:
         items = queue.pending()
     ids = list(exclude_own(queue_key, items, user).values_list("id", flat=True))
+    if narrowing is not None:
+        allowed = set(ids)
+        ids = [item_id for item_id in session_ids(queue_key, narrowing, user) if item_id in allowed]
     claims = claims_for(queue_key, ids)
     for item_id in ids:
         if item_id in skip_ids:
@@ -353,6 +406,7 @@ def go_to_next(request, queue_key, skip_ids=(), empty_message=None, items=None):
     from django.contrib import messages
 
     queue = QUEUES[queue_key]
+    narrowing = session_narrowing(request, queue_key)
     # Whatever the reviewer was holding is done with — released before the
     # search so a re-entrant "next" can't hand them back the item they just
     # decided on.
@@ -361,14 +415,18 @@ def go_to_next(request, queue_key, skip_ids=(), empty_message=None, items=None):
     # is where the rail's badges learn about it. A plain "next" with nothing
     # decided clears them too, which costs one recount and nothing else.
     forget_pending_counts()
-    item_id = next_item_id(queue_key, skip_ids, request.user, items)
+    item_id = next_item_id(queue_key, skip_ids, request.user, items, narrowing)
     if item_id is None:
         release_claim(request.user)
-        messages.info(request, empty_message or f"Nothing else waiting in {queue.label.lower()}.")
-        return redirect(queue.dash)
+        if empty_message is None:
+            empty_message = f"Nothing else waiting in {queue.label.lower()}"
+            empty_message += " that matches this filter." if narrowing else "."
+        messages.info(request, empty_message)
+        return redirect(session_dash_url(queue_key, narrowing))
     url = queue.detail_url(item_id)
-    if skip_ids:
-        url = f"{url}?skip={skip_param(skip_ids)}"
+    query = session_query(skip_ids, narrowing)
+    if query:
+        url = f"{url}?{query}"
     return redirect(url)
 
 
@@ -522,30 +580,29 @@ def _hours_of(queue_key, row):
 FILTER_SEARCH_MAX_LENGTH = 100
 
 
-def filter_rows(request, queue_key, rows):
-    """Narrow a desk's decorated rows by `?filter=`, `?type=` and `?q=`, and
-    put them in `?sort=` order.
+def _filters_for(queue_key):
+    return QUEUE_FILTERS["lookout" if queue_key == "lookout" else "ship"]
 
-    Only the table is narrowed. Rows keep their place number in the whole
-    queue, and the stats above the table still describe all of it. Returns the
-    narrowed rows and the context the filter bar renders from.
+
+def _types_for(queue_key):
+    return {} if queue_key == "lookout" else PROJECT_TYPES
+
+
+def parse_narrowing(request, queue_key, default=""):
+    """`?filter=`, `?type=`, `?q=` and `?sort=`, each one checked, as a dict.
 
     `?shipped=1` is the timelapse desk's older spelling of its shipped filter,
     and it still works so bookmarks and links in Slack keep working.
     """
-    filters = QUEUE_FILTERS["lookout" if queue_key == "lookout" else "ship"]
-    tests = {key: test for key, _label, test in filters}
-    default = DEFAULT_FILTERS.get(queue_key, "")
-
+    tests = {key for key, _label, _test in _filters_for(queue_key)}
     active = request.GET.get("filter", default)
     if queue_key == "lookout" and request.GET.get("shipped") == "1":
         active = "shipped"
     if active not in tests:
         active = ""
 
-    types = {} if queue_key == "lookout" else PROJECT_TYPES
     project_type = request.GET.get("type", "")
-    if project_type not in types:
+    if project_type not in _types_for(queue_key):
         project_type = ""
 
     sort = request.GET.get("sort", "")
@@ -553,36 +610,73 @@ def filter_rows(request, queue_key, rows):
         sort = ""
 
     query = request.GET.get("q", "").strip()[:FILTER_SEARCH_MAX_LENGTH]
-    scope = "all" if request.GET.get("scope") == "all" else ""
+    return {"filter": active, "type": project_type, "q": query, "sort": sort}
 
-    def matches(row):
-        if not query:
-            return True
-        project = _project_of(queue_key, row)
-        owner = project.owner
-        profile = getattr(owner, "hackclub_profile", None)
-        haystack = " ".join(filter(None, [
-            project.title,
-            str(project.id),
-            owner.username,
-            profile.slack_username if profile else "",
-        ])).lower()
-        return query.lower() in haystack
 
-    def of_type(row, type_key):
-        return not type_key or _project_type_of(queue_key, row) == type_key
+def _matches_search(queue_key, row, query):
+    if not query:
+        return True
+    project = _project_of(queue_key, row)
+    owner = project.owner
+    profile = getattr(owner, "hackclub_profile", None)
+    haystack = " ".join(filter(None, [
+        project.title,
+        str(project.id),
+        owner.username,
+        profile.slack_username if profile else "",
+    ])).lower()
+    return query.lower() in haystack
 
-    def passes(row, filter_key):
-        return not filter_key or tests[filter_key](queue_key, row)
 
-    # Type and filter narrow together, so each bar counts within the other.
-    searched = [row for row in rows if matches(row)]
-    typed = [row for row in searched if of_type(row, project_type)]
-    filtered = [row for row in searched if passes(row, active)]
-    shown = [row for row in typed if passes(row, active)]
+def _of_type(queue_key, row, type_key):
+    return not type_key or _project_type_of(queue_key, row) == type_key
+
+
+def _passes(queue_key, row, filter_key):
+    tests = {key: test for key, _label, test in _filters_for(queue_key)}
+    return not filter_key or tests[filter_key](queue_key, row)
+
+
+def _sorted_rows(queue_key, rows, sort):
     if sort:
         _label, descending = QUEUE_SORTS[sort]
-        shown.sort(key=lambda row: _hours_of(queue_key, row), reverse=descending)
+        rows.sort(key=lambda row: _hours_of(queue_key, row), reverse=descending)
+    return rows
+
+
+def narrow_rows(queue_key, rows, narrowing):
+    """`rows` as the desk's table shows them under `narrowing`."""
+    return _sorted_rows(queue_key, [
+        row for row in rows
+        if _matches_search(queue_key, row, narrowing["q"])
+        and _of_type(queue_key, row, narrowing["type"])
+        and _passes(queue_key, row, narrowing["filter"])
+    ], narrowing["sort"])
+
+
+def filter_rows(request, queue_key, rows):
+    """Narrow a desk's decorated rows by `?filter=`, `?type=` and `?q=`, and
+    put them in `?sort=` order.
+
+    Only the table is narrowed. Rows keep their place number in the whole
+    queue, and the stats above the table still describe all of it. Returns the
+    narrowed rows and the context the filter bar renders from.
+    """
+    filters = _filters_for(queue_key)
+    default = DEFAULT_FILTERS.get(queue_key, "")
+    narrowing = parse_narrowing(request, queue_key, default)
+    active, project_type = narrowing["filter"], narrowing["type"]
+    query, sort = narrowing["q"], narrowing["sort"]
+    types = _types_for(queue_key)
+    scope = "all" if request.GET.get("scope") == "all" else ""
+
+    # Type and filter narrow together, so each bar counts within the other.
+    searched = [row for row in rows if _matches_search(queue_key, row, query)]
+    typed = [row for row in searched if _of_type(queue_key, row, project_type)]
+    filtered = [row for row in searched if _passes(queue_key, row, active)]
+    shown = _sorted_rows(
+        queue_key, [row for row in typed if _passes(queue_key, row, active)], sort
+    )
 
     def filter_param(filter_key):
         """How `filter_key` is spelled in the URL: the default goes unsaid."""
@@ -626,7 +720,7 @@ def filter_rows(request, queue_key, rows):
         {
             "key": key,
             "label": label,
-            "count": sum(1 for row in filtered if of_type(row, key)),
+            "count": sum(1 for row in filtered if _of_type(queue_key, row, key)),
             "active": key == project_type,
             "href": querystring(active, type_key=key),
         }
@@ -655,6 +749,10 @@ def filter_rows(request, queue_key, rows):
         # Carried onto the decided table's pager, so paging it doesn't drop
         # the narrowing on the table above.
         "filter_params": "&" + current[1:] if current != "?" else "",
+        # Carried onto "Start reviewing" and every row's link, so the session
+        # they open walks this table rather than the whole queue.
+        "review_query": session_query((), narrowing),
+        "has_pending": bool(shown),
     }
 
 
@@ -812,7 +910,12 @@ def review_context(request, queue_key, item, claimable=True, waiting_since=None,
     """
     queue = QUEUES[queue_key]
     skip_ids = parse_skip(request)
-    ids = list(queue.pending().values_list("id", flat=True))
+    narrowing = session_narrowing(request, queue_key)
+    # Placed in the table the session is walking, when it's walking one.
+    if narrowing is None:
+        ids = list(queue.pending().values_list("id", flat=True))
+    else:
+        ids = session_ids(queue_key, narrowing, request.user)
 
     holder = claim_holder(queue_key, item.id)
     if peek:
@@ -834,9 +937,10 @@ def review_context(request, queue_key, item, claimable=True, waiting_since=None,
 
     next_url = reverse(queue.next_url)
     forward_skip = skip_param(skip_ids)
-    skip_url = reverse(queue.next_url) + f"?skip={skip_param(skip_ids + [item.id])}"
-    if forward_skip:
-        next_url = f"{next_url}?skip={forward_skip}"
+    forward_query = session_query(skip_ids, narrowing)
+    skip_url = reverse(queue.next_url) + f"?{session_query(skip_ids + [item.id], narrowing)}"
+    if forward_query:
+        next_url = f"{next_url}?{forward_query}"
 
     return {
         "queue": queue,
@@ -844,13 +948,16 @@ def review_context(request, queue_key, item, claimable=True, waiting_since=None,
         "queue_label": queue.label,
         "queue_short": queue.short,
         "queue_accent": queue.accent,
-        "queue_dash_url": queue.dash_url(),
+        "queue_dash_url": session_dash_url(queue_key, narrowing),
         "queue_total": len(ids),
         "queue_position": position,
         "queue_remaining": max(len(ids) - (position or len(ids)), 0),
         "skip_url": skip_url,
         "next_url": next_url,
         "skip_value": forward_skip,
+        # What a decision form posts back with, so the decision lands on the
+        # next item of the same session.
+        "session_query": forward_query,
         "claim_conflict": conflict,
         "claim_held": claimable,
         "heartbeat_url": reverse("review_heartbeat", args=[queue_key, item.id]),

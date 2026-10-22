@@ -5,7 +5,7 @@
             {% if pending_count %}<span class="rq-count">{{ pending_count }}</span>{% endif %}
         </h2>
         {% if has_pending %}
-            <a class="rq-start" href="{{ start_url }}" data-key="enter">Start reviewing<kbd>&crarr;</kbd></a>
+            <a class="rq-start" href="{{ start_url }}{% if review_query %}?{{ review_query }}{% endif %}" data-key="enter">Start reviewing<kbd>&crarr;</kbd></a>
         {% endif %}
     </div>
 
@@ -30,7 +30,7 @@
             </thead>
             <tbody>
                 {% for ship in ships %}
-                    <tr class="rq-row" tabindex="0" data-href="{% url queue.detail ship.id %}">
+                    <tr class="rq-row" tabindex="0" data-href="{% url queue.detail ship.id %}{% if review_query %}?{{ review_query }}{% endif %}">
                         <td class="rq-col-num">{{ ship.queue_index }}</td>
                         <td>
                             <div class="rq-project-cell">
@@ -40,7 +40,7 @@
                                     <span class="rq-cover rq-cover-none" aria-hidden="true"></span>
                                 {% endif %}
                                 <div>
-                                    <a class="rq-project" href="{% url queue.detail ship.id %}">{{ ship.project.title }}</a>
+                                    <a class="rq-project" href="{% url queue.detail ship.id %}{% if review_query %}?{{ review_query }}{% endif %}">{{ ship.project.title }}</a>
                                     <span class="rq-desc">{{ ship.project.description|truncatechars:110 }}</span>
                                 </div>
                             </div>
