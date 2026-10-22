@@ -451,10 +451,14 @@ def rescued_by_buffer(now=None):
 	`standing` is where they are; `without` is where they'd be had every
 	buffer gone by the calendar, which has them out. The weeks it saved are
 	the ones `without` has missed and `standing` doesn't.
+
+	A buffer still open is judged on what's in it so far, as though it had
+	closed now. Left open, every week that closed short would be pending
+	rather than missed, and so read as saved by a buffer with nothing in it.
 	"""
 	now = now or timezone.now()
 	tracked, savers, overrides = _ledger()
-	calendar = _calendar(now)
+	calendar = {**_calendar(now), "buffering": None}
 	rescued = {}
 	for owner in tracked.keys() | savers.keys():
 		args = (

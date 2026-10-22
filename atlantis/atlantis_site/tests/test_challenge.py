@@ -1066,6 +1066,13 @@ class BufferRescuedTests(BaseTestCase):
             rescued = challenge.rescued_by_buffer()
         self.assertEqual(set(rescued), {self.rescued.id})
 
+    def test_an_open_buffer_rescues_nobody_it_has_not_filled(self):
+        """While the buffer runs, every short week is pending rather than
+        missed — which isn't the buffer having saved it. Only what's already
+        in the buffer counts."""
+        rescued = challenge.rescued_by_buffer(et("2026-10-12 01:30"))
+        self.assertEqual(set(rescued), {self.rescued.id})
+
     def test_the_roster_filters_to_them_and_names_the_week(self):
         response = self._get("challenge_dash", show="buffer")
         rows = response.context["rows"]
