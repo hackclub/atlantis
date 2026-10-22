@@ -451,15 +451,10 @@ def rescued_by_buffer(now=None):
 	`standing` is where they are; `without` is where they'd be had every
 	buffer gone by the calendar, which has them out. The weeks it saved are
 	the ones `without` has missed and `standing` doesn't.
-
-	A buffer still open is judged on what's in it so far, as though it had
-	closed now. Left open, every week that closed short would be pending
-	rather than missed, and so read as saved by a buffer with nothing in it —
-	which, exported before 2am, tells everyone short that they're back in.
 	"""
 	now = now or timezone.now()
 	tracked, savers, overrides = _ledger()
-	calendar = {**_calendar(now), "buffering": None}
+	calendar = _calendar(now)
 	rescued = {}
 	for owner in tracked.keys() | savers.keys():
 		args = (
@@ -475,50 +470,17 @@ def rescued_by_buffer(now=None):
 	return rescued
 
 
-def listed_while_buffering(at):
-	"""(week, {user id}) that the buffer export listed as back in when pulled
-	at `at`, before rescued_by_buffer judged an open buffer on what was in it.
-
-	While the buffer after `week` ran, a week that closed short was pending
-	rather than missed, so everyone still in and short on it was listed —
-	and DMed that they were back in. Rebuilt from what had been taped in and
-	bought by `at`. (None, set()) outside every buffer, when the export was
-	right.
-	"""
-	week = weeks.buffer_week(at)
-	if week is None:
-		return None, set()
-	tracked, savers, overrides = _ledger(at)
-	calendar = _calendar(at)
-	listed = set()
-	for owner in tracked.keys() | savers.keys():
-		state = _build_standing(
-			tracked.get(owner, ({}, {})), savers.get(owner, {}), overrides.get(owner, {}),
-			at, calendar,
-		)
-		if not state.eliminated and state.weeks[week - 1].pending:
-			listed.add(owner)
-	return week, listed
-
-
-def _ledger(at=None):
+def _ledger():
 	"""Everyone's (_bucket_by_week pair, {week: saver hours}, {week: override}),
-	each keyed by user id. With `at`, only the timelapses and savers written by
-	then."""
-	logged = _all_logged_timelapses()
-	credits = SaverCredit.objects.all()
-	if at is not None:
-		logged = logged.filter(created_at__lte=at)
-		credits = credits.filter(created_at__lte=at)
-
+	each keyed by user id."""
 	rows = {}
-	for owner, moment, seconds in logged.values_list("owner", "at", "tracked_seconds"):
-		rows.setdefault(owner, []).append((moment, seconds))
+	for owner, at, seconds in _all_logged_timelapses().values_list("owner", "at", "tracked_seconds"):
+		rows.setdefault(owner, []).append((at, seconds))
 	tracked = {owner: _bucket_by_week(pairs) for owner, pairs in rows.items()}
 
 	savers = {}
 	for owner, index, hours in (
-		credits.values_list("user", "week_index")
+		SaverCredit.objects.values_list("user", "week_index")
 		.order_by()
 		.annotate(hours=Count("id"))
 	):
