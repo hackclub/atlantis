@@ -27,8 +27,8 @@ from django.utils import timezone
 
 from .. import challenge, weeks
 from ..models import (
-    AuditLog, Item, Order, PrinterClaim, Profile, SaverCredit, Ship, WeekOutcome,
-    WeekReminder,
+    AuditLog, Item, Order, PrinterClaim, Profile, SaverCredit, Ship, Timelapse,
+    WeekOutcome, WeekReminder,
 )
 from ..printers import item_key
 from .base import (
@@ -1066,6 +1066,14 @@ class BufferRescuedTests(BaseTestCase):
             rescued = challenge.rescued_by_buffer()
         self.assertEqual(set(rescued), {self.rescued.id})
 
+    def test_an_open_buffer_rescues_nobody_it_has_not_filled(self):
+        """While the buffer runs, every short week is pending rather than
+        missed — which isn't the buffer having saved it. Only what's already
+        in the buffer counts, so the export can't tell someone with nothing
+        in it that they're back in."""
+        rescued = challenge.rescued_by_buffer(et("2026-10-12 01:30"))
+        self.assertEqual(set(rescued), {self.rescued.id})
+
     def test_the_roster_filters_to_them_and_names_the_week(self):
         response = self._get("challenge_dash", show="buffer")
         rows = response.context["rows"]
@@ -1094,6 +1102,107 @@ class BufferRescuedTests(BaseTestCase):
     def test_the_csv_needs_the_organizer_permission(self):
         self.client.force_login(grant_perms(make_user("t1", slack_id="U0T1"), "t1_review"))
         self.assertEqual(self._get("buffer_rescued_csv").status_code, 302)
+
+
+@override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+class HonorBufferDmTests(BaseTestCase):
+    """Making good on the export pulled while week 3's buffer was still open,
+    which listed everyone short on it as back in.
+
+    Now is in week 4; week 3's buffer is Mon Oct 12, midnight to 2am, and the
+    export went at 12:45. Each recording is taped in the moment it's made.
+    """
+
+    NOW = et("2026-10-14 12:00")
+    EXPORTED = et("2026-10-12 00:45")
+
+    def setUp(self):
+        super().setUp()
+        self.organizer = make_user("organizer", slack_id="U0ORG")
+        # Saved by the buffer for real, at 1am: listed, and met anyway.
+        self.rescued = self._user("rescued", (600, "2026-09-24 12:00"), (240, "2026-10-08 12:00"), (90, "2026-10-12 01:00"))
+        # Nothing in the buffer: told they were back in, and weren't.
+        self.out = self._user("out", (600, "2026-09-24 12:00"), (240, "2026-10-08 12:00"))
+        # Some in the buffer, not enough, so it sat on week 3 off the bar.
+        self.short = self._user("short", (600, "2026-09-24 12:00"), (240, "2026-10-08 12:00"), (30, "2026-10-12 00:30"))
+        # Already out over the grace pair at 12:45, so never listed; bought
+        # their way back in after.
+        self.gone = self._user("gone", (300, "2026-09-24 12:00"), (240, "2026-10-08 12:00"))
+        for _ in range(5):
+            credit = SaverCredit.objects.create(user=self.gone, week_index=1)
+            SaverCredit.objects.filter(pk=credit.pk).update(created_at=et("2026-10-13 12:00"))
+
+    def _user(self, name, *logs):
+        user = make_user(name, slack_id=f"U0{name.upper()}")
+        project = make_project(user)
+        for minutes, when in logs:
+            journal = make_journal(project, time_spent=0)
+            row = make_timelapse(project, journal=journal, minutes=minutes, recorded_at=et(when))
+            Timelapse.objects.filter(pk=row.pk).update(created_at=et(when))
+        return user
+
+    def _export(self, when=None):
+        row = AuditLog.objects.create(action="export_buffer_rescued", metadata={"count": 3})
+        AuditLog.objects.filter(pk=row.pk).update(created_at=when or self.EXPORTED)
+
+    def _run(self, **options):
+        with patch("django.utils.timezone.now", return_value=self.NOW):
+            call_command("honor_buffer_dm", by="organizer", stdout=StringIO(), **options)
+
+    def _standing(self, user):
+        return challenge.standing(user, self.NOW)
+
+    def test_everyone_the_export_listed_is_back_in(self):
+        self._export()
+        self._run()
+        self.assertFalse(self._standing(self.out).eliminated)
+        self.assertFalse(self._standing(self.short).eliminated)
+        outcome = WeekOutcome.objects.get(user=self.out, week_index=3)
+        self.assertEqual(outcome.override, WeekOutcome.Override.PASS)
+        self.assertEqual(outcome.override_by, self.organizer)
+        self.assertEqual(AuditLog.objects.filter(action="override_week").count(), 2)
+
+    def test_the_buffer_time_moves_onto_the_new_weeks_bar(self):
+        self._export()
+        self.assertEqual(self._standing(self.short).current.tracked_minutes, 0)
+        self._run()
+        self.assertEqual(self._standing(self.short).current.tracked_minutes, 30)
+
+    def test_nobody_the_buffer_really_saved_is_touched(self):
+        self._export()
+        self._run()
+        self.assertFalse(WeekOutcome.objects.filter(user=self.rescued).exists())
+
+    def test_nobody_already_out_when_it_was_pulled_is_passed(self):
+        self._export()
+        self._run()
+        self.assertTrue(self._standing(self.gone).eliminated)
+        self.assertFalse(WeekOutcome.objects.filter(user=self.gone).exists())
+
+    def test_an_export_pulled_after_the_buffer_closed_restores_nothing(self):
+        self._export(et("2026-10-12 03:00"))
+        self._run()
+        self.assertTrue(self._standing(self.out).eliminated)
+        self.assertFalse(WeekOutcome.objects.exists())
+
+    def test_the_banned_are_left_out(self):
+        self.out.hackclub_profile.banned = True
+        self.out.hackclub_profile.save()
+        self._export()
+        self._run()
+        self.assertFalse(WeekOutcome.objects.filter(user=self.out).exists())
+
+    def test_an_organizers_fail_is_left_alone(self):
+        WeekOutcome.objects.create(user=self.out, week_index=3, override=WeekOutcome.Override.FAIL)
+        self._export()
+        self._run()
+        self.assertEqual(WeekOutcome.objects.get(user=self.out).override, WeekOutcome.Override.FAIL)
+
+    def test_a_dry_run_writes_nothing(self):
+        self._export()
+        self._run(dry_run=True)
+        self.assertFalse(WeekOutcome.objects.exists())
+        self.assertFalse(AuditLog.objects.filter(action="override_week").exists())
 
 
 class ChallengeAdminTests(BaseTestCase):

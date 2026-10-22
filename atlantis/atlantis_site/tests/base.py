@@ -351,6 +351,13 @@ class BaseTestCase(TestCase):
 			self.slack_message_mocks[target.rsplit(".", 2)[-2]] = patcher.start()
 			self.addCleanup(patcher.stop)
 
+		# The floor under both: commands like close_week import send_slack_dm
+		# from helpers at call time, past every target above, and a dev .env
+		# carries a real token. Nothing a test does may reach Slack.
+		patcher = patch("atlantis_site.views.helpers.slack_client.chat_postMessage", return_value={"ok": True})
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
 		self.model_info_mocks = []
 		for target in self.MODEL_INFO_TARGETS:
 			patcher = patch(target, return_value={"makesCount": 0})
