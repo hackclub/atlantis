@@ -27,6 +27,7 @@ other bar has narrowed to. Searching
         {% if active_filter_param and not search_scope %}<input type="hidden" name="filter" value="{{ active_filter_param }}">{% endif %}
         {% if active_type and not search_scope %}<input type="hidden" name="type" value="{{ active_type }}">{% endif %}
         {% if active_sort %}<input type="hidden" name="sort" value="{{ active_sort }}">{% endif %}
+        {% if search_reviewer %}<input type="hidden" name="reviewer" value="{{ search_reviewer }}">{% endif %}
         <select name="scope" aria-label="Search where">
             <option value=""{% if not search_scope %} selected{% endif %}>This queue</option>
             <option value="all"{% if search_scope == "all" %} selected{% endif %}>All projects</option>

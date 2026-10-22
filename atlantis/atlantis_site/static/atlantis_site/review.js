@@ -688,6 +688,18 @@
 
     /* -------------------------------------------------------------- charts */
 
+    /*
+     * A <select data-autosubmit> submits its form as soon as it changes, so
+     * the button beside it is only there for when this file isn't.
+     */
+    function setupAutoSubmit() {
+        document.querySelectorAll('select[data-autosubmit]').forEach(function (select) {
+            var button = select.form && select.form.querySelector('[data-autosubmit-button]');
+            if (button) button.hidden = true;
+            select.addEventListener('change', function () { select.form.requestSubmit(); });
+        });
+    }
+
     function setupBars() {
         document.querySelectorAll('[data-bar]').forEach(function (el) {
             el.style.width = el.dataset.bar + '%';
@@ -727,6 +739,7 @@
         setupHeartbeat();
         setupQueueTable();
         setupRollback();
+        setupAutoSubmit();
         setupBars();
         setupLeaderboards();
         document.addEventListener('keydown', onKeyDown);

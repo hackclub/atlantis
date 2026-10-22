@@ -849,3 +849,53 @@ class AllReviewsTableTests(BaseTestCase):
 		response = self.client.get(reverse("review_dash"), {"page": 2})
 		self.assertEqual(response.context["reviews_page"].number, 2)
 		self.assertEqual(len(response.context["all_reviews"]), 5)
+
+
+class LapseReviewerFilterTests(BaseTestCase):
+	"""The timelapse desk's decided table, narrowed to one reviewer."""
+
+	def setUp(self):
+		super().setUp()
+		cache.clear()
+		self.busy = grant_perms(make_user("busy", slack_id="U-busy"), "timelapse_review")
+		self.quiet = grant_perms(make_user("quiet", slack_id="U-quiet"), "timelapse_review")
+		self.client.force_login(self.busy)
+		project = make_project(make_user("author"), shippable=True)
+		self.busy_reviews = [approve_timelapse(make_journal(project), reviewer=self.busy) for _ in range(2)]
+		self.quiet_review = approve_timelapse(make_journal(project), reviewer=self.quiet)
+
+	def _dash(self, **params):
+		return self.client.get(reverse("timelapse_review_dash"), params)
+
+	def test_everyone_who_has_reviewed_is_offered_busiest_first(self):
+		options = self._dash().context["reviewer_options"]
+		self.assertEqual(
+			[(option["id"], option["count"]) for option in options],
+			[(self.busy.id, 2), (self.quiet.id, 1)],
+		)
+
+	def test_picking_a_reviewer_narrows_the_table(self):
+		response = self._dash(reviewer=self.quiet.id)
+		self.assertEqual([row["id"] for row in response.context["all_reviews"]], [self.quiet_review.id])
+		self.assertEqual(response.context["active_reviewer"], self.quiet.id)
+
+	def test_no_reviewer_shows_everything(self):
+		self.assertEqual(len(self._dash().context["all_reviews"]), 3)
+
+	def test_junk_or_strangers_are_ignored(self):
+		for value in ("abc", "999999"):
+			response = self._dash(reviewer=value)
+			self.assertEqual(len(response.context["all_reviews"]), 3)
+			self.assertIsNone(response.context["active_reviewer"])
+
+	def test_the_queue_s_filter_links_keep_the_reviewer(self):
+		response = self._dash(reviewer=self.quiet.id)
+		hrefs = {option["key"]: option["href"] for option in response.context["filter_options"]}
+		self.assertIn(f"reviewer={self.quiet.id}", hrefs["flagged"])
+		self.assertIn(f"reviewer={self.quiet.id}", response.context["filter_params"])
+
+	def test_the_ship_desks_have_no_reviewer_filter(self):
+		self.client.force_login(grant_perms(make_user("t1rev"), "t1_review"))
+		response = self.client.get(reverse("review_dash"), {"reviewer": self.busy.id})
+		self.assertEqual(response.context["reviewer_options"], [])
+		self.assertIsNone(response.context["active_reviewer"])

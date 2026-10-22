@@ -24,6 +24,7 @@ the thing that's authoritative.
 from dataclasses import dataclass
 from datetime import timedelta
 
+from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.paginator import Paginator
 from django.db.models import Count, Exists, Min, OuterRef, Prefetch, Q, Sum
@@ -669,6 +670,8 @@ def filter_rows(request, queue_key, rows):
     query, sort = narrowing["q"], narrowing["sort"]
     types = _types_for(queue_key)
     scope = "all" if request.GET.get("scope") == "all" else ""
+    # The decided table's narrowing, kept while the queue's is changed.
+    reviewer = parse_reviewer(request, queue_key) or ""
 
     # Type and filter narrow together, so each bar counts within the other.
     searched = [row for row in rows if _matches_search(queue_key, row, query)]
@@ -689,7 +692,7 @@ def filter_rows(request, queue_key, rows):
             key: value
             for key, value in (
                 ("filter", filter_param(filter_key)), ("type", type_key), ("q", query),
-                ("scope", scope), ("sort", sort_key),
+                ("scope", scope), ("sort", sort_key), ("reviewer", reviewer),
             )
             if value
         }
@@ -741,13 +744,14 @@ def filter_rows(request, queue_key, rows):
         "sort_label": QUEUE_SORTS[sort][0] if sort else "",
         "hours_sort_href": querystring(active, next_sort),
         "search_scope": scope,
+        "search_reviewer": reviewer,
         # With ?scope=all the search leaves the queue and looks everywhere;
         # the table above shows those matches in place of the queue's rows.
         "searching_all": bool(scope and query),
         "search_results": search_everything(queue_key, query) if scope and query else [],
         "search_limit": SEARCH_ALL_LIMIT,
         # Carried onto the decided table's pager, so paging it doesn't drop
-        # the narrowing on the table above.
+        # the narrowing on the table above, or its own reviewer.
         "filter_params": "&" + current[1:] if current != "?" else "",
         # Carried onto "Start reviewing" and every row's link, so the session
         # they open walks this table rather than the whole queue.
@@ -971,8 +975,14 @@ def dash_context(request, queue_key, rows, extra_stats=()):
     """The header a desk shows above its table."""
     queue = QUEUES[queue_key]
     release_claim(request.user)  # Back at the desk: not reviewing anything.
-    page, reviews = all_reviews_page(queue_key, request.GET.get("page"))
+    reviewers = reviewer_options(queue_key)
+    reviewer = parse_reviewer(request, queue_key)
+    if reviewer and reviewer not in {option["id"] for option in reviewers}:
+        reviewer = None
+    page, reviews = all_reviews_page(queue_key, request.GET.get("page"), reviewer)
     return {
+        "reviewer_options": reviewers,
+        "active_reviewer": reviewer,
         "queue": queue,
         "queue_key": queue_key,
         "queue_label": queue.label,
@@ -1306,8 +1316,43 @@ def _review_row(queue_key, review):
     }
 
 
-def all_reviews_page(queue_key, page_number):
-    """Every decision this desk has ever made, newest first, one page of it."""
+# Desks whose decided table can be narrowed to one reviewer, by `?reviewer=`.
+REVIEWER_FILTER_DESKS = {"lookout"}
+
+
+def parse_reviewer(request, queue_key):
+    """The `?reviewer=` user id, on a desk that takes one, or None."""
+    raw = request.GET.get("reviewer", "")
+    if queue_key not in REVIEWER_FILTER_DESKS or not raw.isdigit():
+        return None
+    return int(raw)
+
+
+def reviewer_options(queue_key):
+    """Everyone who has decided something on this desk, busiest first."""
+    if queue_key not in REVIEWER_FILTER_DESKS:
+        return []
+    counts = (
+        REVIEW_MODEL[queue_key].objects
+        .values("reviewer")
+        .annotate(n=Count("id"))
+        .order_by("-n", "reviewer")
+    )
+    counts = [(row["reviewer"], row["n"]) for row in counts]
+    users = User.objects.select_related("hackclub_profile").in_bulk(
+        [user_id for user_id, _n in counts]
+    )
+    return [
+        {"id": user_id, "name": display_name(users.get(user_id)), "count": n}
+        for user_id, n in counts
+    ]
+
+
+def all_reviews_page(queue_key, page_number, reviewer=None):
+    """Every decision this desk has ever made, newest first, one page of it.
+
+    `reviewer` narrows it to the decisions one user made.
+    """
     model = REVIEW_MODEL[queue_key]
     if queue_key == "lookout":
         rows = model.objects.select_related(
@@ -1321,6 +1366,8 @@ def all_reviews_page(queue_key, page_number):
             "ship__project__owner__hackclub_profile",
             "reviewer", "reviewer__hackclub_profile",
         )
+    if reviewer is not None:
+        rows = rows.filter(reviewer_id=reviewer)
 
     paginator = Paginator(rows.order_by("-reviewed_at", "-id"), REVIEWS_PER_PAGE)
     page = paginator.get_page(page_number)

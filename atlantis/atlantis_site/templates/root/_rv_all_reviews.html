@@ -1,5 +1,28 @@
-<section class="rq-section">
-    <h2 class="rq-section-title">All {{ queue_plural }}</h2>
+<section class="rq-section" id="past-reviews">
+    <div class="rq-section-head">
+        <h2 class="rq-section-title">All {{ queue_plural }}</h2>
+        {% if reviewer_options %}
+            {% comment %}
+            Narrows this table to one reviewer's decisions. The queue's own
+            narrowing rides along, so picking a reviewer leaves the table above
+            as it was.
+            {% endcomment %}
+            <form class="rq-search" method="get" action="#past-reviews">
+                {% if active_filter_param %}<input type="hidden" name="filter" value="{{ active_filter_param }}">{% endif %}
+                {% if active_type %}<input type="hidden" name="type" value="{{ active_type }}">{% endif %}
+                {% if filter_query %}<input type="hidden" name="q" value="{{ filter_query }}">{% endif %}
+                {% if search_scope %}<input type="hidden" name="scope" value="{{ search_scope }}">{% endif %}
+                {% if active_sort %}<input type="hidden" name="sort" value="{{ active_sort }}">{% endif %}
+                <select name="reviewer" aria-label="Reviewed by" data-autosubmit>
+                    <option value="">Every reviewer</option>
+                    {% for option in reviewer_options %}
+                        <option value="{{ option.id }}"{% if option.id == active_reviewer %} selected{% endif %}>{{ option.name }} ({{ option.count }})</option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="rv-btn rv-btn-sm" data-autosubmit-button>Show</button>
+            </form>
+        {% endif %}
+    </div>
 
     <div class="rq-table-wrap">
         <table class="rq-table">
@@ -42,7 +65,7 @@
                         {% endif %}
                     </tr>
                 {% empty %}
-                    <tr><td colspan="{% if can_roll_back %}7{% else %}6{% endif %}" class="rq-empty">Nothing decided here yet.</td></tr>
+                    <tr><td colspan="{% if can_roll_back %}7{% else %}6{% endif %}" class="rq-empty">{% if active_reviewer %}Nothing decided here by this reviewer.{% else %}Nothing decided here yet.{% endif %}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -61,13 +84,13 @@
             {% if reviews_page.paginator.num_pages > 1 %}
                 <span class="rq-pager-nav">
                     {% if reviews_page.has_previous %}
-                        <a class="rv-btn rv-btn-sm" href="?page={{ reviews_page.previous_page_number }}{{ filter_params }}">Previous</a>
+                        <a class="rv-btn rv-btn-sm" href="?page={{ reviews_page.previous_page_number }}{{ filter_params }}#past-reviews">Previous</a>
                     {% else %}
                         <span class="rv-btn rv-btn-sm" aria-disabled="true">Previous</span>
                     {% endif %}
                     <span class="rq-pager-at">{{ reviews_page.number }} / {{ reviews_page.paginator.num_pages }}</span>
                     {% if reviews_page.has_next %}
-                        <a class="rv-btn rv-btn-sm" href="?page={{ reviews_page.next_page_number }}{{ filter_params }}">Next</a>
+                        <a class="rv-btn rv-btn-sm" href="?page={{ reviews_page.next_page_number }}{{ filter_params }}#past-reviews">Next</a>
                     {% else %}
                         <span class="rv-btn rv-btn-sm" aria-disabled="true">Next</span>
                     {% endif %}
