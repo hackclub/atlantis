@@ -1549,6 +1549,17 @@ class UpdateEditorModelTests(BaseTestCase):
 		self.assertEqual(self.project.editor_model_url, "")
 
 	@override_settings(ALLOW_JOURNALING=True)
+	def test_fragment_or_query_cannot_smuggle_extension(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		# Read as a URL these end in .f3d, but they would be stored as .html.
+		for name in ("part.f3d#.html", "part.f3d?.svg", "part.zip#.xhtml"):
+			with self.subTest(name=name):
+				response = self._update(editor_model_file=SimpleUploadedFile(name, b"<script>alert(1)</script>"))
+				self.assertTrue(any("Unsupported editor model file" in m for m in message_texts(response)))
+				self.project.refresh_from_db()
+				self.assertEqual(self.project.editor_model_url, "")
+
+	@override_settings(ALLOW_JOURNALING=True)
 	def test_oversized_file_rejected(self):
 		from django.core.files.uploadedfile import SimpleUploadedFile
 		# A real 500MB upload is too heavy for a test, so the size check is
@@ -1848,6 +1859,17 @@ class ServeMediaTests(BaseTestCase):
 		self.assertEqual(response.status_code, 200)
 		self.assertEqual(b"".join(response.streaming_content), b"pngbytes")
 		self.assertEqual(response["Content-Type"], "image/png")
+		self.assertNotIn("attachment", response.get("Content-Disposition", ""))
+
+	def test_non_image_is_served_as_download(self):
+		for key in ("editor_models/abc.html", "editor_models/abc.svg", "editor_models/abc.f3d", "models/abc.stl"):
+			with self.subTest(key=key):
+				key = self._store(key, b"<script>alert(1)</script>")
+				response = self.client.get(reverse("serve_media", args=[key]))
+				self.assertEqual(response.status_code, 200)
+				self.assertEqual(response["Content-Type"], "application/octet-stream")
+				self.assertTrue(response["Content-Disposition"].startswith("attachment"))
+				self.assertIn("sandbox", response["Content-Security-Policy"])
 
 	def test_requires_login(self):
 		self.client.logout()

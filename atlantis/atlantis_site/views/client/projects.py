@@ -24,7 +24,7 @@ import mimetypes
 import secrets
 
 from ...models import (
-    Project, Ship, Journal, Timelapse, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, EDITOR_ARCHIVE_EXTENSIONS, UNLISTED_EDITOR_EXTENSIONS, LINKABLE_EDITORS, is_editor_model_file
+    Project, Ship, Journal, Timelapse, ALLOWED_EDITORS, EDITOR_FILE_EXTENSIONS, EDITOR_ARCHIVE_EXTENSIONS, UNLISTED_EDITOR_EXTENSIONS, LINKABLE_EDITORS
 )
 from ... import activity, challenge, lapse, lookout
 from ...checklists import SHIP_CHECKLIST, unticked, unticked_message
@@ -36,7 +36,7 @@ from ..helpers import (
     sniff_image_extension, random_storage_key,
     notify_followers, rate_limit, fetch_aware, wants_json, run_in_background, tracked_minutes_for_journals, format_minutes,
     can_bypass_ship_requirements, ship_block_reason, field_max_length, fit, too_long,
-    INT_FIELD_MAX, NO_ADDRESS_MESSAGE, ADDRESS_UNAVAILABLE_MESSAGE,
+    INT_FIELD_MAX, NO_ADDRESS_MESSAGE, ADDRESS_UNAVAILABLE_MESSAGE, ALLOWED_IMAGE_FORMATS,
 )
 
 ADDRESS_BLOCK_MESSAGES = (NO_ADDRESS_MESSAGE, ADDRESS_UNAVAILABLE_MESSAGE)
@@ -398,15 +398,18 @@ def update_editor_model(request, project_id):
 
     if editor_model_file:
         if settings.ALLOW_JOURNALING:
-            if not is_editor_model_file(editor_model_file.name):
+            # Check the extension the object is stored under, not the name as
+            # is_editor_model_file reads it: that parses its argument as a URL,
+            # so "part.f3d#.html" passed as .f3d and was then saved as .html.
+            editor_ext = os.path.splitext(editor_model_file.name)[1].lower()
+            if editor_ext not in (*EDITOR_FILE_EXTENSIONS, *EDITOR_ARCHIVE_EXTENSIONS, *UNLISTED_EDITOR_EXTENSIONS):
                 messages.error(request, f"Unsupported editor model file. Supported editors: {', '.join(ALLOWED_EDITORS)}. You can also upload a .zip of your project files.")
                 return redirect("project_detail", project_id=project_id)
-            
+
             if not validate_file_size(editor_model_file, 500):
                 messages.error(request, f"Editor model file too large. Max 500MB.")
                 return redirect("project_detail", project_id=project_id)
-            
-            editor_ext = os.path.splitext(editor_model_file.name)[1].lower()
+
             editor_model_key = default_storage.save(
                 random_storage_key("editor_models", editor_ext), editor_model_file
             )
@@ -1245,6 +1248,13 @@ def ship_project(request, project_id):
 # objects out of the bucket.
 ALLOWED_MEDIA_PREFIXES = ("images/", "models/", "editor_models/")
 
+# The only types serve_media lets a browser render. Images are stored under the
+# extension sniffed from their bytes, so these keys are what they say they are;
+# every other object is participant-named and goes out as an opaque download.
+INLINE_MEDIA_TYPES = {
+    mimetypes.guess_type(f"x{ext}")[0] for ext in ALLOWED_IMAGE_FORMATS.values()
+}
+
 
 @login_required
 def serve_media(request, key):
@@ -1268,4 +1278,12 @@ def serve_media(request, key):
         raise Http404
 
     content_type, _ = mimetypes.guess_type(key)
-    return FileResponse(file, content_type=content_type or "application/octet-stream")
+    if content_type in INLINE_MEDIA_TYPES:
+        response = FileResponse(file, content_type=content_type)
+    else:
+        # A key ending in .html or .svg would otherwise render as a page on our
+        # origin, in the session of whichever reviewer opened it.
+        response = FileResponse(file, as_attachment=True, content_type="application/octet-stream")
+    # Even a mislabelled object can't run script or load anything.
+    response["Content-Security-Policy"] = "default-src 'none'; sandbox"
+    return response
