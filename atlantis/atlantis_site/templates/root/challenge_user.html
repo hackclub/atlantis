@@ -28,6 +28,7 @@
                     <th>Week</th>
                     <th>Logged</th>
                     <th>Saved</th>
+                    <th>Makeup owed</th>
                     <th>Credited</th>
                     <th>Result</th>
                     <th>Override</th>
@@ -39,6 +40,7 @@
                         <td>{{ week.label }}{% if week.current %} <em>(live)</em>{% endif %}</td>
                         <td>{{ week.tracked_display }}</td>
                         <td>{{ week.saver_hours }}h</td>
+                        <td>{% if week.makeup_minutes %}{{ week.makeup_display }}{% else %}<span class="muted">none</span>{% endif %}</td>
                         <td>{{ week.credited_display }}</td>
                         <td>
                             {% if week.missed %}<span class="pill pill-bad">missed</span>

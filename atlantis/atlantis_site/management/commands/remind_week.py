@@ -91,9 +91,11 @@ class Command(BaseCommand):
             return False
 
         if week.grace:
-            goal = f"{week.required_hours} hours across {week.grace_label}"
+            goal = f"{week.required_display} across {week.grace_label}"
         else:
-            goal = f"{week.required_hours} hours this week"
+            goal = f"{week.required_display} this week"
+        if week.bar_makeup_minutes:
+            goal += f" ({week.bar_makeup_display} of it making up deflated time)"
 
         return send_slack_dm(
             f"Heads up: week {week.index} of Atlantis ends tomorrow (Sunday) at "

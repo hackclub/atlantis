@@ -2,10 +2,16 @@
 
 Every journal lands in this queue when it's created and stays there until a
 reviewer signs it off, optionally cutting ranges of unearned time out of the
-the footage first. The whole flow is invisible to the project owner:
-nothing here notifies them, nothing here renders on a page they can load, and a
-project still ships normally while its journals sit in the queue. What waiting
-does hold up is the regular (T1) review queue — see timelapse_cleared_ships.
+the footage first. The review itself is invisible to the project owner: nothing
+here renders on a page they can load, and a project still ships normally while
+its journals sit in the queue. The one thing they do hear is when cuts made in
+a week pass an hour, since that time then has to be made up (see
+notify_makeup). What waiting does hold up is the regular (T1) review queue —
+see timelapse_cleared_ships.
+
+A signed-off review can be corrected afterwards by a reviewer lead from Review
+Audit: its descriptions rewritten, its cuts removed or added to. Every
+correction writes a TimelapseReviewEdit alongside the change.
 
 The unit of work is a *project*, not a journal. Every lapse on a project is the
 same person recording the same build, and judging them one at a time meant
@@ -27,13 +33,15 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 
+from ... import challenge, weeks
 from ...models import (
-    Journal, Project, TimelapseAnnotation, TimelapseRemoval, TimelapseReview,
-    first_overlap, format_timecode, parse_timecode, tracked_to_video,
-    video_to_tracked,
+    Journal, Project, Ship, TimelapseAnnotation, TimelapseRemoval, TimelapseReview,
+    TimelapseReviewEdit, first_overlap, format_timecode, parse_timecode,
+    tracked_to_video, video_to_tracked,
 )
 from ..helpers import (
     staff_member_required, check_perms, display_name, format_minutes, record_audit, reviewer_leaderboards,
+    run_in_background, send_slack_dm,
 )
 from .queue import (
     QUEUES, dash_context, decorate_lapses, decorate_rows, filter_rows, go_to_next,
@@ -47,6 +55,14 @@ TIMELAPSE_REVIEW_PERMS = [
     "atlantis_site.timelapse_review",
     "atlantis_site.organizer",
 ]
+
+# Correcting a review someone else signed off is oversight, not review work,
+# so it belongs to whoever can read Review Audit, not to the reviewers.
+REVIEW_EDIT_PERMS = [
+    "atlantis_site.reviewer_lead",
+    "atlantis_site.organizer",
+]
+EDIT_NOTE_MAX_LENGTH = 500
 
 REASON_MAX_LENGTH = 1000
 INTERNAL_NOTES_MAX_LENGTH = 1000
@@ -210,6 +226,9 @@ def _parse_removals(request, sessions):
             start_seconds=start_seconds,
             end_seconds=end_seconds,
             reason=raw_reason,
+            # Every range cut from here on is owed back; see
+            # challenge.makeup_minutes_by_week.
+            counts_toward_makeup=True,
         ))
         video_ranges.append((session.id, start, end))
 
@@ -259,6 +278,38 @@ def _parse_descriptions(request, lapses):
                 )
             descriptions[session.id] = value
     return descriptions
+
+
+def _live_makeup(user):
+    """Minutes `user` owes in makeup on the week in progress, 0 outside one."""
+    index = weeks.current_week()
+    if index is None:
+        return 0
+    return challenge.makeup_minutes_by_week(user).get(index, 0)
+
+
+def notify_makeup(owner, project, before):
+    """DM the owner if a change just raised what they owe this week.
+
+    `before` is _live_makeup from before the change. Nothing is sent while
+    the week's cuts are under the threshold, since nothing is owed then, or
+    when the change didn't raise the amount: a correction that removes a cut
+    isn't news that needs a DM.
+    """
+    after = _live_makeup(owner)
+    if after <= before:
+        return
+    profile = getattr(owner, "hackclub_profile", None)
+    if profile is None or not profile.slack_id:
+        return
+    run_in_background(
+        send_slack_dm,
+        f"{format_minutes(after)} need to be made up because of deflations to your project "
+        f"<https://atlantis.hackclub.com/projects/{project.id}|{project.title}>. That's on "
+        f"top of this week's {weeks.WEEKLY_HOURS} hours, so this week's bar now needs "
+        f"{format_minutes(weeks.WEEKLY_MINUTES + after)}.",
+        profile.slack_id,
+    )
 
 
 def _recording_payload(session, removals=(), description=""):
@@ -501,6 +552,7 @@ def timelapse_decision(request, project_id):
         return redirect("timelapse_review_project", project_id=project_id)
 
     reviewed_here = {lapse.id for lapse in lapses}
+    makeup_before = _live_makeup(project.owner)
 
     with transaction.atomic():
         # Re-read inside the transaction: two reviewers opening the same project
@@ -560,9 +612,11 @@ def timelapse_decision(request, project_id):
     removed_seconds = sum(removal.duration_seconds for removal in kept)
     dropped = len(removals) - len(kept)
 
-    # No send_slack_dm and no notify_followers, deliberately: timelapse review is
-    # internal, and the shipper is not told that it happened or what it cost
-    # them.
+    # No notify_followers, and no DM about the review itself: timelapse review
+    # is internal. The one exception is the owner hearing how much they now
+    # have to make up, once this week's cuts pass the threshold.
+    if kept:
+        notify_makeup(project.owner, project, makeup_before)
     record_audit(
         request,
         "timelapse_review",
@@ -617,3 +671,272 @@ def timelapse_decision(request, project_id):
     if next_item_id("lookout", skip, request.user, holding) is not None:
         return go_to_next(request, "lookout", skip, items=holding)
     return go_to_next(request, "lookout", skip)
+
+
+# ---------------------------------------------------------------- corrections
+
+def _review_for_edit(review_id):
+    return get_object_or_404(
+        TimelapseReview.objects.select_related(
+            "reviewer", "reviewer__hackclub_profile",
+            "journal", "journal__ship", "journal__project",
+            "journal__project__owner", "journal__project__owner__hackclub_profile",
+        ),
+        id=review_id,
+    )
+
+
+def _removal_record(removal):
+    """A removal as the edit history keeps it, so a deleted one can still be read."""
+    return {
+        "id": removal.id,
+        "session_id": removal.session_id,
+        "start_seconds": removal.start_seconds,
+        "end_seconds": removal.end_seconds,
+        "reason": removal.reason,
+        "counts_toward_makeup": removal.counts_toward_makeup,
+        "created_at": removal.created_at.isoformat(),
+    }
+
+
+def _edit_lines(changes, numbers):
+    """One sentence per thing an edit changed, for the history table.
+
+    `numbers` maps session id to the "Recording N" the page calls it. Ranges
+    are given on the video's timeline, as the reviewer typed them.
+    """
+    def recording(session_id):
+        return f"recording {numbers.get(session_id, '#' + str(session_id))}"
+
+    def cut(row):
+        start = format_timecode(tracked_to_video(row["start_seconds"]))
+        end = format_timecode(tracked_to_video(row["end_seconds"]))
+        length = format_timecode(row["end_seconds"] - row["start_seconds"])
+        return f"{start}-{end} ({length}) on {recording(row['session_id'])}: {row['reason']}"
+
+    lines = [
+        f'Description on {recording(change["session_id"])}: "{change["before"]}" → "{change["after"]}"'
+        for change in changes.get("descriptions", [])
+    ]
+    lines += [f"Removed deflation {cut(row)}" for row in changes.get("removals_deleted", [])]
+    lines += [f"Added deflation {cut(row)}" for row in changes.get("removals_added", [])]
+    return lines
+
+
+def _refuse_own_review(request, review):
+    """A reviewer lead may not correct the review of their own project."""
+    if review.journal.project.owner_id != request.user.id:
+        return None
+    messages.error(request, "You can't edit a review of your own project.")
+    return redirect("review_audit")
+
+
+@staff_member_required
+@check_perms(REVIEW_EDIT_PERMS)
+def lapse_review_edit(request, review_id):
+    """One signed-off review, with every recording's description and cuts editable."""
+    review = _review_for_edit(review_id)
+    refused = _refuse_own_review(request, review)
+    if refused:
+        return refused
+
+    journal = review.journal
+    project = journal.project
+    removals = list(review.removals.all())
+    descriptions = {
+        annotation.session_id: annotation.description
+        for annotation in review.annotations.all()
+    }
+    recordings = list(journal.timelapses.all())
+    for session in recordings:
+        session.review_removals = [r for r in removals if r.session_id == session.id]
+        session.review_description = descriptions.get(session.id, "")
+        removed = sum(r.duration_seconds for r in session.review_removals)
+        session.review_removed_display = format_timecode(removed)
+        session.review_approved_display = format_minutes(
+            max((session.tracked_seconds or 0) - removed, 0) // 60
+        )
+
+    edits = list(review.edits.select_related("editor", "editor__hackclub_profile"))
+    numbers = {session.id: index for index, session in enumerate(recordings, start=1)}
+    for edit in edits:
+        edit.editor_name = display_name(edit.editor)
+        edit.lines = _edit_lines(edit.changes, numbers)
+        edit.removed_before_display = format_timecode(edit.changes.get("removed_seconds_before", 0))
+        edit.removed_after_display = format_timecode(edit.changes.get("removed_seconds_after", 0))
+
+    return render(request, "root/lapse_review_edit.html", {
+        "review": review,
+        "journal": journal,
+        "project": project,
+        "owner_name": display_name(project.owner),
+        "reviewer_name": display_name(review.reviewer),
+        "recordings": recordings,
+        "removed_display": format_timecode(sum(r.duration_seconds for r in removals)),
+        "edits": edits,
+        # Pearls for a finalized ship were paid off the approved time as it
+        # stood then. A correction changes the record and the makeup owed, but
+        # it doesn't reach back into a payout that has already happened.
+        "payout_done": bool(journal.ship and journal.ship.status == Ship.ShipStatus.FINALIZED),
+        "blank_rows": range(3),
+        "removal_reasons": REMOVAL_REASONS,
+        "reason_max_length": REASON_MAX_LENGTH,
+        "description_max_length": DESCRIPTION_MAX_LENGTH,
+        "note_max_length": EDIT_NOTE_MAX_LENGTH,
+    })
+
+
+@require_POST
+@staff_member_required
+@check_perms(REVIEW_EDIT_PERMS)
+def lapse_review_save(request, review_id):
+    """Apply one correction: descriptions, cuts removed and cuts added, all or nothing."""
+    review = _review_for_edit(review_id)
+    refused = _refuse_own_review(request, review)
+    if refused:
+        return refused
+    project = review.journal.project
+    back = redirect("lapse_review_edit", review_id=review.id)
+
+    note = request.POST.get("edit_note", "").strip()
+    if not note:
+        messages.error(request, "Say why you're changing this review.")
+        return back
+    if len(note) > EDIT_NOTE_MAX_LENGTH:
+        messages.error(request, f"That note is too long (max {EDIT_NOTE_MAX_LENGTH} characters).")
+        return back
+
+    sessions = {session.id: session for session in review.journal.timelapses.all()}
+    try:
+        added = _parse_removals(request, sessions)
+    except RemovalError as exc:
+        messages.error(request, str(exc))
+        return back
+
+    makeup_before = _live_makeup(project.owner)
+
+    with transaction.atomic():
+        # Locked so two leads correcting the same review can't each check their
+        # new ranges against cuts the other is deleting.
+        review = TimelapseReview.objects.select_for_update().get(pk=review.pk)
+        existing = {removal.id: removal for removal in review.removals.all()}
+        removed_before = sum(r.duration_seconds for r in existing.values())
+
+        delete_ids = set()
+        for raw in request.POST.getlist("delete_removal"):
+            try:
+                removal_id = int(raw)
+            except ValueError:
+                continue
+            if removal_id not in existing:
+                messages.error(request, "One of the cuts you removed isn't on this review any more. Reload and try again.")
+                return back
+            delete_ids.add(removal_id)
+
+        # The new ranges were checked against each other on the way in. They
+        # also mustn't overlap a cut that is staying, or the same seconds
+        # would be charged twice.
+        staying = [r for r in existing.values() if r.id not in delete_ids]
+        for removal in added:
+            for other in staying:
+                if (
+                    other.session_id == removal.session.id
+                    and removal.start_seconds < other.end_seconds
+                    and other.start_seconds < removal.end_seconds
+                ):
+                    messages.error(
+                        request,
+                        f"{removal.video_range_display} overlaps a cut already on that recording "
+                        f"({other.video_range_display}).",
+                    )
+                    return back
+
+        annotations = {a.session_id: a for a in review.annotations.all()}
+        description_changes = []
+        for session_id, session in sessions.items():
+            key = f"description_{session_id}"
+            if key not in request.POST:
+                continue
+            value = request.POST[key].strip()
+            before = annotations[session_id].description if session_id in annotations else ""
+            if value == before:
+                continue
+            if not value:
+                messages.error(request, "A recording's description can be rewritten but not left empty.")
+                return back
+            if len(value) > DESCRIPTION_MAX_LENGTH:
+                messages.error(
+                    request,
+                    f"A recording description is too long (max {DESCRIPTION_MAX_LENGTH} characters).",
+                )
+                return back
+            description_changes.append({"session_id": session_id, "before": before, "after": value})
+
+        if not (description_changes or delete_ids or added):
+            messages.error(request, "Nothing on the review was changed.")
+            return back
+
+        for change in description_changes:
+            annotation = annotations.get(change["session_id"])
+            if annotation is None:
+                # A review from before descriptions were required has none to edit.
+                TimelapseAnnotation.objects.create(
+                    review=review, session_id=change["session_id"], description=change["after"],
+                )
+            else:
+                annotation.description = change["after"]
+                annotation.save(update_fields=["description"])
+
+        deleted = [_removal_record(existing[removal_id]) for removal_id in sorted(delete_ids)]
+        TimelapseRemoval.objects.filter(id__in=delete_ids).delete()
+
+        for removal in added:
+            removal.review = review
+        TimelapseRemoval.objects.bulk_create(added)
+
+        removed_after = (
+            removed_before
+            - sum(existing[removal_id].duration_seconds for removal_id in delete_ids)
+            + sum(removal.duration_seconds for removal in added)
+        )
+        changes = {
+            "descriptions": description_changes,
+            "removals_deleted": deleted,
+            "removals_added": [
+                {
+                    "session_id": removal.session_id,
+                    "start_seconds": removal.start_seconds,
+                    "end_seconds": removal.end_seconds,
+                    "reason": removal.reason,
+                }
+                for removal in added
+            ],
+            "removed_seconds_before": removed_before,
+            "removed_seconds_after": removed_after,
+        }
+        edit = TimelapseReviewEdit.objects.create(
+            review=review, editor=request.user, note=note, changes=changes,
+        )
+
+    record_audit(
+        request,
+        "edit_timelapse_review",
+        target=f"Project #{project.id} ({project.title})",
+        metadata={
+            "project_id": project.id,
+            "journal_id": review.journal_id,
+            "review_id": review.id,
+            "edit_id": edit.id,
+            "note": note,
+            **changes,
+        },
+    )
+    if added:
+        notify_makeup(project.owner, project, makeup_before)
+
+    messages.success(
+        request,
+        f"Review updated. Time removed went from {format_timecode(removed_before)} "
+        f"to {format_timecode(removed_after)}.",
+    )
+    return back

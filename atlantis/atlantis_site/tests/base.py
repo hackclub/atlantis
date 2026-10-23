@@ -323,6 +323,7 @@ class BaseTestCase(TestCase):
 		"review": "atlantis_site.views.admin.review.send_slack_dm",
 		"shop": "atlantis_site.views.admin.shop.send_slack_dm",
 		"client_shop": "atlantis_site.views.client.shop.send_slack_dm",
+		"timelapse_review": "atlantis_site.views.admin.timelapse_review.send_slack_dm",
 	}
 	SLACK_MESSAGE_TARGETS = [
 		"atlantis_site.views.admin.review.send_slack_message",

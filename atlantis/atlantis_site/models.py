@@ -1214,11 +1214,13 @@ class LapseAccount(models.Model):
 class TimelapseReview(models.Model):
 	"""One reviewer's pass over the footage attached to a journal.
 
-	Strictly internal. Nothing here reaches the project owner: no notification
-	is sent, no page they can load renders it, and the time the reviewer cuts
-	comes off the journal quietly. There is one review per journal and it is
-	never edited — it is written in a single transaction with its removals, so
-	the row and its children are also the audit trail.
+	Internal, with one exception. The review itself never reaches the project
+	owner — no page they can load renders it — but once the time cut in a week
+	passes an hour, the owner is told how much they have to make up (see
+	challenge.makeup_minutes_by_week). There is one review per journal, written
+	in a single transaction with its removals. A reviewer lead can correct it
+	afterwards, and every correction leaves a TimelapseReviewEdit saying who
+	changed what, so the row's history is never lost to an edit.
 	"""
 	journal = models.OneToOneField(
 		Journal,
@@ -1329,6 +1331,16 @@ class TimelapseRemoval(models.Model):
 	# Required, per range: a deduction nobody can explain later is indefensible.
 	reason = models.CharField(max_length=1000)
 
+	# Whether this cut has to be made up on top of the week's five hours. False
+	# on every range from before makeup existed — those were made on the
+	# understanding that the owner would never hear of them, and are not
+	# charged retroactively — and set by the views on every range cut since.
+	counts_toward_makeup = models.BooleanField(default=False)
+	# When the range was cut, which is the week its makeup is owed in. Not the
+	# review's reviewed_at: a range added by a later correction is owed in the
+	# week it was added, not the week the review was first written.
+	created_at = models.DateTimeField(default=timezone.now)
+
 	class Meta:
 		ordering = ["session_id", "start_seconds"]
 		constraints = [
@@ -1368,6 +1380,41 @@ class TimelapseRemoval(models.Model):
 		start = tracked_to_video(self.start_seconds)
 		end = tracked_to_video(self.end_seconds)
 		return f"{format_timecode(start)}-{format_timecode(end)}"
+
+
+class TimelapseReviewEdit(models.Model):
+	"""One correction a reviewer lead made to a signed-off timelapse review.
+
+	Written in the same transaction as the change. A deleted removal is gone
+	from TimelapseRemoval, so `changes` keeps its full contents, along with
+	each description's before and after and every range added. That keeps the
+	whole story on the review instead of only in the audit log.
+	"""
+	review = models.ForeignKey(
+		TimelapseReview,
+		on_delete=models.CASCADE,
+		related_name="edits"
+	)
+	editor = models.ForeignKey(
+		User,
+		on_delete=models.PROTECT,
+		related_name="timelapse_review_edits"
+	)
+	edited_at = models.DateTimeField(auto_now_add=True)
+	# Why the review was corrected. Required: like a removal's reason, a change
+	# nobody can explain later is one nobody can defend.
+	note = models.CharField(max_length=500)
+	# {"descriptions": [{session_id, before, after}],
+	#  "removals_deleted": [{session_id, start_seconds, end_seconds, reason, ...}],
+	#  "removals_added": [{session_id, start_seconds, end_seconds, reason}],
+	#  "removed_seconds_before": int, "removed_seconds_after": int}
+	changes = models.JSONField(default=dict)
+
+	class Meta:
+		ordering = ["-edited_at"]
+
+	def __str__(self):
+		return f"Edit to timelapse review {self.review_id} by {self.editor_id}"
 
 
 # shop models
@@ -1777,6 +1824,10 @@ class Order(models.Model):
 		default="",
 	)
 	refunded = models.BooleanField(blank=True, null=True)
+	# How much of `cost` was borrowed: the part the buyer didn't have, taken
+	# as a negative balance that later payouts pay back. Only life preservers
+	# (streak savers) can be bought this way; 0 on everything else.
+	loaned = models.PositiveIntegerField(default=0)
 
 	def save(self, *args, **kwargs):
 		if self.cost is None and self.item:

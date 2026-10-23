@@ -45,6 +45,15 @@
                     <textarea name="user_notes" maxlength="100" placeholder="Optional order notes"></textarea>
                 </label>
 
+                {% if loan_limit %}
+                <label>
+                    <input type="checkbox" name="loan" value="1">
+                    If I'm short of pearls, take the rest on a loan. My balance goes
+                    negative, my next payouts pay it back, and I can't buy anything else
+                    until it's back above zero.
+                </label>
+                {% endif %}
+
                 <button type="submit">{% if item.is_saver %}Apply{% else %}Order{% endif %}</button>
             </form>
 

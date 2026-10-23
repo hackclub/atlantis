@@ -466,6 +466,11 @@
                 <div class="stat-label">Pearls in circulation</div>
                 <div class="stat-sub">avg {{ users.avg_layers }} / user</div>
             </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ users.layers_owed|default:0 }}</div>
+                <div class="stat-label">Pearls owed on loans</div>
+                <div class="stat-sub">{{ users.users_on_loan|default:0 }} user{{ users.users_on_loan|default:0|pluralize }} below zero</div>
+            </div>
         </div>
 
         <div class="chart-grid">

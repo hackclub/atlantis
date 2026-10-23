@@ -47,8 +47,15 @@ def _saver_state(user, item, now=None):
 
 
 def _decorate(user, items, now=None):
+    # Asked once rather than per item: it's the same question for every saver.
+    eligible = challenge.loan_eligible(user)
     for item in items:
         item.blocked_reason, item.saver_target = _saver_state(user, item, now)
+        # How far below zero this item may take the balance, which the order
+        # pop-up uses to offer a loan rather than greying the button out.
+        item.loan_limit = (
+            challenge.LOAN_MAX_SAVERS * item.cost if eligible and item.is_saver else 0
+        )
     return items
 
 
@@ -60,6 +67,8 @@ def shop(request):
         "items": items,
         "profile": profile,
         "standing": challenge.standing(request.user),
+        "loan_max_savers": challenge.LOAN_MAX_SAVERS,
+        "loan_min_hours": challenge.LOAN_MIN_APPROVED_MINUTES // 60,
     })
 
 
@@ -74,6 +83,7 @@ def item_detail(request, item_id):
         "profile": profile,
         "blocked_reason": blocked_reason,
         "saver_target": saver_target,
+        "loan_limit": challenge.loan_limit(request.user, item),
     })
 
 @login_required
@@ -198,9 +208,27 @@ def _order_saver(request, item, quantity, total_cost, user_notes):
             )
             return redirect("shop")
 
+        # Short of pearls, a life preserver can still be bought on a loan: the
+        # balance goes negative and later payouts pay it back. The pop-up has
+        # to have said so, which is what `loan` confirms, so nobody ends up in
+        # debt from a form they didn't read.
+        loaned = 0
         if profile.layers < total_cost:
-            messages.error(request, "You do not have enough layers to purchase this item.")
-            return redirect("shop")
+            limit = challenge.loan_limit(request.user, item)
+            if not limit:
+                messages.error(request, "You do not have enough layers to purchase this item.")
+                return redirect("shop")
+            if profile.layers - total_cost < -limit:
+                messages.error(
+                    request,
+                    f"A loan can cover at most {challenge.LOAN_MAX_SAVERS} life preservers "
+                    "at a time, and this would take you past that.",
+                )
+                return redirect("shop")
+            if request.POST.get("loan") != "1":
+                messages.error(request, "Confirm the loan to buy this with pearls you don't have yet.")
+                return redirect("shop")
+            loaned = total_cost - max(profile.layers, 0)
 
         # Asked again inside the lock. The shelf greys out a saver with nothing
         # to apply to, but a week can close (or a rescue can land from another
@@ -240,6 +268,7 @@ def _order_saver(request, item, quantity, total_cost, user_notes):
             user_notes=user_notes,
             status=Order.OrderStatus.FULFILLED,
             fulfilled_at=timezone.now(),
+            loaned=loaned,
         )
 
         try:
@@ -262,6 +291,8 @@ def _order_saver(request, item, quantity, total_cost, user_notes):
         "hours": quantity,
         "weeks": weeks_touched,
         "cost": total_cost,
+        "loaned": loaned,
+        "balance_after": profile.layers,
     })
 
     state = challenge.standing(request.user)
@@ -278,6 +309,13 @@ def _order_saver(request, item, quantity, total_cost, user_notes):
             request,
             f"{quantity} saver hour{'s' if quantity != 1 else ''} applied to {named}. "
             "Your streak is safe.",
+        )
+
+    if loaned:
+        messages.info(
+            request,
+            f"{loaned} pearls of that were a loan. Your balance is {profile.layers}, and your "
+            "next payouts will pay it back before anything else can be bought.",
         )
 
     profile = request.user.hackclub_profile

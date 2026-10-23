@@ -22,7 +22,7 @@
             <a id="back-link" href="{% url 'dashboard' %}">&larr; back</a>
             <a class="purse" href="{% url 'user_profile' user.id %}">
                 <img class="purse-pfp" src="{{ profile.slack_pfp_url }}" alt="">
-                <span class="pearl" aria-hidden="true"></span>{{ profile.layers }} pearls
+                <span class="pearl" aria-hidden="true"></span>{{ profile.layers }} pearls{% if profile.layers < 0 %} (on loan){% endif %}
             </a>
         </div>
         {% include "atlantis_site/_banner.html" %}
@@ -63,6 +63,9 @@
                                     so nobody buys the wrong one.
                                     {% endcomment %}
                                     <p class="item-card-note">Applies to {{ item.saver_target }}, instantly.</p>
+                                    {% if item.loan_limit and profile.layers < item.cost %}
+                                        <p class="item-card-note">Short of pearls? You can take this on a loan.</p>
+                                    {% endif %}
                                 {% endif %}
 
                                 <div class="item-card-foot">
@@ -83,6 +86,7 @@
                                            data-cost="{{ item.cost }}"
                                            data-image="{{ item.imageUrl }}"
                                            data-saver="{% if item.is_saver %}{{ item.saver_target }}{% endif %}"
+                                           data-loan="{{ item.loan_limit }}"
                                            data-stock="{% if not item.unlimited_stock %}{{ item.stock }}{% endif %}">order</a>
                                     {% else %}
                                         <span class="order-btn" aria-disabled="true">sold out</span>
@@ -134,6 +138,14 @@
 
                 <p class="order-warn" id="orderWarn" hidden></p>
 
+                {% comment %}
+                A life preserver can be bought on credit by anyone with
+                {{ loan_min_hours }} approved hours. This says so before they
+                commit, and the hidden field is the yes the server checks for.
+                {% endcomment %}
+                <p class="order-saver-note" id="orderLoanNote" hidden></p>
+                <input type="hidden" name="loan" id="orderLoan" value="">
+
                 <div class="shipping-address" id="shippingBlock">
                     <p class="shipping-address-hint">This order ships to your Hack Club address.</p>
                     <button type="button" id="view-address-btn" class="link-button"
@@ -178,9 +190,16 @@
             const addressBtn = document.getElementById("view-address-btn");
             const shippingBlock = document.getElementById("shippingBlock");
             const saverNote = document.getElementById("orderSaverNote");
+            const loanNote = document.getElementById("orderLoanNote");
+            const loanInput = document.getElementById("orderLoan");
+            const LOAN_MAX_SAVERS = {{ loan_max_savers|default:0 }};
 
             let unitCost = 0;
             let stock = null;
+            // How far below zero this item may take the balance: nonzero only
+            // for a life preserver, for someone eligible for a loan.
+            let loanLimit = 0;
+            let borrowing = false;
             // The week a streak saver would land on, or "" for anything that
             // is an actual parcel. Drives both the note in the pop-up and the
             // extra confirmation on the way out.
@@ -196,17 +215,34 @@
                     totalEl.textContent = "0";
                     afterEl.textContent = "";
                     warnEl.hidden = true;
+                    loanNote.hidden = true;
+                    loanInput.value = "";
+                    borrowing = false;
                     submitBtn.disabled = true;
                     return;
                 }
 
                 const total = unitCost * qty;
+                const after = BALANCE - total;
+                borrowing = total > BALANCE && loanLimit > 0 && after >= -loanLimit;
                 totalEl.textContent = total;
-                afterEl.textContent = total > BALANCE ? "" : pearls(BALANCE - total) + " left after";
+                afterEl.textContent = total <= BALANCE
+                    ? pearls(after) + " left after"
+                    : borrowing ? pearls(after) + " after" : "";
 
                 let warning = "";
-                if (total > BALANCE) {
-                    warning = "That is " + pearls(total - BALANCE) + " more than you have.";
+                if (total > BALANCE && !borrowing) {
+                    warning = loanLimit > 0
+                        ? "A loan can cover at most " + LOAN_MAX_SAVERS + " life preservers at a time."
+                        : "That is " + pearls(total - BALANCE) + " more than you have.";
+                }
+                loanInput.value = borrowing ? "1" : "";
+                loanNote.hidden = !borrowing;
+                if (borrowing) {
+                    loanNote.textContent =
+                        "This is a loan of " + pearls(total - Math.max(BALANCE, 0)) + ". Your balance will be "
+                        + after + ", your next payouts pay it back, and you can't buy anything "
+                        + "else until it's back above zero.";
                 }
                 if (stock !== null && qty > stock) {
                     warning = "Only " + stock + " left in stock.";
@@ -221,6 +257,7 @@
                 unitCost = parseInt(btn.dataset.cost, 10) || 0;
                 stock = btn.dataset.stock ? parseInt(btn.dataset.stock, 10) : null;
                 saverWeek = btn.dataset.saver || "";
+                loanLimit = parseInt(btn.dataset.loan, 10) || 0;
 
                 // A saver goes nowhere near the post, so the address block is
                 // replaced rather than left saying something untrue.
@@ -308,7 +345,7 @@
                     const submitter = e.submitter;
                     window.Atlantis.confirm(
                         "Apply " + hours + " to " + saverWeek + " for "
-                        + pearls(unitCost * qty) + "?\n\n"
+                        + pearls(unitCost * qty) + (borrowing ? " on a loan" : "") + "?\n\n"
                         + "This happens straight away and can't be undone from here.",
                         { ok: "Apply" }
                     ).then((ok) => {

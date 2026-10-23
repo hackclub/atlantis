@@ -16,6 +16,10 @@ Three numbers come out of here and they are deliberately different things:
                    and 2 are the exception: ten across the pair will do. Time
                    in the two hours after a week closes (weeks.buffer_bounds)
                    goes to that week if it closed short, else to the next.
+                   Time a reviewer cuts doesn't come back off the week it was
+                   logged in. Instead it is owed as *makeup* on top of the
+                   five in the week the cut was made, once that week's cuts
+                   pass an hour (see makeup_minutes_by_week).
   printer hours    five per week survived, and no more however long you worked.
                    Forty of them buys a printer, which is exactly every week.
   pearls           paid at T3 finalization off *approved* time, split across
@@ -42,6 +46,15 @@ from .models import (
 # The key the prep bucket goes under in every {week: minutes} map here. None,
 # not 0: a week index is 1-based and "no week" has to be unmistakable.
 PREP = None
+
+# Cuts adding up to an hour or less in a week are forgiven. Past that, the
+# whole amount is owed on top of the week's five, and the owner is told.
+MAKEUP_THRESHOLD_MINUTES = 60
+
+# A life preserver (streak saver) can be bought on credit by someone with this
+# much time through lapse review, owing at most LOAN_MAX_SAVERS of them at once.
+LOAN_MIN_APPROVED_MINUTES = 20 * 60
+LOAN_MAX_SAVERS = 5
 
 
 def _logged_timelapses(user):
@@ -97,7 +110,7 @@ def _bucket_by_week(rows):
 	return totals, buffered
 
 
-def _settle_buffers(tracked, savers, overrides, buffer=True):
+def _settle_buffers(tracked, savers, overrides, buffer=True, makeup=None):
 	"""{week index or PREP: tracked minutes}, each week's buffer handed out.
 
 	`tracked` is _bucket_by_week's pair. A buffer goes to the week that just
@@ -111,14 +124,19 @@ def _settle_buffers(tracked, savers, overrides, buffer=True):
 
 	buffer=False puts every buffer where the calendar does, as though there
 	were none — what rescued_by_buffer compares against.
+
+	`makeup` is makeup_minutes_by_week's map: a week owing makeup is short
+	until its five *and* the makeup are in.
 	"""
+	makeup = makeup or {}
 	seconds, buffered = tracked
 	seconds = dict(seconds)
 	for index in sorted(buffered):
 		credited = seconds.get(index, 0) // 60 + savers.get(index, 0) * 60
 		override = overrides.get(index, "")
 		met = override == WeekOutcome.Override.PASS or (
-			override != WeekOutcome.Override.FAIL and credited >= weeks.WEEKLY_MINUTES
+			override != WeekOutcome.Override.FAIL
+			and credited >= weeks.WEEKLY_MINUTES + makeup.get(index, 0)
 		)
 		if buffer and not met:
 			target = index
@@ -142,6 +160,62 @@ def saver_hours_by_week(user):
 		.values_list("week_index")
 		.order_by()
 		.annotate(hours=Count("id"))
+	)
+
+
+def _makeup_week(moment):
+	"""The week a cut made at `moment` is owed in, or None.
+
+	The week it was made in. A cut made in prep is owed in week 1, the first
+	week there is. One made after the last week is owed nowhere, since there
+	is no week left to make it up in.
+	"""
+	if weeks.is_prep(moment):
+		return 1
+	return weeks.week_for(moment)
+
+
+def _makeup_rows():
+	"""Removals that count toward makeup, on recordings that still count as logged.
+
+	A cut on a project that was deleted afterwards isn't owed: the time it was
+	cut from no longer counts for anything either.
+	"""
+	return TimelapseRemoval.objects.filter(
+		counts_toward_makeup=True,
+		session__journal__isnull=False,
+		session__journal__project__deleted=False,
+	)
+
+
+def _bucket_makeup(rows):
+	"""{week index: makeup minutes} from (created_at, seconds) pairs.
+
+	A week whose cuts add up to MAKEUP_THRESHOLD_MINUTES or less owes nothing.
+	"""
+	seconds = {}
+	for created_at, removed in rows:
+		index = _makeup_week(created_at)
+		if index is not None:
+			seconds[index] = seconds.get(index, 0) + (removed or 0)
+	return {
+		index: total // 60
+		for index, total in seconds.items()
+		if total // 60 > MAKEUP_THRESHOLD_MINUTES
+	}
+
+
+def makeup_minutes_by_week(user):
+	"""{week index: minutes} this user owes on top of that week's five.
+
+	Only weeks over the threshold appear. This is recomputed live like
+	everything else here, so a cut a reviewer lead later removes stops being
+	owed straight away.
+	"""
+	return _bucket_makeup(
+		_makeup_rows().filter(session__owner=user).values_list(
+			"created_at", F("end_seconds") - F("start_seconds"),
+		)
 	)
 
 
@@ -169,6 +243,10 @@ class Week:
 	grace: bool = False
 	grace_minutes: int = 0
 	grace_open: bool = False
+	# Cut time owed on top of the five, and for a grace week what the whole
+	# pair owes between them (makeup_minutes_by_week).
+	makeup_minutes: int = 0
+	grace_makeup_minutes: int = 0
 
 	@property
 	def saver_minutes(self):
@@ -180,9 +258,33 @@ class Week:
 		return self.tracked_minutes + self.saver_minutes
 
 	@property
+	def own_required_minutes(self):
+		"""This week's five plus whatever it owes in makeup."""
+		return weeks.WEEKLY_MINUTES + self.makeup_minutes
+
+	@property
+	def grace_required_minutes(self):
+		"""The pair's ten plus whatever the pair owes in makeup."""
+		return weeks.grace_minutes() + self.grace_makeup_minutes
+
+	@property
 	def required_minutes(self):
-		"""What the bar is out of: the pair's ten for a grace week, else five."""
-		return weeks.grace_minutes() if self.grace else weeks.WEEKLY_MINUTES
+		"""What the bar is out of: the pair's ten for a grace week, else five,
+		plus any makeup owed."""
+		return self.grace_required_minutes if self.grace else self.own_required_minutes
+
+	@property
+	def bar_makeup_minutes(self):
+		"""The makeup inside required_minutes: the pair's for a grace week."""
+		return self.grace_makeup_minutes if self.grace else self.makeup_minutes
+
+	@property
+	def makeup_display(self):
+		return format_minutes(self.makeup_minutes)
+
+	@property
+	def bar_makeup_display(self):
+		return format_minutes(self.bar_makeup_minutes)
 
 	@property
 	def progress_minutes(self):
@@ -201,9 +303,9 @@ class Week:
 			return True
 		if self.override == WeekOutcome.Override.FAIL:
 			return False
-		if self.credited_minutes >= weeks.WEEKLY_MINUTES:
+		if self.credited_minutes >= self.own_required_minutes:
 			return True
-		return self.grace and self.grace_minutes >= weeks.grace_minutes()
+		return self.grace and self.grace_minutes >= self.grace_required_minutes
 
 	@property
 	def missed(self):
@@ -232,9 +334,9 @@ class Week:
 		"""
 		if self.met:
 			return 0
-		short = weeks.WEEKLY_MINUTES - self.credited_minutes
+		short = self.own_required_minutes - self.credited_minutes
 		if self.grace:
-			short = min(short, weeks.grace_minutes() - self.grace_minutes)
+			short = min(short, self.grace_required_minutes - self.grace_minutes)
 		return max(short, 0)
 
 	@property
@@ -270,6 +372,19 @@ class Week:
 	@property
 	def required_hours(self):
 		return self.required_minutes // 60
+
+	@property
+	def base_required_hours(self):
+		"""The bar before makeup: the pair's ten for a grace week, else five."""
+		return (weeks.grace_minutes() if self.grace else weeks.WEEKLY_MINUTES) // 60
+
+	@property
+	def required_display(self):
+		"""The bar's total, worded: "5 hours", or "6h 30m" once makeup is owed."""
+		if self.required_minutes % 60:
+			return format_minutes(self.required_minutes)
+		hours = self.required_hours
+		return f"{hours} hour{'' if hours == 1 else 's'}"
 
 	@property
 	def grace_due_later(self):
@@ -418,7 +533,8 @@ def standing(user, now=None):
 	now = now or timezone.now()
 	overrides = {index: row.override for index, row in _overrides(user).items()}
 	return _build_standing(
-		tracked_seconds_by_week(user), saver_hours_by_week(user), overrides, now
+		tracked_seconds_by_week(user), saver_hours_by_week(user), overrides, now,
+		makeup=makeup_minutes_by_week(user),
 	)
 
 
@@ -431,8 +547,8 @@ def standings(now=None):
 	account that ever signed in would have every week "missed" by people who
 	never started.
 	"""
-	tracked, savers, overrides = _ledger()
-	return _standings_for(tracked.keys() | savers.keys(), tracked, savers, overrides, now)
+	tracked, savers, overrides, makeup = _ledger()
+	return _standings_for(tracked.keys() | savers.keys(), tracked, savers, overrides, makeup, now)
 
 
 def standings_for(user_ids, now=None):
@@ -441,8 +557,8 @@ def standings_for(user_ids, now=None):
 	Unlike standings(), someone who has logged nothing still gets a row — the
 	empty one standing() would have given them.
 	"""
-	tracked, savers, overrides = _ledger()
-	return _standings_for(user_ids, tracked, savers, overrides, now)
+	tracked, savers, overrides, makeup = _ledger()
+	return _standings_for(user_ids, tracked, savers, overrides, makeup, now)
 
 
 def rescued_by_buffer(now=None):
@@ -457,7 +573,7 @@ def rescued_by_buffer(now=None):
 	rather than missed, and so read as saved by a buffer with nothing in it.
 	"""
 	now = now or timezone.now()
-	tracked, savers, overrides = _ledger()
+	tracked, savers, overrides, makeup = _ledger()
 	calendar = {**_calendar(now), "buffering": None}
 	rescued = {}
 	for owner in tracked.keys() | savers.keys():
@@ -465,18 +581,19 @@ def rescued_by_buffer(now=None):
 			tracked.get(owner, ({}, {})), savers.get(owner, {}), overrides.get(owner, {}),
 			now, calendar,
 		)
-		state = _build_standing(*args)
+		owed = makeup.get(owner, {})
+		state = _build_standing(*args, makeup=owed)
 		if state.eliminated:
 			continue
-		without = _build_standing(*args, buffer=False)
+		without = _build_standing(*args, buffer=False, makeup=owed)
 		if without.eliminated:
 			rescued[owner] = (state, without)
 	return rescued
 
 
 def _ledger():
-	"""Everyone's (_bucket_by_week pair, {week: saver hours}, {week: override}),
-	each keyed by user id."""
+	"""Everyone's (_bucket_by_week pair, {week: saver hours}, {week: override},
+	{week: makeup minutes}), each keyed by user id."""
 	rows = {}
 	for owner, at, seconds in _all_logged_timelapses().values_list("owner", "at", "tracked_seconds"):
 		rows.setdefault(owner, []).append((at, seconds))
@@ -494,16 +611,23 @@ def _ledger():
 	for owner, index, value in WeekOutcome.objects.values_list("user", "week_index", "override"):
 		overrides.setdefault(owner, {})[index] = value
 
-	return tracked, savers, overrides
+	cuts = {}
+	for owner, created_at, removed in _makeup_rows().values_list(
+		"session__owner", "created_at", F("end_seconds") - F("start_seconds"),
+	):
+		cuts.setdefault(owner, []).append((created_at, removed))
+	makeup = {owner: _bucket_makeup(rows) for owner, rows in cuts.items()}
+
+	return tracked, savers, overrides, makeup
 
 
-def _standings_for(user_ids, tracked, savers, overrides, now):
+def _standings_for(user_ids, tracked, savers, overrides, makeup, now):
 	now = now or timezone.now()
 	calendar = _calendar(now)
 	return {
 		owner: _build_standing(
 			tracked.get(owner, ({}, {})), savers.get(owner, {}), overrides.get(owner, {}), now,
-			calendar,
+			calendar, makeup=makeup.get(owner, {}),
 		)
 		for owner in user_ids
 	}
@@ -526,17 +650,19 @@ def _calendar(now):
 	}
 
 
-def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True):
-	"""A Standing from one user's _bucket_by_week pair, {week: saver hours}
-	and {week: override}. buffer=False judges it as though there were no
-	buffer after each week."""
+def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True, makeup=None):
+	"""A Standing from one user's _bucket_by_week pair, {week: saver hours},
+	{week: override} and {week: makeup minutes}. buffer=False judges it as
+	though there were no buffer after each week."""
+	makeup = makeup or {}
 	calendar = calendar or _calendar(now)
 	closed = calendar["closed"]
 	live = calendar["live"]
 	buffering = calendar["buffering"] if buffer else None
 	grace = calendar["grace"]
-	tracked = _settle_buffers(tracked, savers, overrides, buffer)
+	tracked = _settle_buffers(tracked, savers, overrides, buffer, makeup)
 	grace_minutes = sum(tracked.get(i, 0) + savers.get(i, 0) * 60 for i in grace)
+	grace_makeup = sum(makeup.get(i, 0) for i in grace)
 	grace_open = any(i not in closed or i == buffering for i in grace)
 
 	return Standing(
@@ -552,6 +678,8 @@ def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True)
 				grace=index in grace,
 				grace_minutes=grace_minutes if index in grace else 0,
 				grace_open=grace_open,
+				makeup_minutes=makeup.get(index, 0),
+				grace_makeup_minutes=grace_makeup if index in grace else 0,
 			)
 			for index in range(1, weeks.week_count() + 1)
 		],
@@ -688,6 +816,40 @@ def grant_saver_hours(user, week_index, hours, granted_by, note=""):
 		)
 		for _ in range(hours)
 	])
+
+
+# ---- loans ---------------------------------------------------------------
+
+def approved_minutes(user):
+	"""Minutes of this user's logged time that lapse review has signed off.
+
+	Tracked time on reviewed recordings, minus what the reviewer cut. A
+	recording still waiting in the queue counts for nothing here: loan
+	eligibility is a matter of trust, and this is the time that has been checked.
+	"""
+	reviewed = _logged_timelapses(user).filter(journal__timelapse_review__isnull=False)
+	tracked = reviewed.aggregate(total=Sum("tracked_seconds"))["total"] or 0
+	removed = TimelapseRemoval.objects.filter(session__in=reviewed).aggregate(
+		total=Sum(F("end_seconds") - F("start_seconds"), output_field=IntegerField())
+	)["total"] or 0
+	return max(tracked - removed, 0) // 60
+
+
+def loan_eligible(user):
+	return approved_minutes(user) >= LOAN_MIN_APPROVED_MINUTES
+
+
+def loan_limit(user, item):
+	"""How far below zero `user` may take their balance to buy `item`.
+
+	Only life preservers can be bought on credit, and at most LOAN_MAX_SAVERS
+	of them can be owed at once. A balance already below zero has used up part
+	of that, which the caller covers by comparing against the balance after
+	the purchase.
+	"""
+	if not item.is_saver or not loan_eligible(user):
+		return 0
+	return LOAN_MAX_SAVERS * item.cost
 
 
 # ---- pearls --------------------------------------------------------------

@@ -737,8 +737,12 @@ def build_metrics(now):
 
     staff_users = User.objects.filter(is_staff=True).count()
     slack_linked = Profile.objects.exclude(slack_id="").count()
-    layers_in_circulation = Profile.objects.aggregate(t=Sum("layers"))["t"] or 0
+    # Balances below zero are life-preserver loans waiting on payouts. They are
+    # counted on their own, so a pearl owed doesn't cancel out a pearl held.
+    layers_in_circulation = Profile.objects.filter(layers__gt=0).aggregate(t=Sum("layers"))["t"] or 0
     avg_layers = Profile.objects.aggregate(a=Avg("layers"))["a"] or 0
+    on_loan = Profile.objects.filter(layers__lt=0).aggregate(t=Sum("layers"), n=Count("id"))
+    layers_owed = -(on_loan["t"] or 0)
 
     top_holders = add_bars([
         {"label": display_name(p.user), "value": p.layers}
@@ -753,6 +757,8 @@ def build_metrics(now):
         "last_7": signups_last_7,
         "layers_in_circulation": layers_in_circulation,
         "avg_layers": round(avg_layers, 1),
+        "layers_owed": layers_owed,
+        "users_on_loan": on_loan["n"],
         "top_holders": top_holders,
     }
 

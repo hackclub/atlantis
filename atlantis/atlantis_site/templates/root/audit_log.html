@@ -31,11 +31,60 @@
             Actor:
             <input type="text" name="actor" id="auditActorFilter" value="{{ actor_filter }}" placeholder="name or username" autocomplete="off">
         </label>
+        {% if show_user_filter %}
+        <label>
+            User reviewed:
+            <input type="text" name="user" id="auditUserFilter" value="{{ user_filter }}" placeholder="@slack or username" autocomplete="off">
+        </label>
+        {% endif %}
         <noscript><button type="submit">Filter</button></noscript>
     </form>
 
     {# Everything the filters change, and nothing they don't: atlantis.js swaps just this. #}
     <div id="auditResults" class="live-results">
+    {% if lapse_reviews is not None %}
+        <h3>Lapse reviews</h3>
+        {% if lapse_reviews %}
+            <div class="table-scroll">
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th>Reviewed</th>
+                            <th>Owner</th>
+                            <th>Project</th>
+                            <th>Journal</th>
+                            <th>Reviewer</th>
+                            <th>Tracked</th>
+                            <th>Deflated</th>
+                            <th>Edits</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for review in lapse_reviews %}
+                        <tr>
+                            <td>{{ review.reviewed_at|date:"Y-m-d H:i" }}</td>
+                            <td>{{ review.owner_name }}</td>
+                            <td>{{ review.journal.project.title }}</td>
+                            <td>{{ review.journal.title }}</td>
+                            <td>{{ review.reviewer_name }}</td>
+                            <td>{{ review.tracked_total_display }}</td>
+                            <td>{{ review.removed_total_display }}{% if review.cut_count %} <small>({{ review.cut_count }} cut{{ review.cut_count|pluralize }})</small>{% endif %}</td>
+                            <td>{{ review.edit_count }}</td>
+                            <td><a href="{% url 'lapse_review_edit' review.id %}">View / edit</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if lapse_reviews|length >= lapse_review_limit %}
+                <p><em>Showing the newest {{ lapse_review_limit }}. Narrow the search to see older ones.</em></p>
+            {% endif %}
+        {% else %}
+            <p>No lapse reviews for users matching "{{ user_filter }}".</p>
+        {% endif %}
+        <h3>Audit entries</h3>
+    {% endif %}
     <p>{{ page.paginator.count }} total entr{{ page.paginator.count|pluralize:"y,ies" }}</p>
 
     {% if logs %}
@@ -109,16 +158,16 @@
         {% if page.has_other_pages %}
             <div class="pagination">
                 {% if page.has_previous %}
-                    <a href="?action={{ action_filter }}&actor={{ actor_filter }}&target_type={{ target_type_filter }}&page={{ page.previous_page_number }}">&laquo; Previous</a>
+                    <a href="?action={{ action_filter }}&actor={{ actor_filter }}&target_type={{ target_type_filter }}{% if show_user_filter %}&user={{ user_filter|urlencode }}{% endif %}&page={{ page.previous_page_number }}">&laquo; Previous</a>
                 {% endif %}
                 <span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
                 {% if page.has_next %}
-                    <a href="?action={{ action_filter }}&actor={{ actor_filter }}&target_type={{ target_type_filter }}&page={{ page.next_page_number }}">Next &raquo;</a>
+                    <a href="?action={{ action_filter }}&actor={{ actor_filter }}&target_type={{ target_type_filter }}{% if show_user_filter %}&user={{ user_filter|urlencode }}{% endif %}&page={{ page.next_page_number }}">Next &raquo;</a>
                 {% endif %}
             </div>
         {% endif %}
     {% else %}
-        <p>No audit log entries{% if action_filter or actor_filter or target_type_filter %} match your filters{% endif %}.</p>
+        <p>No audit log entries{% if action_filter or actor_filter or target_type_filter or user_filter %} match your filters{% endif %}.</p>
     {% endif %}
     </div>
 </div>

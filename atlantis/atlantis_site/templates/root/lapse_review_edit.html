@@ -1,0 +1,124 @@
+{% extends 'root/_base_root.html' %}
+
+{% block page_id %}admin-lapse-review-edit-page{% endblock %}
+{% block title %}Lapse review &middot; {{ journal.title }}{% endblock %}
+
+{% block content %}
+<div class="content">
+    <p><a href="{% url 'review_audit' %}?user={{ project.owner.username|urlencode }}">&larr; Review Audit</a></p>
+    <h1>{{ journal.title }}</h1>
+    <h3>{{ project.title }} &middot; {{ owner_name }}</h3>
+
+    <p>
+        Reviewed by {{ reviewer_name }} on {{ review.reviewed_at|date:"Y-m-d H:i" }}
+        &middot; {{ removed_display }} deflated in total
+        {% if review.internal_notes %}<br><span class="muted">Notes: {{ review.internal_notes }}</span>{% endif %}
+    </p>
+
+    {% if payout_done %}
+        <p><span class="pill pill-warn">ship finalized</span>
+            Pearls for this journal's ship have already been paid. Changing the
+            deflations here corrects the record and any makeup owed, but it won't
+            change that payout.</p>
+    {% endif %}
+
+    {% comment %}
+    One form for the whole correction, so a description change and the cuts it
+    explains go in as one edit with one note. Ranges are typed in the compiled
+    video's own timecodes, the same as on the review desk.
+    {% endcomment %}
+    <form method="post" action="{% url 'lapse_review_save' review.id %}" class="lapse-edit">
+        {% csrf_token %}
+
+        {% for session in recordings %}
+        <fieldset class="lapse-edit-recording">
+            <legend>
+                Recording {{ forloop.counter }}
+                &middot; {{ session.tracked_display }} tracked
+                &middot; {{ session.review_approved_display }} approved
+                {% if session.video_url %}&middot; <a href="{{ session.video_url }}" target="_blank" rel="noopener">watch</a>{% endif %}
+            </legend>
+
+            <label>
+                Description
+                <textarea name="description_{{ session.id }}" rows="2" maxlength="{{ description_max_length }}">{{ session.review_description }}</textarea>
+            </label>
+
+            {% if session.review_removals %}
+                <table class="users-table">
+                    <thead>
+                        <tr><th>Video range</th><th>Deflated</th><th>Reason</th><th>Makeup</th><th>Remove</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for removal in session.review_removals %}
+                        <tr>
+                            <td>{{ removal.video_range_display }}</td>
+                            <td>{{ removal.duration_display }}</td>
+                            <td>{{ removal.reason }}</td>
+                            <td>{% if removal.counts_toward_makeup %}counts{% else %}<span class="muted">before makeup</span>{% endif %}</td>
+                            <td><input type="checkbox" name="delete_removal" value="{{ removal.id }}" aria-label="Remove the deflation {{ removal.video_range_display }}"></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="muted">No time deflated from this recording.</p>
+            {% endif %}
+        </fieldset>
+        {% endfor %}
+
+        <fieldset class="lapse-edit-recording">
+            <legend>Add deflations</legend>
+            <p class="muted">Video timecodes (m:ss or h:mm:ss). Leave a row empty to skip it.
+                Deflations added now count toward this week's makeup.</p>
+            {% for _ in blank_rows %}
+            <div class="inline-form">
+                <select name="removal_session" aria-label="Recording">
+                    {% for session in recordings %}
+                        <option value="{{ session.id }}">Recording {{ forloop.counter }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="removal_start" placeholder="start" aria-label="Start">
+                <input type="text" name="removal_end" placeholder="end" aria-label="End">
+                <input type="text" name="removal_reason" list="removalReasons" maxlength="{{ reason_max_length }}" placeholder="reason" aria-label="Reason">
+            </div>
+            {% endfor %}
+            <datalist id="removalReasons">
+                {% for reason in removal_reasons %}<option value="{{ reason }}">{% endfor %}
+            </datalist>
+        </fieldset>
+
+        <label>
+            Why are you changing this review?
+            <textarea name="edit_note" rows="2" maxlength="{{ note_max_length }}" required></textarea>
+        </label>
+        <button type="submit">Save changes</button>
+    </form>
+
+    <h3>Edit history</h3>
+    {% if edits %}
+        <div class="table-scroll">
+            <table class="users-table">
+                <thead>
+                    <tr><th>When</th><th>Editor</th><th>Note</th><th>What changed</th></tr>
+                </thead>
+                <tbody>
+                    {% for edit in edits %}
+                    <tr>
+                        <td>{{ edit.edited_at|date:"Y-m-d H:i" }}</td>
+                        <td>{{ edit.editor_name }}</td>
+                        <td>{{ edit.note }}</td>
+                        <td>
+                            {% for line in edit.lines %}<div>{{ line }}</div>{% endfor %}
+                            <div class="muted">Deflated: {{ edit.removed_before_display }} &rarr; {{ edit.removed_after_display }}</div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <p class="muted">This review hasn't been edited.</p>
+    {% endif %}
+</div>
+{% endblock %}

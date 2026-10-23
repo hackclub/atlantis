@@ -958,3 +958,30 @@
 .root-page .muted {
     color: var(--oc-ink-3);
 }
+
+/* Correcting a signed-off lapse review: one block per recording. */
+.root-page .lapse-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 900px;
+}
+
+.root-page .lapse-edit label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.root-page .lapse-edit-recording {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--oc-line);
+    border-radius: 8px;
+    padding: 10px 14px 14px;
+}
+
+.root-page .lapse-edit button[type="submit"] {
+    align-self: flex-start;
+}

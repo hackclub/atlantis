@@ -31,6 +31,19 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
             </span>
         </div>
 
+        {% comment %}
+        Time a reviewer cut from the owner's footage this week, once it passes
+        an hour, is owed on top of the five (challenge.makeup_minutes_by_week).
+        The bar already counts it, so this says why the bar is longer than usual.
+        {% endcomment %}
+        {% if week.bar_makeup_minutes %}
+            <p class="streak-note streak-note-bad streak-makeup" role="status">
+                {{ week.bar_makeup_display }} need to be made up because of deflations to
+                your project. That's on top of the usual {{ week.base_required_hours }} hours,
+                so this week's bar is {{ week.required_display }}.
+            </p>
+        {% endif %}
+
         <div class="streak-bar" role="progressbar"
              aria-valuenow="{{ week.progress_minutes }}" aria-valuemin="0"
              aria-valuemax="{{ week.required_minutes }}"
@@ -40,7 +53,7 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
 
         <p class="streak-legend">
             <strong class="streak-count">{{ week.progress_display }}</strong>
-            <span class="streak-of">of {{ week.required_hours }} hours{% if week.grace %} across {{ week.grace_label }}{% endif %}</span>
+            <span class="streak-of">of {{ week.required_display }}{% if week.grace %} across {{ week.grace_label }}{% endif %}</span>
             {% if week.saver_hours %}
                 <span class="streak-savers">{{ week.saver_hours }} saved</span>
             {% endif %}
@@ -58,14 +71,14 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
         {% endcomment %}
         {% if week.grace_due_later and not week.done %}
             <p class="streak-hint">
-                You don't need all {{ week.required_hours }} hours by the end of this
+                You don't need all {{ week.required_display }} by the end of this
                 countdown. {{ week.grace_label|capfirst }} count together, so you have
                 until {{ week.grace_deadline_display }} Eastern.
             </p>
         {% elif week.grace and not week.done %}
             <p class="streak-hint">
-                {{ week.grace_label|capfirst }} count together: these {{ week.required_hours }}
-                hours are due when this countdown ends.
+                {{ week.grace_label|capfirst }} count together: these {{ week.required_display }}
+                are due when this countdown ends.
             </p>
         {% endif %}
 
