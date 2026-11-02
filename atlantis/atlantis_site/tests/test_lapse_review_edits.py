@@ -5,7 +5,7 @@ from django.urls import reverse
 
 from .. import challenge
 from ..models import (
-	AuditLog, Item, Order, Profile, SaverCredit, TimelapseAnnotation, TimelapseRemoval,
+	AuditLog, Item, MakeupDeferral, Order, Profile, SaverCredit, TimelapseAnnotation, TimelapseRemoval,
 	TimelapseReview, TimelapseReviewEdit,
 )
 from .base import (
@@ -132,6 +132,94 @@ class MakeupTests(BaseTestCase):
 			self.project.deleted = True
 			self.project.save()
 			self.assertEqual(challenge.standing(self.owner).current.makeup_minutes, 0)
+
+
+class MakeupDeferralTests(BaseTestCase):
+	"""The owner chooses whether a week's makeup is owed in it or the next."""
+
+	def setUp(self):
+		super().setUp()
+		self.owner = make_user("owner", slack_id="U0OWNER")
+		self.project = make_project(self.owner)
+		self.reviewer = grant_perms(make_user("tlrev", slack_id="U0TL"), "timelapse_review")
+		self.dm = self.slack_dm_mocks["timelapse_review"]
+
+	def _review(self, minutes, cut):
+		journal = make_journal(self.project, time_spent=minutes)
+		session = journal.timelapses.get()
+		self.client.force_login(self.reviewer)
+		self.client.post(
+			reverse("timelapse_decision", args=[self.project.id]),
+			_pass(self.project, [(session, "0:00", cut, "afk")]),
+		)
+		self.client.force_login(self.owner)
+
+	def _choose(self, when):
+		return self.client.post(reverse("defer_makeup"), {"when": when})
+
+	def test_moving_it_puts_it_on_next_week(self):
+		with during_week(3):
+			self._review(180, "1:30")
+			self._choose("next")
+			state = challenge.standing(self.owner)
+			self.assertEqual(state.current.makeup_minutes, 0)
+			self.assertEqual(state.current.required_minutes, 300)
+			self.assertEqual(state.weeks[3].makeup_minutes, 90)
+			self.assertEqual(state.weeks[3].carried_makeup_minutes, 90)
+			self.assertTrue(state.current.makeup_deferred)
+
+	def test_the_whole_field_agrees_after_a_move(self):
+		with during_week(3):
+			self._review(180, "1:30")
+			self._choose("next")
+			field = challenge.standings()[self.owner.id]
+			self.assertEqual(field.current.makeup_minutes, 0)
+			self.assertEqual(field.weeks[3].makeup_minutes, 90)
+
+	def test_it_can_be_moved_back(self):
+		with during_week(3):
+			self._review(180, "1:30")
+			self._choose("next")
+			self._choose("this")
+			self.assertEqual(challenge.standing(self.owner).current.makeup_minutes, 90)
+			self.assertFalse(MakeupDeferral.objects.exists())
+
+	def test_later_cuts_follow_the_choice(self):
+		with during_week(3):
+			self._review(180, "1:30")
+			self._choose("next")
+			self._review(60, "0:30")
+			state = challenge.standing(self.owner)
+			self.assertEqual(state.current.makeup_minutes, 0)
+			self.assertEqual(state.weeks[3].makeup_minutes, 120)
+		self.assertIn("You chose to make deflations from this week up next week", self.dm.call_args.args[0])
+
+	def test_nothing_to_move_is_refused(self):
+		with during_week(3):
+			self.client.force_login(self.owner)
+			self._choose("next")
+			self.assertFalse(MakeupDeferral.objects.exists())
+
+	def test_the_last_week_cant_be_moved(self):
+		with during_week(8):
+			self._review(180, "1:30")
+			self._choose("next")
+			self.assertFalse(MakeupDeferral.objects.exists())
+			self.assertEqual(challenge.standing(self.owner).current.makeup_minutes, 90)
+
+	def test_the_deck_offers_the_choice(self):
+		with during_week(3):
+			self._review(180, "1:30")
+			response = self.client.get(reverse("dashboard"))
+			self.assertContains(response, "Make up 1h 30m next week instead")
+			self._choose("next")
+			response = self.client.get(reverse("dashboard"))
+		self.assertContains(response, "Make it up this week instead")
+
+	def test_the_dm_offers_the_choice(self):
+		with during_week(3):
+			self._review(180, "1:30")
+		self.assertIn("move it to next week", self.dm.call_args.args[0])
 
 
 class LapseReviewEditTests(BaseTestCase):

@@ -9,6 +9,7 @@ urlpatterns = [
     path("auth/logout/", logout_view, name="logout"),
     path("oauth/callback/", auth_callback, name="auth_callback"),
     path("dashboard/", dashboard, name="dashboard"),
+    path("dashboard/makeup/", defer_makeup, name="defer_makeup"),
     path("guides/", guides, name="guides"),
     path("guides/<slug:slug>/", guide_detail, name="guide_detail"),
     path("printer-select/", printer_select, name="printer_select"),

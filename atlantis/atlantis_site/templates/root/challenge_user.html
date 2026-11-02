@@ -40,7 +40,7 @@
                         <td>{{ week.label }}{% if week.current %} <em>(live)</em>{% endif %}</td>
                         <td>{{ week.tracked_display }}</td>
                         <td>{{ week.saver_hours }}h</td>
-                        <td>{% if week.makeup_minutes %}{{ week.makeup_display }}{% else %}<span class="muted">none</span>{% endif %}</td>
+                        <td>{% if week.makeup_minutes %}{{ week.makeup_display }}{% else %}<span class="muted">none</span>{% endif %}{% if week.deferred_makeup_minutes %} <span class="muted">({{ week.own_makeup_display }} moved to next week)</span>{% endif %}</td>
                         <td>{{ week.credited_display }}</td>
                         <td>
                             {% if week.missed %}<span class="pill pill-bad">missed</span>

@@ -281,15 +281,19 @@ def _parse_descriptions(request, lapses):
 
 
 def _live_makeup(user):
-    """Minutes `user` owes in makeup on the week in progress, 0 outside one."""
+    """Minutes of makeup this week's cuts on `user` add up to, 0 outside a week.
+
+    Counted where they were cut, not where they're owed: the owner may have
+    moved them to next week, and they still need telling either way.
+    """
     index = weeks.current_week()
     if index is None:
         return 0
-    return challenge.makeup_minutes_by_week(user).get(index, 0)
+    return challenge.makeup_cut_by_week(user).get(index, 0)
 
 
 def notify_makeup(owner, project, before):
-    """DM the owner if a change just raised what they owe this week.
+    """DM the owner if a change just raised what this week's cuts owe.
 
     `before` is _live_makeup from before the change. Nothing is sent while
     the week's cuts are under the threshold, since nothing is owed then, or
@@ -302,12 +306,23 @@ def notify_makeup(owner, project, before):
     profile = getattr(owner, "hackclub_profile", None)
     if profile is None or not profile.slack_id:
         return
+    week = challenge.standing(owner).current
+    if week.makeup_deferred:
+        where = (
+            f"You chose to make deflations from this week up next week, so week "
+            f"{week.index + 1}'s bar will be {weeks.WEEKLY_HOURS} hours plus this."
+        )
+    else:
+        where = (
+            f"That's on top of this week's {weeks.WEEKLY_HOURS} hours, so this week's bar "
+            f"now needs {format_minutes(week.required_minutes)}."
+        )
+        if week.can_defer_makeup:
+            where += " If that's too tight, you can move it to next week from your dashboard."
     run_in_background(
         send_slack_dm,
         f"{format_minutes(after)} need to be made up because of deflations to your project "
-        f"<https://atlantis.hackclub.com/projects/{project.id}|{project.title}>. That's on "
-        f"top of this week's {weeks.WEEKLY_HOURS} hours, so this week's bar now needs "
-        f"{format_minutes(weeks.WEEKLY_MINUTES + after)}.",
+        f"<https://atlantis.hackclub.com/projects/{project.id}|{project.title}>. {where}",
         profile.slack_id,
     )
 

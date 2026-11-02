@@ -133,6 +133,16 @@
     margin-top: 0.5em;
 }
 
+.streak-makeup-choice {
+    margin: 0 0 0.5em;
+}
+
+button.streak-action {
+    border: none;
+    font: inherit;
+    cursor: pointer;
+}
+
 .streak-action {
     display: inline-block;
     margin-top: 0.4em;

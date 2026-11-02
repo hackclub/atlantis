@@ -1483,6 +1483,39 @@ class WeekOutcome(models.Model):
 		return f"{self.user_id} week {self.week_index}: {'met' if self.passed else 'missed'}"
 
 
+class MakeupDeferral(models.Model):
+	"""That one user chose to make up one week's deflations in the week after.
+
+	Deflations land all at once, whenever a reviewer gets to the footage, and
+	owing them on top of the five in the same week can leave a deadline nobody
+	could meet. So the owner picks: this week (no row, the default) or the next
+	one (a row). Only while the week is running — once it closes, what it owed
+	is settled — and never for the last week, which has no next one. Read live
+	by challenge._makeup like everything else there, so deleting the row moves
+	the makeup straight back.
+	"""
+
+	user = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="makeup_deferrals",
+	)
+	# The week the cuts were made in, not the week they're now owed in.
+	week_index = models.PositiveSmallIntegerField()
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering = ["user_id", "week_index"]
+		constraints = [
+			models.UniqueConstraint(
+				fields=["user", "week_index"], name="one_makeup_deferral_per_user_week"
+			),
+		]
+
+	def __str__(self):
+		return f"{self.user_id} week {self.week_index} makeup moved to week {self.week_index + 1}"
+
+
 class WeekReminder(models.Model):
 	"""That the Saturday "hours left this week" DM went to one user for one week.
 

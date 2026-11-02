@@ -1,4 +1,4 @@
-from ...views.client.dashboard import index, dashboard
+from ...views.client.dashboard import index, dashboard, defer_makeup
 from ...views.client.auth import login_view, auth_callback, logout_view
 from ...views.client.projects import projects, create_project, edit_project, update_editor_model, update_project_image, project_detail, create_journal, edit_journal, ship_project, explore, follow_project, unfollow_project, serve_media
 from ...views.client.shop import shop, item_detail, order_page, order_item, view_own_address
@@ -7,7 +7,7 @@ from ...views.client.timelapse import start_timelapse, record_timelapse, sync_ti
 from ...views.client.lapse import lapse_connect, lapse_callback, lapse_disconnect, lapse_timelapses
 
 __all__ = [
-    "index", "dashboard",
+    "index", "dashboard", "defer_makeup",
     "login_view", "auth_callback", "logout_view",
     "projects", "create_project", "edit_project", "update_editor_model", "update_project_image", "project_detail", "create_journal", "edit_journal", "ship_project", "explore", "follow_project", "unfollow_project",
     "shop", "item_detail", "order_page", "order_item", "view_own_address",

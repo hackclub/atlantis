@@ -41,7 +41,32 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
                 {{ week.bar_makeup_display }} need to be made up because of deflations to
                 your project. That's on top of the usual {{ week.base_required_hours }} hours,
                 so this week's bar is {{ week.required_display }}.
+                {% if week.carried_makeup_minutes %}{{ week.carried_makeup_display }} of it
+                was moved here from last week.{% endif %}
             </p>
+        {% endif %}
+
+        {% comment %}
+        Deflations can land late in a week, and owing them by Sunday on top of
+        the five can be a deadline nobody could meet, so the owner picks this
+        week or next (MakeupDeferral). Only this week's own cuts move, and only
+        while the week is running.
+        {% endcomment %}
+        {% if week.can_defer_makeup %}
+            <form class="streak-makeup-choice" method="post" action="{% url 'defer_makeup' %}">
+                {% csrf_token %}
+                {% if week.makeup_deferred %}
+                    <p class="streak-hint">
+                        {{ week.own_makeup_display }} from this week's deflations will be
+                        made up in week {{ week.index|add:1 }} instead.
+                    </p>
+                    <input type="hidden" name="when" value="this">
+                    <button type="submit" class="streak-action">Make it up this week instead</button>
+                {% else %}
+                    <input type="hidden" name="when" value="next">
+                    <button type="submit" class="streak-action">Make up {{ week.own_makeup_display }} next week instead</button>
+                {% endif %}
+            </form>
         {% endif %}
 
         <div class="streak-bar" role="progressbar"
