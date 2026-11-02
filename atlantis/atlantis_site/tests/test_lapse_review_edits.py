@@ -194,6 +194,41 @@ class MakeupDeferralTests(BaseTestCase):
 			self.assertEqual(state.weeks[3].makeup_minutes, 120)
 		self.assertIn("You chose to make deflations from this week up next week", self.dm.call_args.args[0])
 
+	def test_makeup_already_done_this_week_is_not_moved(self):
+		with during_week(3):
+			# 6h30m logged is the 5 plus all 1h30m of makeup.
+			self._review(390, "1:30")
+			self._choose("next")
+			state = challenge.standing(self.owner)
+			self.assertTrue(state.current.makeup_deferred)
+			self.assertEqual(state.current.deferred_makeup_minutes, 0)
+			self.assertEqual(state.current.makeup_minutes, 90)
+			self.assertTrue(state.current.met)
+			self.assertEqual(state.weeks[3].makeup_minutes, 0)
+
+	def test_only_the_part_not_done_yet_moves(self):
+		with during_week(3):
+			# 5h30m logged: an hour of the 1h30m is left to do.
+			self._review(330, "1:30")
+			self._choose("next")
+			state = challenge.standing(self.owner)
+			self.assertEqual(state.current.makeup_minutes, 30)
+			self.assertEqual(state.current.deferred_makeup_minutes, 60)
+			self.assertTrue(state.current.met)
+			self.assertEqual(state.weeks[3].makeup_minutes, 60)
+			field = challenge.standings()[self.owner.id]
+			self.assertEqual(field.weeks[3].makeup_minutes, 60)
+
+	def test_logging_more_after_moving_shrinks_what_moves(self):
+		with during_week(3):
+			self._review(180, "1:30")
+			self._choose("next")
+			self.assertEqual(challenge.standing(self.owner).weeks[3].makeup_minutes, 90)
+			make_journal(self.project, time_spent=210)
+			state = challenge.standing(self.owner)
+			self.assertEqual(state.weeks[3].makeup_minutes, 0)
+			self.assertTrue(state.current.met)
+
 	def test_nothing_to_move_is_refused(self):
 		with during_week(3):
 			self.client.force_login(self.owner)

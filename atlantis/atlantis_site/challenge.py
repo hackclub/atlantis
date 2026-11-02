@@ -206,25 +206,40 @@ def _bucket_makeup(rows):
 	}
 
 
-def _defer_makeup(cut, deferred):
-	"""(owed, moved) from {week cut in: minutes} and the weeks moved on.
+def _defer_makeup(cut, deferred, credited):
+	"""(owed, moved) from {week cut in: minutes}, the weeks moved on and
+	{week index: credited minutes}.
 
 	`owed` is {week index: minutes owed on top of its five}; `moved` is
 	{week index: minutes of its own cuts it handed to the week after}. A
 	deferral on the last week moves nothing, since there's no week after it.
+
+	Only what the week hasn't already made up moves. Whatever was credited in
+	it past its five and anything carried into it counts against its own
+	makeup first, so someone who did the makeup before choosing to move it
+	(or before an organizer moved it for them) isn't asked for it twice. That
+	is judged live, so the amount moved shrinks as the week fills up.
 	"""
 	owed, moved = {}, {}
-	for index, minutes in cut.items():
+	for index in sorted(cut):
+		minutes = cut[index]
 		if index in deferred and index < weeks.week_count():
-			moved[index] = minutes
-			index += 1
-		owed[index] = owed.get(index, 0) + minutes
+			carried = moved.get(index - 1, 0)
+			surplus = max(credited.get(index, 0) - weeks.WEEKLY_MINUTES - carried, 0)
+			kept = min(minutes, surplus)
+			if minutes > kept:
+				moved[index] = minutes - kept
+				owed[index + 1] = owed.get(index + 1, 0) + minutes - kept
+			minutes = kept
+		if minutes:
+			owed[index] = owed.get(index, 0) + minutes
 	return owed, moved
 
 
 def _makeup(user):
-	"""This user's (owed, moved) pair; see _defer_makeup."""
-	return _defer_makeup(makeup_cut_by_week(user), deferred_makeup_weeks(user))
+	"""This user's (makeup_cut_by_week, deferred_makeup_weeks) pair, which
+	_build_standing settles with _defer_makeup once it knows the hours."""
+	return makeup_cut_by_week(user), deferred_makeup_weeks(user)
 
 
 def makeup_cut_by_week(user):
@@ -252,7 +267,11 @@ def makeup_minutes_by_week(user):
 	chose that. This is recomputed live like everything else here, so a cut a
 	reviewer lead later removes stops being owed straight away.
 	"""
-	return _makeup(user)[0]
+	return {
+		week.index: week.makeup_minutes
+		for week in standing(user).weeks
+		if week.makeup_minutes
+	}
 
 
 def _overrides(user):
@@ -288,6 +307,9 @@ class Week:
 	# inside makeup_minutes; the deferred part is in next week's.
 	deferred_makeup_minutes: int = 0
 	carried_makeup_minutes: int = 0
+	# Whether the owner chose next week for this week's makeup, which holds
+	# even once the week has made it all up and nothing is left to move.
+	makeup_deferred: bool = False
 
 	@property
 	def saver_minutes(self):
@@ -337,12 +359,12 @@ class Week:
 		return format_minutes(self.own_makeup_minutes)
 
 	@property
-	def carried_makeup_display(self):
-		return format_minutes(self.carried_makeup_minutes)
+	def deferred_makeup_display(self):
+		return format_minutes(self.deferred_makeup_minutes)
 
 	@property
-	def makeup_deferred(self):
-		return bool(self.deferred_makeup_minutes)
+	def carried_makeup_display(self):
+		return format_minutes(self.carried_makeup_minutes)
 
 	@property
 	def can_defer_makeup(self):
@@ -660,7 +682,7 @@ def rescued_by_buffer(now=None):
 
 def _ledger():
 	"""Everyone's (_bucket_by_week pair, {week: saver hours}, {week: override},
-	_defer_makeup's (owed, moved) pair), each keyed by user id."""
+	_makeup's (cut, deferred) pair), each keyed by user id."""
 	rows = {}
 	for owner, at, seconds in _all_logged_timelapses().values_list("owner", "at", "tracked_seconds"):
 		rows.setdefault(owner, []).append((at, seconds))
@@ -687,7 +709,7 @@ def _ledger():
 	for owner, index in MakeupDeferral.objects.values_list("user", "week_index"):
 		deferred.setdefault(owner, set()).add(index)
 	makeup = {
-		owner: _defer_makeup(_bucket_makeup(rows), deferred.get(owner, set()))
+		owner: (_bucket_makeup(rows), deferred.get(owner, set()))
 		for owner, rows in cuts.items()
 	}
 
@@ -725,9 +747,17 @@ def _calendar(now):
 
 def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True, makeup=None):
 	"""A Standing from one user's _bucket_by_week pair, {week: saver hours},
-	{week: override} and _defer_makeup's (owed, moved) pair. buffer=False
+	{week: override} and _makeup's (cut, deferred) pair. buffer=False
 	judges it as though there were no buffer after each week."""
-	makeup, moved = makeup or ({}, {})
+	cut, deferred = makeup or ({}, set())
+	# What each week has credited by the calendar, before any buffer is
+	# handed out: a buffer is placed by what the week owes, so it can't also
+	# decide how much of the makeup moves.
+	credited = {
+		index: tracked[0].get(index, 0) // 60 + savers.get(index, 0) * 60
+		for index in cut
+	}
+	makeup, moved = _defer_makeup(cut, deferred, credited)
 	calendar = calendar or _calendar(now)
 	closed = calendar["closed"]
 	live = calendar["live"]
@@ -755,6 +785,7 @@ def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True,
 				grace_makeup_minutes=grace_makeup if index in grace else 0,
 				deferred_makeup_minutes=moved.get(index, 0),
 				carried_makeup_minutes=moved.get(index - 1, 0),
+				makeup_deferred=index in deferred and index < weeks.week_count(),
 			)
 			for index in range(1, weeks.week_count() + 1)
 		],

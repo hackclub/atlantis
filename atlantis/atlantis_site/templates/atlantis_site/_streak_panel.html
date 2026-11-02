@@ -57,8 +57,14 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
                 {% csrf_token %}
                 {% if week.makeup_deferred %}
                     <p class="streak-hint">
-                        {{ week.own_makeup_display }} from this week's deflations will be
-                        made up in week {{ week.index|add:1 }} instead.
+                        {% if week.deferred_makeup_minutes %}
+                            {{ week.deferred_makeup_display }} from this week's deflations will be
+                            made up in week {{ week.index|add:1 }} instead. Anything past your
+                            {{ week.base_required_hours }} hours this week comes off it.
+                        {% else %}
+                            You've already made up this week's {{ week.own_makeup_display }}
+                            of deflations, so none of it moves to week {{ week.index|add:1 }}.
+                        {% endif %}
                     </p>
                     <input type="hidden" name="when" value="this">
                     <button type="submit" class="streak-action">Make it up this week instead</button>

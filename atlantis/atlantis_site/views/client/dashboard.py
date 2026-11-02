@@ -57,9 +57,13 @@ def defer_makeup(request):
 
     if request.POST.get("when") == "next":
         MakeupDeferral.objects.get_or_create(user=request.user, week_index=week.index)
+        # Only what this week hasn't already made up moves, so ask again.
+        moved = challenge.standing(request.user).current
         messages.success(
             request,
-            f"{week.own_makeup_display} of makeup moved to week {week.index + 1}.",
+            f"{moved.deferred_makeup_display} of makeup moved to week {week.index + 1}."
+            if moved.deferred_makeup_minutes else
+            f"You've already made up this week's {week.own_makeup_display}, so nothing moves.",
         )
     else:
         MakeupDeferral.objects.filter(user=request.user, week_index=week.index).delete()

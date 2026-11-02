@@ -309,8 +309,9 @@ def notify_makeup(owner, project, before):
     week = challenge.standing(owner).current
     if week.makeup_deferred:
         where = (
-            f"You chose to make deflations from this week up next week, so week "
-            f"{week.index + 1}'s bar will be {weeks.WEEKLY_HOURS} hours plus this."
+            f"You chose to make deflations from this week up next week, so whatever of "
+            f"it you haven't made up by the end of this week goes on week "
+            f"{week.index + 1}'s bar."
         )
     else:
         where = (
