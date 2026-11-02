@@ -75,6 +75,14 @@ class ReviewAccessControlTests(BaseTestCase):
 		self.assertEqual(self.client.get(reverse("ysws_review_dash")).status_code, 200)
 		self.assertEqual(self.client.get(reverse("fraud_review_dash")).status_code, 302)
 
+	def test_baller_gets_t1_t2_and_timelapse_but_nothing_else(self):
+		self.client.force_login(grant_perms(make_user("baller"), "baller"))
+		self.assertEqual(self.client.get(reverse("review_dash")).status_code, 200)
+		self.assertEqual(self.client.get(reverse("ysws_review_dash")).status_code, 200)
+		self.assertEqual(self.client.get(reverse("timelapse_review_dash")).status_code, 200)
+		self.assertEqual(self.client.get(reverse("fraud_review_dash")).status_code, 302)
+		self.assertEqual(self.client.get(reverse("reviewer_shop_dash")).status_code, 302)
+
 	def test_organizer_can_access_everything(self):
 		organizer = grant_perms(make_user("organizer"), "organizer")
 		self.client.force_login(organizer)

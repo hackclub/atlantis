@@ -3,6 +3,6 @@ from django.shortcuts import render
 from ..helpers import check_perms, staff_member_required
 
 @staff_member_required
-@check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment", "atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.t3_review", "atlantis_site.timelapse_review", "atlantis_site.reviewer_lead", "atlantis_site.metrics"])
+@check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment", "atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.baller", "atlantis_site.t3_review", "atlantis_site.timelapse_review", "atlantis_site.reviewer_lead", "atlantis_site.metrics"])
 def admin_dash(request):
     return render(request, "root/home.html")

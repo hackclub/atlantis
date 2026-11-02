@@ -43,6 +43,7 @@ TIMELAPSE_PENDING_MESSAGE = (
 T1_VIEW_PERMS = [
     "atlantis_site.t1_review",
     "atlantis_site.t2_review",
+    "atlantis_site.baller",
     "atlantis_site.organizer",
     "atlantis_site.t3_review",
     "atlantis_site.reviewer_lead",
@@ -51,6 +52,7 @@ T1_VIEW_PERMS = [
 T1_DECIDE_PERMS = [
     "atlantis_site.t1_review",
     "atlantis_site.t2_review",
+    "atlantis_site.baller",
     "atlantis_site.organizer",
     "atlantis_site.t3_review",
 ]
@@ -64,6 +66,7 @@ ROLLBACK_REASON_MAX_LENGTH = 800
 COMMENT_PERMS = [
     "atlantis_site.t1_review",
     "atlantis_site.t2_review",
+    "atlantis_site.baller",
     "atlantis_site.t3_review",
     "atlantis_site.organizer",
 ]
@@ -78,6 +81,7 @@ FLAG_REASON_MAX_LENGTH = 500
 LOCK_PERMS = [
     "atlantis_site.organizer",
     "atlantis_site.t2_review",
+    "atlantis_site.baller",
     "atlantis_site.t3_review",
 ]
 
@@ -485,7 +489,7 @@ def t1_rollback(request, t1_id):
     return safe_redirect_back(request)
 
 @staff_member_required
-@check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+@check_perms(["atlantis_site.t2_review", "atlantis_site.baller", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def ysws_review_dash(request):
     ships = decorate_rows("t2", QUEUES["t2"].pending())
     context = dash_context(request, "t2", ships)
@@ -498,12 +502,12 @@ def ysws_review_dash(request):
     })
 
 @staff_member_required
-@check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+@check_perms(["atlantis_site.t2_review", "atlantis_site.baller", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def ysws_review_next(request):
     return go_to_next(request, "t2", parse_skip(request))
 
 @staff_member_required
-@check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+@check_perms(["atlantis_site.t2_review", "atlantis_site.baller", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def ysws_review_project(request, ship_id):
     ship = get_object_or_404(Ship, id=ship_id)
     if is_own_item("t2", ship, request.user):
@@ -540,7 +544,7 @@ def ysws_review_project(request, ship_id):
 
 @require_POST
 @staff_member_required
-@check_perms(["atlantis_site.t2_review", "atlantis_site.organizer", "atlantis_site.t3_review"])
+@check_perms(["atlantis_site.t2_review", "atlantis_site.baller", "atlantis_site.organizer", "atlantis_site.t3_review"])
 def t2_decision(request, ship_id):
     reviewer = request.user
     decision = request.POST.get("decision", "").strip()

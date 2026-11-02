@@ -1407,14 +1407,14 @@ def owner_snapshot(user):
 QUEUE_PERMS = {
     "t1": [
         "atlantis_site.t1_review", "atlantis_site.t2_review",
-        "atlantis_site.t3_review", "atlantis_site.organizer",
+        "atlantis_site.baller", "atlantis_site.t3_review", "atlantis_site.organizer",
     ],
     "t2": [
-        "atlantis_site.t2_review", "atlantis_site.t3_review",
+        "atlantis_site.t2_review", "atlantis_site.baller", "atlantis_site.t3_review",
         "atlantis_site.organizer",
     ],
     "t3": ["atlantis_site.t3_review", "atlantis_site.organizer"],
-    "lookout": ["atlantis_site.timelapse_review", "atlantis_site.organizer"],
+    "lookout": ["atlantis_site.timelapse_review", "atlantis_site.baller", "atlantis_site.organizer"],
 }
 
 # Who can open an item's review page, which is a little wider than who can hold

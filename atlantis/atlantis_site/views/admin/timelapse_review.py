@@ -50,9 +50,11 @@ from .queue import (
 )
 
 # Its own permission, not a tier of the T1/T2/T3 ladder. Organizers keep their
-# skeleton key; nobody else gets this by holding another review perm.
+# skeleton key, and ballers get it as part of their role; nobody else gets this
+# by holding another review perm.
 TIMELAPSE_REVIEW_PERMS = [
     "atlantis_site.timelapse_review",
+    "atlantis_site.baller",
     "atlantis_site.organizer",
 ]
 

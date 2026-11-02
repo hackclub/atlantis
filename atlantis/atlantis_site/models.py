@@ -1975,6 +1975,9 @@ class Permissions(models.Model):
 			# T1 decision that shouldn't have been made, and reading the audit
 			# trail of review decisions. Makes no decisions of its own.
 			("reviewer_lead", "Reviewer Lead: roll back T1 reviews, audit reviews"),
+			# T1, T2 and timelapse review, and nothing else that comes with being a
+			# reviewer: no T3 and no reviewer shop.
+			("baller", "Baller: T1, T2 and timelapse review only"),
 			("fulfillment", "Fulfill shop orders"),
 			# Read-only: the metrics page and nothing else under /root.
 			("metrics", "View the metrics page"),
