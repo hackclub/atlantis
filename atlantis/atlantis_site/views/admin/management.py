@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.models import Group
+from django.contrib.auth.models import Group, Permission
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
@@ -12,9 +12,10 @@ from django.utils import timezone
 
 import csv
 import os
+from collections import Counter
 
 from ... import airtable, challenge, weeks
-from ...models import Journal, Profile, Project, Ship, Timelapse
+from ...models import Journal, Permissions, Profile, Project, Ship, Timelapse
 from .shop import address_lookup
 from ..helpers import check_perms, staff_member_required, invite_to_autojoin_channels_in_background, is_valid_image_url, record_audit, is_valid_printables_url, is_valid_editor_model_url, format_minutes, INT_FIELD_MAX, INT_FIELD_MIN, field_max_length, too_long
 
@@ -39,6 +40,16 @@ def users(request):
     if search_query:
         users = users.filter(hackclub_profile__slack_username__icontains=search_query)
 
+    role_codenames = [codename for codename, _ in Permissions._meta.permissions]
+    role = request.GET.get("role", "")
+    if role in role_codenames:
+        users = users.filter(
+            Q(groups__permissions__codename=role, groups__permissions__content_type__app_label="atlantis_site")
+            | Q(user_permissions__codename=role, user_permissions__content_type__app_label="atlantis_site")
+        ).distinct()
+    else:
+        role = ""
+
     # A page at a time: every row carries its groups and an edit button's
     # worth of data attributes, and the table is everyone who ever logged in.
     page = Paginator(users, ADMIN_PAGE_SIZE).get_page(request.GET.get("page"))
@@ -52,7 +63,33 @@ def users(request):
         "default_pfp_url": default_pfp_url,
         "all_groups": all_groups,
         "search_query": search_query,
+        "role": role,
+        "role_counts": _role_counts(),
     })
+
+def _role_counts():
+    """How many people hold each of the custom permissions, in the order the
+    model lists them.
+
+    Counted off the grants themselves, through a group or given directly, so
+    someone in two groups that both carry T1 review is one T1 reviewer. A
+    superuser's implicit everything isn't counted: it would add them to every
+    role without them doing any of the jobs.
+    """
+    user_model = get_user_model()
+    perms = Permission.objects.filter(content_type__app_label="atlantis_site")
+    holders = set(
+        user_model.objects.filter(groups__permissions__in=perms)
+        .values_list("id", "groups__permissions__codename")
+    ) | set(
+        user_model.objects.filter(user_permissions__in=perms)
+        .values_list("id", "user_permissions__codename")
+    )
+    counts = Counter(codename for _, codename in holders)
+    return [
+        {"codename": codename, "name": codename.replace("_", " "), "description": description, "count": counts[codename]}
+        for codename, description in Permissions._meta.permissions
+    ]
 
 @staff_member_required
 @require_POST

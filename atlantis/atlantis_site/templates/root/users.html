@@ -22,7 +22,21 @@
             <button type="submit">Export users short on hours (CSV)</button>
         </form>
     </div>
+    <h3>Roles</h3>
+    {% comment %}
+    One card per custom permission, counting everyone who holds it through a
+    group or directly. Each card filters the table below to those people.
+    {% endcomment %}
+    <div class="stat-grid role-counts">
+        {% for r in role_counts %}
+        <a href="{% querystring role=r.codename page=None %}" class="stat-card role-count{% if r.codename == role %} accent{% endif %}" title="{{ r.description }}"{% if r.codename == role %} aria-current="true"{% endif %}>
+            <div class="stat-value">{{ r.count }}</div>
+            <div class="stat-label">{{ r.name }}</div>
+        </a>
+        {% endfor %}
+    </div>
     <form method="GET" class="users-search" role="search">
+        {% if role %}<input type="hidden" name="role" value="{{ role }}">{% endif %}
         <input
             id="userSearchInput"
             type="search"
@@ -33,7 +47,7 @@
             autocomplete="off"
         >
         <noscript><button type="submit">Search</button></noscript>
-        {% if search_query %}
+        {% if search_query or role %}
         <a href="{% url 'users' %}" class="link-button">Clear</a>
         {% endif %}
     </form>

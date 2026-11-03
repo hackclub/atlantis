@@ -985,3 +985,19 @@
 .root-page .lapse-edit button[type="submit"] {
     align-self: flex-start;
 }
+
+/* ---------- users: role counts ---------- */
+
+.root-page .role-counts {
+    margin: 8px 0 16px;
+}
+
+.root-page a.role-count {
+    display: block;
+    text-decoration: none;
+    color: inherit;
+}
+
+.root-page a.role-count:hover {
+    border-left-color: var(--oc-lagoon);
+}
