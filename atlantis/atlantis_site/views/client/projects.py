@@ -85,20 +85,23 @@ def _already_attached(user, lapse_ids):
 
     A deleted book doesn't count. Deleting a project gives its footage back —
     the recording still exists on Lapse and the hours behind it were never
-    paid, because a project that has shipped can't be deleted at all.
+    paid, because a project that has shipped can't be deleted at all. Nor does
+    a row an organizer cut loose by deleting its lapse (db_delete_journal),
+    which refuses a lapse that's been paid out for the same reason.
     """
     return set(
         Timelapse.objects.filter(
             owner=user,
             source=Timelapse.Source.LAPSE,
             project__deleted=False,
+            journal__isnull=False,
             lapse_id__in=lapse_ids,
         ).values_list("lapse_id", flat=True)
     )
 
 
 def _released_lapse_rows(user, lapse_ids):
-    """The rows holding footage a deleted book let go of.
+    """The rows holding footage a deleted book, or a deleted lapse, let go of.
 
     _already_attached stops treating these as taped in, but the row is still
     there and the unique constraint on lapse_id is what the new attach would
@@ -109,9 +112,8 @@ def _released_lapse_rows(user, lapse_ids):
     return Timelapse.objects.filter(
         owner=user,
         source=Timelapse.Source.LAPSE,
-        project__deleted=True,
         lapse_id__in=lapse_ids,
-    )
+    ).filter(Q(project__deleted=True) | Q(journal__isnull=True))
 
 
 def _attachable_lookouts(project, user, ids=None):

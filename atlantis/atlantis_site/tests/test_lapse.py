@@ -19,7 +19,7 @@ from django.utils import timezone as dj_timezone
 from .. import lapse
 from ..models import LapseAccount, Journal, Timelapse
 from .base import (
-	BaseTestCase, image_upload, make_lookout, make_project, make_user,
+	BaseTestCase, image_upload, make_journal, make_lookout, make_project, make_user,
 	message_texts, stl_upload,
 )
 
@@ -490,6 +490,7 @@ class LapsePickerTests(BaseTestCase):
 		Timelapse.objects.create(
 			project=self.project, owner=self.user, source=Timelapse.Source.LAPSE,
 			lapse_id="taken", tracked_seconds=60, status=Timelapse.Status.COMPLETE,
+			journal=make_journal(self.project, time_spent=0),
 		)
 		listing = [
 			timelapse_payload("ok"),
@@ -513,6 +514,7 @@ class LapsePickerTests(BaseTestCase):
 		Timelapse.objects.create(
 			project=other, owner=self.user, source=Timelapse.Source.LAPSE,
 			lapse_id="shared", tracked_seconds=60, status=Timelapse.Status.COMPLETE,
+			journal=make_journal(other, time_spent=0),
 		)
 		with patch("atlantis_site.lapse.fetch_published_timelapses", return_value=[timelapse_payload("shared")]):
 			payload = self._list().json()
@@ -527,6 +529,15 @@ class LapsePickerTests(BaseTestCase):
 		gone.deleted = True
 		gone.save()
 		with patch("atlantis_site.lapse.fetch_published_timelapses", return_value=[timelapse_payload("freed")]):
+			payload = self._list().json()
+		self.assertEqual(payload["timelapses"][0]["state"], "available")
+
+	def test_footage_off_a_deleted_lapse_is_pickable_again(self):
+		Timelapse.objects.create(
+			project=self.project, owner=self.user, source=Timelapse.Source.LAPSE,
+			lapse_id="loose", tracked_seconds=60, status=Timelapse.Status.COMPLETE,
+		)
+		with patch("atlantis_site.lapse.fetch_published_timelapses", return_value=[timelapse_payload("loose")]):
 			payload = self._list().json()
 		self.assertEqual(payload["timelapses"][0]["state"], "available")
 
@@ -676,6 +687,18 @@ class CreateJournalFromLapseTests(BaseTestCase):
 		self.assertEqual(row.lapse_id, "tl-1")
 		# The row the deleted book wrote is what the unique constraint would
 		# have refused the new one over, so it is gone rather than orphaned.
+		self.assertNotEqual(row.pk, stranded)
+
+	def test_footage_off_a_lapse_an_organizer_deleted_can_be_taped_in_again(self):
+		self._create()
+		stranded = Timelapse.objects.get().pk
+		Journal.objects.get().delete()
+
+		response = self._create()
+		self.assertEqual(response.status_code, 302)
+		self.assertEqual(Journal.objects.count(), 1)
+		row = Timelapse.objects.get()
+		self.assertEqual(row.journal, Journal.objects.get())
 		self.assertNotEqual(row.pk, stranded)
 
 	def test_the_same_id_twice_in_one_submission_is_refused(self):
