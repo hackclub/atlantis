@@ -19,6 +19,7 @@ from ..models import (
 	T1,
 	T2,
 	T3,
+	TimelapseReview,
 )
 from ..views.admin import management as management_views
 from .base import (
@@ -26,6 +27,7 @@ from .base import (
 	VALID_R2_URL,
 	BaseTestCase,
 	User,
+	approve_timelapse,
 	grant_perms,
 	make_journal,
 	make_project,
@@ -446,6 +448,97 @@ class DbDeleteProjectTests(BaseTestCase):
 	def test_unknown_project_404(self):
 		response = self.client.post(reverse("db_delete_project", args=[99999]))
 		self.assertEqual(response.status_code, 404)
+
+
+class DbDeleteJournalTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.organizer = grant_perms(make_user("organizer"), "organizer")
+		self.client.force_login(self.organizer)
+		self.owner = make_user("owner")
+		self.project = make_project(self.owner)
+		self.journal = make_journal(self.project, time_spent=90)
+		self.session = self.journal.timelapses.get()
+
+	def _delete(self, journal=None):
+		return self.client.post(reverse("db_delete_journal", args=[(journal or self.journal).id]))
+
+	def test_deletes_journal_and_unlinks_its_timelapses(self):
+		approve_timelapse(self.journal)
+
+		response = self._delete()
+
+		self.assertRedirects(response, reverse("project_detail", args=[self.project.id]), fetch_redirect_response=False)
+		self.assertFalse(Journal.objects.filter(id=self.journal.id).exists())
+		self.assertFalse(TimelapseReview.objects.exists())
+		self.session.refresh_from_db()
+		self.assertIsNone(self.session.journal_id)
+		self.assertEqual(self.session.project_id, self.project.id)
+
+	def test_unlinked_timelapse_can_go_onto_a_new_journal(self):
+		approve_timelapse(self.journal)
+		self._delete()
+
+		fresh = make_journal(self.project, time_spent=0)
+		self.session.refresh_from_db()
+		self.session.journal = fresh
+		self.session.save()
+		self.assertEqual(fresh.tracked_minutes, 90)
+
+	def test_records_audit_log(self):
+		review = approve_timelapse(self.journal)
+		journal_id = self.journal.id
+
+		self._delete()
+
+		log = AuditLog.objects.get(action="db_delete_journal")
+		self.assertEqual(log.actor, self.organizer)
+		self.assertEqual(log.target, f"Journal #{journal_id} (Journal entry)")
+		self.assertEqual(log.metadata["project_id"], self.project.id)
+		self.assertEqual(log.metadata["owner_username"], "owner")
+		self.assertEqual(log.metadata["timelapses_unlinked"], [self.session.id])
+		self.assertEqual(log.metadata["timelapse_review_id"], review.id)
+
+	def test_refuses_journal_on_finalized_ship(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(60,))
+		journal = ship.journals.get()
+
+		response = self._delete(journal)
+
+		self.assertIn("This lapse is on a finalized ship and has been paid out; it can't be deleted.", message_texts(response))
+		self.assertTrue(Journal.objects.filter(id=journal.id).exists())
+		self.assertFalse(AuditLog.objects.filter(action="db_delete_journal").exists())
+
+	def test_allows_journal_on_ship_still_in_review(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(60,))
+		journal = ship.journals.get()
+
+		self._delete(journal)
+
+		self.assertFalse(Journal.objects.filter(id=journal.id).exists())
+		self.assertTrue(Ship.objects.filter(id=ship.id).exists())
+
+	def test_non_organizer_cannot_delete(self):
+		for user in (self.owner, grant_perms(make_user("t1"), "t1_review")):
+			with self.subTest(user=user.username):
+				self.client.force_login(user)
+				self.assertEqual(self._delete().status_code, 302)
+				self.assertTrue(Journal.objects.filter(id=self.journal.id).exists())
+
+	def test_get_not_allowed(self):
+		response = self.client.get(reverse("db_delete_journal", args=[self.journal.id]))
+		self.assertEqual(response.status_code, 405)
+		self.assertTrue(Journal.objects.filter(id=self.journal.id).exists())
+
+	def test_unknown_journal_404(self):
+		self.assertEqual(self.client.post(reverse("db_delete_journal", args=[99999])).status_code, 404)
+
+	def test_delete_button_shown_to_organizers_only(self):
+		url = reverse("db_delete_journal", args=[self.journal.id])
+		self.assertContains(self.client.get(reverse("project_detail", args=[self.project.id])), url)
+
+		self.client.force_login(self.owner)
+		self.assertNotContains(self.client.get(reverse("project_detail", args=[self.project.id])), url)
 
 
 class DbDeleteProjectsBulkTests(BaseTestCase):

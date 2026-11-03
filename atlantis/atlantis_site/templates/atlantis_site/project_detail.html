@@ -227,10 +227,20 @@
                                     <div class="lapse-body">
                                         <h3 class="lapse-title">{{ entry.journal.title }}</h3>
                                         <p class="lapse-meta">{{ entry.journal.tracked_display }} &middot; {{ entry.journal.created_at|date:"M j, Y" }}</p>
-                                        {% if is_owner and not project.locked and entry.journal.changeable %}
-                                            <p class="lapse-actions">
-                                                <button type="button" class="ink-link" data-slip="slip-lapse-edit-{{ entry.journal.id }}">edit</button>
-                                            </p>
+                                        {% if is_owner and not project.locked and entry.journal.changeable or perms.atlantis_site.organizer and entry.journal.ship.status != "F" %}
+                                            <div class="lapse-actions">
+                                                {% if is_owner and not project.locked and entry.journal.changeable %}
+                                                    <button type="button" class="ink-link" data-slip="slip-lapse-edit-{{ entry.journal.id }}">edit</button>
+                                                {% endif %}
+                                                {# Organizers only: frees the lapse's timelapses to go onto another one. #}
+                                                {% if perms.atlantis_site.organizer and entry.journal.ship.status != "F" %}
+                                                    <form method="post" action="{% url 'db_delete_journal' entry.journal.id %}"
+                                                          data-confirm="Delete &quot;{{ entry.journal.title }}&quot;? Its timelapses stay on the project, unattached, and its timelapse review is deleted with it." data-confirm-ok="Delete" data-confirm-danger>
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="ink-link">delete</button>
+                                                    </form>
+                                                {% endif %}
+                                            </div>
                                         {% endif %}
                                     </div>
                                 </li>

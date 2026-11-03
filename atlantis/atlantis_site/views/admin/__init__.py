@@ -9,7 +9,7 @@ from ...views.admin.review import lock_project, unlock_project, flag_project, un
 from ...views.admin.timelapse_review import timelapse_review_dash, timelapse_review_next, timelapse_review_project, timelapse_decision, lapse_review_edit, lapse_review_save
 from ...views.admin.shop import shop_dash, create_item, edit_item, delete_item, reorder_categories, fulfillment_dash, update_order_status, view_order_address
 from ...views.admin.reviewer_shop import reviewer_shop_dash, buy_reviewer_item, create_reviewer_item, edit_reviewer_item, delete_reviewer_item
-from ...views.admin.management import users, backfill_emails, invite_to_channels, unfinished_hours_csv, edit_user, set_user_ban, view_user_address, manage_projects, admin_edit_project, db_delete_project, db_delete_projects
+from ...views.admin.management import users, backfill_emails, invite_to_channels, unfinished_hours_csv, edit_user, set_user_ban, view_user_address, manage_projects, admin_edit_project, db_delete_project, db_delete_projects, db_delete_journal
 from ...views.admin.challenge import challenge_dash, challenge_user, grant_saver, override_week, buffer_rescued_csv
 
 __all__ = [
@@ -23,6 +23,6 @@ __all__ = [
     "timelapse_review_dash", "timelapse_review_next", "timelapse_review_project", "timelapse_decision", "lapse_review_edit", "lapse_review_save",
     "shop_dash", "create_item", "edit_item", "delete_item", "reorder_categories", "fulfillment_dash", "update_order_status", "view_order_address",
     "reviewer_shop_dash", "buy_reviewer_item", "create_reviewer_item", "edit_reviewer_item", "delete_reviewer_item",
-    "users", "backfill_emails", "invite_to_channels", "unfinished_hours_csv", "edit_user", "set_user_ban", "view_user_address", "manage_projects", "admin_edit_project", "db_delete_project", "db_delete_projects",
+    "users", "backfill_emails", "invite_to_channels", "unfinished_hours_csv", "edit_user", "set_user_ban", "view_user_address", "manage_projects", "admin_edit_project", "db_delete_project", "db_delete_projects", "db_delete_journal",
     "challenge_dash", "challenge_user", "grant_saver", "override_week", "buffer_rescued_csv",
 ]

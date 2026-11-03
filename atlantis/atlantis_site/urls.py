@@ -99,6 +99,7 @@ urlpatterns = [
     path("root/projects/edit/<int:project_id>/", admin_edit_project, name="admin_edit_project"),
     path("root/projects/delete/bulk/", db_delete_projects, name="db_delete_projects"),
     path("root/projects/delete/<int:project_id>/", db_delete_project, name="db_delete_project"),
+    path("root/journals/delete/<int:journal_id>/", db_delete_journal, name="db_delete_journal"),
     path("root/metrics/", metrics, name="metrics"),
     path("root/challenge/", challenge_dash, name="challenge_dash"),
     path("root/challenge/back_in_from_buffer.csv", buffer_rescued_csv, name="buffer_rescued_csv"),

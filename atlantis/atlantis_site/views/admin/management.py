@@ -523,3 +523,49 @@ def db_delete_projects(request):
         messages.success(request, f"Removed {deleted} project(s) from the DB")
 
     return redirect("manage_projects")
+
+@staff_member_required
+@check_perms(["atlantis_site.organizer"])
+@require_POST
+def db_delete_journal(request, journal_id):
+    """Hard-delete one lapse so the timelapses on it can go onto another.
+
+    The recordings themselves stay on the project, unattached (Timelapse.journal
+    is SET_NULL); the lapse's timelapse review goes with it, so whatever lapse
+    they land on next is reviewed afresh. A lapse on a finalized ship has been
+    paid for, and pulling it out would leave a payout nothing backs any more.
+    """
+    journal = get_object_or_404(Journal.objects.select_related("project__owner", "ship"), id=journal_id)
+    project = journal.project
+    back = redirect("manage_projects") if project.deleted else redirect("project_detail", project_id=project.id)
+
+    if journal.ship is not None and journal.ship.status == Ship.ShipStatus.FINALIZED:
+        messages.error(request, "This lapse is on a finalized ship and has been paid out; it can't be deleted.")
+        return back
+
+    review = journal.timelapse_review_or_none
+    metadata = {
+        "journal_id": journal.id,
+        "title": journal.title,
+        "project_id": project.id,
+        "project_title": project.title,
+        "owner_id": project.owner_id,
+        "owner_username": project.owner.username,
+        "ship_id": journal.ship_id,
+        "ship_status": journal.ship.status if journal.ship else None,
+        "timelapses_unlinked": list(journal.timelapses.values_list("id", flat=True)),
+        "timelapse_review_id": review.id if review else None,
+    }
+
+    try:
+        with transaction.atomic():
+            journal.delete()
+    except Exception as e:
+        messages.error(request, f"DB delete failed, {e}")
+        return back
+
+    record_audit(request, "db_delete_journal", target=f"Journal #{metadata['journal_id']} ({metadata['title']})", metadata=metadata)
+
+    unlinked = len(metadata["timelapses_unlinked"])
+    messages.success(request, f"Deleted {metadata['title']}; {unlinked} timelapse(s) are free to attach again")
+    return back
