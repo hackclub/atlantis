@@ -1,7 +1,7 @@
 """Presence tracking, and the activity/time figures the metrics page draws."""
 
 import os
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from io import StringIO
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -17,7 +17,7 @@ from django.utils import timezone
 from .. import challenge, weeks
 from ..models import ActiveDay, AirtableSubmission, Journal, Ship, T3, MetricsSnapshot, Profile, SaverCredit
 from ..presence import WRITE_EVERY, record_seen
-from ..views.admin.metrics import build_streak_stats
+from ..views.admin.metrics import build_metrics, build_streak_stats
 from .base import (
 	BaseTestCase,
 	approve_timelapse,
@@ -411,6 +411,55 @@ class MetricsHoursTests(BaseTestCase):
 			hours["challenge_end"],
 			weeks.start_date() + timedelta(weeks=weeks.week_count(), days=-1),
 		)
+
+	def _ship_at(self, project, moment):
+		ship = Ship.objects.create(project=project)
+		Ship.objects.filter(pk=ship.pk).update(created_at=moment)
+		return ship
+
+	@override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+	def test_ship_counts_by_window(self):
+		# Noon on Wednesday Oct 7: week 3 of a program that opened Sep 21, so
+		# today, this week, this month and the program are all different spans.
+		eastern = weeks.zone()
+		now = datetime(2026, 10, 7, 12, tzinfo=eastern)
+		alice = make_project(make_user("alice", slack_id="U1"))
+		bob = make_project(make_user("bob", slack_id="U2"))
+
+		self._ship_at(alice, now - timedelta(hours=1))                     # today
+		self._ship_at(bob, datetime(2026, 10, 5, tzinfo=eastern))           # Monday midnight: this week
+		self._ship_at(alice, datetime(2026, 10, 4, 23, 59, tzinfo=eastern)) # last week, this month
+		self._ship_at(alice, datetime(2026, 9, 30, 23, 59, tzinfo=eastern)) # last month, in the program
+		self._ship_at(bob, weeks.starts_at() - timedelta(minutes=1))       # before the program
+		self._ship_at(bob, weeks.ends_at())                                # after it: the end is exclusive
+
+		ships = build_metrics(now)["ships"]
+
+		self.assertEqual(ships["today"], 1)
+		self.assertEqual(ships["this_week"], 2)
+		self.assertEqual(ships["shippers_this_week"], 2)
+		self.assertEqual(ships["week_start"], date(2026, 10, 5))
+		self.assertEqual(ships["this_month"], 3)
+		self.assertEqual(ships["shippers_this_month"], 2)
+		self.assertEqual(ships["month_start"], date(2026, 10, 1))
+		self.assertEqual(ships["challenge"], 4)
+		self.assertEqual(ships["shippers_challenge"], 2)
+		self.assertEqual(ships["total"], 6)
+
+	@override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+	def test_ships_per_program_week_stops_at_the_live_week(self):
+		week2_opens, week2_closes = weeks.week_bounds(2)
+		project = make_project(make_user("builder", slack_id="U1"))
+		self._ship_at(project, weeks.starts_at())
+		self._ship_at(project, week2_opens)
+		self._ship_at(project, week2_closes - timedelta(minutes=1))
+
+		rows = build_metrics(week2_opens + timedelta(days=1))["ships"]["per_week"]
+
+		self.assertEqual([row["value"] for row in rows], [1, 2])
+		self.assertEqual(rows[0]["label"], weeks.week_label(1))
+		self.assertNotIn("sub", rows[0])
+		self.assertEqual(rows[1]["sub"], "so far")
 
 
 @patch.dict(os.environ, DEFAULT_PFP_ENV)

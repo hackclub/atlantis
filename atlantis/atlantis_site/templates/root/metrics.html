@@ -356,6 +356,47 @@
             </div>
         </div>
 
+        <h3>Ships over time</h3>
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-value">{{ ships.today }}</div>
+                <div class="stat-label">Ships today</div>
+                <div class="stat-sub">{{ ships.avg_per_day }}/day over {{ hours.window_days }}d</div>
+            </div>
+            <div class="stat-card accent">
+                <div class="stat-value">{{ ships.this_week }}</div>
+                <div class="stat-label">Ships this week (Mon&ndash;Sun)</div>
+                <div class="stat-sub">since Mon {{ ships.week_start|date:"M j" }} &middot; {{ ships.shippers_this_week }} shipper{{ ships.shippers_this_week|pluralize }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ ships.last_7 }}</div>
+                <div class="stat-label">Ships in last 7 days</div>
+            </div>
+            <div class="stat-card accent">
+                <div class="stat-value">{{ ships.this_month }}</div>
+                <div class="stat-label">Ships this month</div>
+                <div class="stat-sub">since {{ ships.month_start|date:"M j" }} &middot; {{ ships.shippers_this_month }} shipper{{ ships.shippers_this_month|pluralize }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ ships.last_30 }}</div>
+                <div class="stat-label">Ships in last 30 days</div>
+            </div>
+            <div class="stat-card good">
+                <div class="stat-value">{{ ships.challenge }}</div>
+                <div class="stat-label">Ships during program ({{ ships.challenge_start|date:"M j" }}&ndash;{{ ships.challenge_end|date:"M j" }})</div>
+                <div class="stat-sub">{{ ships.shippers_challenge }} shipper{{ ships.shippers_challenge|pluralize }} &middot; {{ ships.finalized_challenge }} finalized</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">{{ ships.total }}</div>
+                <div class="stat-label">Ships all time</div>
+            </div>
+        </div>
+
+        <div class="chart-grid">
+            {% include "root/_metric_chart.html" with title="Ships per day" rows=ships.daily fill_class="good" wide=True empty="No ships yet" %}
+            {% include "root/_metric_chart.html" with title="Ships per program week" rows=ships.per_week fill_class="lagoon" wide=True empty="The program hasn't started" %}
+        </div>
+
         <div class="chart-grid">
             {% include "root/_metric_chart.html" with title="Live pipeline (waiting now)" rows=ships.pipeline fill_class="lagoon" empty="Nothing in the pipeline" %}
             {% include "root/_metric_chart.html" with title="All ships by status" rows=ships.by_status %}

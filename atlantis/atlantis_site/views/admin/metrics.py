@@ -512,6 +512,40 @@ def build_metrics(now):
 
     total_ships = Ship.objects.count()
     ships_last_7 = Ship.objects.filter(created_at__gte=last_7).count()
+    ships_last_30 = Ship.objects.filter(created_at__gte=last_30).count()
+    # Calendar windows, cut in the program's zone like every other "today" and
+    # "this week" here. The month starts from the local date for the same DST
+    # reason week_start does.
+    month_start = datetime.combine(today.replace(day=1), time.min, tzinfo=timezone.get_current_timezone())
+    ships_today = Ship.objects.filter(created_at__gte=today_start)
+    ships_this_week = Ship.objects.filter(created_at__gte=week_start)
+    ships_this_month = Ship.objects.filter(created_at__gte=month_start)
+    ships_challenge = Ship.objects.filter(
+        created_at__gte=weeks.starts_at(), created_at__lt=weeks.ends_at()
+    )
+    # One bar per program week, by when the ship was made. Weeks that haven't
+    # opened yet are left off rather than drawn as zeros.
+    live_week = weeks.current_week(now)
+    ships_per_week = []
+    for index in range(1, weeks.week_count() + 1):
+        opens, closes = weeks.week_bounds(index)
+        if opens > now:
+            break
+        row = {
+            "label": weeks.week_label(index),
+            "value": Ship.objects.filter(created_at__gte=opens, created_at__lt=closes).count(),
+        }
+        if index == live_week:
+            row["sub"] = "so far"
+        ships_per_week.append(row)
+    add_bars(ships_per_week)
+    ship_day_counts = {
+        row["day"]: row["n"]
+        for row in Ship.objects
+        .filter(created_at__gte=today_start - timedelta(days=TREND_DAYS - 1))
+        .annotate(day=TruncDate("created_at"))
+        .values("day").annotate(n=Count("id"))
+    }
     status_counts = dict(
         Ship.objects.values_list("status").annotate(n=Count("id")).values_list("status", "n")
     )
@@ -601,6 +635,22 @@ def build_metrics(now):
         "shipped_devlogs": shipped_journals.count(),
         "finalized_hours": _hours(finalized_minutes),
         "last_7": ships_last_7,
+        "last_30": ships_last_30,
+        "today": ships_today.count(),
+        "this_week": ships_this_week.count(),
+        "shippers_this_week": ships_this_week.values("project__owner").distinct().count(),
+        "week_start": week_start_day,
+        "this_month": ships_this_month.count(),
+        "shippers_this_month": ships_this_month.values("project__owner").distinct().count(),
+        "month_start": today.replace(day=1),
+        "challenge": ships_challenge.count(),
+        "shippers_challenge": ships_challenge.values("project__owner").distinct().count(),
+        "finalized_challenge": ships_challenge.filter(status=Ship.ShipStatus.FINALIZED).count(),
+        "challenge_start": weeks.start_date(),
+        "challenge_end": weeks.start_date() + timedelta(weeks=weeks.week_count(), days=-1),
+        "avg_per_day": _avg(ships_last_30, WINDOW_DAYS),
+        "per_week": ships_per_week,
+        "daily": _daily_rows(ship_day_counts, TREND_DAYS, today),
         "by_status": ship_by_status,
         "hours_by_status": shipped_hours_by_status,
         "finalized": finalized_ships,
@@ -795,6 +845,10 @@ SNAPSHOT_DATE_KEYS = [
     ("hours", "week_start"),
     ("hours", "challenge_start"),
     ("hours", "challenge_end"),
+    ("ships", "week_start"),
+    ("ships", "month_start"),
+    ("ships", "challenge_start"),
+    ("ships", "challenge_end"),
 ]
 
 
