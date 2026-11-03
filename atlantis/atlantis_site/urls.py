@@ -46,6 +46,7 @@ urlpatterns = [
     path("timelapse/<int:session_pk>/sync/", sync_timelapse, name="sync_timelapse"),
     path("media/<path:key>", serve_media, name="serve_media"),
     path("explore/", explore, name="explore"),
+    path("queue/", queue_status, name="queue_status"),
     path("shop/", shop, name="shop"),
     path("shop/<int:item_id>", item_detail, name="item_detail"),
     path("shop/<int:item_id>/order", order_item, name="order_item"),

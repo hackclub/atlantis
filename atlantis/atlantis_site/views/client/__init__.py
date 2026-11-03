@@ -5,6 +5,7 @@ from ...views.client.shop import shop, item_detail, order_page, order_item, view
 from ...views.client.misc import user_profile, guides, guide_detail, printer_select, printer_track, choose_printer_track, claim_printer
 from ...views.client.timelapse import start_timelapse, record_timelapse, sync_timelapse
 from ...views.client.lapse import lapse_connect, lapse_callback, lapse_disconnect, lapse_timelapses
+from ...views.client.queue_status import queue_status
 
 __all__ = [
     "index", "dashboard", "defer_makeup",
@@ -16,4 +17,5 @@ __all__ = [
     "start_timelapse", "record_timelapse", "sync_timelapse",
     "lapse_connect", "lapse_callback", "lapse_disconnect", "lapse_timelapses",
     "serve_media",
+    "queue_status",
 ]

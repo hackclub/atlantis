@@ -1,0 +1,48 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Review Queue · Atlantis</title>
+    {% include '_prompt_font.html' %}
+    <link rel="stylesheet" href="{% static 'atlantis_site/css/queue_status.css' %}">
+    {% include '_favicon.html' %}
+</head>
+<body class="qs">
+    <main class="qs-main">
+        <header class="qs-header">
+            <h1>Review queue</h1>
+        </header>
+
+        <ol class="qs-list">
+            {% for queue in queues %}
+                <li class="qs-card{% if queue.empty %} qs-card-empty{% endif %}">
+                    <div class="qs-card-head">
+                        <span class="qs-step">{{ queue.step }}</span>
+                        <h2>{{ queue.label }}</h2>
+                    </div>
+                    <dl class="qs-stats">
+                        <div class="qs-stat">
+                            <dt>Projects waiting</dt>
+                            <dd class="qs-value">{{ queue.count }}</dd>
+                        </div>
+                        <div class="qs-stat">
+                            <dt>Est. wait</dt>
+                            <dd class="qs-value">{{ queue.wait }}</dd>
+                        </div>
+                    </dl>
+                </li>
+            {% endfor %}
+        </ol>
+
+        <footer class="qs-footer">
+            <p>
+                Updated <time datetime="{{ updated_at|date:'c' }}">{{ updated_at|timesince }} ago</time>
+                · refreshes every {{ refresh_minutes }} minutes
+            </p>
+        </footer>
+    </main>
+</body>
+</html>

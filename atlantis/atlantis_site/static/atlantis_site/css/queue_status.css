@@ -1,0 +1,171 @@
+/* The public /queue/ page. Standalone: it loads none of the site's paper
+   stylesheets, so everything it needs is here. */
+
+:root {
+    --qs-bg: #000;
+    --qs-border: #26262b;
+    --qs-border-hover: #3a3a42;
+    --qs-text: #e7ecf2;
+    --qs-muted: #8a96a6;
+    --qs-faint: #5d6877;
+    --qs-accent: #5fd4c4;
+    --qs-accent-soft: rgba(95, 212, 196, 0.14);
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    background: var(--qs-bg);
+}
+
+body.qs {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--qs-bg);
+    color: var(--qs-text);
+    font-family: "Prompt", system-ui, -apple-system, sans-serif;
+    font-weight: 400;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+}
+
+.qs-main {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 72px 16px 56px;
+}
+
+/* ------------------------------------------------------------- header */
+
+.qs-header {
+    margin-bottom: 36px;
+}
+
+.qs-header h1 {
+    margin: 0;
+    font-size: clamp(32px, 6vw, 44px);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+}
+
+/* -------------------------------------------------------------- cards */
+
+.qs-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.qs-card {
+    background: var(--qs-bg);
+    border: 1px solid var(--qs-border);
+    border-radius: 16px;
+    padding: 20px 22px 22px;
+    transition: border-color 0.15s ease;
+}
+
+.qs-card:hover {
+    border-color: var(--qs-border-hover);
+}
+
+.qs-card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.qs-step {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: var(--qs-accent-soft);
+    color: var(--qs-accent);
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.qs-card h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 500;
+}
+
+.qs-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0;
+}
+
+.qs-stat {
+    min-width: 0;
+}
+
+.qs-stat dt {
+    margin-bottom: 4px;
+    color: var(--qs-muted);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.qs-stat dd {
+    margin: 0;
+}
+
+.qs-value {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+}
+
+.qs-card-empty .qs-value {
+    color: var(--qs-muted);
+}
+
+/* ------------------------------------------------------------- footer */
+
+.qs-footer {
+    margin-top: 32px;
+    padding-top: 20px;
+    border-top: 1px solid var(--qs-border);
+    color: var(--qs-faint);
+    font-size: 13px;
+}
+
+.qs-footer p {
+    margin: 0 0 6px;
+}
+
+/* ------------------------------------------------------------- narrow */
+
+@media (max-width: 600px) {
+    .qs-main {
+        padding-top: 48px;
+    }
+
+    .qs-list {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .qs-value {
+        font-size: 24px;
+    }
+}
