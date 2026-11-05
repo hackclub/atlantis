@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group, Permission
 from django.test import override_settings
 from django.core.cache import cache
 from django.core.management import call_command
@@ -112,6 +113,38 @@ class MetricsActivityTests(BaseTestCase):
 		response = self.client.get(reverse("metrics"))
 		self.assertEqual(response.status_code, 200)
 		return response.context
+
+	def _role_count(self, context, codename):
+		return next(r["count"] for r in context["users"]["roles"] if r["codename"] == codename)
+
+	def test_role_counts_through_groups_and_direct_grants(self):
+		reviewers = Group.objects.create(name="reviewers")
+		t1 = Permission.objects.get(content_type__app_label="atlantis_site", codename="t1_review")
+		reviewers.permissions.add(t1)
+		in_group = make_user("in_group")
+		in_group.groups.add(reviewers)
+		# In the group and granted directly: still one T1 reviewer.
+		both = grant_perms(make_user("both"), "t1_review", "baller")
+		both.groups.add(reviewers)
+		grant_perms(make_user("lapse"), "timelapse_review")
+		make_user("pleb")
+
+		context = self._page()
+		self.assertEqual(self._role_count(context, "t1_review"), 2)
+		self.assertEqual(self._role_count(context, "baller"), 1)
+		self.assertEqual(self._role_count(context, "timelapse_review"), 1)
+		self.assertEqual(self._role_count(context, "t3_review"), 0)
+		self.assertEqual(self._role_count(context, "organizer"), 1)
+
+	def test_role_cards_link_organizers_to_the_users_page(self):
+		response = self.client.get(reverse("metrics"))
+		self.assertContains(response, f'href="{reverse("users")}?role=baller"')
+
+	def test_role_cards_are_plain_for_metrics_only_viewers(self):
+		self.client.force_login(grant_perms(make_user("watcher"), "metrics"))
+		response = self.client.get(reverse("metrics"))
+		self.assertContains(response, 'class="stat-card role-count"')
+		self.assertNotContains(response, "?role=")
 
 	def test_counts_who_is_here(self):
 		now = timezone.now()

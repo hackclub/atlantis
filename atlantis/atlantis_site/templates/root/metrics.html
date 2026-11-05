@@ -514,6 +514,29 @@
             </div>
         </div>
 
+        {% if users.roles %}
+        {% comment %}
+        One card per custom permission, counting everyone who holds it through a
+        group or directly. Organizers can click through to those people on the
+        users page; old snapshots predate these and skip the row.
+        {% endcomment %}
+        <div class="stat-grid role-counts">
+            {% for r in users.roles %}
+            {% if perms.atlantis_site.organizer %}
+            <a href="{% url 'users' %}?role={{ r.codename }}" class="stat-card role-count" title="{{ r.description }}">
+                <div class="stat-value">{{ r.count }}</div>
+                <div class="stat-label">{{ r.name }}</div>
+            </a>
+            {% else %}
+            <div class="stat-card role-count" title="{{ r.description }}">
+                <div class="stat-value">{{ r.count }}</div>
+                <div class="stat-label">{{ r.name }}</div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <div class="chart-grid">
             {% include "root/_metric_chart.html" with title="Top pearl holders" rows=users.top_holders empty="No users yet" %}
         </div>
