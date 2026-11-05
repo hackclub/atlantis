@@ -33,7 +33,7 @@
             aria-label="Search by Slack username"
             autocomplete="off"
         >
-        <noscript><button type="submit">Search</button></noscript>
+        <button type="submit">Search</button>
         {% if search_query or role %}
         <a href="{% url 'users' %}" class="link-button">Clear</a>
         {% endif %}
@@ -118,7 +118,7 @@
         </table>
     </div>
     {% include "root/_pager.html" with page=page noun="users" %}
-    <p id="userSearchEmpty" hidden>{% if page.has_other_pages %}No users on this page match. Press Enter to search every page.{% else %}No users match that Slack username.{% endif %}</p>
+    <p id="userSearchEmpty" hidden>{% if page.has_other_pages or search_query or role %}No users here match. Press Enter to search every user.{% else %}No users match that Slack username.{% endif %}</p>
 
     <dialog id="editUserPopup">
         <form method="POST" id="editUserForm" action="">
