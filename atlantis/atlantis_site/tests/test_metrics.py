@@ -334,6 +334,21 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(ships["shipped_devlogs"], 4)
 		self.assertEqual(ships["finalized_hours"], 2.0)
 
+	def test_finalized_hours_include_rejected_lapses_a_later_ship_paid(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		# Rejected, then paid for by the finalized ship after it.
+		make_ship(project, status=Ship.ShipStatus.REJECTED, journal_minutes=(60,))
+		make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(120,))
+		# Rejected after the last finalization: nothing has paid for it yet.
+		make_ship(project, status=Ship.ShipStatus.REJECTED, journal_minutes=(30,))
+		# Another project's finalized ship doesn't reach across.
+		other = make_project(make_user("other", slack_id="U2"))
+		make_ship(other, status=Ship.ShipStatus.REJECTED, journal_minutes=(90,))
+
+		ships = self.client.get(reverse("metrics")).context["ships"]
+
+		self.assertEqual(ships["finalized_hours"], 3.0)
+
 	def test_queued_hours_sum_every_review_queue(self):
 		project = make_project(make_user("builder", slack_id="U1"))
 		make_ship(project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(60,))

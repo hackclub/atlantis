@@ -6,7 +6,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.conf import settings
-from django.db.models import Count, Sum, Avg
+from django.db.models import Count, Sum, Avg, OuterRef, Subquery
 from django.db.models.functions import TruncDate, TruncWeek
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -601,12 +601,21 @@ def build_metrics(now):
 
     # Every lapse that has gone out in a ship, whatever became of the ship. A
     # rejected ship's lapses stay attached to it and are paid by the next one,
-    # so they count as shipped here; the finalized figure is the share a T3
-    # has signed off.
+    # so they count as shipped here.
     shipped_journals = Journal.objects.filter(ship__isnull=False)
     shipped_minutes = tracked_minutes_for_journals(shipped_journals)
+    # The finalized figure is every lapse a finalized ship has paid for, the
+    # same scope as payable_journals_for_ship: a rejected ship's lapses count
+    # once a later ship on the project is finalized, since that payout (and
+    # the Airtable record it sends) covers them. Put together, that is every
+    # shipped lapse up to the project's latest finalized ship.
+    latest_finalized_id = Subquery(
+        Ship.objects.filter(
+            project=OuterRef("ship__project"), status=Ship.ShipStatus.FINALIZED
+        ).order_by("-id").values("id")[:1]
+    )
     finalized_minutes = tracked_minutes_for_journals(
-        shipped_journals.filter(ship__status=Ship.ShipStatus.FINALIZED)
+        shipped_journals.filter(ship_id__lte=latest_finalized_id)
     )
     # The shipped hours still waiting on a reviewer, across every queue the
     # pipeline chart counts.
