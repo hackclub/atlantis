@@ -18,7 +18,7 @@
             autocomplete="off"
             style="width: 275px;"
         >
-        <noscript><button type="submit">Search</button></noscript>
+        <button type="submit">Search</button>
         {% if search_query %}
         <a href="{% url 'manage_projects' %}" class="link-button">Clear</a>
         {% endif %}
@@ -95,7 +95,7 @@
         </table>
     </div>
     {% include "root/_pager.html" with page=page noun="projects" %}
-    <p id="projectSearchEmpty" hidden>{% if page.has_other_pages %}No projects on this page match. Press Enter to search every page.{% else %}No projects match that search.{% endif %}</p>
+    <p id="projectSearchEmpty" hidden>{% if page.has_other_pages or search_query %}No projects here match. Press Enter to search every project.{% else %}No projects match that search.{% endif %}</p>
 
     <dialog id="editProjectPopup">
         <form method="POST" id="editProjectForm" action="">
