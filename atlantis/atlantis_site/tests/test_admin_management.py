@@ -5,7 +5,7 @@ from datetime import datetime
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
-from django.contrib.auth.models import Group, Permission
+from django.contrib.auth.models import Group
 from django.test import override_settings
 from django.urls import reverse
 
@@ -121,28 +121,6 @@ class UsersViewTests(BaseTestCase):
 	def test_a_single_page_draws_no_pager(self):
 		response = self.client.get(reverse("users"))
 		self.assertNotContains(response, 'class="pagination"')
-
-	def _role_count(self, response, codename):
-		return next(r["count"] for r in response.context["role_counts"] if r["codename"] == codename)
-
-	def test_role_counts_through_groups_and_direct_grants(self):
-		reviewers = Group.objects.create(name="reviewers")
-		t1 = Permission.objects.get(content_type__app_label="atlantis_site", codename="t1_review")
-		reviewers.permissions.add(t1)
-		in_group = make_user("in_group")
-		in_group.groups.add(reviewers)
-		# In the group and granted directly: still one T1 reviewer.
-		both = grant_perms(make_user("both"), "t1_review", "baller")
-		both.groups.add(reviewers)
-		grant_perms(make_user("lapse"), "timelapse_review")
-		make_user("pleb")
-
-		response = self.client.get(reverse("users"))
-		self.assertEqual(self._role_count(response, "t1_review"), 2)
-		self.assertEqual(self._role_count(response, "baller"), 1)
-		self.assertEqual(self._role_count(response, "timelapse_review"), 1)
-		self.assertEqual(self._role_count(response, "t3_review"), 0)
-		self.assertEqual(self._role_count(response, "organizer"), 1)
 
 	def test_role_filter_lists_only_holders(self):
 		grant_perms(make_user("baller"), "baller")

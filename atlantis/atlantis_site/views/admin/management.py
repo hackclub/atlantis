@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.contrib.auth.models import Group, Permission
+from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
@@ -12,7 +12,6 @@ from django.utils import timezone
 
 import csv
 import os
-from collections import Counter
 
 from ... import airtable, challenge, weeks
 from ...models import Journal, Permissions, Profile, Project, Ship, Timelapse
@@ -64,32 +63,7 @@ def users(request):
         "all_groups": all_groups,
         "search_query": search_query,
         "role": role,
-        "role_counts": _role_counts(),
     })
-
-def _role_counts():
-    """How many people hold each of the custom permissions, in the order the
-    model lists them.
-
-    Counted off the grants themselves, through a group or given directly, so
-    someone in two groups that both carry T1 review is one T1 reviewer. A
-    superuser's implicit everything isn't counted: it would add them to every
-    role without them doing any of the jobs.
-    """
-    user_model = get_user_model()
-    perms = Permission.objects.filter(content_type__app_label="atlantis_site")
-    holders = set(
-        user_model.objects.filter(groups__permissions__in=perms)
-        .values_list("id", "groups__permissions__codename")
-    ) | set(
-        user_model.objects.filter(user_permissions__in=perms)
-        .values_list("id", "user_permissions__codename")
-    )
-    counts = Counter(codename for _, codename in holders)
-    return [
-        {"codename": codename, "name": codename.replace("_", " "), "description": description, "count": counts[codename]}
-        for codename, description in Permissions._meta.permissions
-    ]
 
 @staff_member_required
 @require_POST

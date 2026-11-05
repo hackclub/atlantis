@@ -1,4 +1,5 @@
 import json
+from collections import Counter
 from datetime import datetime, time, timedelta
 
 from django.core.serializers.json import DjangoJSONEncoder
@@ -8,6 +9,7 @@ from django.conf import settings
 from django.db.models import Count, Sum, Avg
 from django.db.models.functions import TruncDate, TruncWeek
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
@@ -15,6 +17,7 @@ from ...models import (
     ActiveDay,
     AirtableSubmission,
     AuditLog,
+    Permissions,
     Profile,
     Project,
     Ship,
@@ -102,6 +105,31 @@ def _daily_rows(counts, days, today, value=lambda n: n):
         {"label": day.strftime("%b %-d"), "value": value(counts.get(day, 0))}
         for day in (today - timedelta(days=offset) for offset in range(days - 1, -1, -1))
     ])
+
+
+def _role_counts():
+    """How many people hold each of the custom permissions, in the order the
+    model lists them.
+
+    Counted off the grants themselves, through a group or given directly, so
+    someone in two groups that both carry T1 review is one T1 reviewer. A
+    superuser's implicit everything isn't counted: it would add them to every
+    role without them doing any of the jobs.
+    """
+    user_model = get_user_model()
+    perms = Permission.objects.filter(content_type__app_label="atlantis_site")
+    holders = set(
+        user_model.objects.filter(groups__permissions__in=perms)
+        .values_list("id", "groups__permissions__codename")
+    ) | set(
+        user_model.objects.filter(user_permissions__in=perms)
+        .values_list("id", "user_permissions__codename")
+    )
+    counts = Counter(codename for _, codename in holders)
+    return [
+        {"codename": codename, "name": codename.replace("_", " "), "description": description, "count": counts[codename]}
+        for codename, description in Permissions._meta.permissions
+    ]
 
 
 def _week_elapsed(index, now):
@@ -810,6 +838,7 @@ def build_metrics(now):
         "layers_owed": layers_owed,
         "users_on_loan": on_loan["n"],
         "top_holders": top_holders,
+        "roles": _role_counts(),
     }
 
     total_audit = AuditLog.objects.count()
