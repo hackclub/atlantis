@@ -450,6 +450,46 @@ class FilteredSessionTests(BaseTestCase):
 			fetch_redirect_response=False,
 		)
 
+	def test_flagged_and_locked_rows_stay_off_the_all_tab(self):
+		locked = make_project(make_user("shut", slack_id="U-s"), shippable=True, locked=True)
+		locked_ship = ages(make_ship(locked), days=7)
+		response = self.client.get(reverse("review_dash"))
+		shown = {row.id for row in response.context["ships"]}
+		self.assertEqual(shown, {self.plain_old.id, self.plain_mid.id})
+		response = self.client.get(reverse("review_dash"), {"filter": "flagged"})
+		self.assertEqual(
+			{row.id for row in response.context["ships"]},
+			{self.flagged_first.id, self.flagged_second.id},
+		)
+		response = self.client.get(reverse("review_dash"), {"filter": "locked"})
+		self.assertEqual({row.id for row in response.context["ships"]}, {locked_ship.id})
+		# Narrowing to anything else still leaves them out.
+		response = self.client.get(reverse("review_dash"), {"filter": "overdue"})
+		self.assertNotIn(self.flagged_first.id, {row.id for row in response.context["ships"]})
+
+	def test_next_from_the_whole_queue_passes_over_flagged_and_locked(self):
+		locked = make_project(make_user("shut", slack_id="U-s"), shippable=True, locked=True)
+		ages(make_ship(locked), days=8)
+		response = self.client.get(reverse("review_next"), {"skip": str(self.plain_old.id)})
+		self.assertRedirects(
+			response,
+			f"{reverse('review_project', args=[self.plain_mid.id])}?skip={self.plain_old.id}",
+			fetch_redirect_response=False,
+		)
+
+	def test_a_decision_skips_over_flagged_to_the_next_plain_ship(self):
+		response = self._approve(self.plain_old)
+		self.assertRedirects(
+			response,
+			f"{reverse('review_project', args=[self.plain_mid.id])}?skip={self.plain_old.id}",
+			fetch_redirect_response=False,
+		)
+
+	def test_the_review_page_counts_without_flagged_and_locked(self):
+		response = self.client.get(reverse("review_project", args=[self.plain_mid.id]))
+		self.assertEqual(response.context["queue_position"], 2)
+		self.assertEqual(response.context["queue_total"], 2)
+
 	def test_the_timelapse_desk_names_its_default_tab(self):
 		self.client.force_login(grant_perms(make_user("lapserev"), "timelapse_review"))
 		response = self.client.get(reverse("timelapse_review_dash"))
