@@ -96,9 +96,13 @@ class DeskFilterTests(BaseTestCase):
 		response = self.client.get(reverse("review_dash") + query)
 		return [ship.id for ship in response.context["ships"]], response
 
-	def test_no_filter_shows_the_whole_queue(self):
-		ids, _ = self._ids()
-		self.assertEqual(ids, [self.plain.id, self.flagged.id])
+	def test_no_filter_leaves_out_flagged_and_locked(self):
+		locked = make_ship(make_project(make_user("shut", slack_id="U-s"), shippable=True, locked=True))
+		ids, response = self._ids()
+		self.assertEqual(ids, [self.plain.id])
+		counts = {option["key"]: option["count"] for option in response.context["filter_options"]}
+		self.assertEqual((counts[""], counts["flagged"], counts["locked"]), (1, 1, 1))
+		self.assertEqual(self._ids("?filter=locked")[0], [locked.id])
 
 	def test_the_flagged_filter(self):
 		ids, response = self._ids("?filter=flagged")
@@ -107,17 +111,19 @@ class DeskFilterTests(BaseTestCase):
 		# Still numbered by its place in the whole queue.
 		self.assertEqual(response.context["ships"][0].queue_index, 2)
 		counts = {option["key"]: option["count"] for option in response.context["filter_options"]}
-		self.assertEqual(counts[""], 2)
+		self.assertEqual(counts[""], 1)
 		self.assertEqual(counts["flagged"], 1)
 
 	def test_search_matches_title_and_owner(self):
-		self.assertEqual(self._ids("?q=bracket")[0], [self.flagged.id])
+		self.assertEqual(self._ids("?filter=flagged&q=bracket")[0], [self.flagged.id])
 		self.assertEqual(self._ids("?q=PLAIN")[0], [self.plain.id])
+		# Flagged rows stay under their own tab, search or no search.
+		self.assertEqual(self._ids("?q=bracket")[0], [])
 		self.assertEqual(self._ids("?q=nothing-like-this")[0], [])
 
 	def test_an_unknown_filter_is_ignored(self):
 		ids, response = self._ids("?filter=bogus")
-		self.assertEqual(len(ids), 2)
+		self.assertEqual(ids, [self.plain.id])
 		self.assertEqual(response.context["active_filter"], "")
 
 	def test_the_reship_filter(self):
@@ -135,15 +141,15 @@ class DeskFilterTests(BaseTestCase):
 		archive = make_ship(make_project(
 			make_user("zipper", slack_id="U-z"), shippable=True, editor_model_url="model.zip",
 		))
-		self.assertEqual(self._ids("?type=onshape")[0], [self.plain.id, self.flagged.id])
-		self.assertEqual(self._ids("?type=fusion-360")[0], [fusion.id])
+		self.assertEqual(self._ids("?type=onshape")[0], [self.plain.id])
+		self.assertEqual(self._ids("?filter=flagged&type=fusion-360")[0], [fusion.id])
 		self.assertEqual(self._ids("?type=other")[0], [archive.id])
 
 		# It narrows alongside the filter tabs, and each bar counts within the other.
 		ids, response = self._ids("?filter=flagged&type=onshape")
 		self.assertEqual(ids, [self.flagged.id])
 		counts = {option["key"]: option["count"] for option in response.context["filter_options"]}
-		self.assertEqual((counts[""], counts["flagged"]), (2, 1))
+		self.assertEqual((counts[""], counts["flagged"]), (1, 1))
 		types = {option["key"]: option for option in response.context["type_options"]}
 		self.assertEqual(types[""]["count"], 2)
 		self.assertEqual(types["fusion-360"]["count"], 1)
@@ -153,7 +159,7 @@ class DeskFilterTests(BaseTestCase):
 
 	def test_an_unknown_project_type_is_ignored(self):
 		ids, response = self._ids("?type=blender")
-		self.assertEqual(len(ids), 2)
+		self.assertEqual(ids, [self.plain.id])
 		self.assertEqual(response.context["active_type"], "")
 
 	def test_the_timelapse_desk_has_no_project_types(self):

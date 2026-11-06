@@ -387,6 +387,8 @@ def next_item_id(queue_key, skip_ids=(), user=None, items=None, narrowing=None):
     queue = QUEUES[queue_key]
     if items is None:
         items = queue.pending()
+    if narrowing is None:
+        items = exclude_held_back(queue_key, items)
     ids = list(exclude_own(queue_key, items, user).values_list("id", flat=True))
     if narrowing is not None:
         allowed = set(ids)
@@ -538,6 +540,20 @@ QUEUE_FILTERS = {
     ],
 }
 
+# A flagged or locked project is waiting on something other than a review, so
+# on the ship desks it shows only under its own Flagged or Locked tab — not
+# under All, and not as the next item in a session walking the whole queue.
+HELD_BACK_DESKS = {"t1", "t2", "t3"}
+HELD_BACK_FILTERS = {"flagged", "locked"}
+
+
+def exclude_held_back(queue_key, items):
+    """`items` without the flagged and locked projects the ship desks hold back."""
+    if queue_key not in HELD_BACK_DESKS:
+        return items
+    return items.exclude(project__flagged=True).exclude(project__locked=True)
+
+
 # The project types a ship desk's table can be narrowed to, by `?type=`, as
 # key -> label. A project's type is the editor its source file came from, which
 # detect_editor already works out for the Flags column. Archives and anything
@@ -633,7 +649,17 @@ def _of_type(queue_key, row, type_key):
     return not type_key or _project_type_of(queue_key, row) == type_key
 
 
+def _held_back(queue_key, row):
+    """Whether a row is kept out of every tab but its own Flagged or Locked."""
+    if queue_key not in HELD_BACK_DESKS:
+        return False
+    project = _project_of(queue_key, row)
+    return project.flagged or project.locked
+
+
 def _passes(queue_key, row, filter_key):
+    if filter_key not in HELD_BACK_FILTERS and _held_back(queue_key, row):
+        return False
     tests = {key: test for key, _label, test in _filters_for(queue_key)}
     return not filter_key or tests[filter_key](queue_key, row)
 
@@ -702,7 +728,8 @@ def filter_rows(request, queue_key, rows):
     next_sort = {"": "hours", "hours": "hours_asc", "hours_asc": ""}[sort]
 
     options = [{
-        "key": "", "label": "All", "count": len(typed), "active": not active,
+        "key": "", "label": "All", "count": sum(1 for row in typed if _passes(queue_key, row, "")),
+        "active": not active,
         "href": querystring(""),
     }]
     options += [
@@ -917,7 +944,7 @@ def review_context(request, queue_key, item, claimable=True, waiting_since=None,
     narrowing = session_narrowing(request, queue_key)
     # Placed in the table the session is walking, when it's walking one.
     if narrowing is None:
-        ids = list(queue.pending().values_list("id", flat=True))
+        ids = list(exclude_held_back(queue_key, queue.pending()).values_list("id", flat=True))
     else:
         ids = session_ids(queue_key, narrowing, request.user)
 
