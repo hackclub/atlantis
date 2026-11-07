@@ -593,28 +593,25 @@ class T3DecisionTests(BaseTestCase):
 		self.assertEqual(t3.airtable_time, 120)
 		self.assertEqual(t3.reviewer, self.reviewer)
 
-	def test_approval_claims_reviewed_lapses_logged_since_the_ship(self):
+	def test_approval_leaves_lapses_logged_since_the_ship_for_the_next_one(self):
+		# Signed off or not, a lapse that wasn't shipped isn't this ship's to pay.
 		reviewed = make_journal(self.project, time_spent=60)
 		approve_timelapse(reviewed)
 		unreviewed = make_journal(self.project, time_spent=60)
-		self.assertEqual(payable_minutes_for_ship(self.ship), 300)
+		self.assertEqual(payable_minutes_for_ship(self.ship), 240)
 
-		self._decide(payout_time="300", airtable_time="300")
+		self._decide(payout_time="240", airtable_time="240")
 		reviewed.refresh_from_db()
 		unreviewed.refresh_from_db()
-		self.assertEqual(reviewed.ship, self.ship)
+		self.assertIsNone(reviewed.ship)
 		self.assertIsNone(unreviewed.ship)
-		self.assertEqual(self._author_layers(), 10 + challenge.payout_breakdown(
-			self.ship.journals.all(), 300)[0])
-		log = AuditLog.objects.get(action="t3_decision")
-		self.assertEqual(log.metadata["claimed_journal_ids"], [reviewed.id])
+		self.assertNotIn("claimed_journal_ids", AuditLog.objects.get(action="t3_decision").metadata)
 
-		# Paid now, so the next ship doesn't pay for it again.
-		approve_timelapse(unreviewed)
+		# Shipped next time, they're paid by that ship.
 		next_ship = Ship.objects.create(project=self.project, status=Ship.ShipStatus.T3_QUEUE)
-		unreviewed.ship = next_ship
-		unreviewed.save()
-		self.assertEqual(payable_minutes_for_ship(next_ship), 60)
+		self.project.journals.filter(ship__isnull=True).update(ship=next_ship)
+		approve_timelapse(unreviewed)
+		self.assertEqual(payable_minutes_for_ship(next_ship), 120)
 
 	def test_returns_leave_lapses_logged_since_the_ship_unshipped(self):
 		reviewed = make_journal(self.project, time_spent=60)
@@ -828,11 +825,12 @@ class PayoutScopeTests(BaseTestCase):
 		reship = make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(30,))
 		self.assertEqual(self._t2_page(reship).context["logged_time"], 60)
 
-	def test_only_reviewed_unshipped_journals_are_paid_for(self):
+	def test_unshipped_journals_are_not_paid_for(self):
+		# Reviewed or not: only what was shipped counts.
 		ship = make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(60,))
 		approve_timelapse(make_journal(self.project, time_spent=120))
 		make_journal(self.project, time_spent=45)
-		self.assertEqual(self._t2_page(ship).context["logged_time"], 180)
+		self.assertEqual(self._t2_page(ship).context["logged_time"], 60)
 
 	def test_deduction_ceiling_covers_the_carried_hours(self):
 		make_ship(self.project, status=Ship.ShipStatus.REJECTED, journal_minutes=(180,))

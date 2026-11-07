@@ -111,7 +111,7 @@ def build_timelapse_audit(ship):
 	The journals covered are every one the payout covers, not only the ones
 	shipped under this ship: a rejected ship pays nothing, so the lapses it
 	carried roll forward into the next payout, and HQ needs their evidence next
-	to the hours they add. That is everything logged since the project's last
+	to the hours they add. That is every lapse shipped since the project's last
 	finalized ship — see payable_journals_for_ship.
 
 	One block per journal: the reviewer's notes on the pass if they left any,

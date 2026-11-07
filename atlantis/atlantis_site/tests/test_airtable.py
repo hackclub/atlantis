@@ -257,9 +257,8 @@ class JustificationTests(BaseTestCase):
 		self.assertIn(session.watch_url, text)
 		self.assertIn("Tracked by timelapse: 2h 30m", text)
 
-	def test_reviewed_lapses_logged_since_the_ship_are_included(self):
-		# On no ship yet, but signed off and paid for by nothing else: they go
-		# out with this payout. One still awaiting review waits for the next.
+	def test_lapses_logged_since_the_ship_are_left_out(self):
+		# Not shipped, so not this payout's, even once signed off.
 		reviewed = make_journal(self.project, time_spent=0)
 		reviewed_session = make_timelapse(self.project, journal=reviewed, minutes=30)
 		approve_timelapse(reviewed)
@@ -267,9 +266,9 @@ class JustificationTests(BaseTestCase):
 		unreviewed_session = make_timelapse(self.project, journal=unreviewed, minutes=40)
 
 		text = build_override_justification(self.ship)
-		self.assertIn(reviewed_session.watch_url, text)
+		self.assertNotIn(reviewed_session.watch_url, text)
 		self.assertNotIn(unreviewed_session.watch_url, text)
-		self.assertIn("Tracked by timelapse: 2h 30m", text)
+		self.assertIn("Tracked by timelapse: 2h 0m", text)
 
 	def test_lapses_logged_after_finalization_are_left_out(self):
 		self.ship.status = Ship.ShipStatus.FINALIZED
