@@ -6,7 +6,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.conf import settings
-from django.db.models import Count, Sum, Avg, OuterRef, Subquery
+from django.db.models import Count, Sum, Avg, OuterRef, Q, Subquery
 from django.db.models.functions import TruncDate, TruncWeek
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -50,6 +50,18 @@ from ..helpers import (
 # written at most once a minute per user (see presence.py), so this is
 # comfortably wider than the staleness that introduces.
 ACTIVE_NOW_WINDOW = timedelta(minutes=5)
+
+# The weekly minimum each review desk asks of its reviewers, highest desk
+# first. A reviewer only owes the first one they hold. The timelapse goal is in
+# minutes of footage signed off; the others are reviews written.
+REVIEW_QUOTAS = [
+    {"key": "t2", "perm": "t2_review", "label": "T2", "goal": 10},
+    {"key": "t1", "perm": "t1_review", "label": "T1", "goal": 10},
+    {"key": "lapse", "perm": "timelapse_review", "label": "Timelapse", "goal": 10 * 60},
+]
+
+# Who no desk asks a minimum of, whatever else they hold.
+QUOTA_EXEMPT = {"baller", "organizer"}
 
 # The window every "per day" average on this page is taken over, and the one
 # the 30-day totals are cut to.
@@ -107,29 +119,96 @@ def _daily_rows(counts, days, today, value=lambda n: n):
     ])
 
 
-def _role_counts():
-    """How many people hold each of the custom permissions, in the order the
-    model lists them.
+def _permission_holders():
+    """Every (user id, codename) pair for the custom permissions.
 
     Counted off the grants themselves, through a group or given directly, so
-    someone in two groups that both carry T1 review is one T1 reviewer. A
+    someone in two groups that both carry T1 review holds it once. A
     superuser's implicit everything isn't counted: it would add them to every
     role without them doing any of the jobs.
     """
     user_model = get_user_model()
     perms = Permission.objects.filter(content_type__app_label="atlantis_site")
-    holders = set(
+    return set(
         user_model.objects.filter(groups__permissions__in=perms)
         .values_list("id", "groups__permissions__codename")
     ) | set(
         user_model.objects.filter(user_permissions__in=perms)
         .values_list("id", "user_permissions__codename")
     )
-    counts = Counter(codename for _, codename in holders)
+
+
+def _role_counts():
+    """How many people hold each of the custom permissions, in the order the
+    model lists them."""
+    counts = Counter(codename for _, codename in _permission_holders())
     return [
         {"codename": codename, "name": codename.replace("_", " "), "description": description, "count": counts[codename]}
         for codename, description in Permissions._meta.permissions
     ]
+
+
+def _behind_on_quota(now):
+    """The reviewers who haven't done their weekly minimum yet, as chart rows.
+
+    Each reviewer owes the minimum for the highest desk they've unlocked and
+    only that one: T2 beats T1 beats timelapse. Ballers owe nothing, and nor do
+    organizers, who hold every permission without sitting on any desk. The week
+    is the same one the "this week" reviewer boards count over.
+    """
+    week_start, _ = weeks.current_week_bounds(now)
+    codenames_by_user = {}
+    for user_id, codename in _permission_holders():
+        codenames_by_user.setdefault(user_id, set()).add(codename)
+
+    desk_for = {}
+    for user_id, codenames in codenames_by_user.items():
+        if codenames & QUOTA_EXEMPT:
+            continue
+        desk = next((desk for desk in REVIEW_QUOTAS if desk["perm"] in codenames), None)
+        if desk:
+            desk_for[user_id] = desk
+
+    User = get_user_model()
+    reviewers = (
+        User.objects.filter(pk__in=desk_for, is_active=True)
+        .select_related("hackclub_profile")
+        .annotate(
+            t1=Count("t1_reviews", filter=Q(t1_reviews__reviewed_at__gte=week_start), distinct=True),
+            t2=Count("t2_reviews", filter=Q(t2_reviews__reviewed_at__gte=week_start), distinct=True),
+        )
+    )
+    # Summed on its own query: joined onto the counts above, every footage row
+    # would multiply the review rows and the other way round.
+    lapse_seconds = dict(
+        User.objects.filter(pk__in=desk_for)
+        .annotate(n=Sum(
+            "timelapse_reviews__journal__timelapses__tracked_seconds",
+            filter=Q(timelapse_reviews__reviewed_at__gte=week_start),
+        ))
+        .values_list("pk", "n")
+    )
+
+    rows = []
+    for user in reviewers:
+        desk = desk_for[user.pk]
+        if desk["key"] == "lapse":
+            done = (lapse_seconds.get(user.pk) or 0) // 60
+            value = f"{format_minutes(done)} / {desk['goal'] // 60}h"
+        else:
+            done = getattr(user, desk["key"])
+            value = f"{done} / {desk['goal']}"
+        if done >= desk["goal"]:
+            continue
+        rows.append({
+            "label": f"{display_name(user)} · {desk['label']}",
+            "value": value,
+            "desk": desk["label"],
+            "bar": _pct(done, desk["goal"]),
+        })
+    order = [desk["label"] for desk in REVIEW_QUOTAS]
+    rows.sort(key=lambda row: (order.index(row["desk"]), row["bar"], row["label"].lower()))
+    return rows
 
 
 def _week_elapsed(index, now):
@@ -761,6 +840,7 @@ def build_metrics(now):
         "top_t1": reviewer_leaderboard("t1_reviews"),
         "top_t2": reviewer_leaderboard("t2_reviews"),
         "top_t3": reviewer_leaderboard("t3_reviews"),
+        "behind_on_quota": _behind_on_quota(now),
     }
 
     total_items = Item.objects.count()

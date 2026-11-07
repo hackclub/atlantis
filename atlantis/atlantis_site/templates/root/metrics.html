@@ -453,6 +453,10 @@
             {% include "root/_metric_chart.html" with title="Top T2 reviewers" rows=reviews.top_t2 empty="No reviews yet" %}
             {% include "root/_metric_chart.html" with title="Top T3 reviewers" rows=reviews.top_t3 empty="No reviews yet" %}
         </div>
+
+        <div class="chart-grid">
+            {% include "root/_metric_chart.html" with title="Reviewers behind on this week's minimum" rows=reviews.behind_on_quota fill_class="warn" wide=True empty="Every reviewer has hit their minimum this week" %}
+        </div>
     </section>
 
     <section class="metrics-section">

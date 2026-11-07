@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .. import challenge, weeks
-from ..models import ActiveDay, AirtableSubmission, Journal, Ship, T3, MetricsSnapshot, Profile, SaverCredit
+from ..models import ActiveDay, AirtableSubmission, Journal, Ship, T1, T2, T3, MetricsSnapshot, Profile, SaverCredit
 from ..presence import WRITE_EVERY, record_seen
 from ..views.admin.metrics import build_metrics, build_streak_stats
 from .base import (
@@ -735,3 +735,75 @@ class MetricsStreakTests(BaseTestCase):
 		self.assertFalse(stats["started"])
 		self.assertIsNone(stats["live_week"])
 		self.assertNotIn("done", stats)
+
+
+class ReviewQuotaTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.ship = make_ship(make_project(make_user("builder", slack_id="U0BUILD")), journal_minutes=())
+
+	def _behind(self):
+		return {row["label"]: row["value"] for row in build_metrics(timezone.now())["reviews"]["behind_on_quota"]}
+
+	def _t1s(self, reviewer, n):
+		for _ in range(n):
+			T1.objects.create(ship=self.ship, reviewer=reviewer, feedback="", internal_notes="", approved=True)
+
+	def _t2s(self, reviewer, n):
+		for _ in range(n):
+			T2.objects.create(ship=self.ship, reviewer=reviewer, feedback="", justification="")
+
+	def _lapses(self, reviewer, minutes):
+		project = make_project(reviewer)
+		approve_timelapse(make_journal(project, time_spent=minutes), reviewer=reviewer)
+
+	def test_each_reviewer_only_owes_their_highest_desk(self):
+		t2 = grant_perms(make_user("t2", slack_id="U0T2"), "t2_review", "t1_review", "timelapse_review")
+		t1 = grant_perms(make_user("t1", slack_id="U0T1"), "t1_review", "timelapse_review")
+		lapse = grant_perms(make_user("lapse", slack_id="U0LAPSE"), "timelapse_review")
+		# T1 reviews don't count towards a T2 reviewer's minimum.
+		self._t1s(t2, 10)
+		self._t2s(t2, 4)
+		self._t1s(t1, 3)
+		self._lapses(lapse, 150)
+
+		self.assertEqual(self._behind(), {
+			"t2 · T2": "4 / 10",
+			"t1 · T1": "3 / 10",
+			"lapse · Timelapse": "2h 30m / 10h",
+		})
+
+	def test_hitting_the_minimum_drops_you_off_the_list(self):
+		t1 = grant_perms(make_user("t1", slack_id="U0T1"), "t1_review")
+		lapse = grant_perms(make_user("lapse", slack_id="U0LAPSE"), "timelapse_review")
+		self._t1s(t1, 10)
+		self._lapses(lapse, 300)
+		self._lapses(lapse, 300)
+
+		self.assertEqual(self._behind(), {})
+
+	def test_ballers_and_organizers_owe_nothing(self):
+		grant_perms(make_user("baller", slack_id="U0BALL"), "baller", "t2_review")
+		grant_perms(make_user("organizer", slack_id="U0ORG"), "organizer", "t1_review")
+		grant_perms(make_user("fraud", slack_id="U0FRAUD"), "t3_review")
+
+		self.assertEqual(self._behind(), {})
+
+	def test_last_weeks_reviews_do_not_count(self):
+		t2 = grant_perms(make_user("t2", slack_id="U0T2"), "t2_review")
+		self._t2s(t2, 10)
+		week_start, _ = weeks.current_week_bounds()
+		T2.objects.update(reviewed_at=week_start - timedelta(minutes=1))
+
+		self.assertEqual(self._behind(), {"t2 · T2": "0 / 10"})
+
+	def test_a_group_grant_counts_and_the_page_lists_them(self):
+		group = Group.objects.create(name="t1s")
+		group.permissions.add(Permission.objects.get(content_type__app_label="atlantis_site", codename="t1_review"))
+		make_user("grouped", slack_id="U0GRP").groups.add(group)
+		organizer = grant_perms(make_user("organizer", slack_id="U0ORG"), "organizer")
+		self.client.force_login(organizer)
+
+		with patch.dict(os.environ, DEFAULT_PFP_ENV):
+			response = self.client.get(reverse("metrics"))
+		self.assertContains(response, "grouped · T1")
