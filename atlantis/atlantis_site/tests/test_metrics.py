@@ -319,7 +319,7 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(hours["builders_this_week"], 1)
 		self.assertEqual(hours["week_start"], monday.date())
 
-	def test_shipped_hours_count_every_shipped_lapse_and_finalized_apart(self):
+	def test_shipped_hours_count_every_shipped_lapse(self):
 		project = make_project(make_user("builder", slack_id="U1"))
 		make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(120,))
 		make_ship(project, status=Ship.ShipStatus.REJECTED, journal_minutes=(60,))
@@ -332,22 +332,31 @@ class MetricsHoursTests(BaseTestCase):
 
 		self.assertEqual(ships["shipped_hours"], 4.0)
 		self.assertEqual(ships["shipped_devlogs"], 4)
-		self.assertEqual(ships["finalized_hours"], 2.0)
 
-	def test_finalized_hours_include_rejected_lapses_a_later_ship_paid(self):
+	def test_finalized_hours_are_what_the_records_carry_not_the_footage(self):
 		project = make_project(make_user("builder", slack_id="U1"))
-		# Rejected, then paid for by the finalized ship after it.
-		make_ship(project, status=Ship.ShipStatus.REJECTED, journal_minutes=(60,))
-		make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(120,))
-		# Rejected after the last finalization: nothing has paid for it yet.
-		make_ship(project, status=Ship.ShipStatus.REJECTED, journal_minutes=(30,))
-		# Another project's finalized ship doesn't reach across.
-		other = make_project(make_user("other", slack_id="U2"))
-		make_ship(other, status=Ship.ShipStatus.REJECTED, journal_minutes=(90,))
+		reviewer = make_user("t3", slack_id="U-t3")
+		# Five hours of footage, approved for three: three is what HQ is sent,
+		# so three is what was finalized.
+		ship = make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(300,))
+		T3.objects.create(
+			ship=ship, reviewer=reviewer, decision=T3.Decision.APPROVE,
+			payout_time=180, airtable_time=180,
+		)
+		AirtableSubmission.objects.create(ship=ship, record_id="rec1")
+		# Still in review: not finalized, whatever a T3 return put on it.
+		queued = make_ship(project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(60,))
+		T3.objects.create(
+			ship=queued, reviewer=reviewer, decision=T3.Decision.RETURN_T2,
+			payout_time=60, airtable_time=60,
+		)
 
 		ships = self.client.get(reverse("metrics")).context["ships"]
 
 		self.assertEqual(ships["finalized_hours"], 3.0)
+		self.assertEqual(ships["airtable_hours"], 3.0)
+		self.assertEqual(ships["airtable_unsent"], 0)
+		self.assertEqual(ships["airtable_unsent_hours"], 0)
 
 	def test_queued_hours_sum_every_review_queue(self):
 		project = make_project(make_user("builder", slack_id="U1"))
@@ -406,6 +415,54 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(ships["airtable_hours"], 3.0)
 		self.assertEqual(ships["airtable_ships"], 2)
 		self.assertEqual(ships["airtable_unsent"], 1)
+
+	def test_finalized_hours_are_pushed_hours_plus_the_unsent(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		reviewer = make_user("t3", slack_id="U-t3")
+
+		def finalized(minutes, record_id=None):
+			ship = make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(60,))
+			T3.objects.create(
+				ship=ship, reviewer=reviewer, decision=T3.Decision.APPROVE,
+				payout_time=minutes, airtable_time=minutes,
+			)
+			if record_id is not None:
+				AirtableSubmission.objects.create(ship=ship, record_id=record_id)
+
+		finalized(120, record_id="rec1")
+		finalized(50, record_id="rec2")
+		# Failed, and never attempted at all: both still owe HQ a record.
+		finalized(30, record_id="")
+		finalized(45)
+
+		ships = self.client.get(reverse("metrics")).context["ships"]
+
+		self.assertEqual(ships["finalized_hours"], 4.1)
+		self.assertEqual(ships["airtable_hours"], 2.8)
+		self.assertEqual(ships["airtable_unsent"], 2)
+		self.assertEqual(ships["airtable_unsent_hours"], 1.3)
+		self.assertEqual(
+			round(ships["airtable_hours"] + ships["airtable_unsent_hours"], 1),
+			ships["finalized_hours"],
+		)
+
+	def test_t3_airtable_time_counts_approvals_only(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		reviewer = make_user("t3", slack_id="U-t3")
+		ship = make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(60,))
+		# Sent back first with the form's prefilled time, then approved.
+		T3.objects.create(
+			ship=ship, reviewer=reviewer, decision=T3.Decision.RETURN_T1,
+			payout_time=600, airtable_time=600,
+		)
+		T3.objects.create(
+			ship=ship, reviewer=reviewer, decision=T3.Decision.APPROVE,
+			payout_time=90, airtable_time=90,
+		)
+
+		reviews = self.client.get(reverse("metrics")).context["reviews"]
+
+		self.assertEqual(reviews["t3_airtable_display"], "1h 30m")
 
 	def test_funnel_counts_each_step_out_of_the_one_before(self):
 		make_user("signed-up-only", slack_id="U1")

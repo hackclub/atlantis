@@ -6,7 +6,7 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.conf import settings
-from django.db.models import Count, Sum, Avg, OuterRef, Q, Subquery
+from django.db.models import Count, Sum, Avg, Q
 from django.db.models.functions import TruncDate, TruncWeek
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -104,6 +104,24 @@ def _hours(minutes):
 
 def _avg(total, count):
     return round(total / count, 1) if count else 0.0
+
+
+def _submitted_minutes_by_ship(ships):
+    """{ship id: minutes its Airtable record carries} for `ships`.
+
+    The approving T3's airtable_time, picked the way submissions.approving_t3
+    picks it (the latest approval, else the latest T3 of any kind), in one
+    query rather than one per ship. A ship with no T3 at all submits nothing.
+    """
+    picked = {}
+    for ship_id, decision, minutes in (
+        T3.objects.filter(ship__in=ships)
+        .order_by("id").values_list("ship_id", "decision", "airtable_time")
+    ):
+        approved = decision == T3.Decision.APPROVE
+        if approved or not picked.get(ship_id, (False,))[0]:
+            picked[ship_id] = (approved, minutes or 0)
+    return {ship_id: minutes for ship_id, (_approved, minutes) in picked.items()}
 
 
 def _daily_rows(counts, days, today, value=lambda n: n):
@@ -683,19 +701,6 @@ def build_metrics(now):
     # so they count as shipped here.
     shipped_journals = Journal.objects.filter(ship__isnull=False)
     shipped_minutes = tracked_minutes_for_journals(shipped_journals)
-    # The finalized figure is every lapse a finalized ship has paid for, the
-    # same scope as payable_journals_for_ship: a rejected ship's lapses count
-    # once a later ship on the project is finalized, since that payout (and
-    # the Airtable record it sends) covers them. Put together, that is every
-    # shipped lapse up to the project's latest finalized ship.
-    latest_finalized_id = Subquery(
-        Ship.objects.filter(
-            project=OuterRef("ship__project"), status=Ship.ShipStatus.FINALIZED
-        ).order_by("-id").values("id")[:1]
-    )
-    finalized_minutes = tracked_minutes_for_journals(
-        shipped_journals.filter(ship_id__lte=latest_finalized_id)
-    )
     # The shipped hours still waiting on a reviewer, across every queue the
     # pipeline chart counts.
     queued_journals = shipped_journals.filter(ship__status__in=[
@@ -724,32 +729,38 @@ def build_metrics(now):
         })
     add_bars(shipped_hours_by_status)
 
-    # What HQ's Airtable was actually told: the override hours on each record
-    # we created, which is the approving T3's airtable_time. Picked per ship
-    # the way submissions.approving_t3 picks it (the latest approval, else the
-    # latest T3 of any kind), in one query rather than one per ship.
-    pushed_ship_ids = set(
-        AirtableSubmission.objects.exclude(record_id="").values_list("ship_id", flat=True)
+    # Hours finalized and hours pushed to Airtable are one figure read twice:
+    # the hours each finalized ship's Airtable record carries, which is the
+    # approving T3's airtable_time. So the two differ by exactly the ships
+    # whose record hasn't gone out yet. Tracked footage can't be the finalized
+    # figure: timelapse removals, T2 deductions and the T3 reviewer's own call
+    # all sit between it and what HQ is sent.
+    submitted_minutes = _submitted_minutes_by_ship(
+        Ship.objects.filter(status=Ship.ShipStatus.FINALIZED)
     )
-    airtable_t3 = {}
-    for ship_id, decision, minutes in (
-        T3.objects.filter(ship_id__in=pushed_ship_ids)
-        .order_by("id").values_list("ship_id", "decision", "airtable_time")
-    ):
-        approved = decision == T3.Decision.APPROVE
-        if approved or not airtable_t3.get(ship_id, (False,))[0]:
-            airtable_t3[ship_id] = (approved, minutes or 0)
-    airtable_minutes = sum(minutes for _approved, minutes in airtable_t3.values())
-    airtable_unsent = AirtableSubmission.objects.filter(record_id="").count()
+    pushed_ship_ids = set(
+        AirtableSubmission.objects
+        .filter(ship__status=Ship.ShipStatus.FINALIZED)
+        .exclude(record_id="")
+        .values_list("ship_id", flat=True)
+    )
+    finalized_hours = _hours(sum(submitted_minutes.values()))
+    airtable_hours = _hours(sum(
+        minutes for ship_id, minutes in submitted_minutes.items() if ship_id in pushed_ship_ids
+    ))
 
     ships_stats = {
         "total": total_ships,
-        "airtable_hours": _hours(airtable_minutes),
+        "airtable_hours": airtable_hours,
         "airtable_ships": len(pushed_ship_ids),
-        "airtable_unsent": airtable_unsent,
+        # Every finalized ship without a record: never attempted, failed, or
+        # stuck mid-send. Its hours are taken off the two rounded figures so
+        # the card's numbers add up exactly as printed.
+        "airtable_unsent": finalized_ships - len(pushed_ship_ids),
+        "airtable_unsent_hours": round(finalized_hours - airtable_hours, 1),
         "shipped_hours": _hours(shipped_minutes),
         "shipped_devlogs": shipped_journals.count(),
-        "finalized_hours": _hours(finalized_minutes),
+        "finalized_hours": finalized_hours,
         "last_7": ships_last_7,
         "last_30": ships_last_30,
         "today": ships_today.count(),
@@ -802,7 +813,11 @@ def build_metrics(now):
         {"label": label, "value": t3_decisions.get(code, 0)}
         for code, label in t3_decision_labels.items()
     ])
-    t3_total_airtable_minutes = T3.objects.aggregate(t=Sum("airtable_time"))["t"] or 0
+    # Approvals only: a return carries the form's prefilled airtable_time but
+    # sends nothing, so counting it would put hours here HQ never saw.
+    t3_total_airtable_minutes = T3.objects.filter(
+        decision=T3.Decision.APPROVE
+    ).aggregate(t=Sum("airtable_time"))["t"] or 0
 
     # What was paid is read off the decision rather than recomputed: an hour is
     # worth one of three rates depending on the week it was recorded in, so
