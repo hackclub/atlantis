@@ -27,7 +27,7 @@ from datetime import timedelta
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import Count, Exists, Min, OuterRef, Prefetch, Q, Sum
+from django.db.models import BooleanField, Count, Exists, ExpressionWrapper, Min, OuterRef, Prefetch, Q, Sum
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import redirect
@@ -92,6 +92,21 @@ def project_lapse_prefetch():
     )
 
 
+def owner_in_debt(owner_path):
+    """True when the item's owner has a negative pearl balance.
+
+    A balance goes below zero when someone borrows for a life preserver
+    (Order.loaned), and only payouts pay it back — so their reviews are moved
+    to the front of every desk. `owner_path` is the lookup from the queued
+    item to its owner: "owner" for a project, "project__owner" for a ship. A
+    user without a profile has no balance and so no debt.
+    """
+    return ExpressionWrapper(
+        Q(**{f"{owner_path}__hackclub_profile__layers__lt": 0}),
+        output_field=BooleanField(),
+    )
+
+
 @dataclass(frozen=True)
 class Queue:
     """One review desk: what's in it, and the URLs for moving through it."""
@@ -120,11 +135,15 @@ class Queue:
         return reverse(self.detail, args=[item_id])
 
     def pending(self):
-        """The queue itself, in the order it should be worked: oldest first.
+        """The queue itself, in the order it should be worked: owners in
+        debt first, then oldest first.
 
-        Oldest-first and not newest-first, unlike the tables this replaces. A
-        queue worked newest-first starves its tail, and the tail is exactly the
-        set of people who have been waiting longest.
+        Someone with a negative pearl balance only gets out of it through a
+        payout, and a payout needs these reviews done, so theirs jump the
+        line (owner_in_debt). Within each group it's oldest first and not
+        newest-first, unlike the tables this replaces. A queue worked
+        newest-first starves its tail, and the tail is exactly the set of
+        people who have been waiting longest.
         """
         if self.key == "lookout":
             # A project, not a lapse. Every lapse on a project is the same
@@ -145,9 +164,10 @@ class Queue:
                     filter=Q(journals__timelapse_review__isnull=True),
                 ))
                 .filter(waiting_since__isnull=False)
+                .annotate(in_debt=owner_in_debt("owner"))
                 .select_related("owner", "owner__hackclub_profile")
                 .prefetch_related(project_lapse_prefetch())
-                .order_by("waiting_since", "id")
+                .order_by("-in_debt", "waiting_since", "id")
             )
         base = Ship.objects.filter(status=SHIP_STATUS_FOR[self.key], project__deleted=False)
         if self.key == "t1":
@@ -156,8 +176,9 @@ class Queue:
             base = timelapse_cleared_ships(base)
         return (
             base
+            .annotate(in_debt=owner_in_debt("project__owner"))
             .select_related("project", "project__owner", "project__owner__hackclub_profile")
-            .order_by("created_at", "id")
+            .order_by("-in_debt", "created_at", "id")
         )
 
 
@@ -576,7 +597,7 @@ def _project_type_of(queue_key, row):
 DEFAULT_FILTERS = {"lookout": "shipped"}
 
 # The orders a desk's table can be put in, by `?sort=`. The queue's own order,
-# oldest first, goes unsaid. Hours are the column the table already shows:
+# owners in debt and then oldest first, goes unsaid. Hours are the column the table already shows:
 # approved project time on the ship desks, tracked footage on the timelapse
 # desk. Ties keep their queue order, so the longest-waiting of two equal rows
 # still comes first.

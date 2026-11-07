@@ -59,6 +59,7 @@
                             <span class="rq-since">since {{ ship.created_at|date:"M j" }}</span>
                         </td>
                         <td class="rq-flags">
+                            {% if ship.in_debt %}<span class="rv-chip rv-chip-warn" title="Negative pearl balance: moved to the front of the queue">in debt</span>{% endif %}
                             {% if ship.project.flagged %}<span class="rv-chip rv-chip-warn" title="{{ ship.project.flag_reason }}">flagged</span>{% endif %}
                             {% if ship.project.locked %}<span class="rv-chip rv-chip-bad">locked</span>{% endif %}
                             {% if ship.is_reship %}<span class="rq-quiet">re-ship</span>{% endif %}

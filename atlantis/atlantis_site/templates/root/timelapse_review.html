@@ -66,6 +66,7 @@
                                 <span class="rv-age-{{ project.age_bucket }}">{{ project.age_display }}</span>
                             </td>
                             <td class="rq-flags">
+                                {% if project.in_debt %}<span class="rv-chip rv-chip-warn" title="Negative pearl balance: moved to the front of the queue">in debt</span>{% endif %}
                                 {% if project.flagged %}<span class="rv-chip rv-chip-warn" title="{{ project.flag_reason }}">flagged</span>{% endif %}
                                 {% if project.held_ships %}
                                     <span class="rv-chip rv-chip-bad">

@@ -58,6 +58,32 @@ class QueueOrderTests(BaseTestCase):
 			[oldest.id, middle.id, newest.id],
 		)
 
+	def test_owners_in_debt_jump_the_queue(self):
+		oldest = ages(make_ship(self.project), days=9)
+		in_debt = make_project(make_user("borrower", layers=-50), shippable=True)
+		debt_newer = make_ship(in_debt)
+		debt_older = ages(make_ship(in_debt), days=2)
+
+		rows = self.client.get(reverse("review_dash")).context["ships"]
+		# In debt first, and oldest first within each group.
+		self.assertEqual([ship.id for ship in rows], [debt_older.id, debt_newer.id, oldest.id])
+		self.assertEqual([ship.in_debt for ship in rows], [True, True, False])
+
+	def test_a_zero_balance_is_not_debt(self):
+		oldest = ages(make_ship(self.project), days=9)
+		broke = make_project(make_user("broke", layers=0), shippable=True)
+		newest = make_ship(broke)
+		rows = self.client.get(reverse("review_dash")).context["ships"]
+		self.assertEqual([ship.id for ship in rows], [oldest.id, newest.id])
+
+	def test_next_opens_a_ship_in_debt_first(self):
+		ages(make_ship(self.project), days=9)
+		in_debt = make_ship(make_project(make_user("borrower", layers=-1), shippable=True))
+		response = self.client.get(reverse("review_next"))
+		self.assertRedirects(
+			response, reverse("review_project", args=[in_debt.id]), fetch_redirect_response=False
+		)
+
 	def test_rows_carry_their_wait(self):
 		ages(make_ship(self.project), days=9)
 		row = self.client.get(reverse("review_dash")).context["ships"][0]
@@ -238,6 +264,16 @@ class LookoutQueueTests(BaseTestCase):
 
 		rows = self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["projects"]
 		self.assertEqual([p.id for p in rows], [older.id, newer.id])
+
+	def test_projects_whose_owner_is_in_debt_come_first(self):
+		older = make_project(make_user("older"), shippable=True)
+		in_debt = make_project(make_user("borrower", layers=-25), shippable=True)
+		self._lapse(older, 9)
+		self._lapse(in_debt, 1)
+
+		rows = self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["projects"]
+		self.assertEqual([p.id for p in rows], [in_debt.id, older.id])
+		self.assertTrue(rows[0].in_debt)
 
 	def test_a_project_waits_from_its_oldest_lapse_not_its_creation(self):
 		self._lapse(self.project, 9)
