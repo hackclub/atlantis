@@ -331,6 +331,24 @@ def refuse_own_item(request, queue_key):
     return redirect(QUEUES[queue_key].dash)
 
 
+# ------------------------------------------------------- second opinions
+
+# T2 is a second pair of eyes on T1's call, which it isn't when they're the
+# same eyes. "Next" walks a T2 reviewer past any ship they reviewed at T1. It
+# doesn't lock them out: a ship opened directly (a link from Slack, say) still
+# opens, with a warning, the way a claim conflict does.
+
+def reviewed_at_t1(queue_key, item, user):
+    return queue_key == "t2" and item.t1_reviews.filter(reviewer=user).exists()
+
+
+def exclude_t1_reviewed(queue_key, items, user):
+    """`items` without the T2 ships this reviewer already reviewed at T1."""
+    if queue_key != "t2" or user is None:
+        return items
+    return items.exclude(t1_reviews__reviewer=user)
+
+
 # ------------------------------------------------------------ navigation
 
 def parse_skip(request):
@@ -410,7 +428,8 @@ def next_item_id(queue_key, skip_ids=(), user=None, items=None, narrowing=None):
         items = queue.pending()
     if narrowing is None:
         items = exclude_held_back(queue_key, items)
-    ids = list(exclude_own(queue_key, items, user).values_list("id", flat=True))
+    items = exclude_t1_reviewed(queue_key, exclude_own(queue_key, items, user), user)
+    ids = list(items.values_list("id", flat=True))
     if narrowing is not None:
         allowed = set(ids)
         ids = [item_id for item_id in session_ids(queue_key, narrowing, user) if item_id in allowed]
@@ -1011,6 +1030,7 @@ def review_context(request, queue_key, item, claimable=True, waiting_since=None,
         # next item of the same session.
         "session_query": forward_query,
         "claim_conflict": conflict,
+        "reviewed_at_t1": reviewed_at_t1(queue_key, item, request.user),
         "claim_held": claimable,
         "heartbeat_url": reverse("review_heartbeat", args=[queue_key, item.id]),
         "heartbeat_seconds": CLAIM_HEARTBEAT_SECONDS,
