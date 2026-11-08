@@ -634,6 +634,77 @@ class ClaimTests(BaseTestCase):
 		self.assertFalse(release_claim(self.one))
 
 
+class SecondOpinionTests(BaseTestCase):
+	"""T2 is a second look at T1's call, so a T2 reviewer isn't handed a ship
+	they reviewed at T1 — and is warned if they open one anyway."""
+
+	def setUp(self):
+		super().setUp()
+		self.reviewer = grant_perms(make_user("both-tiers"), "t1_review", "t2_review")
+		self.client.force_login(self.reviewer)
+		self.project = make_project(make_user("author"), shippable=True)
+
+	def reviewed_at_t1(self, ship, reviewer=None):
+		T1.objects.create(ship=ship, reviewer=reviewer or self.reviewer,
+						  feedback="", internal_notes="", approved=True)
+		return ship
+
+	def test_next_skips_a_ship_you_reviewed_at_t1(self):
+		self.reviewed_at_t1(ages(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE), days=6))
+		other = ages(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE), days=2)
+		self.assertRedirects(
+			self.client.get(reverse("ysws_review_next")),
+			reverse("ysws_review_project", args=[other.id]),
+			fetch_redirect_response=False,
+		)
+
+	def test_someone_elses_t1_review_is_not_skipped(self):
+		ship = self.reviewed_at_t1(
+			make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE),
+			reviewer=grant_perms(make_user("t1rev"), "t1_review"),
+		)
+		self.assertEqual(next_item_id("t2", user=self.reviewer), ship.id)
+
+	def test_skipping_and_deciding_walk_past_your_t1_ships(self):
+		current = ages(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE), days=9)
+		self.reviewed_at_t1(ages(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE), days=6))
+		last = ages(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE), days=2)
+
+		skipped = self.client.get(reverse("ysws_review_next"), {"skip": current.id})
+		self.assertRedirects(
+			skipped, reverse("ysws_review_project", args=[last.id]) + f"?skip={current.id}",
+			fetch_redirect_response=False,
+		)
+		decided = self.client.post(reverse("t2_decision", args=[current.id]), {
+			"decision": T2.Decision.APPROVE, "deductions": "0",
+		})
+		self.assertRedirects(
+			decided, reverse("ysws_review_project", args=[last.id]) + f"?skip={current.id}",
+			fetch_redirect_response=False,
+		)
+
+	def test_a_queue_of_only_your_t1_ships_sends_you_back_to_the_desk(self):
+		self.reviewed_at_t1(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE))
+		self.assertRedirects(
+			self.client.get(reverse("ysws_review_next")),
+			reverse("ysws_review_dash"),
+			fetch_redirect_response=False,
+		)
+
+	def test_opening_one_directly_warns(self):
+		ship = self.reviewed_at_t1(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE))
+		response = self.client.get(reverse("ysws_review_project", args=[ship.id]))
+		self.assertEqual(response.status_code, 200)
+		self.assertTrue(response.context["reviewed_at_t1"])
+		self.assertContains(response, "You reviewed this ship at T1.")
+
+	def test_no_warning_on_a_ship_you_didnt_review(self):
+		ship = make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE)
+		response = self.client.get(reverse("ysws_review_project", args=[ship.id]))
+		self.assertFalse(response.context["reviewed_at_t1"])
+		self.assertNotContains(response, "You reviewed this ship at T1.")
+
+
 class HeartbeatTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()

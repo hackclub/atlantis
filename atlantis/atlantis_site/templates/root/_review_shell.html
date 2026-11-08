@@ -54,6 +54,14 @@
         </div>
     {% endif %}
 
+    {% if reviewed_at_t1 %}
+        <div class="rv-banner rv-banner-warn">
+            You reviewed this ship at T1. T2 is meant to be a second opinion, so it should
+            go to someone else.
+            <a href="{{ skip_url }}">Skip to the next one instead →</a>
+        </div>
+    {% endif %}
+
     <div class="rv-body">
         <main class="rv-evidence" id="rv-evidence">
             {% block evidence %}{% endblock %}
