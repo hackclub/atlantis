@@ -665,6 +665,21 @@ class SecondOpinionTests(BaseTestCase):
 		)
 		self.assertEqual(next_item_id("t2", user=self.reviewer), ship.id)
 
+	def test_only_the_latest_t1_review_counts(self):
+		ship = self.reviewed_at_t1(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE))
+		self.reviewed_at_t1(ship, reviewer=grant_perms(make_user("t1rev2"), "t1_review"))
+		self.assertEqual(next_item_id("t2", user=self.reviewer), ship.id)
+		response = self.client.get(reverse("ysws_review_project", args=[ship.id]))
+		self.assertFalse(response.context["reviewed_at_t1"])
+
+	def test_your_latest_t1_review_is_skipped_after_someone_elses(self):
+		ship = self.reviewed_at_t1(
+			make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE),
+			reviewer=grant_perms(make_user("t1rev3"), "t1_review"),
+		)
+		self.reviewed_at_t1(ship)
+		self.assertIsNone(next_item_id("t2", user=self.reviewer))
+
 	def test_skipping_and_deciding_walk_past_your_t1_ships(self):
 		current = ages(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE), days=9)
 		self.reviewed_at_t1(ages(make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE), days=6))

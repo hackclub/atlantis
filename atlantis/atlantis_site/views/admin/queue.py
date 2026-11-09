@@ -27,7 +27,7 @@ from datetime import timedelta
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import BooleanField, Count, Exists, ExpressionWrapper, Min, OuterRef, Prefetch, Q, Sum
+from django.db.models import BooleanField, Count, Exists, ExpressionWrapper, Min, OuterRef, Prefetch, Q, Subquery, Sum
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import redirect
@@ -334,19 +334,29 @@ def refuse_own_item(request, queue_key):
 # ------------------------------------------------------- second opinions
 
 # T2 is a second pair of eyes on T1's call, which it isn't when they're the
-# same eyes. "Next" walks a T2 reviewer past any ship they reviewed at T1. It
-# doesn't lock them out: a ship opened directly (a link from Slack, say) still
-# opens, with a warning, the way a claim conflict does.
+# same eyes. "Next" walks a T2 reviewer past any ship whose latest T1 review is
+# theirs; an earlier T1 on a ship that has since been resubmitted and re-reviewed
+# by someone else doesn't count. It doesn't lock them out: a ship opened
+# directly (a link from Slack, say) still opens, with a warning, the way a
+# claim conflict does.
+
+def latest_t1_reviewer_id(ship):
+    latest = ship.t1_reviews.order_by("-reviewed_at", "-id").first()
+    return latest.reviewer_id if latest else None
+
 
 def reviewed_at_t1(queue_key, item, user):
-    return queue_key == "t2" and item.t1_reviews.filter(reviewer=user).exists()
+    return queue_key == "t2" and latest_t1_reviewer_id(item) == user.id
 
 
 def exclude_t1_reviewed(queue_key, items, user):
-    """`items` without the T2 ships this reviewer already reviewed at T1."""
+    """`items` without the T2 ships whose latest T1 review was this reviewer's."""
     if queue_key != "t2" or user is None:
         return items
-    return items.exclude(t1_reviews__reviewer=user)
+    latest = T1.objects.filter(ship=OuterRef("pk")).order_by("-reviewed_at", "-id")
+    return items.alias(
+        latest_t1_reviewer=Subquery(latest.values("reviewer_id")[:1])
+    ).filter(Q(latest_t1_reviewer__isnull=True) | ~Q(latest_t1_reviewer=user.id))
 
 
 # ------------------------------------------------------------ navigation
