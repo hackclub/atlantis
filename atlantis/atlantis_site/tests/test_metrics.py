@@ -773,6 +773,29 @@ class MetricsStreakTests(BaseTestCase):
 		stats = build_streak_stats(datetime(2026, 10, 7, 12, tzinfo=EASTERN))
 		self.assertNotIn("grace_live", stats)
 
+	def test_weeks_7_and_8_get_the_card_too(self):
+		# Wednesdays of weeks 1-6, each with its five.
+		settled = [
+			(300, datetime(2026, 9, 23, 10, tzinfo=EASTERN) + timedelta(weeks=i))
+			for i in range(6)
+		]
+		week_7 = datetime(2026, 11, 4, 10, tzinfo=EASTERN)
+		week_8 = datetime(2026, 11, 11, 10, tzinfo=EASTERN)
+		self._builder("split", *settled, (420, week_7), (180, week_8))
+		self._builder("late", *settled, (300, week_8))
+
+		# Week 6: no pair is live.
+		stats = build_streak_stats(datetime(2026, 10, 28, 12, tzinfo=EASTERN))
+		self.assertNotIn("grace_live", stats)
+
+		# Wednesday of week 8.
+		stats = build_streak_stats(datetime(2026, 11, 11, 12, tzinfo=EASTERN))
+		self.assertTrue(stats["grace_live"])
+		self.assertEqual(stats["grace_label"], "7 & 8")
+		self.assertEqual(stats["grace_hours"], 10)
+		self.assertEqual(stats["grace_secured"], 1)
+		self.assertEqual(stats["grace_secured_rate"], 50.0)
+
 	def test_the_bulk_standings_agree_with_one_at_a_time(self):
 		now = datetime(2026, 9, 30, 12, tzinfo=EASTERN)
 		users = [

@@ -412,6 +412,89 @@ class GraceWeeksTests(BaseTestCase):
             call_command("close_week", "--no-notify", stdout=open("/dev/null", "w"))
             self.assertFalse(WeekOutcome.objects.filter(user=self.user, week_index=1).exists())
 
+    # ---- weeks 7 and 8, the second pair ----
+
+    def _meet(self, *indices):
+        for index in indices:
+            self._log(300, in_week(index))
+
+    @override_settings(CHALLENGE_WEEKS=8)
+    def test_each_week_knows_its_own_pair(self):
+        self.assertEqual(weeks.grace_pairs(), ((1, 2), (7, 8)))
+        self.assertEqual(weeks.grace_pair(1), (1, 2))
+        self.assertEqual(weeks.grace_pair(8), (7, 8))
+        self.assertEqual(weeks.grace_pair(3), ())
+        self.assertEqual(weeks.grace_pair(6), ())
+        self.assertEqual(weeks.grace_minutes(7), 600)
+
+    def test_weeks_3_to_6_stand_on_their_own_five(self):
+        with after_week(8):
+            self._meet(1, 2, 3, 4, 5, 6, 7, 8)
+            state = challenge.standing(self.user)
+            self.assertEqual(
+                [w.index for w in state.weeks if w.grace], [1, 2, 7, 8],
+            )
+
+    def test_a_short_week_7_is_not_missed_while_week_8_is_open(self):
+        Profile.objects.get_or_create(user=self.user)
+        with during_week(8):
+            self._meet(1, 2, 3, 4, 5, 6)
+            self._log(60, in_week(7))
+            state = challenge.standing(self.user)
+            self.assertTrue(state.weeks[6].pending)
+            self.assertFalse(state.eliminated)
+            live = state.current
+            self.assertEqual(live.required_minutes, 600)
+            self.assertEqual(live.left_minutes, 540)
+            self.assertEqual(live.grace_label, "weeks 7 and 8")
+            # Weeks 1 and 2 are their own pair and don't count towards 7 and 8.
+            self.assertEqual(live.grace_minutes, 60)
+            call_command("close_week", "--no-notify", stdout=open("/dev/null", "w"))
+            self.assertFalse(WeekOutcome.objects.filter(user=self.user, week_index=7).exists())
+
+    def test_week_7_counts_down_to_the_end_of_week_8(self):
+        with during_week(7):
+            self._meet(1, 2, 3, 4, 5, 6)
+            live = challenge.standing(self.user).current
+            self.assertTrue(live.grace_due_later)
+            self.assertEqual(live.grace_deadline, weeks.deadline(8))
+
+    def test_ten_hours_across_weeks_7_and_8_meets_both(self):
+        with after_week(8):
+            self._meet(1, 2, 3, 4, 5, 6)
+            self._log(120, in_week(7))
+            self._log(480, in_week(8))
+            state = challenge.standing(self.user)
+            self.assertFalse(state.eliminated)
+            self.assertTrue(all(w.met for w in state.weeks))
+            self.assertEqual(state.printer_hours, 40)
+
+    def test_short_of_ten_across_weeks_7_and_8_drops_you(self):
+        with after_week(8):
+            self._meet(1, 2, 3, 4, 5, 6)
+            self._log(120, in_week(7))
+            self._log(360, in_week(8))
+            state = challenge.standing(self.user)
+            self.assertTrue(state.eliminated)
+            self.assertEqual(state.earliest_missed.index, 7)
+            self.assertEqual(state.saver_hours_needed, 2)
+            self.assertIn(
+                "Weeks 7 and 8 closed with 8h 0m of the 10 hours needed between them",
+                challenge.elimination_reason(self.user),
+            )
+
+    def test_missing_both_pairs_asks_only_for_the_earliest(self):
+        with after_week(8):
+            self._log(60, in_week(1))
+            self._meet(2, 3, 4, 5, 6)
+            self._log(60, in_week(7))
+            self._meet(8)
+            state = challenge.standing(self.user)
+            self.assertEqual([w.index for w in state.missed], [1, 7])
+            # Week 1's four, not week 7's four on top.
+            self.assertEqual(state.saver_hours_needed, 4)
+            self.assertEqual(state.saver_hours_outstanding, 8)
+
 
 class PrinterBarTests(BaseTestCase):
     """Five hours a week towards forty, and no more."""
@@ -992,6 +1075,29 @@ class RemindWeekCommandTests(BaseTestCase):
         self.assertIn("week 3", text)
         self.assertIn("2h 10m of the 5 hours this week", text)
         self.assertIn("2h 50m", text)
+
+    def _settle_weeks_1_to_6(self):
+        self._log(600, et("2026-09-23 10:00"))
+        for wednesday in ("2026-10-07", "2026-10-14", "2026-10-21", "2026-10-28"):
+            self._log(300, et(f"{wednesday} 10:00"))
+
+    def test_week_7_gets_no_reminder(self):
+        """It's judged with week 8, so nothing is due when it ends."""
+        self._settle_weeks_1_to_6()
+        self._log(60, et("2026-11-04 10:00"))
+        self._run("2026-11-07 18:05")
+        self.dm.assert_not_called()
+
+    def test_week_8s_reminder_is_about_the_pair(self):
+        self._settle_weeks_1_to_6()
+        self._log(120, et("2026-11-04 10:00"))
+        self._log(60, et("2026-11-11 10:00"))
+        self._run("2026-11-14 18:05")
+        self.dm.assert_called_once()
+        text = self.dm.call_args.args[0]
+        self.assertIn("week 8", text)
+        self.assertIn("3h 0m of the 10 hours across weeks 7 and 8", text)
+        self.assertIn("7h 0m", text)
 
     def test_each_person_hears_once(self):
         self._log(600, et("2026-09-23 10:00"))

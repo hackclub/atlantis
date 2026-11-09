@@ -9,9 +9,9 @@ and a WeekReminder row means each person hears once a week however many times
 it runs after that — so the scheduler runs it every few minutes and it catches
 up by itself if the container was down at six.
 
-Week 1 gets no reminder: it's judged together with week 2 (weeks.GRACE_WEEKS),
-so nothing is actually due when it ends. Week 2's reminder is about the pair's
-ten hours.
+The first week of a grace pair (weeks.GRACE_PAIRS: 1 and 2, 7 and 8) gets no
+reminder: it's judged together with the second, so nothing is actually due when
+it ends. The second week's reminder is about the pair's ten hours.
 """
 
 from django.core.management.base import BaseCommand
@@ -43,9 +43,9 @@ class Command(BaseCommand):
         if now < weeks.reminder_at(index):
             self.stdout.write(f"Week {index}'s reminder isn't due until {weeks.reminder_at(index)}.")
             return
-        grace = weeks.grace_weeks()
-        if index in grace and index != grace[-1]:
-            self.stdout.write(f"Week {index} is judged with week {grace[-1]}; nothing is due yet.")
+        pair = weeks.grace_pair(index)
+        if pair and index != pair[-1]:
+            self.stdout.write(f"Week {index} is judged with week {pair[-1]}; nothing is due yet.")
             return
 
         already = set(

@@ -32,11 +32,12 @@ from django.utils import timezone
 WEEKLY_HOURS = 5
 WEEKLY_MINUTES = WEEKLY_HOURS * 60
 
-# A one-off for the start of the program: weeks 1 and 2 are judged together,
-# so ten hours across the pair keeps you in however it's split, and week 1
-# can't be missed until week 2 has closed too. Every later week stands on its
-# own five. See challenge.Week.met.
-GRACE_WEEKS = (1, 2)
+# Pairs of weeks judged together: ten hours across a pair keeps you in however
+# it's split, and the first week of a pair can't be missed until the second has
+# closed too. Weeks 1 and 2 ease people into the program; weeks 7 and 8 were
+# pooled the same way later on. Every other week stands on its own five. See
+# challenge.Week.met.
+GRACE_PAIRS = ((1, 2), (7, 8))
 
 
 def zone():
@@ -53,14 +54,21 @@ def printer_hours():
     return WEEKLY_HOURS * week_count()
 
 
-def grace_weeks():
-    """The pooled weeks that actually exist in a program this long."""
-    return tuple(index for index in GRACE_WEEKS if index <= week_count())
+def grace_pairs():
+    """The pooled pairs, each cut to the weeks that exist in a program this long."""
+    pairs = (tuple(index for index in pair if index <= week_count()) for pair in GRACE_PAIRS)
+    return tuple(pair for pair in pairs if pair)
 
 
-def grace_minutes():
-    """What the pooled weeks ask for between them."""
-    return WEEKLY_MINUTES * len(grace_weeks())
+def grace_pair(index):
+    """The pooled weeks week `index` is judged with, itself included — or ()
+    for a week that stands on its own five."""
+    return next((pair for pair in grace_pairs() if index in pair), ())
+
+
+def grace_minutes(index):
+    """What the pair week `index` is in asks for between them."""
+    return WEEKLY_MINUTES * len(grace_pair(index))
 
 
 def start_date():

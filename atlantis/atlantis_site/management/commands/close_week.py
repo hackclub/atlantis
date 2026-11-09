@@ -80,8 +80,8 @@ class Command(BaseCommand):
             for index in closed:
                 week = state.weeks[index - 1]
                 # A short week is still live until its buffer closes at 2am,
-                # and week 1 short until week 2 closes too (the grace pair),
-                # so there's nothing to write down about it yet.
+                # and the first of a grace pair short until the second closes
+                # too, so there's nothing to write down about it yet.
                 if week.pending:
                     continue
                 row = existing.get(index)
@@ -139,14 +139,14 @@ class Command(BaseCommand):
         # The grace pair missed together, so it gets one DM, not one per week.
         if week.grace:
             pair = WeekOutcome.objects.filter(
-                user=profile.user, week_index__in=weeks.grace_weeks(),
+                user=profile.user, week_index__in=weeks.grace_pair(week.index),
             )
             if pair.filter(notified_at__isnull=False).exists():
                 row.notified_at = timezone.now()
                 row.save(update_fields=["notified_at"])
                 return False
             missed = (
-                f"{weeks.grace_minutes() // 60} hours across {week.grace_label}"
+                f"{weeks.grace_minutes(week.index) // 60} hours across {week.grace_label}"
             )
         else:
             missed = f"{weeks.WEEKLY_HOURS} hours for week {row.week_index}"

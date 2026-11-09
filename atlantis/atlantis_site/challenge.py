@@ -292,9 +292,9 @@ class Week:
 	# Closed, but its buffer hasn't: what's recorded now can still meet it.
 	buffer_open: bool = False
 	override: str = ""
-	# Weeks 1 and 2 are judged as a pair (weeks.GRACE_WEEKS). For a week in
-	# the pair, grace_minutes is what the whole pair has credited and
-	# grace_open says one of them hasn't closed yet.
+	# Weeks 1 and 2, and 7 and 8, are judged as pairs (weeks.GRACE_PAIRS).
+	# For a week in a pair, grace_minutes is what the whole pair has credited
+	# and grace_open says one of them hasn't closed yet.
 	grace: bool = False
 	grace_minutes: int = 0
 	grace_open: bool = False
@@ -328,7 +328,7 @@ class Week:
 	@property
 	def grace_required_minutes(self):
 		"""The pair's ten plus whatever the pair owes in makeup."""
-		return weeks.grace_minutes() + self.grace_makeup_minutes
+		return weeks.grace_minutes(self.index) + self.grace_makeup_minutes
 
 	@property
 	def required_minutes(self):
@@ -465,7 +465,7 @@ class Week:
 	@property
 	def base_required_hours(self):
 		"""The bar before makeup: the pair's ten for a grace week, else five."""
-		return (weeks.grace_minutes() if self.grace else weeks.WEEKLY_MINUTES) // 60
+		return (weeks.grace_minutes(self.index) if self.grace else weeks.WEEKLY_MINUTES) // 60
 
 	@property
 	def required_display(self):
@@ -478,12 +478,12 @@ class Week:
 	@property
 	def grace_due_later(self):
 		"""A grace week before the last: its countdown isn't when the ten are due."""
-		return self.grace and self.index != weeks.grace_weeks()[-1]
+		return self.grace and self.index != weeks.grace_pair(self.index)[-1]
 
 	@property
 	def grace_deadline(self):
 		"""When the pair's ten are actually due — the last grace week's end."""
-		return weeks.deadline(weeks.grace_weeks()[-1])
+		return weeks.deadline(weeks.grace_pair(self.index)[-1])
 
 	@property
 	def grace_deadline_display(self):
@@ -491,8 +491,8 @@ class Week:
 
 	@property
 	def grace_label(self):
-		""""weeks 1 and 2", the way a sentence names the pair."""
-		return "weeks " + " and ".join(str(i) for i in weeks.grace_weeks())
+		""""weeks 7 and 8", the way a sentence names the pair."""
+		return "weeks " + " and ".join(str(i) for i in weeks.grace_pair(self.index))
 
 	@property
 	def credited_display(self):
@@ -598,13 +598,14 @@ class Standing:
 		"""Savers needed to rescue the earliest missed week and get back in.
 
 		When that's a grace week, the pair missed together and is rescued
-		together, so it's what both need.
+		together, so it's what both need — that pair's, not any other's.
 		"""
 		week = self.earliest_missed
 		if week is None:
 			return 0
 		if week.grace:
-			return sum(w.shortfall_hours for w in self.missed if w.grace)
+			pair = weeks.grace_pair(week.index)
+			return sum(w.shortfall_hours for w in self.missed if w.index in pair)
 		return week.shortfall_hours
 
 	@property
@@ -739,7 +740,7 @@ def _calendar(now):
 		"closed": set(weeks.closed_weeks(now)),
 		"live": weeks.current_week(now),
 		"buffering": weeks.buffer_week(now),
-		"grace": weeks.grace_weeks(),
+		"grace": weeks.grace_pairs(),
 		"started": weeks.has_started(now),
 		"ended": weeks.has_ended(now),
 	}
@@ -762,11 +763,18 @@ def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True,
 	closed = calendar["closed"]
 	live = calendar["live"]
 	buffering = calendar["buffering"] if buffer else None
-	grace = calendar["grace"]
 	tracked = _settle_buffers(tracked, savers, overrides, buffer, makeup)
-	grace_minutes = sum(tracked.get(i, 0) + savers.get(i, 0) * 60 for i in grace)
-	grace_makeup = sum(makeup.get(i, 0) for i in grace)
-	grace_open = any(i not in closed or i == buffering for i in grace)
+	# Each grace pair's totals, keyed by every week in it, as Week fields.
+	# A week in no pair gets none of them and keeps the defaults.
+	grace = {}
+	for pair in calendar["grace"]:
+		pool = {
+			"grace": True,
+			"grace_minutes": sum(tracked.get(i, 0) + savers.get(i, 0) * 60 for i in pair),
+			"grace_makeup_minutes": sum(makeup.get(i, 0) for i in pair),
+			"grace_open": any(i not in closed or i == buffering for i in pair),
+		}
+		grace.update(dict.fromkeys(pair, pool))
 
 	return Standing(
 		weeks=[
@@ -778,11 +786,8 @@ def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True,
 				current=index == live,
 				buffer_open=index == buffering,
 				override=overrides.get(index, ""),
-				grace=index in grace,
-				grace_minutes=grace_minutes if index in grace else 0,
-				grace_open=grace_open,
 				makeup_minutes=makeup.get(index, 0),
-				grace_makeup_minutes=grace_makeup if index in grace else 0,
+				**grace.get(index, {}),
 				deferred_makeup_minutes=moved.get(index, 0),
 				carried_makeup_minutes=moved.get(index - 1, 0),
 				makeup_deferred=index in deferred and index < weeks.week_count(),
@@ -815,7 +820,7 @@ def elimination_reason(user, now=None):
 		closed = (
 			f"{week.grace_label.capitalize()} closed with "
 			f"{format_minutes(week.grace_minutes)} of the "
-			f"{weeks.grace_minutes() // 60} hours needed between them"
+			f"{weeks.grace_minutes(week.index) // 60} hours needed between them"
 		)
 	else:
 		closed = (

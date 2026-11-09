@@ -142,7 +142,7 @@ def unfinished_hours_csv(request):
     """Everyone still in who hasn't filled this week's bar, for the mass-DM script.
 
     Slack-linked, not banned, not already out, has tracked some time, and is
-    short of the week in progress (for weeks 1 and 2, the pair's ten).
+    short of the week in progress (for a grace pair, the pair's ten).
     """
     now = timezone.now()
     index = weeks.current_week(now)
