@@ -2,7 +2,7 @@ from django.contrib import admin
 
 from .models import (
     AirtableSubmission, AuditLog, LapseAccount, PearlBracket, PrinterClaim,
-    SaverCredit, Timelapse, TimelapseRemoval, TimelapseReview, WeekOutcome,
+    HourRemoval, SaverCredit, Timelapse, TimelapseRemoval, TimelapseReview, WeekOutcome,
     WeekReminder,
 )
 
@@ -167,6 +167,14 @@ class SaverCreditAdmin(ReadOnlyAdmin):
     list_display = ("user", "week_index", "source", "order", "granted_by", "created_at")
     list_filter = ("week_index", "source", "created_at")
     search_fields = ("user__username", "granted_by__username", "note")
+    date_hierarchy = "created_at"
+
+
+@admin.register(HourRemoval)
+class HourRemovalAdmin(ReadOnlyAdmin):
+    list_display = ("user", "week_index", "hours", "removed_by", "created_at")
+    list_filter = ("week_index", "created_at")
+    search_fields = ("user__username", "removed_by__username", "note")
     date_hierarchy = "created_at"
 
 

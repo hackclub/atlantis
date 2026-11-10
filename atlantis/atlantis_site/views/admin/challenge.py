@@ -3,10 +3,11 @@
 Two pages. The roster is every participant against every week, so "who is out
 and why" is one glance rather than a query; it also lists, and exports, who
 the two-hour buffer after each week put back in. The per-user page is where a wrong
-call gets fixed: grant saver hours, or force a week to pass or fail outright.
+call gets fixed: grant saver hours, take hours off a week, or force a week to
+pass or fail outright.
 
-Every one of those is a thumb on the scale, so all three are audit-logged with
-the reason the organizer typed.
+Every one of those is a thumb on the scale, so all of them are audit-logged
+with the reason the organizer typed.
 """
 
 import csv
@@ -19,7 +20,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from ... import challenge, weeks
-from ...models import SaverCredit, WeekOutcome
+from ...models import HourRemoval, SaverCredit, WeekOutcome
 from ...models import Profile
 from ..helpers import check_perms, staff_member_required, display_name, record_audit
 
@@ -152,6 +153,10 @@ def challenge_user(request, user_id):
             SaverCredit.objects.filter(user=target)
             .select_related("order", "granted_by")[:50]
         ),
+        "removals": (
+            HourRemoval.objects.filter(user=target)
+            .select_related("removed_by")[:50]
+        ),
         "overrides": WeekOutcome.Override.choices,
     })
 
@@ -194,6 +199,73 @@ def grant_saver(request, user_id):
         "revived": was_out and not now_out,
     })
     messages.success(request, f"Granted {hours}h to week {week_index}.")
+    return redirect("challenge_user", user_id=user_id)
+
+
+@staff_member_required
+@require_POST
+@check_perms(CHALLENGE_PERMS)
+def remove_hours(request, user_id):
+    """Take hours off a week, the way grant_saver puts them on."""
+    User = get_user_model()
+    target = get_object_or_404(User, id=user_id)
+
+    week_index, error = _week_arg(request)
+    if error:
+        messages.error(request, error)
+        return redirect("challenge_user", user_id=user_id)
+
+    try:
+        hours = int(request.POST.get("hours", "").strip() or "0")
+    except ValueError:
+        messages.error(request, "Hours must be a whole number.")
+        return redirect("challenge_user", user_id=user_id)
+
+    before = challenge.standing(target)
+    week = before.weeks[week_index - 1]
+    # Up to what the week has, a part-hour rounded up, so a slip of the
+    # keyboard can't bury a week under hours it would take a month to log.
+    available = -(-week.credited_minutes // 60)
+    if not available:
+        messages.error(request, f"Week {week_index} has no hours to remove.")
+        return redirect("challenge_user", user_id=user_id)
+    if not 1 <= hours <= available:
+        messages.error(request, f"Remove between 1 and {available} hours from week {week_index}.")
+        return redirect("challenge_user", user_id=user_id)
+
+    note = request.POST.get("note", "").strip()[:200]
+    removal = challenge.remove_hours(target, week_index, hours, request.user, note)
+    now_out = challenge.standing(target).eliminated
+
+    record_audit(request, "remove_week_hours", target=f"{display_name(target)} week {week_index}", metadata={
+        "user_id": target.id,
+        "removal_id": removal.id,
+        "week": week_index,
+        "hours": hours,
+        "note": note,
+        "eliminated": now_out and not before.eliminated,
+    })
+    messages.success(request, f"Removed {hours}h from week {week_index}.")
+    return redirect("challenge_user", user_id=user_id)
+
+
+@staff_member_required
+@require_POST
+@check_perms(CHALLENGE_PERMS)
+def undo_hour_removal(request, user_id, removal_id):
+    """Give back hours a removal took, by deleting it."""
+    removal = get_object_or_404(HourRemoval.objects.select_related("user"), id=removal_id, user_id=user_id)
+    target = removal.user
+    week_index, hours = removal.week_index, removal.hours
+    removal.delete()
+
+    record_audit(request, "undo_hour_removal", target=f"{display_name(target)} week {week_index}", metadata={
+        "user_id": target.id,
+        "removal_id": removal_id,
+        "week": week_index,
+        "hours": hours,
+    })
+    messages.success(request, f"Gave {hours}h back to week {week_index}.")
     return redirect("challenge_user", user_id=user_id)
 
 

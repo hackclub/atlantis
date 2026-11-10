@@ -1,4 +1,5 @@
 from decimal import Decimal
+from unittest.mock import patch
 
 from django.core.cache import cache
 from django.test import override_settings
@@ -11,11 +12,13 @@ from ..models import (
 )
 from ..checklists import T1_CHECKLIST, T3_CHECKLIST
 from ..views.helpers import payable_minutes_for_ship
+from ..views.admin import review as review_views
 from .base import (
 	BaseTestCase,
 	approve_timelapse,
 	during_week,
 	grant_perms,
+	image_upload,
 	make_journal,
 	make_project,
 	make_ship,
@@ -478,6 +481,63 @@ class T2DecisionTests(BaseTestCase):
 		log = AuditLog.objects.get(action="t2_decision")
 		self.assertEqual(log.metadata["deductions"], 15)
 		self.assertEqual(log.metadata["new_ship_status"], Ship.ShipStatus.T3_QUEUE)
+
+	def test_approving_with_no_screenshot_leaves_the_projects(self):
+		self._decide()
+		self.assertEqual(T2.objects.get().airtable_screenshot, "")
+
+	def test_an_uploaded_airtable_screenshot_is_stored_on_the_review_only(self):
+		original = self.project.image_url
+		self._decide(airtable_screenshot_file=image_upload("cover.png"))
+		stored = T2.objects.get().airtable_screenshot
+		self.assertTrue(stored.startswith("images/"))
+		self.assertTrue(stored.endswith(".png"))
+		self.project.refresh_from_db()
+		self.assertEqual(self.project.image_url, original)
+
+	def test_a_pasted_airtable_screenshot_link_is_stored(self):
+		with patch.object(review_views, "is_valid_image_url", return_value=True):
+			self._decide(airtable_screenshot_url="https://example.com/shot.png")
+		self.assertEqual(T2.objects.get().airtable_screenshot, "https://example.com/shot.png")
+
+	def test_a_link_that_isnt_an_image_bounces(self):
+		with patch.object(review_views, "is_valid_image_url", return_value=False):
+			response = self._decide(airtable_screenshot_url="https://example.com/page")
+		self.assertFalse(T2.objects.exists())
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.T2_QUEUE)
+		self.assertIn("reachable image URL", " ".join(message_texts(response)))
+
+	def test_a_link_that_isnt_http_is_refused_without_fetching(self):
+		with patch.object(review_views, "is_valid_image_url") as check:
+			self._decide(airtable_screenshot_url="file:///etc/passwd")
+		check.assert_not_called()
+		self.assertFalse(T2.objects.exists())
+
+	def test_an_upload_that_isnt_an_image_bounces(self):
+		from django.core.files.uploadedfile import SimpleUploadedFile
+		self._decide(airtable_screenshot_file=SimpleUploadedFile("x.png", b"not an image"))
+		self.assertFalse(T2.objects.exists())
+
+	def test_both_an_upload_and_a_link_bounces(self):
+		self._decide(
+			airtable_screenshot_file=image_upload(),
+			airtable_screenshot_url="https://example.com/shot.png",
+		)
+		self.assertFalse(T2.objects.exists())
+
+	def test_a_screenshot_is_ignored_when_not_approving(self):
+		self._decide(
+			decision=T2.Decision.RETURN_T1, feedback="redo",
+			airtable_screenshot_file=image_upload(),
+		)
+		self.assertEqual(T2.objects.get().airtable_screenshot, "")
+
+	def test_the_review_page_has_the_screenshot_picker(self):
+		response = self.client.get(reverse("ysws_review_project", args=[self.ship.id]))
+		self.assertContains(response, 'enctype="multipart/form-data"')
+		self.assertContains(response, 'name="airtable_screenshot_file"')
+		self.assertContains(response, 'name="airtable_screenshot_url"')
 
 
 class T3ChecklistTests(BaseTestCase):

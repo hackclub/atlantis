@@ -512,6 +512,11 @@ class T2(models.Model):
 
 	feedback = models.CharField(max_length=1000)
 	justification = models.CharField(max_length=1000)
+	# The screenshot sent to Airtable in place of the project's own, as a
+	# storage key or an absolute URL like Project.image_url. Blank sends the
+	# project's. Nothing on the site shows it: the book cover stays the
+	# shipper's.
+	airtable_screenshot = models.CharField(max_length=2048, blank=True, default="")
 
 class T3(models.Model):
 	ship = models.ForeignKey(
@@ -1635,6 +1640,42 @@ class SaverCredit(models.Model):
 
 	def __str__(self):
 		return f"saver hour for {self.user_id}, week {self.week_index}"
+
+
+class HourRemoval(models.Model):
+	"""Hours an organizer took off one week, the opposite of an admin saver.
+
+	Counted against the week's credited time the same way a saver counts
+	toward it, so a removal can fail a week that was met — and, since nothing
+	in challenge.py is cached, undoing it (deleting the row) puts the hours
+	straight back.
+	"""
+
+	user = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="hour_removals",
+	)
+	week_index = models.PositiveSmallIntegerField()
+	hours = models.PositiveSmallIntegerField()
+	removed_by = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		related_name="hours_removed",
+		null=True,
+		blank=True,
+	)
+	note = models.CharField(max_length=200, blank=True, default="")
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering = ["-created_at"]
+		indexes = [
+			models.Index(fields=["user", "week_index"]),
+		]
+
+	def __str__(self):
+		return f"{self.hours}h removed from {self.user_id}, week {self.week_index}"
 
 
 class ShopCategory(models.Model):

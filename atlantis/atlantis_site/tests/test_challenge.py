@@ -27,8 +27,8 @@ from django.utils import timezone
 
 from .. import challenge, weeks
 from ..models import (
-    AuditLog, Item, Order, PrinterClaim, Profile, SaverCredit, Ship, WeekOutcome,
-    WeekReminder,
+    AuditLog, HourRemoval, Item, Order, PrinterClaim, Profile, SaverCredit, Ship,
+    WeekOutcome, WeekReminder,
 )
 from ..printers import item_key
 from .base import (
@@ -1297,6 +1297,89 @@ class ChallengeAdminTests(BaseTestCase):
                 "week": "1", "hours": "9999",
             })
             self.assertFalse(SaverCredit.objects.exists())
+
+    def test_removing_hours_can_fail_a_met_week(self):
+        with during_week(4):
+            self._log(300, in_week(3))
+            self.assertTrue(challenge.standing(self.shipper).weeks[2].met)
+            self.client.post(reverse("remove_hours", args=[self.shipper.id]), {
+                "week": "3", "hours": "1", "note": "idle recording",
+            })
+            week = challenge.standing(self.shipper).weeks[2]
+            self.assertEqual(week.removed_hours, 1)
+            self.assertEqual(week.credited_minutes, 240)
+            self.assertTrue(week.missed)
+            removal = HourRemoval.objects.get()
+            self.assertEqual(removal.removed_by, self.organizer)
+            self.assertEqual(removal.note, "idle recording")
+            self.assertTrue(AuditLog.objects.filter(action="remove_week_hours").exists())
+
+    def test_removed_hours_count_on_the_roster_too(self):
+        with during_week(4):
+            self._log(300, in_week(3))
+            challenge.remove_hours(self.shipper, 3, 2, self.organizer)
+            state = challenge.standings_for([self.shipper.id])[self.shipper.id]
+            self.assertEqual(state.weeks[2].credited_minutes, 180)
+
+    def test_removing_hours_takes_from_savers_as_well(self):
+        with during_week(4):
+            self._log(180, in_week(3))
+            challenge.grant_saver_hours(self.shipper, 3, 2, self.organizer)
+            self.assertTrue(challenge.standing(self.shipper).weeks[2].met)
+            challenge.remove_hours(self.shipper, 3, 1, self.organizer)
+            self.assertFalse(challenge.standing(self.shipper).weeks[2].met)
+
+    def test_cannot_remove_more_than_the_week_has(self):
+        with during_week(4):
+            self._log(90, in_week(3))
+            self.client.post(reverse("remove_hours", args=[self.shipper.id]), {
+                "week": "3", "hours": "3",
+            })
+            self.assertFalse(HourRemoval.objects.exists())
+            # A part-hour rounds up, so all of it can still go.
+            self.client.post(reverse("remove_hours", args=[self.shipper.id]), {
+                "week": "3", "hours": "2",
+            })
+            self.assertEqual(challenge.standing(self.shipper).weeks[2].credited_minutes, 0)
+
+    def test_an_empty_week_has_nothing_to_remove(self):
+        with during_week(4):
+            self.client.post(reverse("remove_hours", args=[self.shipper.id]), {
+                "week": "3", "hours": "1",
+            })
+            self.assertFalse(HourRemoval.objects.exists())
+
+    def test_undoing_a_removal_gives_the_hours_back(self):
+        with during_week(4):
+            self._log(300, in_week(3))
+            removal = challenge.remove_hours(self.shipper, 3, 1, self.organizer)
+            self.client.post(reverse("undo_hour_removal", args=[self.shipper.id, removal.id]))
+            self.assertFalse(HourRemoval.objects.exists())
+            self.assertTrue(challenge.standing(self.shipper).weeks[2].met)
+
+    def test_undo_only_touches_that_users_removals(self):
+        other = make_user("other", slack_id="U0OTHER")
+        removal = HourRemoval.objects.create(user=other, week_index=3, hours=1)
+        response = self.client.post(reverse("undo_hour_removal", args=[self.shipper.id, removal.id]))
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(HourRemoval.objects.exists())
+
+    def test_removing_hours_needs_the_organizer_permission(self):
+        self.client.force_login(grant_perms(make_user("t1", slack_id="U0T1"), "t1_review"))
+        with during_week(4):
+            self._log(300, in_week(3))
+            self.client.post(reverse("remove_hours", args=[self.shipper.id]), {
+                "week": "3", "hours": "1",
+            })
+        self.assertFalse(HourRemoval.objects.exists())
+
+    def test_the_user_page_lists_removals(self):
+        with during_week(4):
+            self._log(300, in_week(3))
+            challenge.remove_hours(self.shipper, 3, 1, self.organizer, "idle recording")
+            response = self.client.get(reverse("challenge_user", args=[self.shipper.id]))
+            self.assertContains(response, "idle recording")
+            self.assertContains(response, reverse("undo_hour_removal", args=[self.shipper.id, HourRemoval.objects.get().id]))
 
     def test_overriding_a_week_is_recorded_with_who_did_it(self):
         with during_week(2):

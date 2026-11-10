@@ -28,6 +28,7 @@
                     <th>Week</th>
                     <th>Logged</th>
                     <th>Saved</th>
+                    <th>Removed</th>
                     <th>Makeup owed</th>
                     <th>Credited</th>
                     <th>Result</th>
@@ -40,6 +41,7 @@
                         <td>{{ week.label }}{% if week.current %} <em>(live)</em>{% endif %}</td>
                         <td>{{ week.tracked_display }}</td>
                         <td>{{ week.saver_hours }}h</td>
+                        <td>{% if week.removed_hours %}{{ week.removed_hours }}h{% else %}<span class="muted">none</span>{% endif %}</td>
                         <td>{% if week.makeup_minutes %}{{ week.makeup_display }}{% else %}<span class="muted">none</span>{% endif %}{% if week.deferred_makeup_minutes %} <span class="muted">({{ week.own_makeup_display }} moved to next week)</span>{% endif %}</td>
                         <td>{{ week.credited_display }}</td>
                         <td>
@@ -93,6 +95,53 @@
         </label>
         <button type="submit">Grant</button>
     </form>
+
+    <h3>Remove hours</h3>
+    <p class="muted">
+        Takes hours off a week's credited time, logged or saved. Enough of them
+        can fail a week that was met. Undo one below to give the hours back.
+    </p>
+    <form method="post" action="{% url 'remove_hours' target.id %}" class="inline-form">
+        {% csrf_token %}
+        <label>Week
+            <input type="number" name="week" min="1" max="{{ standing.weeks|length }}" required>
+        </label>
+        <label>Hours
+            <input type="number" name="hours" min="1" value="1" required>
+        </label>
+        <label>Why
+            <input type="text" name="note" maxlength="200" placeholder="Idle recording, etc.">
+        </label>
+        <button type="submit">Remove</button>
+    </form>
+
+    <h3>Removal history</h3>
+    <div class="table-scroll">
+        <table class="users-table">
+            <thead>
+                <tr><th>When</th><th>Week</th><th>Hours</th><th>Removed by</th><th>Note</th><th></th></tr>
+            </thead>
+            <tbody>
+                {% for removal in removals %}
+                    <tr>
+                        <td>{{ removal.created_at|date:"Y-m-d H:i" }}</td>
+                        <td>{{ removal.week_index }}</td>
+                        <td>{{ removal.hours }}h</td>
+                        <td>{{ removal.removed_by.username|default:"none" }}</td>
+                        <td>{{ removal.note }}</td>
+                        <td>
+                            <form method="post" action="{% url 'undo_hour_removal' target.id removal.id %}" class="inline-form">
+                                {% csrf_token %}
+                                <button type="submit">Undo</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="6">No hours removed from this account.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
     <h3>Saver history</h3>
     <div class="table-scroll">

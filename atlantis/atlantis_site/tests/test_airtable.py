@@ -348,6 +348,18 @@ class BuildFieldsTests(BaseTestCase):
 		[attachment] = self._build()[FIELDS["screenshot"]]
 		self.assertIn("screenshot.png", attachment["url"])
 
+	def test_the_t2_reviewers_screenshot_replaces_the_projects(self):
+		self.ship.t2_reviews.update(airtable_screenshot="https://example.com/better.png")
+		[attachment] = self._build()[FIELDS["screenshot"]]
+		self.assertEqual(attachment["url"], "https://example.com/better.png")
+		self.project.refresh_from_db()
+		self.assertIn("screenshot.png", self.project.image_url)
+
+	def test_an_uploaded_t2_screenshot_becomes_a_url(self):
+		self.ship.t2_reviews.update(airtable_screenshot="images/better.png")
+		[attachment] = self._build()[FIELDS["screenshot"]]
+		self.assertIn("images/better.png", attachment["url"])
+
 	def test_stored_keys_become_absolute_urls_and_links_pass_through(self):
 		# The bucket has no public hostname, so an uploaded model has to be
 		# turned into a fetchable URL; an editor's own share link must not be.

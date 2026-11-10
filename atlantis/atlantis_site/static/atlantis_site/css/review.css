@@ -1060,7 +1060,8 @@
 
 .root-page .rv-form textarea,
 .root-page .rv-form input[type="number"],
-.root-page .rv-form input[type="text"] {
+.root-page .rv-form input[type="text"],
+.root-page .rv-form input[type="url"] {
     width: 100%;
     box-sizing: border-box;
     padding: 8px 10px;
@@ -1079,6 +1080,39 @@
     outline: none;
     border-color: var(--oc-tide);
     box-shadow: 0 0 0 2px var(--oc-tide-soft);
+}
+
+/* The T2 form's Airtable screenshot: a thumbnail of what will be sent, and
+   the two ways to send something else beside it. */
+.root-page .rv-airtable-shot {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+}
+
+.root-page .rv-airtable-shot .rv-shot {
+    width: 120px;
+}
+
+.root-page .rv-airtable-shot-inputs {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.root-page .rv-airtable-shot-inputs .rv-form-note {
+    margin: 0;
+}
+
+.root-page .rv-airtable-shot-inputs input[type="file"] {
+    font-size: 12px;
+    color: var(--oc-ink-2);
+}
+
+.root-page .rv-airtable-shot-inputs .rv-btn {
+    align-self: flex-start;
 }
 
 .root-page .rv-counter {

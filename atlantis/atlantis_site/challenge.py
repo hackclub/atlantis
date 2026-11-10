@@ -39,8 +39,8 @@ from django.utils import timezone
 from . import weeks
 from .models import (
 	CHALLENGE_BASE_PEARLS_PER_HOUR, CHALLENGE_BONUS_PEARLS_PER_HOUR,
-	PAYOUT_MULTIPLIER_DEFAULT, PEARLS_PER_HOUR, Item, MakeupDeferral, PearlBracket, SaverCredit,
-	Timelapse, TimelapseRemoval, WeekOutcome,
+	PAYOUT_MULTIPLIER_DEFAULT, PEARLS_PER_HOUR, HourRemoval, Item, MakeupDeferral, PearlBracket,
+	SaverCredit, Timelapse, TimelapseRemoval, WeekOutcome,
 )
 
 
@@ -111,7 +111,13 @@ def _bucket_by_week(rows):
 	return totals, buffered
 
 
-def _settle_buffers(tracked, savers, overrides, buffer=True, makeup=None):
+def _credited(tracked_minutes, saver_hours, removed_hours):
+	"""Minutes a week is judged on: logged plus saved, less what an organizer
+	took off it, and never below nothing."""
+	return max(tracked_minutes + (saver_hours - removed_hours) * 60, 0)
+
+
+def _settle_buffers(tracked, savers, overrides, buffer=True, makeup=None, removed=None):
 	"""{week index or PREP: tracked minutes}, each week's buffer handed out.
 
 	`tracked` is _bucket_by_week's pair. A buffer goes to the week that just
@@ -127,13 +133,15 @@ def _settle_buffers(tracked, savers, overrides, buffer=True, makeup=None):
 	were none — what rescued_by_buffer compares against.
 
 	`makeup` is makeup_minutes_by_week's map: a week owing makeup is short
-	until its five *and* the makeup are in.
+	until its five *and* the makeup are in. `removed` is
+	removed_hours_by_week's.
 	"""
 	makeup = makeup or {}
+	removed = removed or {}
 	seconds, buffered = tracked
 	seconds = dict(seconds)
 	for index in sorted(buffered):
-		credited = seconds.get(index, 0) // 60 + savers.get(index, 0) * 60
+		credited = _credited(seconds.get(index, 0) // 60, savers.get(index, 0), removed.get(index, 0))
 		override = overrides.get(index, "")
 		met = override == WeekOutcome.Override.PASS or (
 			override != WeekOutcome.Override.FAIL
@@ -161,6 +169,16 @@ def saver_hours_by_week(user):
 		.values_list("week_index")
 		.order_by()
 		.annotate(hours=Count("id"))
+	)
+
+
+def removed_hours_by_week(user):
+	"""{week index: hours} organizers took off this user's weeks."""
+	return dict(
+		HourRemoval.objects.filter(user=user)
+		.values_list("week_index")
+		.order_by()
+		.annotate(hours=Sum("hours"))
 	)
 
 
@@ -287,6 +305,7 @@ class Week:
 	index: int
 	tracked_minutes: int = 0
 	saver_hours: int = 0
+	removed_hours: int = 0
 	closed: bool = False
 	current: bool = False
 	# Closed, but its buffer hasn't: what's recorded now can still meet it.
@@ -317,8 +336,9 @@ class Week:
 
 	@property
 	def credited_minutes(self):
-		"""Time logged plus time bought, which is what the five is judged on."""
-		return self.tracked_minutes + self.saver_minutes
+		"""Time logged plus time bought, less what an organizer removed, which
+		is what the five is judged on."""
+		return _credited(self.tracked_minutes, self.saver_hours, self.removed_hours)
 
 	@property
 	def own_required_minutes(self):
@@ -624,7 +644,7 @@ def standing(user, now=None):
 	overrides = {index: row.override for index, row in _overrides(user).items()}
 	return _build_standing(
 		tracked_seconds_by_week(user), saver_hours_by_week(user), overrides, now,
-		makeup=_makeup(user),
+		makeup=_makeup(user), removed=removed_hours_by_week(user),
 	)
 
 
@@ -637,8 +657,8 @@ def standings(now=None):
 	account that ever signed in would have every week "missed" by people who
 	never started.
 	"""
-	tracked, savers, overrides, makeup = _ledger()
-	return _standings_for(tracked.keys() | savers.keys(), tracked, savers, overrides, makeup, now)
+	tracked, savers, overrides, makeup, removed = _ledger()
+	return _standings_for(tracked.keys() | savers.keys(), tracked, savers, overrides, makeup, removed, now)
 
 
 def standings_for(user_ids, now=None):
@@ -647,8 +667,8 @@ def standings_for(user_ids, now=None):
 	Unlike standings(), someone who has logged nothing still gets a row — the
 	empty one standing() would have given them.
 	"""
-	tracked, savers, overrides, makeup = _ledger()
-	return _standings_for(user_ids, tracked, savers, overrides, makeup, now)
+	tracked, savers, overrides, makeup, removed = _ledger()
+	return _standings_for(user_ids, tracked, savers, overrides, makeup, removed, now)
 
 
 def rescued_by_buffer(now=None):
@@ -663,7 +683,7 @@ def rescued_by_buffer(now=None):
 	rather than missed, and so read as saved by a buffer with nothing in it.
 	"""
 	now = now or timezone.now()
-	tracked, savers, overrides, makeup = _ledger()
+	tracked, savers, overrides, makeup, removed = _ledger()
 	calendar = {**_calendar(now), "buffering": None}
 	rescued = {}
 	for owner in tracked.keys() | savers.keys():
@@ -672,10 +692,11 @@ def rescued_by_buffer(now=None):
 			now, calendar,
 		)
 		owed = makeup.get(owner)
-		state = _build_standing(*args, makeup=owed)
+		taken = removed.get(owner)
+		state = _build_standing(*args, makeup=owed, removed=taken)
 		if state.eliminated:
 			continue
-		without = _build_standing(*args, buffer=False, makeup=owed)
+		without = _build_standing(*args, buffer=False, makeup=owed, removed=taken)
 		if without.eliminated:
 			rescued[owner] = (state, without)
 	return rescued
@@ -683,7 +704,8 @@ def rescued_by_buffer(now=None):
 
 def _ledger():
 	"""Everyone's (_bucket_by_week pair, {week: saver hours}, {week: override},
-	_makeup's (cut, deferred) pair), each keyed by user id."""
+	_makeup's (cut, deferred) pair, {week: removed hours}), each keyed by user
+	id."""
 	rows = {}
 	for owner, at, seconds in _all_logged_timelapses().values_list("owner", "at", "tracked_seconds"):
 		rows.setdefault(owner, []).append((at, seconds))
@@ -696,6 +718,14 @@ def _ledger():
 		.annotate(hours=Count("id"))
 	):
 		savers.setdefault(owner, {})[index] = hours
+
+	taken = {}
+	for owner, index, hours in (
+		HourRemoval.objects.values_list("user", "week_index")
+		.order_by()
+		.annotate(hours=Sum("hours"))
+	):
+		taken.setdefault(owner, {})[index] = hours
 
 	overrides = {}
 	for owner, index, value in WeekOutcome.objects.values_list("user", "week_index", "override"):
@@ -714,16 +744,16 @@ def _ledger():
 		for owner, rows in cuts.items()
 	}
 
-	return tracked, savers, overrides, makeup
+	return tracked, savers, overrides, makeup, taken
 
 
-def _standings_for(user_ids, tracked, savers, overrides, makeup, now):
+def _standings_for(user_ids, tracked, savers, overrides, makeup, removed, now):
 	now = now or timezone.now()
 	calendar = _calendar(now)
 	return {
 		owner: _build_standing(
 			tracked.get(owner, ({}, {})), savers.get(owner, {}), overrides.get(owner, {}), now,
-			calendar, makeup=makeup.get(owner),
+			calendar, makeup=makeup.get(owner), removed=removed.get(owner),
 		)
 		for owner in user_ids
 	}
@@ -746,16 +776,18 @@ def _calendar(now):
 	}
 
 
-def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True, makeup=None):
+def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True, makeup=None, removed=None):
 	"""A Standing from one user's _bucket_by_week pair, {week: saver hours},
-	{week: override} and _makeup's (cut, deferred) pair. buffer=False
-	judges it as though there were no buffer after each week."""
+	{week: override}, _makeup's (cut, deferred) pair and {week: removed
+	hours}. buffer=False judges it as though there were no buffer after each
+	week."""
 	cut, deferred = makeup or ({}, set())
+	removed = removed or {}
 	# What each week has credited by the calendar, before any buffer is
 	# handed out: a buffer is placed by what the week owes, so it can't also
 	# decide how much of the makeup moves.
 	credited = {
-		index: tracked[0].get(index, 0) // 60 + savers.get(index, 0) * 60
+		index: _credited(tracked[0].get(index, 0) // 60, savers.get(index, 0), removed.get(index, 0))
 		for index in cut
 	}
 	makeup, moved = _defer_makeup(cut, deferred, credited)
@@ -763,14 +795,16 @@ def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True,
 	closed = calendar["closed"]
 	live = calendar["live"]
 	buffering = calendar["buffering"] if buffer else None
-	tracked = _settle_buffers(tracked, savers, overrides, buffer, makeup)
+	tracked = _settle_buffers(tracked, savers, overrides, buffer, makeup, removed)
 	# Each grace pair's totals, keyed by every week in it, as Week fields.
 	# A week in no pair gets none of them and keeps the defaults.
 	grace = {}
 	for pair in calendar["grace"]:
 		pool = {
 			"grace": True,
-			"grace_minutes": sum(tracked.get(i, 0) + savers.get(i, 0) * 60 for i in pair),
+			"grace_minutes": sum(
+				_credited(tracked.get(i, 0), savers.get(i, 0), removed.get(i, 0)) for i in pair
+			),
 			"grace_makeup_minutes": sum(makeup.get(i, 0) for i in pair),
 			"grace_open": any(i not in closed or i == buffering for i in pair),
 		}
@@ -782,6 +816,7 @@ def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True,
 				index=index,
 				tracked_minutes=tracked.get(index, 0),
 				saver_hours=savers.get(index, 0),
+				removed_hours=removed.get(index, 0),
 				closed=index in closed,
 				current=index == live,
 				buffer_open=index == buffering,
@@ -927,6 +962,17 @@ def grant_saver_hours(user, week_index, hours, granted_by, note=""):
 		)
 		for _ in range(hours)
 	])
+
+
+def remove_hours(user, week_index, hours, removed_by, note=""):
+	"""An organizer taking hours off a week by hand."""
+	return HourRemoval.objects.create(
+		user=user,
+		week_index=week_index,
+		hours=hours,
+		removed_by=removed_by,
+		note=note,
+	)
 
 
 # ---- loans ---------------------------------------------------------------

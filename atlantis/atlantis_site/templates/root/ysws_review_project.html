@@ -41,7 +41,7 @@
 {% endblock %}
 
 {% block decision %}
-<form class="rv-form" method="POST"
+<form class="rv-form" method="POST" enctype="multipart/form-data"
       action="{% url 't2_decision' ship.id %}{% if session_query %}?{{ session_query }}{% endif %}">
     {% csrf_token %}
     <h2 class="rv-form-title">Submit Review</h2>
@@ -55,6 +55,35 @@
                   placeholder="Why the hours sent to HQ are what they are."></textarea>
         <span class="rv-counter" data-counter-for="rv-internal" data-max="1000"></span>
     </label>
+
+    {% comment %}
+    Only what goes to Airtable on approval. The book cover, and everything
+    else on the site, keeps the shipper's own screenshot.
+    {% endcomment %}
+    <div class="rv-field" data-airtable-shot>
+        <span class="rv-field-label">Airtable screenshot <em>(not shown to user)</em></span>
+        <div class="rv-airtable-shot">
+            {% comment %}
+            Two thumbnails rather than one that's rewritten: the project's is
+            never touched, so going back to it is just showing it again.
+            {% endcomment %}
+            <a class="rv-shot" href="{{ ship.project.image_display_url }}" target="_blank" rel="noreferrer noopener"
+               data-airtable-shot-default {% if not ship.project.image_display_url %}hidden{% endif %}>
+                <img src="{{ ship.project.image_display_url }}" alt="Screenshot sent to Airtable">
+            </a>
+            <a class="rv-shot" target="_blank" rel="noreferrer noopener" data-airtable-shot-custom hidden>
+                <img alt="Screenshot sent to Airtable">
+            </a>
+            <div class="rv-airtable-shot-inputs">
+                <p class="rv-form-note" data-airtable-shot-note>The project's own screenshot is sent unless you pick another.</p>
+                <input type="file" name="airtable_screenshot_file" accept="image/png,image/jpeg,image/gif,image/webp"
+                       aria-label="Upload a screenshot for Airtable" data-airtable-shot-file>
+                <input type="url" name="airtable_screenshot_url" maxlength="2048" placeholder="or paste an image URL"
+                       aria-label="Image URL for Airtable" data-airtable-shot-url>
+                <button type="button" class="rv-btn" data-airtable-shot-reset hidden>Use the project's</button>
+            </div>
+        </div>
+    </div>
 
     <label class="rv-field">
         <span class="rv-field-label">Feedback <em>(shown to user)</em><kbd>&#8984;F</kbd></span>

@@ -3,6 +3,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.utils import timezone
 
@@ -13,11 +14,11 @@ import json
 from ...models import (
     AirtableSubmission, InternalComment, Profile, Project, Ship, T1, T2, T3,
     PAYOUT_MULTIPLIER_DEFAULT, PAYOUT_MULTIPLIER_MAX, PAYOUT_MULTIPLIER_MIN,
-    PAYOUT_MULTIPLIER_STEP, PEARLS_PER_HOUR,
+    PAYOUT_MULTIPLIER_STEP, PEARLS_PER_HOUR, media_url,
 )
 from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked_message
 from ...submissions import build_generated_justification, build_override_justification, submit_ship
-from ..helpers import check_perms, staff_member_required, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, INT_FIELD_MAX, INT_FIELD_MIN
+from ..helpers import check_perms, staff_member_required, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, is_valid_image_url, random_storage_key, sniff_image_extension, validate_file_size, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
 from .queue import (
     QUEUES, annotate_recordings, dash_context, decorate_rows, filter_rows,
@@ -29,6 +30,8 @@ from .queue import (
 INTERNAL_COMMENT_MAX_LENGTH = 1000
 T1_FIELD_MAX_LENGTH = 1000
 T2_FIELD_MAX_LENGTH = 1000
+AIRTABLE_SCREENSHOT_MAX_MB = 5
+AIRTABLE_SCREENSHOT_URL_MAX_LENGTH = 2048
 # Room for a long T2 justification plus the timelapse audit of a ship with many
 # Lookouts, which is what the T3 field starts out holding.
 T3_JUSTIFICATION_MAX_LENGTH = 20000
@@ -194,6 +197,33 @@ def submit_finalized_ship(ship_id):
     and pending is exactly what submit_airtable picks up.
     """
     submit_ship(Ship.objects.get(pk=ship_id))
+
+def airtable_screenshot_choice(request):
+    """(file, extension, url, error) for the T2 form's Airtable screenshot.
+
+    At most one of the file and the url comes back; neither means the
+    project's own screenshot goes to Airtable. The file isn't stored here, so
+    a decision that bounces leaves nothing behind in the bucket.
+    """
+    image_file = request.FILES.get("airtable_screenshot_file")
+    url = request.POST.get("airtable_screenshot_url", "").strip()
+    if image_file and url:
+        return None, None, "", "Upload a screenshot or paste a link for Airtable, not both."
+    if image_file:
+        if not validate_file_size(image_file, AIRTABLE_SCREENSHOT_MAX_MB):
+            return None, None, "", f"Max file size for the Airtable screenshot is {AIRTABLE_SCREENSHOT_MAX_MB}MB."
+        ext = sniff_image_extension(image_file)
+        if not ext:
+            return None, None, "", "The Airtable screenshot must be a valid PNG, JPEG, GIF, or WEBP file."
+        return image_file, ext, "", None
+    if url:
+        if (
+            len(url) > AIRTABLE_SCREENSHOT_URL_MAX_LENGTH
+            or not url.startswith(("http://", "https://"))
+            or not is_valid_image_url(url)
+        ):
+            return None, None, "", "The Airtable screenshot link has to be a reachable image URL."
+    return None, None, url, None
 
 def t1_rollback_block(t1):
     """Why this T1 review can't be rolled back, or None when it can.
@@ -573,6 +603,14 @@ def t2_decision(request, ship_id):
         messages.error(request, f"Feedback or justification length too long (max {T2_FIELD_MAX_LENGTH} char)")
         return back_to_item()
 
+    # Only an approval goes on to Airtable, so the other decisions ignore it.
+    screenshot_file, screenshot_ext, screenshot_url = None, None, ""
+    if decision == T2.Decision.APPROVE:
+        screenshot_file, screenshot_ext, screenshot_url, error = airtable_screenshot_choice(request)
+        if error:
+            messages.error(request, error)
+            return back_to_item()
+
     with transaction.atomic():
         ship = get_object_or_404(Ship.objects.select_for_update(), id=ship_id)
 
@@ -612,13 +650,22 @@ def t2_decision(request, ship_id):
 
         ship.save()
 
+        # Stored like Project.image_url: an object key in the private bucket,
+        # or the link as pasted.
+        airtable_screenshot = screenshot_url
+        if screenshot_file:
+            airtable_screenshot = default_storage.save(
+                random_storage_key("images", screenshot_ext), screenshot_file
+            )
+
         t2 = T2.objects.create(
             ship=ship,
             reviewer=reviewer,
             decision=decision,
             deductions=deductions,
             feedback=feedback,
-            justification=justification
+            justification=justification,
+            airtable_screenshot=airtable_screenshot,
         )
 
     if decision == T2.Decision.CHANGES:
@@ -632,6 +679,7 @@ def t2_decision(request, ship_id):
         "project": ship.project.title,
         "decision": decision,
         "deductions": deductions,
+        "custom_airtable_screenshot": bool(t2.airtable_screenshot),
         "new_ship_status": ship.status,
     })
 
@@ -686,6 +734,8 @@ def fraud_review_project(request, ship_id):
         "multiplier_max": PAYOUT_MULTIPLIER_MAX,
         "multiplier_step": PAYOUT_MULTIPLIER_STEP,
         "multiplier_default": PAYOUT_MULTIPLIER_DEFAULT,
+        # The screenshot the T2 reviewer picked for Airtable, if they did.
+        "custom_airtable_screenshot": media_url(latest_t2.airtable_screenshot) if latest_t2 else "",
         # Airtable's override-hours justification: the T2 reviewer's words,
         # then every Lookout on the ship with the ranges cut from it and why.
         # Nothing else shows a T3 reviewer the timelapse review in full.
