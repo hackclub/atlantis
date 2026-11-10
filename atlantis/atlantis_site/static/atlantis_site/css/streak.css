@@ -101,6 +101,7 @@
 }
 
 .streak-savers,
+.streak-removed,
 .streak-done {
     padding: 0 0.4em;
     border-radius: 0.5em;
@@ -110,6 +111,10 @@
 
 .streak-done {
     background-color: rgba(129, 199, 132, 0.3);
+}
+
+.streak-removed {
+    background-color: rgba(239, 154, 154, 0.3);
 }
 
 /* The grace-week line under the legend: when the pair's hours are really due. */

@@ -61,7 +61,7 @@
                                 {% elif week.met %}is-met
                                 {% elif week.current %}is-live
                                 {% else %}is-future{% endif %}"
-                                title="{{ week.label }}: {{ week.credited_display }}{% if week.saver_hours %} ({{ week.saver_hours }}h saved){% endif %}{% if week.override %}, overridden{% endif %}">
+                                title="{{ week.label }}: {{ week.credited_display }}{% if week.saver_hours %} ({{ week.saver_hours }}h saved){% endif %}{% if week.removed_hours %} ({{ week.removed_hours }}h removed){% endif %}{% if week.override %}, overridden{% endif %}">
                                 {% if week.missed %}&times;
                                 {% elif week.met %}&check;
                                 {% elif week.current %}{{ week.percent }}%

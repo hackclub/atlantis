@@ -89,6 +89,9 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
             {% if week.saver_hours %}
                 <span class="streak-savers">{{ week.saver_hours }} saved</span>
             {% endif %}
+            {% if week.removed_hours %}
+                <span class="streak-removed">{{ week.removed_hours }}h removed</span>
+            {% endif %}
             {% if week.done %}
                 <span class="streak-done">done</span>
             {% else %}

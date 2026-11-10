@@ -77,6 +77,13 @@ def latest_t2(ship):
 	return ship.t2_reviews.order_by("-id").first()
 
 
+def airtable_screenshot(ship):
+	"""The screenshot HQ gets: the one the latest T2 reviewer chose for
+	Airtable, or the project's own when they left it alone."""
+	t2 = latest_t2(ship)
+	return (t2.airtable_screenshot if t2 else "") or ship.project.image_url
+
+
 def approving_t3(ship):
 	"""The T3 review that finalized the ship, which is where the hours to submit
 	come from. Falls back to the most recent T3 so a ship finalized some other
@@ -266,7 +273,7 @@ def build_fields(ship, notes=None):
 
 	first_name = address.get("first_name") or owner.first_name
 	last_name = address.get("last_name") or owner.last_name
-	screenshot = download_url(project.image_url)
+	screenshot = download_url(airtable_screenshot(ship))
 	t3 = approving_t3(ship)
 
 	fields = {

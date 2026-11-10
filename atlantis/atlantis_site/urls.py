@@ -106,6 +106,8 @@ urlpatterns = [
     path("root/challenge/back_in_from_buffer.csv", buffer_rescued_csv, name="buffer_rescued_csv"),
     path("root/challenge/<int:user_id>/", challenge_user, name="challenge_user"),
     path("root/challenge/<int:user_id>/saver/", grant_saver, name="grant_saver"),
+    path("root/challenge/<int:user_id>/remove/", remove_hours, name="remove_hours"),
+    path("root/challenge/<int:user_id>/remove/<int:removal_id>/undo/", undo_hour_removal, name="undo_hour_removal"),
     path("root/challenge/<int:user_id>/override/", override_week, name="override_week"),
     path("users/<int:user_id>/", user_profile, name="user_profile")
 ]

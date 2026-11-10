@@ -686,6 +686,64 @@
         });
     }
 
+    /* ------------------------------------------------ airtable screenshot */
+
+    /*
+     * The T2 form's thumbnail follows whatever will go to Airtable: the
+     * project's own screenshot until an upload or a link replaces it. Only
+     * one of the two can be sent, so picking one clears the other.
+     */
+    function setupAirtableShot() {
+        var field = document.querySelector('[data-airtable-shot]');
+        if (!field) return;
+        var link = field.querySelector('[data-airtable-shot-link]');
+        var preview = field.querySelector('[data-airtable-shot-preview]');
+        var note = field.querySelector('[data-airtable-shot-note]');
+        var file = field.querySelector('[data-airtable-shot-file]');
+        var url = field.querySelector('[data-airtable-shot-url]');
+        var reset = field.querySelector('[data-airtable-shot-reset]');
+        var defaultNote = note.textContent;
+        var objectUrl = null;
+
+        var show = function (src, text) {
+            if (objectUrl && src !== objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+                objectUrl = null;
+            }
+            preview.src = src;
+            preview.hidden = !src;
+            link.href = src || link.dataset.default;
+            note.textContent = text || defaultNote;
+            reset.hidden = !text;
+        };
+
+        file.addEventListener('change', function () {
+            var chosen = file.files && file.files[0];
+            if (!chosen) {
+                show(link.dataset.default, '');
+                return;
+            }
+            url.value = '';
+            var next = URL.createObjectURL(chosen);
+            show(next, 'Your upload is sent to Airtable instead.');
+            objectUrl = next;
+        });
+        url.addEventListener('input', function () {
+            var value = url.value.trim();
+            if (!value) {
+                show(link.dataset.default, '');
+                return;
+            }
+            file.value = '';
+            show(/^https?:\/\//i.test(value) ? value : '', 'This link is sent to Airtable instead.');
+        });
+        reset.addEventListener('click', function () {
+            file.value = '';
+            url.value = '';
+            show(link.dataset.default, '');
+        });
+    }
+
     /* -------------------------------------------------------------- charts */
 
     /*
@@ -736,6 +794,7 @@
         setupNotes();
         setupCopy();
         setupPayout();
+        setupAirtableShot();
         setupHeartbeat();
         setupQueueTable();
         setupRollback();

@@ -74,6 +74,13 @@
             {% else %}
                 <p class="rv-airtable-state">Not submitted yet. This is the generated text; what's sent is the copy you edit under Submit Review.</p>
             {% endif %}
+            {% if custom_airtable_screenshot %}
+                <p class="rv-airtable-state">
+                    <strong>Screenshot:</strong> the T2 reviewer chose a
+                    <a href="{{ custom_airtable_screenshot }}" target="_blank" rel="noreferrer noopener">different one</a>
+                    for Airtable.
+                </p>
+            {% endif %}
             {% if override_justification %}
                 <pre class="rv-airtable-justification">{{ override_justification }}</pre>
             {% else %}
