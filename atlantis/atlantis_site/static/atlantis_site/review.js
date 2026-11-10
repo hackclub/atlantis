@@ -693,54 +693,85 @@
      * project's own screenshot until an upload or a link replaces it. Only
      * one of the two can be sent, so picking one clears the other.
      */
+    /*
+     * A URL, reparsed, if it's one an <img> can safely load: http(s) for a
+     * pasted link, blob: for an upload's own object URL. `javascript:` and
+     * friends never reach an href; anything else comes back empty and just
+     * isn't previewed. The server checks a pasted link again either way.
+     */
+    function imageLinkOrEmpty(value, protocols) {
+        var parsed;
+        try {
+            parsed = new URL(value);
+        } catch (e) {
+            return '';
+        }
+        if (protocols.indexOf(parsed.protocol) === -1) return '';
+        return parsed.href;
+    }
+
     function setupAirtableShot() {
         var field = document.querySelector('[data-airtable-shot]');
         if (!field) return;
-        var link = field.querySelector('[data-airtable-shot-link]');
-        var preview = field.querySelector('[data-airtable-shot-preview]');
+        var standard = field.querySelector('[data-airtable-shot-default]');
+        var custom = field.querySelector('[data-airtable-shot-custom]');
+        var preview = custom.querySelector('img');
         var note = field.querySelector('[data-airtable-shot-note]');
         var file = field.querySelector('[data-airtable-shot-file]');
         var url = field.querySelector('[data-airtable-shot-url]');
         var reset = field.querySelector('[data-airtable-shot-reset]');
         var defaultNote = note.textContent;
+        var hadDefault = !standard.hidden;
         var objectUrl = null;
 
+        var forgetUpload = function () {
+            if (!objectUrl) return;
+            URL.revokeObjectURL(objectUrl);
+            objectUrl = null;
+        };
+        // `src` is a blob: URL or what imageLinkOrEmpty let through, never
+        // anything read back out of the page. Empty shows the project's.
         var show = function (src, text) {
-            if (objectUrl && src !== objectUrl) {
-                URL.revokeObjectURL(objectUrl);
-                objectUrl = null;
+            if (src) {
+                preview.src = src;
+                custom.href = src;
+            } else {
+                preview.removeAttribute('src');
+                custom.removeAttribute('href');
             }
-            preview.src = src;
-            preview.hidden = !src;
-            link.href = src || link.dataset.default;
+            custom.hidden = !src;
+            standard.hidden = Boolean(text) || !hadDefault;
             note.textContent = text || defaultNote;
             reset.hidden = !text;
         };
 
         file.addEventListener('change', function () {
+            forgetUpload();
             var chosen = file.files && file.files[0];
             if (!chosen) {
-                show(link.dataset.default, '');
+                show('', '');
                 return;
             }
             url.value = '';
             var next = URL.createObjectURL(chosen);
-            show(next, 'Your upload is sent to Airtable instead.');
             objectUrl = next;
+            show(imageLinkOrEmpty(next, ['blob:']), 'Your upload is sent to Airtable instead.');
         });
         url.addEventListener('input', function () {
             var value = url.value.trim();
             if (!value) {
-                show(link.dataset.default, '');
+                show('', '');
                 return;
             }
             file.value = '';
-            show(/^https?:\/\//i.test(value) ? value : '', 'This link is sent to Airtable instead.');
+            forgetUpload();
+            show(imageLinkOrEmpty(value, ['http:', 'https:']), 'This link is sent to Airtable instead.');
         });
         reset.addEventListener('click', function () {
             file.value = '';
             url.value = '';
-            show(link.dataset.default, '');
+            forgetUpload();
+            show('', '');
         });
     }
 

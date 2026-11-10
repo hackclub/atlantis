@@ -63,10 +63,16 @@
     <div class="rv-field" data-airtable-shot>
         <span class="rv-field-label">Airtable screenshot <em>(not shown to user)</em></span>
         <div class="rv-airtable-shot">
+            {% comment %}
+            Two thumbnails rather than one that's rewritten: the project's is
+            never touched, so going back to it is just showing it again.
+            {% endcomment %}
             <a class="rv-shot" href="{{ ship.project.image_display_url }}" target="_blank" rel="noreferrer noopener"
-               data-airtable-shot-link data-default="{{ ship.project.image_display_url }}">
-                <img src="{{ ship.project.image_display_url }}" alt="Screenshot sent to Airtable" data-airtable-shot-preview
-                     {% if not ship.project.image_display_url %}hidden{% endif %}>
+               data-airtable-shot-default {% if not ship.project.image_display_url %}hidden{% endif %}>
+                <img src="{{ ship.project.image_display_url }}" alt="Screenshot sent to Airtable">
+            </a>
+            <a class="rv-shot" target="_blank" rel="noreferrer noopener" data-airtable-shot-custom hidden>
+                <img alt="Screenshot sent to Airtable">
             </a>
             <div class="rv-airtable-shot-inputs">
                 <p class="rv-form-note" data-airtable-shot-note>The project's own screenshot is sent unless you pick another.</p>
