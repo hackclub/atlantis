@@ -5,6 +5,8 @@ Only the shape of each queue leaves this module. Counts are rounded to the
 nearest ten and waits to the nearest hour before they are cached or rendered,
 so nothing on the page (or in its context) can be used to work out which
 projects are in a queue, or that one particular project has just joined it.
+The one exception is the fish costume counter (SHIP_GOAL), an exact total of
+projects shipped since a fixed moment, which names no project.
 
 The wait is the backlog divided by the rate the desk has been clearing it:
 "at the pace of the last week, how long until the reviewers get through
@@ -13,13 +15,14 @@ everything ahead of you". That answers the question a shipper is asking about
 grown or shrunk.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from django.core.cache import cache
 from django.shortcuts import render
 from django.utils import timezone
 
-from ...models import Project
+from ...models import Project, Ship
 from ..admin.queue import QUEUES, REVIEW_MODEL
 
 # The desks in the order a ship passes through them, under the names a shipper
@@ -35,6 +38,12 @@ PIPELINE = (
 # A week, so a quiet weekend or one big review session doesn't swing the
 # estimate by a factor of three.
 THROUGHPUT_WINDOW = timedelta(days=7)
+
+# The fish costume goal: unique projects shipped since 11 PM Eastern on
+# Wednesday, November 11, 2026, counted up to SHIP_GOAL. Unlike the queue
+# lengths this is an exact running total, so the bar moves with every ship.
+SHIP_GOAL_SINCE = datetime(2026, 11, 11, 23, 0, tzinfo=ZoneInfo("America/New_York"))
+SHIP_GOAL = 300
 
 CACHE_KEY = "public-queue-stats"
 CACHE_TTL = 5 * 60
@@ -109,6 +118,27 @@ def wait_display(hours):
     return f"~{whole:,} hr{'' if whole == 1 else 's'}"
 
 
+def ship_goal_progress(shipped, goal=SHIP_GOAL):
+    """The counter's numbers: the total, the goal, and how full the bar is (0-100)."""
+    return {
+        "shipped": shipped,
+        "goal": goal,
+        "percent": min(100, round(shipped * 100 / goal)),
+        "reached": shipped >= goal,
+    }
+
+
+def _projects_shipped_since(since):
+    """Distinct live projects with at least one ship created at or after `since`."""
+    return (
+        Ship.objects
+        .filter(created_at__gte=since, project__deleted=False)
+        .values("project")
+        .distinct()
+        .count()
+    )
+
+
 def queue_snapshot():
     """Every desk's rounded count and wait, cached briefly.
 
@@ -131,7 +161,11 @@ def queue_snapshot():
             "wait": wait,
         })
 
-    snapshot = {"queues": queues, "updated_at": timezone.now()}
+    snapshot = {
+        "queues": queues,
+        "ship_goal": ship_goal_progress(_projects_shipped_since(SHIP_GOAL_SINCE)),
+        "updated_at": timezone.now(),
+    }
     cache.set(CACHE_KEY, snapshot, CACHE_TTL)
     return snapshot
 

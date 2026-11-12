@@ -8,7 +8,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from ..models import Ship, T1
-from ..views.client.queue_status import estimate_hours, rounded_count, wait_display
+from ..views.client.queue_status import (
+	SHIP_GOAL_SINCE, estimate_hours, rounded_count, ship_goal_progress, wait_display,
+)
 from .base import BaseTestCase, make_journal, make_project, make_ship, make_user
 
 
@@ -97,3 +99,36 @@ class QueueStatusPageTests(BaseTestCase):
 		make_ship(make_project(self.owner, shippable=True), journal_minutes=(60,))
 		_response, queues = self._queues()
 		self.assertEqual(queues["Project review"]["count"], "0")
+
+
+class ShipGoalTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		cache.clear()
+		self.owner = make_user("author")
+
+	def _ship_at(self, project, at):
+		ship = make_ship(project, journal_minutes=(60,))
+		Ship.objects.filter(pk=ship.pk).update(created_at=at)
+
+	def test_progress_caps_at_the_goal(self):
+		self.assertEqual(ship_goal_progress(0)["percent"], 0)
+		self.assertEqual(ship_goal_progress(150)["percent"], 50)
+		self.assertFalse(ship_goal_progress(299)["reached"])
+		self.assertEqual(ship_goal_progress(450)["percent"], 100)
+		self.assertTrue(ship_goal_progress(450)["reached"])
+
+	def test_counts_unique_projects_shipped_since_the_start(self):
+		twice = make_project(self.owner, shippable=True)
+		self._ship_at(twice, SHIP_GOAL_SINCE + timedelta(hours=1))
+		self._ship_at(twice, SHIP_GOAL_SINCE + timedelta(hours=2))
+		self._ship_at(make_project(self.owner, shippable=True), SHIP_GOAL_SINCE)
+		self._ship_at(make_project(self.owner, shippable=True), SHIP_GOAL_SINCE - timedelta(seconds=1))
+		gone = make_project(self.owner, shippable=True)
+		self._ship_at(gone, SHIP_GOAL_SINCE + timedelta(hours=1))
+		gone.deleted = True
+		gone.save()
+
+		response = self.client.get(reverse("queue_status"))
+		self.assertEqual(response.context["ship_goal"]["shipped"], 2)
+		self.assertContains(response, "Mihi fish costume progress")

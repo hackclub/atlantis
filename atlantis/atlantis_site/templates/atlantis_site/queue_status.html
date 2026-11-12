@@ -16,6 +16,17 @@
             <h1>Review queue</h1>
         </header>
 
+        <section class="qs-goal{% if ship_goal.reached %} qs-goal-reached{% endif %}" aria-labelledby="qs-goal-label">
+            <div class="qs-goal-head">
+                <h2 id="qs-goal-label">mihi fish costume progress</h2>
+                <p class="qs-goal-count"><span class="qs-value">{{ ship_goal.shipped }}</span> / {{ ship_goal.goal }}</p>
+            </div>
+            <div class="qs-goal-bar" role="progressbar" aria-labelledby="qs-goal-label"
+                 aria-valuemin="0" aria-valuemax="{{ ship_goal.goal }}" aria-valuenow="{{ ship_goal.shipped }}">
+                <div class="qs-goal-fill" style="width: {{ ship_goal.percent }}%"></div>
+            </div>
+        </section>
+
         <ol class="qs-list">
             {% for queue in queues %}
                 <li class="qs-card{% if queue.empty %} qs-card-empty{% endif %}">

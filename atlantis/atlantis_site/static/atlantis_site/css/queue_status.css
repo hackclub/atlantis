@@ -53,6 +53,65 @@ body.qs {
     line-height: 1.1;
 }
 
+/* --------------------------------------------------------- ship goal */
+
+.qs-goal {
+    margin-bottom: 14px;
+    border: 1px solid var(--qs-border);
+    border-radius: 16px;
+    padding: 20px 22px 22px;
+}
+
+.qs-goal-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin-bottom: 14px;
+}
+
+.qs-goal h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 500;
+}
+
+.qs-goal-count {
+    margin: 0;
+    color: var(--qs-muted);
+    font-size: 15px;
+    font-variant-numeric: tabular-nums;
+}
+
+.qs-goal-count .qs-value {
+    color: var(--qs-text);
+}
+
+.qs-goal-bar {
+    height: 12px;
+    border-radius: 999px;
+    background: var(--qs-accent-soft);
+    overflow: hidden;
+}
+
+.qs-goal-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--qs-accent);
+    transition: width 0.4s ease;
+}
+
+.qs-goal-note {
+    margin: 10px 0 0;
+    color: var(--qs-faint);
+    font-size: 13px;
+}
+
+.qs-goal-reached {
+    border-color: var(--qs-accent);
+}
+
 /* -------------------------------------------------------------- cards */
 
 .qs-list {
