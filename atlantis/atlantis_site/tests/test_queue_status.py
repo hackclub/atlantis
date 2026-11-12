@@ -131,4 +131,4 @@ class ShipGoalTests(BaseTestCase):
 
 		response = self.client.get(reverse("queue_status"))
 		self.assertEqual(response.context["ship_goal"]["shipped"], 2)
-		self.assertContains(response, "Mihi fish costume progress")
+		self.assertContains(response, "mihi fish costume progress")
