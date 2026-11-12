@@ -45,7 +45,10 @@ THROUGHPUT_WINDOW = timedelta(days=7)
 SHIP_GOAL_SINCE = datetime(2026, 11, 11, 23, 0, tzinfo=ZoneInfo("America/New_York"))
 SHIP_GOAL = 300
 
-CACHE_KEY = "public-queue-stats"
+# Versioned: the cache is the database, so it outlives a deploy. Bump the
+# suffix whenever the snapshot's shape changes, or the new template renders
+# the old code's snapshot (with its new fields missing) until it expires.
+CACHE_KEY = "public-queue-stats-v2"
 CACHE_TTL = 5 * 60
 
 
