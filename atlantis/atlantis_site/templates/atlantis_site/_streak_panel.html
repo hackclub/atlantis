@@ -15,8 +15,7 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
 
     {% if not standing.started %}
         <p class="streak-note">
-            The eight weeks open {{ program_starts|slice:":10" }}. Hours logged until then
-            pay the prep rate and don't count towards a printer.
+            Week 1 opens {{ program_starts|slice:":10" }}. Hours before then earn pearls, not printer progress.
         </p>
 
     {% elif week %}
@@ -39,11 +38,7 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
         {% endcomment %}
         {% if week.bar_makeup_minutes %}
             <p class="streak-note streak-note-bad streak-makeup" role="status">
-                {{ week.bar_makeup_display }} need to be made up because of deflations to
-                your project. That's on top of the usual {{ week.base_required_hours }} hours,
-                so this week's bar is {{ week.required_display }}.
-                {% if week.carried_makeup_minutes %}{{ week.carried_makeup_display }} of it
-                was moved here from last week.{% endif %}
+                +{{ week.bar_makeup_display }} makeup for deflations on your project{% if week.carried_makeup_minutes %} ({{ week.carried_makeup_display }} from last week){% endif %}.
             </p>
         {% endif %}
 
@@ -59,12 +54,9 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
                 {% if week.makeup_deferred %}
                     <p class="streak-hint">
                         {% if week.deferred_makeup_minutes %}
-                            {{ week.deferred_makeup_display }} from this week's deflations will be
-                            made up in week {{ week.index|add:1 }} instead. Anything past your
-                            {{ week.base_required_hours }} hours this week comes off it.
+                            {{ week.deferred_makeup_display }} of makeup moved to week {{ week.index|add:1 }}.
                         {% else %}
-                            You've already made up this week's {{ week.own_makeup_display }}
-                            of deflations, so none of it moves to week {{ week.index|add:1 }}.
+                            This week's {{ week.own_makeup_display }} makeup is already done.
                         {% endif %}
                     </p>
                     <input type="hidden" name="when" value="this">
@@ -106,14 +98,11 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
         {% endcomment %}
         {% if week.grace_due_later and not week.done %}
             <p class="streak-hint">
-                You don't need all {{ week.required_display }} by the end of this
-                countdown. {{ week.grace_label|capfirst }} count together, so you have
-                until {{ week.grace_deadline_display }} Eastern.
+                {{ week.grace_label|capfirst }} count together: due {{ week.grace_deadline_display }} Eastern.
             </p>
         {% elif week.grace and not week.done %}
             <p class="streak-hint">
-                {{ week.grace_label|capfirst }} count together: these {{ week.required_display }}
-                are due when this countdown ends.
+                {{ week.grace_label|capfirst }} count together: due when this countdown ends.
             </p>
         {% endif %}
 
@@ -124,8 +113,7 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
         <a class="streak-action" href="{% url 'shop' %}">Buy a missed-week saver</a>
     {% elif standing.started and not week %}
         <p class="streak-note">
-            The eight weeks are over. {% if standing.printer_unlocked %}Your printer is
-            waiting on the charts.{% endif %}
+            The eight weeks are over.{% if standing.printer_unlocked %} Your printer is waiting on the charts.{% endif %}
         </p>
     {% endif %}
 

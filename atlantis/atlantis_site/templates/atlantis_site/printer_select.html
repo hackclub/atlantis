@@ -26,10 +26,11 @@
                     {{ profile.layers }}
                 </div>
             </div>
-
-            <h1 class="chart-heading">Pick your printer</h1>
         </header>
 
+        {# The heading sits in the grid's own column, so its left edge is the first card's. #}
+        <div class="track-room">
+        <h1 class="chart-heading">Pick your printer</h1>
         <ul class="track-grid">
             {% for track in tracks %}
                 <li>
@@ -51,6 +52,7 @@
                 </li>
             {% endfor %}
         </ul>
+        </div>
     </div>
 </body>
 </html>

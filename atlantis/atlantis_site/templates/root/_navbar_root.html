@@ -1,40 +1,58 @@
 {% load nav_badges %}
-<nav class="sidebar">
-    <div class="sidebar-brand">
+{% comment %}
+The rail, in the order the work flows: the review desks, then the shop, then
+the organizer's tables. A group a reviewer holds no permission in renders no
+links, and admin.css hides a group with no links, so nobody sees a heading
+over nothing.
+{% endcomment %}
+<nav class="sidebar" aria-label="Admin">
+    <a class="sidebar-brand" href="{% url 'admin_dash' %}"{% nav_current 'admin_dash' %}>
         <span class="sidebar-brand-name">Atlantis</span>
         <span class="sidebar-brand-sub">admin</span>
+    </a>
+
+    <div class="nav-group">
+        <p class="nav-group-label">Review</p>
+        {% if perms.atlantis_site.timelapse_review or perms.atlantis_site.baller or perms.atlantis_site.organizer %}
+            <a href="{% url 'timelapse_review_dash' %}" class="nav-counted"{% nav_current 'timelapse_review_dash' %}>timelapse review{% nav_badge 'lookout' %}</a>
+        {% endif %}
+        {% if perms.atlantis_site.t1_review or perms.atlantis_site.organizer or perms.atlantis_site.t2_review or perms.atlantis_site.baller or perms.atlantis_site.t3_review or perms.atlantis_site.reviewer_lead %}
+            <a href="{% url 'review_dash' %}" class="nav-counted"{% nav_current 'review_dash' %}>T1 review{% nav_badge 't1' %}</a>
+        {% endif %}
+        {% if perms.atlantis_site.t2_review or perms.atlantis_site.baller or perms.atlantis_site.organizer or perms.atlantis_site.t3_review %}
+            <a href="{% url 'ysws_review_dash' %}" class="nav-counted"{% nav_current 'ysws_review_dash' %}>T2 review{% nav_badge 't2' %}</a>
+        {% endif %}
+        {% if perms.atlantis_site.t3_review or perms.atlantis_site.organizer %}
+            <a href="{% url 'fraud_review_dash' %}" class="nav-counted"{% nav_current 'fraud_review_dash' %}>T3 review{% nav_badge 't3' %}</a>
+        {% endif %}
+        {% if perms.atlantis_site.reviewer_lead or perms.atlantis_site.organizer %}
+            <a href="{% url 'review_audit' %}"{% nav_current 'review_audit' %}>review audit</a>
+        {% endif %}
     </div>
-    <a href="/root/">home</a>
-    {% if perms.atlantis_site.fulfillment or perms.atlantis_site.organizer %}
-        <a href="/root/shop">shop management</a>
-        <a href="/root/fulfillment" class="nav-counted">fulfillment{% nav_badge 'fulfillment' %}</a>
-    {% endif %}
-    {% if perms.atlantis_site.organizer or perms.atlantis_site.fulfillment or perms.atlantis_site.t1_review or perms.atlantis_site.t2_review or perms.atlantis_site.t3_review or perms.atlantis_site.timelapse_review or perms.atlantis_site.reviewer_lead %}
-        <a href="/root/reviewer-shop/">reviewer shop</a>
-    {% endif %}
-    {% if perms.atlantis_site.t1_review or perms.atlantis_site.organizer or perms.atlantis_site.t2_review or perms.atlantis_site.baller or perms.atlantis_site.t3_review or perms.atlantis_site.reviewer_lead %}
-        <a href="/root/review" class="nav-counted">T1 review{% nav_badge 't1' %}</a>
-    {% endif %}
-    {% if perms.atlantis_site.t2_review or perms.atlantis_site.baller or perms.atlantis_site.organizer or perms.atlantis_site.t3_review %}
-        <a href="/root/ysws_review" class="nav-counted">T2 review{% nav_badge 't2' %}</a>
-    {% endif %}
-    {% if perms.atlantis_site.t3_review or perms.atlantis_site.organizer %}
-        <a href="/root/fraud_review" class="nav-counted">T3 review{% nav_badge 't3' %}</a>
-    {% endif %}
-    {% if perms.atlantis_site.timelapse_review or perms.atlantis_site.baller or perms.atlantis_site.organizer %}
-        <a href="/root/timelapse_review" class="nav-counted">timelapse review{% nav_badge 'lookout' %}</a>
-    {% endif %}
-    {% if perms.atlantis_site.reviewer_lead or perms.atlantis_site.organizer %}
-        <a href="/root/review/audit/">review audit</a>
-    {% endif %}
-    {% if perms.atlantis_site.organizer %}
-        <a href="/root/audit_log">audit log</a>
-        <a href="/root/challenge/">streaks</a>
-        <a href="/root/users">users</a>
-        <a href="/root/projects">projects</a>
-    {% endif %}
-    {% if perms.atlantis_site.metrics or perms.atlantis_site.organizer %}
-        <a href="/root/metrics">metrics</a>
-    {% endif %}
-    <a href="/dashboard">back home</a>
+
+    <div class="nav-group">
+        <p class="nav-group-label">Shop</p>
+        {% if perms.atlantis_site.fulfillment or perms.atlantis_site.organizer %}
+            <a href="{% url 'fulfillment_dash' %}" class="nav-counted"{% nav_current 'fulfillment_dash' %}>fulfillment{% nav_badge 'fulfillment' %}</a>
+            <a href="{% url 'shop_dash' %}"{% nav_current 'shop_dash' %}>shop management</a>
+        {% endif %}
+        {% if perms.atlantis_site.organizer or perms.atlantis_site.fulfillment or perms.atlantis_site.t1_review or perms.atlantis_site.t2_review or perms.atlantis_site.t3_review or perms.atlantis_site.timelapse_review or perms.atlantis_site.reviewer_lead %}
+            <a href="{% url 'reviewer_shop_dash' %}"{% nav_current 'reviewer_shop_dash' %}>reviewer shop</a>
+        {% endif %}
+    </div>
+
+    <div class="nav-group">
+        <p class="nav-group-label">Manage</p>
+        {% if perms.atlantis_site.organizer %}
+            <a href="{% url 'users' %}"{% nav_current 'users' %}>users</a>
+            <a href="{% url 'manage_projects' %}"{% nav_current 'manage_projects' %}>projects</a>
+            <a href="{% url 'challenge_dash' %}"{% nav_current 'challenge_dash' %}>streaks</a>
+            <a href="{% url 'audit_log' %}"{% nav_current 'audit_log' %}>audit log</a>
+        {% endif %}
+        {% if perms.atlantis_site.metrics or perms.atlantis_site.organizer %}
+            <a href="{% url 'metrics' %}"{% nav_current 'metrics' %}>metrics</a>
+        {% endif %}
+    </div>
+
+    <a class="sidebar-exit" href="{% url 'dashboard' %}">&larr; back to the site</a>
 </nav>

@@ -79,8 +79,7 @@
 
     <h3>Grant saver hours</h3>
     <p class="muted">
-        Free hours on a week, charged to nobody. Enough of them on the earliest
-        missed week puts this person straight back in the program.
+        Free hours on a week. Enough on the earliest missed week puts them back in.
     </p>
     <form method="post" action="{% url 'grant_saver' target.id %}" class="inline-form">
         {% csrf_token %}
@@ -98,8 +97,7 @@
 
     <h3>Remove hours</h3>
     <p class="muted">
-        Takes hours off a week's credited time, logged or saved. Enough of them
-        can fail a week that was met. Undo one below to give the hours back.
+        Takes hours off a week, which can fail it. Undo below.
     </p>
     <form method="post" action="{% url 'remove_hours' target.id %}" class="inline-form">
         {% csrf_token %}

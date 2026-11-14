@@ -853,20 +853,18 @@ def elimination_reason(user, now=None):
 	hours = state.saver_hours_needed
 	if week.grace:
 		closed = (
-			f"{week.grace_label.capitalize()} closed with "
-			f"{format_minutes(week.grace_minutes)} of the "
-			f"{weeks.grace_minutes(week.index) // 60} hours needed between them"
+			f"{week.grace_label} ended at {format_minutes(week.grace_minutes)} "
+			f"of {weeks.grace_minutes(week.index) // 60}h"
 		)
 	else:
 		closed = (
-			f"{week.label} closed with {format_minutes(week.credited_minutes)} "
-			f"of the {weeks.WEEKLY_HOURS} hours needed"
+			f"{week.label.lower()} ended at {format_minutes(week.credited_minutes)} "
+			f"of {weeks.WEEKLY_HOURS}h"
 		)
 	return (
-		f"You're out of the program: {closed}. Buy {hours} missed-week streak "
-		f"saver{'s' if hours != 1 else ''} in the shop to get back in. You can "
-		"still journal and ship while you're out, so your ships can earn the "
-		"pearls to pay for them."
+		f"You're out of the program: {closed}. {hours} missed-week "
+		f"saver{'s' if hours != 1 else ''} get{'' if hours != 1 else 's'} you back in, "
+		"and you can still journal and ship to earn them."
 	)
 
 

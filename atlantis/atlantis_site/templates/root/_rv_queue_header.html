@@ -6,13 +6,18 @@
     {% if blurb %}<p class="rq-blurb">{{ blurb }}</p>{% endif %}
 
     {% if stat_cards %}
-        <div class="rq-stat-grid">
+        {% comment %}
+        One strip, not a row of cards: these are context for the queue below,
+        and the queue is what the page is for. What each figure measures is on
+        hover; only a breached SLA earns words of its own.
+        {% endcomment %}
+        <dl class="rq-stats">
             {% for card in stat_cards %}
-                <div class="rq-stat-card">
-                    <p class="rq-stat-label">{{ card.label }}</p>
-                    <p class="rq-stat-value{% if card.breached %} is-no{% endif %}">
+                <div class="rq-stat" title="{{ card.description|capfirst }}">
+                    <dt>{{ card.label }}</dt>
+                    <dd class="rq-stat-value{% if card.breached %} is-no{% endif %}">
                         {% if card.value is None %}
-                            n/a
+                            <span class="rq-stat-none">&ndash;</span>
                         {% else %}
                             {{ card.value }}{{ card.unit }}
                         {% endif %}
@@ -23,15 +28,14 @@
                                 {% if card.delta_up %}&uarr;{% else %}&darr;{% endif %}{{ card.delta_size|floatformat:1 }}{{ card.unit }}
                             </span>
                         {% endif %}
-                        {% if card.count %}
-                            <span class="rq-stat-count">({{ card.count }} {{ card.count_noun }}{{ card.count|pluralize }})</span>
+                        {% if card.breached %}
+                            <span class="rq-stat-note is-no">past the {{ sla_days }}d SLA</span>
+                        {% elif card.count %}
+                            <span class="rq-stat-note">{{ card.count }} {{ card.count_noun }}{{ card.count|pluralize }}</span>
                         {% endif %}
-                    </p>
-                    <p class="rq-stat-desc">
-                        {{ card.description }}{% if card.breached %} &middot; <span class="is-no">past the {{ sla_days }}d SLA</span>{% endif %}
-                    </p>
+                    </dd>
                 </div>
             {% endfor %}
-        </div>
+        </dl>
     {% endif %}
 </header>

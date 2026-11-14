@@ -14,7 +14,7 @@ expects: currencies, as (cost field, label) pairs
 
 <fieldset class="rs-costs">
     <legend>Cost</legend>
-    <small>Fill in any of these; the buyer pays in whichever they pick. Leave one blank and the item can't be bought with it.</small>
+    <small>Blank currencies can't be used to buy it.</small>
     {% for field, label in currencies %}
         <label>
             {{ label }}

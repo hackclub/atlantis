@@ -137,7 +137,10 @@ body {
 
 /* ---------- the chart room: every track at once ---------- */
 
-.track-grid {
+/* The heading and the grid share one column. The sizing variables live here
+   rather than on the grid so the column and the cards in it agree, and they
+   inherit down to .track-grid. */
+.track-room {
     --gap: clamp(14px, 1.8vw, 30px);
     --per-row: 3;
 
@@ -163,15 +166,23 @@ body {
     --chrome: clamp(158px, calc(13vh + 6vw), 300px);
 
     display: flex;
+    flex-direction: column;
+    gap: clamp(12px, 2vh, 28px);
+    width: 100%;
+    max-width: calc((100dvh - var(--chrome) - 2 * var(--card-text)
+                     - 0.22 * var(--gap)) * 2.564);
+    margin: 0 auto;
+}
+
+.track-grid {
+    display: flex;
     flex-wrap: wrap;
     /* Five cards never fill three even rows, so the short last row centres
        instead of hanging off to the left. */
     justify-content: center;
     gap: var(--gap);
     width: 100%;
-    max-width: calc((100dvh - var(--chrome) - 2 * var(--card-text)
-                     - 0.22 * var(--gap)) * 2.564);
-    margin: 0 auto;
+    margin: 0;
     padding: 0;
     list-style: none;
 }
@@ -189,7 +200,7 @@ body {
 }
 
 @media (max-width: 1080px) {
-    .track-grid {
+    .track-room {
         /* Fewer, taller rows: let them scroll rather than shrink the maps to
            fit a short window. */
         max-width: none;

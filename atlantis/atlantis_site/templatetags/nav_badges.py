@@ -18,7 +18,9 @@ else's decision can take up to the TTL to show.
 
 from django import template
 from django.core.cache import cache
+from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from ..models import Order
 from ..views.admin.queue import PENDING_COUNT_TTL, QUEUES, pending_count_cache_key
@@ -66,3 +68,42 @@ def nav_badge(key):
         count,
         count if count <= BADGE_MAX else f"{BADGE_MAX}+",
     )
+
+
+# Every page the rail links to, by URL name. nav_current needs the whole set to
+# tell "review audit" from "T1 review": the audit lives under the T1 desk's
+# path, so the link that owns a page is the one with the longest matching path,
+# not merely one that matches.
+NAV_PAGES = (
+    "admin_dash", "review_dash", "ysws_review_dash", "fraud_review_dash",
+    "timelapse_review_dash", "review_audit", "shop_dash", "fulfillment_dash",
+    "reviewer_shop_dash", "users", "manage_projects", "challenge_dash",
+    "audit_log", "metrics",
+)
+
+
+def nav_owner(path):
+    """The NAV_PAGES entry whose page `path` is, or is underneath."""
+    best, best_length = None, 0
+    for name in NAV_PAGES:
+        root = reverse(name)
+        # Compared without the trailing slash so /root/users/edit/3 belongs to
+        # /root/users, and on a segment boundary so /root/review_x would not
+        # belong to /root/review.
+        stem = root.rstrip("/")
+        if name == "admin_dash":
+            matches = path.rstrip("/") == stem
+        else:
+            matches = path.rstrip("/") == stem or path.startswith(stem + "/")
+        if matches and len(stem) > best_length:
+            best, best_length = name, len(stem)
+    return best
+
+
+@register.simple_tag(takes_context=True)
+def nav_current(context, name):
+    """` aria-current="page"` for the rail link whose page this is."""
+    request = context.get("request")
+    if request is not None and nav_owner(request.path) == name:
+        return mark_safe(' aria-current="page"')
+    return ""

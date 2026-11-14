@@ -96,9 +96,8 @@
 <form class="rv-form" method="POST"
       action="{% url 't3_decision' ship.id %}{% if session_query %}?{{ session_query }}{% endif %}">
     {% csrf_token %}
-    <h2 class="rv-form-title">Submit Review</h2>
-    <p class="rv-form-note">Approving is the end of the line: the ship is finalized, the
-        pearls are paid, and the record goes to HQ. It can't be undone from here.</p>
+    <h2 class="rv-form-title">Submit review</h2>
+    <p class="rv-form-note">Approve is final: it pays the pearls and sends the record to HQ.</p>
 
     <dl class="rv-ledger">
         <div><dt>Logged</dt><dd>{{ logged_time }} min</dd></div>

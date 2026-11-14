@@ -113,12 +113,19 @@
     color: var(--oc-sidebar-text);
 }
 
-.root-page .sidebar-brand {
+/* The wordmark is the way back to the admin home, so it is a link — but it
+   keeps its own box rather than the pill the section links below it get. */
+.root-page .sidebar a.sidebar-brand {
     display: block;
-    padding: 6px 12px 16px;
-    margin-bottom: 8px;
+    padding: 6px 12px 14px;
+    margin-bottom: 4px;
     border-bottom: 1px solid var(--oc-sidebar-line);
+    border-radius: 0;
     line-height: 1.2;
+}
+
+.root-page .sidebar a.sidebar-brand:hover {
+    background: none;
 }
 
 .root-page .sidebar-brand-name {
@@ -137,9 +144,30 @@
     margin-top: 2px;
 }
 
+/* Review, shop, manage. The links are permission-gated one by one, so a
+   reviewer can hold none of a group; the heading goes with them. */
+.root-page .nav-group {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 14px;
+}
+
+.root-page .nav-group:not(:has(a)) {
+    display: none;
+}
+
+.root-page .nav-group-label {
+    margin: 0 0 4px;
+    padding: 0 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--oc-sidebar-dim);
+}
+
 .root-page .sidebar a {
-    padding: 9px 12px;
-    border-radius: 8px;
+    padding: 7px 12px;
+    border-radius: 6px;
     font-size: 14px;
     color: var(--oc-sidebar-text);
 }
@@ -147,6 +175,14 @@
 .root-page .sidebar a:hover {
     background: var(--oc-abyss-2);
     color: var(--oc-sidebar-strong);
+}
+
+/* Where you are. A bar on the rail's own edge as well as the fill, so the
+   mark survives a screen that washes the two near-black surfaces together. */
+.root-page .sidebar .nav-group a[aria-current="page"] {
+    background: var(--oc-abyss-2);
+    color: var(--oc-sidebar-strong);
+    box-shadow: inset 2px 0 0 var(--oc-tide);
 }
 
 /* A link that carries a pending count. Flex so the badge can sit against the
@@ -164,7 +200,6 @@
     min-width: 20px;
     padding: 0 6px;
     box-sizing: border-box;
-    border: 1px solid var(--oc-line-2);
     border-radius: 999px;
     background: var(--oc-tide-soft);
     color: var(--oc-tide-2);
@@ -177,20 +212,20 @@
     font-variant-numeric: tabular-nums;
 }
 
-/* "back home" leaves for the public site — pin it away from the admin
-   sections so it can't be mistaken for one of them. */
-.root-page .sidebar a:last-child {
+/* Leaves for the public site — pinned away from the admin sections so it
+   can't be mistaken for one of them. */
+.root-page .sidebar a.sidebar-exit {
     margin-top: auto;
     padding-top: 14px;
     border-top: 1px solid var(--oc-sidebar-line);
     border-radius: 0;
+    font-size: 13px;
     color: var(--oc-sidebar-dim);
 }
 
-.root-page .sidebar a:last-child:hover {
+.root-page .sidebar a.sidebar-exit:hover {
     background: none;
     color: var(--oc-sidebar-strong);
-    text-decoration: underline;
 }
 
 /* ---------- page shell + type ---------- */
@@ -323,6 +358,42 @@
 .root-page .users-table > tbody > tr > td > form > button,
 .root-page .users-table > tbody > tr > td > span[aria-disabled] {
     white-space: nowrap;
+}
+
+/* A row's actions sit on one line. Stacked, three short links made every row
+   three lines tall however little the row itself had to say. */
+.root-page .users-table > tbody > tr > td.row-actions {
+    white-space: nowrap;
+}
+
+.root-page .row-actions > * {
+    display: inline-block;
+    vertical-align: baseline;
+}
+
+.root-page .row-actions > * + * {
+    margin-left: 14px;
+}
+
+/* Title over description, so the two share a column instead of the
+   description taking one of its own and squeezing everything else. */
+.root-page .project-cell > a {
+    display: block;
+    font-weight: 500;
+}
+
+.root-page .project-cell > .muted {
+    display: block;
+    margin-top: 2px;
+    font-size: 12.5px;
+}
+
+.root-page .users-table > tbody > tr > td.nowrap {
+    white-space: nowrap;
+}
+
+.root-page .users-table .pill + .pill {
+    margin-left: 4px;
 }
 
 .root-page .users-table a {
@@ -507,7 +578,7 @@
 }
 
 .root-page .users-search input[type="search"] {
-    width: 320px;
+    width: 360px;
     max-width: 100%;
 }
 
@@ -627,6 +698,7 @@
 }
 
 .root-page summary {
+    white-space: nowrap;
     cursor: pointer;
     color: var(--oc-tide);
     font-size: 13px;
@@ -845,15 +917,25 @@
 
     /* Keeps the wordmark on a line of its own instead of letting the first
        couple of section links wrap up alongside it. */
-    .root-page .sidebar-brand {
+    .root-page .sidebar a.sidebar-brand {
         flex: 1 0 100%;
         padding-bottom: 10px;
         margin-bottom: 0;
     }
 
-    .root-page .sidebar a:last-child {
+    /* The groups dissolve into the wrapping row: the headings are a column's
+       furniture, and a row of links reads fine without them. */
+    .root-page .nav-group {
+        display: contents;
+    }
+
+    .root-page .nav-group-label {
+        display: none;
+    }
+
+    .root-page .sidebar a.sidebar-exit {
         margin-top: 0;
-        padding-top: 9px;
+        padding-top: 7px;
         border-top: none;
     }
 

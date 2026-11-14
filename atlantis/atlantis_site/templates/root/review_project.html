@@ -42,9 +42,8 @@
 <form class="rv-form" method="POST"
       action="{% url 't1_decision' ship.id %}{% if session_query %}?{{ session_query }}{% endif %}">
     {% csrf_token %}
-    <h2 class="rv-form-title">Submit Review</h2>
-    <p class="rv-form-note">Approving moves this ship into the T2 queue. Either way the
-        shipper and you are both pinged in the review checkpoint channel.</p>
+    <h2 class="rv-form-title">Submit review</h2>
+    <p class="rv-form-note">Approve sends it to T2. Both outcomes post in the checkpoint channel.</p>
 
     <label class="rv-field">
         <span class="rv-field-label">Internal reason <em>(not shown to user)</em><kbd>&#8984;J</kbd></span>

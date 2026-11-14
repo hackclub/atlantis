@@ -1,10 +1,42 @@
 {% extends "root/_base_root.html" %}
+{% load static %}
 
 {% block page_id %}admin-dashboard{% endblock %}
 
 {% block content %}
-<div class="content">
-    <h1>Admin Dash</h1>
-    <p>Don't be <i>too</i> naughty!</p>
+<div class="content rq home">
+    <h1>What needs you</h1>
+
+    {% if desks %}
+        {% comment %}
+        One row per desk this person can open, in pipeline order. "Start" goes
+        straight to the longest-waiting item, the same place the desk's own
+        Start reviewing button goes, so the usual visit is one click (or one
+        digit) from here to a review.
+        {% endcomment %}
+        <ol class="home-desks">
+            {% for desk in desks %}
+                <li class="home-desk{% if not desk.count %} is-clear{% endif %}">
+                    <span class="rv-queue-tag rv-accent-{{ desk.accent }}">{{ desk.short }}</span>
+                    <a class="home-desk-name" href="{{ desk.url }}">{{ desk.label }}</a>
+                    <span class="home-desk-count">
+                        {% if desk.count %}
+                            <strong>{{ desk.count }}</strong> {{ desk.noun }}{{ desk.count|pluralize }} waiting
+                        {% else %}
+                            clear
+                        {% endif %}
+                    </span>
+                    {% if desk.start_url %}
+                        <a class="rq-start" href="{{ desk.start_url }}" data-key="{{ forloop.counter }}">Start<kbd>{{ forloop.counter }}</kbd></a>
+                    {% elif desk.count %}
+                        <a class="home-desk-open" href="{{ desk.url }}" data-key="{{ forloop.counter }}">Open<kbd>{{ forloop.counter }}</kbd></a>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ol>
+    {% else %}
+        <p class="home-empty">No queues are assigned to you. Everything you can open is in the menu.</p>
+    {% endif %}
 </div>
+<script src="{% static 'atlantis_site/review.js' %}" defer></script>
 {% endblock %}

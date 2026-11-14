@@ -47,6 +47,8 @@
 
                     <a class="book-link" href="{% url 'project_detail' project.id %}" aria-label="{{ project.title }}"></a>
                 </article>
+            {% empty %}
+                <p class="shelf-empty">Nothing on the shelf yet. Check back once people start logging lapses.</p>
             {% endfor %}
             {% comment %}
             The shelf is dealt out a page at a time in a shuffle that holds for

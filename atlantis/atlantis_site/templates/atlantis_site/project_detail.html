@@ -316,9 +316,9 @@
 
         <div class="slip" id="slip-model" hidden>
             <h2>Editor file</h2>
-            <p>Your source model, from any of: {{ allowed_editors|join:", " }}. If it doesn't fit in one file, upload a .zip of the project.</p>
+            <p>{{ allowed_editors|join:", " }}. Use a .zip for more than one file.</p>
             {% if project.editor_model_url %}
-                <p class="slip-note">Currently {% if project.editor_name %}{{ project.editor_name }}{% else %}a source file{% endif %}. Uploading or linking again replaces it.</p>
+                <p class="slip-note">Uploading replaces the current {% if project.editor_name %}{{ project.editor_name }} {% endif %}file.</p>
             {% endif %}
             <form action="{% url 'update_editor_model' project.id %}" method="post" enctype="multipart/form-data" data-upload>
                 {% csrf_token %}
@@ -375,13 +375,10 @@
         <div class="slip" id="slip-ship" hidden>
             {% if resubmitting %}
             <h2>Before you resubmit</h2>
-            <p>A reviewer asked for changes to this ship. Once you've made them, this
-                sends the same ship back to review, along with any lapses you've added
-                since. Tick the list off again first.</p>
+            <p>Made the requested changes? Tick the list again to send this ship back to review.</p>
             {% else %}
             <h2>Before you ship</h2>
-            <p>Read each one and tick it off. A reviewer is about to check the same
-                list, so anything you skip here comes back as a rejection.</p>
+            <p>Reviewers check this same list, so skipped items get rejected.</p>
             {% endif %}
             <form action="{% url 'ship_project' project.id %}" method="post" data-ajax>
                 {% csrf_token %}

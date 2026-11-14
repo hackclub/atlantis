@@ -365,8 +365,11 @@
             return;
         }
 
-        if (key >= '1' && key <= '9') {
-            if (toggleCardByNumber(key)) event.preventDefault();
+        // A digit toggles a numbered card where the page has one; where it
+        // doesn't (the admin home numbers its desks), it is an ordinary
+        // data-key like any letter.
+        if (key >= '1' && key <= '9' && toggleCardByNumber(key)) {
+            event.preventDefault();
             return;
         }
 

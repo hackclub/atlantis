@@ -11,8 +11,11 @@
     --page-outer: 5.5%;
     --page-width: 41.1%;
 
-    /* How far each leaf tips away at the gutter. */
-    --bend: 18deg;
+    /* How far each leaf tips away at the gutter. Flat: any tilt here puts the
+       page in perspective, which slants every row on it (the byline sloped
+       down towards the spine and the buttons sloped up), so nothing on a page
+       lined up with anything else. */
+    --bend: 0deg;
 }
 
 * {
@@ -538,7 +541,10 @@ a.ink-btn {
 .page-photo {
     float: right;
     width: 48%;
-    margin: 0.1em 0 0.45em 1.1em;
+    /* Clear of the byline above: the tape rides 6% above the frame and the
+       tilt lifts its far corner, so a hairline margin let both cover the end
+       of that line. */
+    margin: 0.9em 0 0.45em 1.1em;
     rotate: 2.2deg;
 }
 
@@ -632,7 +638,9 @@ a.ink-btn {
 .lapse {
     display: flex;
     flex: none;
-    align-items: center;
+    /* Top-aligned, like the composer below them, so a title starts level with
+       the top of its photo instead of floating at the photo's middle. */
+    align-items: flex-start;
     gap: 5%;
     min-height: 0;
 }

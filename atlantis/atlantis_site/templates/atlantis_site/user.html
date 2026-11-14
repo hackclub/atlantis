@@ -18,7 +18,7 @@
         <aside class="profile-sidebar">
             <div class="profile-card">
                 {% if viewed_profile.slack_pfp_url %}
-                    <img src="{{ viewed_profile.slack_pfp_url }}" alt="@{{ viewed_profile.slack_username }}" class="profile-pfp">
+                    <img src="{{ viewed_profile.slack_pfp_url }}" alt="" class="profile-pfp">
                 {% endif %}
                 <h1 class="profile-name">@{{ viewed_profile.slack_username }}</h1>
                 <p class="profile-pearls">{{ viewed_profile.layers }} pearls</p>

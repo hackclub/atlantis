@@ -109,7 +109,7 @@
         <form method="post" class="rv-form" id="rq-rollback-form">
             {% csrf_token %}
             <h2>Roll back a T1 review</h2>
-            <p>This deletes <strong data-rollback-subject></strong> and puts the ship back in the T1 queue. The shipper is told in the review checkpoint channel, and your reason is left as an internal comment on the ship.</p>
+            <p>Deletes <strong data-rollback-subject></strong> and returns the ship to T1. Your reason is saved as an internal comment.</p>
             <label for="rq-rollback-reason">Why is it being rolled back?</label>
             <textarea id="rq-rollback-reason" name="reason" rows="4" required maxlength="{{ rollback_reason_max }}"></textarea>
             <div class="rq-rollback-actions">

@@ -83,10 +83,7 @@
 
     {% if unchecked_count %}
         <div class="rv-banner rv-banner-quiet">
-            Inactivity detection hasn&rsquo;t run over {{ unchecked_count }} of the
-            {{ recording_count }} recording{{ recording_count|pluralize }} in this pass, so the second
-            track under {{ unchecked_count|pluralize:"it,those" }} reads &ldquo;not analysed&rdquo;
-            rather than &ldquo;clean&rdquo;.
+            {{ unchecked_count }} of {{ recording_count }} recording{{ recording_count|pluralize }} {{ unchecked_count|pluralize:"hasn&rsquo;t,haven&rsquo;t" }} been checked for inactivity yet.
         </div>
     {% endif %}
 
@@ -117,8 +114,7 @@
             <div class="ta-final">
                 <h2 id="ta-final-title">Sign off {{ lapse_count }} {{ lapse_count|pluralize:"entry,entries" }}</h2>
                 <p class="ta-final-note">
-                    Approving clears every waiting lapse on this project for T1. Nothing is
-                    sent to @{{ owner.name }}: not that it happened, not what it cost.
+                    Clears every waiting lapse for T1. @{{ owner.name }} isn&rsquo;t notified.
                 </p>
 
                 <dl class="ta-ledger">
@@ -138,10 +134,6 @@
                               placeholder="Anything that spans the whole project rather than one recording."></textarea>
                     <span class="rv-counter" data-counter-for="ta-internal" data-max="{{ internal_notes_max_length }}"></span>
                 </label>
-                <p class="ta-final-note">
-                    The per-timelapse descriptions in the pass are what carry the account of
-                    it; this is only for what didn&rsquo;t fit in one of them.
-                </p>
 
                 <div class="ta-final-actions">
                     <button type="button" class="rv-btn" data-close-final>Back<kbd>Esc</kbd></button>

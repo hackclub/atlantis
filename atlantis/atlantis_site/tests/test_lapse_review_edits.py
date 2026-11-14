@@ -123,7 +123,7 @@ class MakeupTests(BaseTestCase):
 			self._review(180, "1:30")
 			self.client.force_login(self.owner)
 			response = self.client.get(reverse("dashboard"))
-		self.assertContains(response, "1h 30m need to be made up because of deflations")
+		self.assertContains(response, "+1h 30m makeup for deflations")
 		self.assertContains(response, "6h 30m")
 
 	def test_a_deleted_project_owes_nothing(self):

@@ -35,10 +35,8 @@
         <h3>Items</h3>
         {% if printer_item_count %}
             <p class="muted">
-                Plus {{ printer_item_count }} hidden printer items, generated from the
-                tech trees so a claim can become an order. They aren't sold here and
-                their prices are set in <code>printers.py</code>; run
-                <code>sync_printer_items</code> after changing it.
+                Plus {{ printer_item_count }} hidden printer items from <code>printers.py</code>
+                (run <code>sync_printer_items</code> after editing).
             </p>
         {% endif %}
         {% if items %}
@@ -134,8 +132,7 @@
                     {% endfor %}
                 </select>
                 <small>
-                    Savers are applied the moment they're bought and never reach
-                    fulfillment. Printer rows are generated from the tech trees.
+                    Savers apply instantly and skip fulfillment.
                 </small>
             </label>
 
@@ -192,8 +189,7 @@
                     {% endfor %}
                 </select>
                 <small>
-                    Savers are applied the moment they're bought and never reach
-                    fulfillment. Printer rows are generated from the tech trees.
+                    Savers apply instantly and skip fulfillment.
                 </small>
             </label>
 

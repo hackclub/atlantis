@@ -103,7 +103,7 @@
                 <tbody>
                     {% for log in logs %}
                     <tr>
-                        <td>{{ log.created_at }}</td>
+                        <td class="nowrap">{{ log.created_at|date:"M j, Y" }}<br><small class="muted">{{ log.created_at|time:"g:i a" }}</small></td>
                         <td><strong>{{ log.action }}</strong></td>
                         <td>
                             {% if log.actor %}
@@ -121,7 +121,7 @@
                         {% endif %}
                         <td>
                             <details>
-                                <summary>Form values ({{ log.form_data|length }})</summary>
+                                <summary>Form ({{ log.form_data|length }})</summary>
                                 {% if log.form_data %}
                                     <table class="audit-data">
                                         {% for key, value in log.form_data.items %}
@@ -137,7 +137,7 @@
                             </details>
                             {% if log.metadata %}
                                 <details>
-                                    <summary>Resulting state / context</summary>
+                                    <summary>Result</summary>
                                     <table class="audit-data">
                                         {% for key, value in log.metadata.items %}
                                             <tr>

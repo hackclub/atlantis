@@ -48,17 +48,15 @@
 
     {% if claim_conflict %}
         <div class="rv-banner rv-banner-warn">
-            <strong>{{ claim_conflict.name }}</strong> has this open right now. Two decisions can't
-            both land. Whoever submits first wins and the other is turned away.
-            <a href="{{ skip_url }}">Skip to the next one instead →</a>
+            <strong>{{ claim_conflict.name }}</strong> has this open. First to submit wins.
+            <a href="{{ skip_url }}">Skip →</a>
         </div>
     {% endif %}
 
     {% if reviewed_at_t1 %}
         <div class="rv-banner rv-banner-warn">
-            You reviewed this ship at T1. T2 is meant to be a second opinion, so it should
-            go to someone else.
-            <a href="{{ skip_url }}">Skip to the next one instead →</a>
+            You reviewed this at T1, so let someone else take T2.
+            <a href="{{ skip_url }}">Skip →</a>
         </div>
     {% endif %}
 

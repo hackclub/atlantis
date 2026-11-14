@@ -6,14 +6,14 @@
 
 {% block content %}
 <div class="content rq">
-    {% include "root/_rv_queue_header.html" with blurb="First pass review and requirements check." %}
+    {% include "root/_rv_queue_header.html" with blurb="First pass: requirements check." %}
+
+    {% include "root/_rv_ship_queue.html" with empty_text="No projects awaiting T1 review." %}
+    <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> move &middot; <kbd>&crarr;</kbd> open</p>
 
     <section class="chart-grid rq-charts">
         {% include "root/_rv_leaderboard.html" with title="Top T1 reviewers" %}
     </section>
-
-    {% include "root/_rv_ship_queue.html" with empty_text="No projects awaiting T1 review." %}
-    <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> to move through the queue, <kbd>&crarr;</kbd> to open, or <strong>Start reviewing</strong> to be handed the longest-waiting one.</p>
 
     {% include "root/_rv_all_reviews.html" %}
 </div>

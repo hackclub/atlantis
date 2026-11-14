@@ -44,7 +44,8 @@
     grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
     align-items: start;
     gap: 24px;
-    padding: 24px 24px 60px;
+    /* Same inset as the back link above it, so the two share a left edge. */
+    padding: 20px var(--back-inset) 60px;
 }
 
 .profile-sidebar {
@@ -187,21 +188,24 @@
 
 .profile-activity > h2 {
     font-family: "Atlantis Hand", "Prompt", sans-serif;
-    margin: 4px 0 16px;
+    /* Its cap height lines up with the top of the first sidebar card. */
+    margin: -6px 0 12px;
+    line-height: 1.2;
     font-size: 26px;
     color: #FBEFD6;
     text-shadow: 0 1px 4px rgba(10, 40, 50, 0.55);
 }
 
+/* One column of one width. Shrink-wrapped, each card took its own content's
+   width and the feed came out ragged. */
 .activity-feed {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    max-width: 640px;
 }
 
 .activity-entry {
-    width: fit-content;
-    max-width: min(570px, 100%);
     border: 2px solid #E4D8BE;
     border-radius: 14px;
     padding: 14px 16px;
@@ -239,7 +243,8 @@
 
 .activity-entry-image {
     display: block;
-    max-width: min(787px, 100%);
+    width: 100%;
+    max-width: 100%;
     max-height: 700px;
     height: auto;
     border-radius: 8px;
@@ -267,7 +272,7 @@
 }
 
 .activity-entry-stl-stage {
-    width: min(540px, 100%);
+    width: 100%;
     margin-top: 10px;
 }
 
@@ -281,6 +286,6 @@
 
     .profile-page {
         grid-template-columns: minmax(0, 1fr);
-        padding: 18px 18px 40px;
+        padding: 18px var(--back-inset) 40px;
     }
 }

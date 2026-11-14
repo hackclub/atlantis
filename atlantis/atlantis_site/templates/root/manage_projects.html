@@ -6,7 +6,6 @@
 {% block content %}
 <div class="content">
     <h1>Projects</h1>
-    <h3>Manage Projects</h3>
     <form method="GET" class="users-search" role="search">
         <input
             id="projectSearchInput"
@@ -16,7 +15,6 @@
             placeholder="Search by project title or Slack username"
             aria-label="Search by project title or Slack username"
             autocomplete="off"
-            style="width: 275px;"
         >
         <button type="submit">Search</button>
         {% if search_query %}
@@ -38,14 +36,12 @@
             <thead>
                 <tr>
                     <th></th>
-                    <th>Project ID</th>
+                    <th>ID</th>
+                    <th>Project</th>
                     <th>Owner</th>
-                    <th>Project Title</th>
-                    <th>Description</th>
-                    <th>Time Spent</th>
+                    <th>Time</th>
                     <th>Journals</th>
                     <th>Status</th>
-                    <th>Deleted</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -62,14 +58,18 @@
                         >
                     </td>
                     <td>{{ project.id }}</td>
+                    <td class="project-cell">
+                        <a href="{% url 'project_detail' project.id %}" target="_blank" rel="noopener">{{ project.title }}</a>
+                        <span class="muted">{{ project.description|truncatechars:80 }}</span>
+                    </td>
                     <td>{{ project.owner.hackclub_profile.slack_username }}</td>
-                    <td>{{ project.title }}</td>
-                    <td>{{ project.description|truncatechars:80 }}</td>
-                    <td>{{ project.time_spent_display }}</td>
+                    <td class="nowrap">{{ project.time_spent_display }}</td>
                     <td>{{ project.journal_count }}</td>
-                    <td>{{ project.status_display }}</td>
-                    <td>{{ project.deleted|yesno:"Yes,No" }}</td>
                     <td>
+                        {{ project.status_display }}
+                        {% if project.deleted %}<span class="pill pill-bad">deleted</span>{% endif %}
+                    </td>
+                    <td class="row-actions">
                         <button
                             type="button"
                             class="open-edit-project link-button"
@@ -79,12 +79,9 @@
                             data-printables-url="{{ project.printablesUrl|default:'' }}"
                             data-editor-model-url="{{ project.editor_model_url|default:'' }}"
                             data-deleted="{{ project.deleted|yesno:'1,0' }}"
-                        >edit project</button>
-                        <br>
-                        <a href="{% url 'project_detail' project.id %}" class="link-button" target="_blank" rel="noopener">view project</a>
-                        <br>
+                        >edit</button>
                         <form method="POST" action="{% url 'db_delete_project' project.id %}" class="db-delete-project-form" data-title="{{ project.title|default:'' }}"
-                              data-confirm="Permanently delete &quot;{{ project.title|default:'this project' }}&quot; from the database? This cannot be undone." data-confirm-ok="Delete" data-confirm-danger style="display:inline;">
+                              data-confirm="Permanently delete &quot;{{ project.title|default:'this project' }}&quot; from the database? This cannot be undone." data-confirm-ok="Delete" data-confirm-danger>
                             {% csrf_token %}
                             <button type="submit" class="link-button danger">db delete</button>
                         </form>

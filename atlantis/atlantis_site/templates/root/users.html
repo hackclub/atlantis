@@ -6,20 +6,19 @@
 {% block content %}
 <div class="content">
     <h1>Users</h1>
-    <h3>Manage Users</h3>
     <div class="admin-actions">
         <form method="POST" action="{% url 'backfill_emails' %}" id="backfillEmailsForm"
               data-confirm="Send every user's full name and email to the Airtable Emails table?" data-confirm-ok="Send">
             {% csrf_token %}
-            <button type="submit">Backfill emails to Airtable</button>
+            <button type="submit" class="secondary">Backfill emails to Airtable</button>
         </form>
         <form method="POST" action="{% url 'invite_to_channels' %}" id="inviteChannelsForm"
               data-confirm="Add every Slack-linked user to #atlantis-bulletin, #atlantis, #atlantis-help, and #atlantis-checkpoint?" data-confirm-ok="Add them">
             {% csrf_token %}
-            <button type="submit">Add Slack users to Atlantis channels</button>
+            <button type="submit" class="secondary">Add Slack users to Atlantis channels</button>
         </form>
         <form method="GET" action="{% url 'unfinished_hours_csv' %}">
-            <button type="submit">Export users short on hours (CSV)</button>
+            <button type="submit" class="secondary">Export users short on hours (CSV)</button>
         </form>
     </div>
     <form method="GET" class="users-search" role="search">
@@ -43,13 +42,12 @@
             <thead>
                 <tr>
                     <th></th>
-                    <th>User ID</th>
-                    <th>Slack Username</th>
+                    <th>ID</th>
+                    <th>Slack name</th>
                     <th>Slack ID</th>
                     <th>Pearls</th>
                     <th>Groups</th>
-                    <th>Staff Member</th>
-                    <th>Banned</th>
+                    <th>Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -58,27 +56,22 @@
                 <tr data-user-id="{{ user.id }}" data-slack-username="{{ user.hackclub_profile.slack_username|default:''|lower }}">
                     <td>
                         {% if user.hackclub_profile.slack_pfp_url %}
-                        <img src="{{ user.hackclub_profile.slack_pfp_url }}" class="user-pfp">
+                        <img src="{{ user.hackclub_profile.slack_pfp_url }}" class="user-pfp" alt="" loading="lazy">
                         {% else %}
-                        <img src="{{ default_pfp_url }}" class="user-pfp">
+                        <img src="{{ default_pfp_url }}" class="user-pfp" alt="" loading="lazy">
                         {% endif %}
                     </td>
                     <td>{{ user.id }}</td>
-                    <td>{{ user.hackclub_profile.slack_username|default:"not found" }}</td>
-                    <td>{{ user.hackclub_profile.slack_id|default:"not found" }}</td>
+                    <td>{% if user.hackclub_profile.slack_username %}<a href="{% url 'user_profile' user.id %}" target="_blank" rel="noopener">{{ user.hackclub_profile.slack_username }}</a>{% else %}<span class="muted">no Slack</span>{% endif %}</td>
+                    <td>{{ user.hackclub_profile.slack_id|default:"" }}</td>
                     <td>{{ user.hackclub_profile.layers|default:"0" }}</td>
-                    <td>{{ user.groups.all|join:", "|default:"no groups found" }}</td>
-                    {% if user.is_staff %}
-                    <td class="is-yes">true</td>
-                    {% else %}
-                    <td class="is-no">false</td>
-                    {% endif %}
-                    {% if user.hackclub_profile.banned %}
-                    <td class="is-no">banned</td>
-                    {% else %}
-                    <td>no</td>
-                    {% endif %}
+                    <td>{{ user.groups.all|join:", " }}</td>
+                    {# Only what is out of the ordinary gets a word: most rows are neither staff nor banned, and a column of "false" and "no" is noise to read past. #}
                     <td>
+                        {% if user.hackclub_profile.banned %}<span class="pill pill-bad">banned</span>{% endif %}
+                        {% if user.is_staff %}<span class="pill pill-good">staff</span>{% endif %}
+                    </td>
+                    <td class="row-actions">
                         <button
                             type="button"
                             class="open-edit-user link-button"
@@ -92,24 +85,24 @@
                             data-layers="{{ user.hackclub_profile.layers|default:'0' }}"
                             data-slack-pfp-url="{{ user.hackclub_profile.slack_pfp_url|default:'' }}"
                             data-group-ids="{% for group in user.groups.all %}{{ group.id }}{% if not forloop.last %},{% endif %}{% endfor %}"
-                        >edit user</button>
+                        >edit</button>
                         {% if user.hackclub_profile %}
                         <form method="POST" action="{% url 'set_user_ban' user.id %}" class="ban-user-form" data-username="{{ user.hackclub_profile.slack_username|default:user.id }}" data-banning="{{ user.hackclub_profile.banned|yesno:'0,1' }}"
                               data-confirm="{{ user.hackclub_profile.banned|yesno:'Unban,Ban' }} {{ user.hackclub_profile.slack_username|default:user.id }}?" data-confirm-ok="{{ user.hackclub_profile.banned|yesno:'Unban,Ban' }}"{% if not user.hackclub_profile.banned %} data-confirm-danger{% endif %}>
                             {% csrf_token %}
                             {% if user.hackclub_profile.banned %}
                             <input type="hidden" name="banned" value="0">
-                            <button type="submit" class="link-button">unban user</button>
+                            <button type="submit" class="link-button">unban</button>
                             {% else %}
                             <input type="hidden" name="banned" value="1">
-                            <button type="submit" class="link-button">ban user</button>
+                            <button type="submit" class="link-button danger">ban</button>
                             {% endif %}
                         </form>
                         <button type="button" class="view-address-btn link-button"
                                 data-url="{% url 'view_user_address' user.id %}"
                                 data-address-label="User #{{ user.id }} &middot; {{ user.hackclub_profile.slack_username|default:user.username }}"
                                 data-address-none="No address on file for this user."
-                                data-address-confirm="View {{ user.hackclub_profile.slack_username|default:user.username }}'s address? It's fetched live from Hack Club identity, and the lookup is recorded in the audit log.">view address</button>
+                                data-address-confirm="View {{ user.hackclub_profile.slack_username|default:user.username }}'s address? It's fetched live from Hack Club identity, and the lookup is recorded in the audit log.">address</button>
                         {% endif %}
                     </td>
                 </tr>

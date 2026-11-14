@@ -22,7 +22,7 @@
     </div>
     {% if snapshot %}
     <p class="metrics-snapshot-note">
-        You're looking at the page as it stood at the end of {{ snapshot.day|date:"l, M j" }} (Eastern). "Now" and "today" mean then, not now.
+        Snapshot from the end of {{ snapshot.day|date:"l, M j" }} (Eastern).
         <a href="{% url 'metrics' %}">Back to live</a>
     </p>
     {% endif %}
@@ -84,7 +84,7 @@
     {% if funnel %}{# absent from snapshots taken before it existed #}
     <section class="metrics-section">
         <h2>Conversion funnel</h2>
-        <p class="metrics-generated">All time. Each step counts only people who made the one before it. {{ funnel.overall_rate }}% of signups have shipped.</p>
+        <p class="metrics-generated">All time. {{ funnel.overall_rate }}% of signups have shipped.</p>
         <div class="chart-grid">
             {% include "root/_metric_chart.html" with title="Sign up to ship" rows=funnel.steps fill_class="good" wide=True empty="No signups yet" %}
         </div>

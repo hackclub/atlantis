@@ -18,10 +18,8 @@ someone arrives from an old recorder link.
             <span class="tl-pill" id="lookout-pill">Not started</span>
         </div>
         <p class="recorder-hint" id="lookout-hint">
-            Lookout has been replaced by <a href="{{ lapse_web_url }}" target="_blank" rel="noreferrer noopener">Lapse</a>,
-            which is where new recordings belong. If you carry on here: when you hit start,
-            your browser asks which screen or window to share. Pick the one you'll be
-            modelling in. Nothing is captured until you do.
+            New recordings belong on <a href="{{ lapse_web_url }}" target="_blank" rel="noreferrer noopener">Lapse</a>.
+            To use Lookout anyway, hit start and share the window you model in.
         </p>
 
         <div class="recorder-alert" id="lookout-alert" hidden>
@@ -32,8 +30,7 @@ someone arrives from an old recorder link.
         <div class="recorder-body">
             <div class="recorder-stage">
                 <p class="stage-empty" id="lookout-stage-empty">
-                    A preview of whatever you share shows up here, so you can check you picked the
-                    right window before you start working.
+                    Your shared window shows up here.
                 </p>
                 <video id="lookout-preview" muted playsinline hidden></video>
                 <div class="stage-badge" id="lookout-badge" hidden><span class="tl-dot"></span> Recording</div>
@@ -75,10 +72,10 @@ someone arrives from an old recorder link.
         </div>
 
         <ul class="recorder-facts">
-            <li>One screenshot of the screen you share is taken roughly every minute, then stitched into a video.</li>
-            <li>Time is credited by Lookout from those screenshots. It can't be typed in by hand.</li>
-            <li>Keep this tab open while you work. Closing this popup is fine. The recording carries on, and &ldquo;record a lookout&rdquo; brings it back.</li>
-            <li>Pause any time. Resuming asks you to share your screen again. Browsers drop the share when you leave.</li>
+            <li>A screenshot is taken about once a minute and stitched into a video.</li>
+            <li>Time comes from the screenshots, not from typing it in.</li>
+            <li>Keep this tab open. You can close this popup; &ldquo;record a lookout&rdquo; brings it back.</li>
+            <li>Pause any time. Resuming asks you to share your screen again.</li>
         </ul>
 
         <details class="recorder-log">

@@ -711,13 +711,13 @@ class SecondOpinionTests(BaseTestCase):
 		response = self.client.get(reverse("ysws_review_project", args=[ship.id]))
 		self.assertEqual(response.status_code, 200)
 		self.assertTrue(response.context["reviewed_at_t1"])
-		self.assertContains(response, "You reviewed this ship at T1.")
+		self.assertContains(response, "You reviewed this at T1")
 
 	def test_no_warning_on_a_ship_you_didnt_review(self):
 		ship = make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE)
 		response = self.client.get(reverse("ysws_review_project", args=[ship.id]))
 		self.assertFalse(response.context["reviewed_at_t1"])
-		self.assertNotContains(response, "You reviewed this ship at T1.")
+		self.assertNotContains(response, "You reviewed this at T1")
 
 
 class HeartbeatTests(BaseTestCase):

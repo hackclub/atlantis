@@ -17,9 +17,7 @@
 
     {% if payout_done %}
         <p><span class="pill pill-warn">ship finalized</span>
-            Pearls for this journal's ship have already been paid. Changing the
-            deflations here corrects the record and any makeup owed, but it won't
-            change that payout.</p>
+            Already paid out. Edits here fix the record and makeup, not the payout.</p>
     {% endif %}
 
     {% comment %}
@@ -69,8 +67,7 @@
 
         <fieldset class="lapse-edit-recording">
             <legend>Add deflations</legend>
-            <p class="muted">Video timecodes (m:ss or h:mm:ss). Leave a row empty to skip it.
-                Deflations added now count toward this week's makeup.</p>
+            <p class="muted">Timecodes as m:ss or h:mm:ss. Blank rows are skipped.</p>
             {% for _ in blank_rows %}
             <div class="inline-form">
                 <select name="removal_session" aria-label="Recording">

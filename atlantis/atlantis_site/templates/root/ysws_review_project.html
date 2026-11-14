@@ -44,10 +44,8 @@
 <form class="rv-form" method="POST" enctype="multipart/form-data"
       action="{% url 't2_decision' ship.id %}{% if session_query %}?{{ session_query }}{% endif %}">
     {% csrf_token %}
-    <h2 class="rv-form-title">Submit Review</h2>
-    <p class="rv-form-note">Approving sends the ship to fraud review. Deductions come off
-        this ship's logged time before pearls are worked out. Requesting changes sends it
-        back to the shipper, and their resubmission starts again at T1.</p>
+    <h2 class="rv-form-title">Submit review</h2>
+    <p class="rv-form-note">Approve sends it to T3. Changes send it back to the shipper, then T1.</p>
 
     <label class="rv-field">
         <span class="rv-field-label">Airtable justification <em>(not shown to user)</em><kbd>&#8984;J</kbd></span>
@@ -75,7 +73,7 @@
                 <img alt="Screenshot sent to Airtable">
             </a>
             <div class="rv-airtable-shot-inputs">
-                <p class="rv-form-note" data-airtable-shot-note>The project's own screenshot is sent unless you pick another.</p>
+                <p class="rv-form-note" data-airtable-shot-note>Defaults to the project screenshot.</p>
                 <input type="file" name="airtable_screenshot_file" accept="image/png,image/jpeg,image/gif,image/webp"
                        aria-label="Upload a screenshot for Airtable" data-airtable-shot-file>
                 <input type="url" name="airtable_screenshot_url" maxlength="2048" placeholder="or paste an image URL"

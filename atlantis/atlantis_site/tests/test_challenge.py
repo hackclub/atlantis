@@ -384,7 +384,7 @@ class GraceWeeksTests(BaseTestCase):
             self._log(60, in_week(2))
             state = challenge.standing(self.user)
             self.assertEqual(state.saver_hours_needed, 6)
-            self.assertIn("between them", challenge.elimination_reason(self.user))
+            self.assertIn("weeks 1 and 2 ended at", challenge.elimination_reason(self.user))
 
     def test_the_old_rule_still_passes_a_week_on_its_own_five(self):
         """The pair is a relaxation: five in a week still meets that week."""
@@ -479,7 +479,7 @@ class GraceWeeksTests(BaseTestCase):
             self.assertEqual(state.earliest_missed.index, 7)
             self.assertEqual(state.saver_hours_needed, 2)
             self.assertIn(
-                "Weeks 7 and 8 closed with 8h 0m of the 10 hours needed between them",
+                "weeks 7 and 8 ended at 8h 0m of 10h",
                 challenge.elimination_reason(self.user),
             )
 
@@ -1434,16 +1434,17 @@ class StreakPanelTests(BaseTestCase):
             self._log(120, in_week(1))
             response = self.client.get(reverse("dashboard"))
             self.assertContains(response, "of 10 hours across weeks 1 and 2")
-            self.assertContains(response, "don't need all 10 hours by the end of this")
+            self.assertContains(response, "Weeks 1 and 2 count together: due")
             deadline = weeks.deadline(2).astimezone(weeks.zone())
-            self.assertContains(response, f"until {deadline:%a %b} {deadline.day}, 11:59 PM Eastern")
+            self.assertContains(response, f"due {deadline:%a %b} {deadline.day}, 11:59 PM Eastern")
 
     def test_week_2_says_the_ten_are_due_when_the_countdown_ends(self):
         with during_week(2):
             self._log(120, in_week(1))
             response = self.client.get(reverse("dashboard"))
-            self.assertContains(response, "due when this countdown ends")
-            self.assertNotContains(response, "don't need all")
+            self.assertContains(response, "count together: due when this countdown ends")
+            # No second, later deadline: week 2 is the end of the pair.
+            self.assertNotContains(response, "Eastern.</p>")
 
     def test_week_3_has_no_grace_note(self):
         with during_week(3):
