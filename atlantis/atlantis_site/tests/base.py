@@ -63,10 +63,13 @@ def after_week(index):
 	"""override_settings putting `now` just past the end of week `index`.
 
 	The program is `index` weeks long here, so week `index` has closed and there
-	is no live week — which is what judging a finished week needs.
+	is no live week — which is what judging a finished week needs. A week with
+	an extension (weeks.EXTENSION_DAYS) could still be running early in the
+	week after, so then `now` is put a week further on.
 	"""
+	later = index + 2 if weeks.EXTENSION_DAYS.get(index) else index + 1
 	return override_settings(
-		**{**during_week(index + 1).options, "CHALLENGE_WEEKS": index}
+		**{**during_week(later).options, "CHALLENGE_WEEKS": index}
 	)
 
 

@@ -540,6 +540,11 @@ class Week:
 		template's |date would print Monday morning."""
 		return _local_display(self.deadline, "%a %-I:%M %p")
 
+	@property
+	def deadline_day(self):
+		""""Sunday", or whichever day an extended week closes on."""
+		return _local_display(self.deadline, "%A")
+
 
 @dataclass
 class Standing:

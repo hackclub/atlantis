@@ -39,6 +39,12 @@ WEEKLY_MINUTES = WEEKLY_HOURS * 60
 # challenge.Week.met.
 GRACE_PAIRS = ((1, 2), (7, 8))
 
+# Days a week's close was pushed back past its Sunday, by week index. Week 8
+# was extended to Tuesday 11:59pm. Only the program's last week can be
+# extended — any other would run into the week after it — so an entry for an
+# earlier week is ignored.
+EXTENSION_DAYS = {8: 2}
+
 
 def zone():
     """The program's timezone — the one weeks are cut in."""
@@ -76,6 +82,16 @@ def start_date():
     return date.fromisoformat(settings.CHALLENGE_START_DATE)
 
 
+def extension_days(index):
+    """Days week `index` runs past its Sunday — 0 unless it was extended."""
+    return EXTENSION_DAYS.get(index, 0) if index == week_count() else 0
+
+
+def _close_date(index):
+    """Local date of the midnight week `index` closes at (exclusive)."""
+    return start_date() + timedelta(weeks=index, days=extension_days(index))
+
+
 def _local_midnight(on):
     """Midnight local to the program on the given local date.
 
@@ -93,12 +109,12 @@ def starts_at():
 
 
 def ends_at():
-    """The instant the program closes — midnight after the last week's Sunday.
+    """The instant the program closes — midnight after the last week's last day.
 
     Exclusive, like every other end in here: the last week runs up to but not
     including this, so a moment equal to it is already past the program.
     """
-    return _local_midnight(start_date() + timedelta(weeks=week_count()))
+    return _local_midnight(_close_date(week_count()))
 
 
 def week_bounds(index):
@@ -106,12 +122,13 @@ def week_bounds(index):
 
     The end is the *next* week's local midnight rather than 23:59:59, so no
     instant falls between two weeks. What a page shows as "Sunday 11:59pm" is
-    this minus a second; what the arithmetic uses is this.
+    this minus a second; what the arithmetic uses is this. An extended week
+    (EXTENSION_DAYS) ends that many days later.
     """
     if not 1 <= index <= week_count():
         raise ValueError(f"week {index} is outside the {week_count()}-week program")
     opens = start_date() + timedelta(weeks=index - 1)
-    return _local_midnight(opens), _local_midnight(opens + timedelta(days=7))
+    return _local_midnight(opens), _local_midnight(_close_date(index))
 
 
 def week_for(moment):
@@ -125,11 +142,15 @@ def week_for(moment):
         return None
     if timezone.is_naive(moment):
         moment = timezone.make_aware(moment, timezone.get_default_timezone())
-    days = (moment.astimezone(zone()).date() - start_date()).days
+    on = moment.astimezone(zone()).date()
+    days = (on - start_date()).days
     if days < 0:
         return None
     index = days // 7 + 1
-    return index if index <= week_count() else None
+    if index <= week_count():
+        return index
+    # The days an extended last week runs past its Sunday.
+    return week_count() if on < _close_date(week_count()) else None
 
 
 def is_prep(moment):
@@ -215,23 +236,22 @@ def buffer_week(moment):
     if timezone.is_naive(moment):
         moment = timezone.make_aware(moment, timezone.get_default_timezone())
     local = moment.astimezone(zone())
-    days = (local.date() - start_date()).days
-    if days <= 0 or days % 7 or local.time() >= BUFFER_ENDS:
+    if local.time() >= BUFFER_ENDS:
         return None
-    index = days // 7
-    return index if index <= week_count() else None
+    on = local.date()
+    return next((i for i in range(1, week_count() + 1) if _close_date(i) == on), None)
 
 
-# When the "hours left" DM goes out: Saturday evening, local, a day and a bit
-# before the week closes.
-REMINDER_DAY = 5  # Monday is 0
+# When the "hours left" DM goes out: the evening before the week's last day,
+# local, a day and a bit before it closes — Saturday, for a week that isn't
+# extended.
 REMINDER_TIME = time(18, 0)
 
 
 def reminder_at(index):
-    """The instant week `index`'s reminder DM is due — its Saturday 6pm."""
-    opens = start_date() + timedelta(weeks=index - 1)
-    on = opens + timedelta(days=REMINDER_DAY)
+    """The instant week `index`'s reminder DM is due — 6pm the day before its
+    last day."""
+    on = _close_date(index) - timedelta(days=2)
     return datetime.combine(on, REMINDER_TIME, tzinfo=zone()).replace(fold=0)
 
 

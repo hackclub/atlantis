@@ -52,9 +52,25 @@ class WeekMathTests(BaseTestCase):
     def test_the_program_opens_at_local_midnight(self):
         self.assertEqual(weeks.starts_at(), et("2026-09-21 00:00"))
 
-    def test_the_program_closes_at_local_midnight_after_the_last_sunday(self):
-        # Eight weeks from Mon Sep 21 ends as Sun Nov 15 turns into Nov 16.
-        self.assertEqual(weeks.ends_at(), et("2026-11-16 00:00"))
+    def test_the_program_closes_at_local_midnight_after_the_extended_last_week(self):
+        # Eight weeks from Mon Sep 21 would end as Sun Nov 15 turns into Nov 16;
+        # week 8 was extended two days, to Tue Nov 17 11:59pm.
+        self.assertEqual(weeks.ends_at(), et("2026-11-18 00:00"))
+
+    def test_week_8_is_extended_to_tuesday(self):
+        self.assertEqual(weeks.week_bounds(8), (et("2026-11-09 00:00"), et("2026-11-18 00:00")))
+        self.assertEqual(weeks.deadline(8), et("2026-11-17 23:59:59"))
+        self.assertEqual(weeks.week_for(et("2026-11-16 12:00")), 8)
+        self.assertEqual(weeks.week_for(et("2026-11-17 23:59:59")), 8)
+        self.assertEqual(weeks.week_label(8), "Week 8 · Nov 9–17")
+        self.assertEqual(weeks.reminder_at(8), et("2026-11-16 18:00"))
+        self.assertNotIn(8, weeks.closed_weeks(et("2026-11-17 12:00")))
+        self.assertIn(8, weeks.closed_weeks(et("2026-11-18 00:00")))
+
+    @override_settings(CHALLENGE_WEEKS=9)
+    def test_an_extension_is_ignored_unless_it_is_the_last_week(self):
+        self.assertEqual(weeks.week_bounds(8)[1], et("2026-11-16 00:00"))
+        self.assertEqual(weeks.week_for(et("2026-11-16 12:00")), 9)
 
     def test_a_week_runs_monday_to_the_next_monday(self):
         opens, closes = weeks.week_bounds(1)
@@ -96,7 +112,7 @@ class WeekMathTests(BaseTestCase):
         self.assertTrue(weeks.is_prep(moment))
 
     def test_after_the_end_is_neither_a_week_nor_prep(self):
-        moment = et("2026-11-16 00:00")
+        moment = et("2026-11-18 00:00")
         self.assertIsNone(weeks.week_for(moment))
         self.assertFalse(weeks.is_prep(moment))
 
@@ -157,7 +173,9 @@ class BufferTests(BaseTestCase):
         self.assertEqual(weeks.buffer_week(et("2026-11-02 01:30")), 6)
 
     def test_there_is_a_buffer_after_the_last_week(self):
-        self.assertEqual(weeks.buffer_week(et("2026-11-16 01:00")), 8)
+        # Week 8 is extended, so its buffer is after its Tuesday, not Sunday.
+        self.assertEqual(weeks.buffer_week(et("2026-11-18 01:00")), 8)
+        self.assertIsNone(weeks.buffer_week(et("2026-11-16 01:00")))
         self.assertIsNone(weeks.buffer_week(et("2026-09-21 01:00")))
 
     def test_buffer_time_saves_a_week_that_closed_short(self):

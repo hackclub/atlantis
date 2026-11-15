@@ -98,7 +98,7 @@ class Command(BaseCommand):
             goal += f" ({week.bar_makeup_display} of it making up deflated time)"
 
         return send_slack_dm(
-            f"Heads up: week {week.index} of Atlantis ends tomorrow (Sunday) at "
+            f"Heads up: week {week.index} of Atlantis ends tomorrow ({week.deadline_day}) at "
             f"11:59 PM Eastern. You've tracked {week.progress_display} of the {goal}, "
             f"so you have *{week.left_display}* left to track to stay in the program. "
             "Record it with Lapse and tape it into your project: "
