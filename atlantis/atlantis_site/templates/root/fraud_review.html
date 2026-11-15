@@ -8,12 +8,12 @@
 <div class="content rq">
     {% include "root/_rv_queue_header.html" with blurb="Final gate: approving pays out and sends to HQ." %}
 
-    {% include "root/_rv_ship_queue.html" with empty_text="No projects awaiting T3 review." %}
-    <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> move &middot; <kbd>&crarr;</kbd> open</p>
-
     <section class="chart-grid rq-charts">
         {% include "root/_rv_leaderboard.html" with title="Top T3 reviewers" %}
     </section>
+
+    {% include "root/_rv_ship_queue.html" with empty_text="No projects awaiting T3 review." %}
+    <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> move &middot; <kbd>&crarr;</kbd> open</p>
 
     {% include "root/_rv_all_reviews.html" %}
 </div>

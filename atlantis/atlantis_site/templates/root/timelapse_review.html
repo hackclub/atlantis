@@ -8,6 +8,10 @@
 <div class="content rq">
     {% include "root/_rv_queue_header.html" with blurb="Internal only. Lapses must be signed off here before T1." %}
 
+    <section class="chart-grid rq-charts">
+        {% include "root/_rv_leaderboard.html" with title="Top timelapse reviewers" %}
+    </section>
+
     <section class="rq-section">
         <div class="rq-section-head">
             <h2 class="rq-section-title">
@@ -84,10 +88,6 @@
         {% endif %}
     </section>
     <p class="rq-hint"><kbd>j</kbd> <kbd>k</kbd> move &middot; <kbd>&crarr;</kbd> open</p>
-
-    <section class="chart-grid rq-charts">
-        {% include "root/_rv_leaderboard.html" with title="Top timelapse reviewers" %}
-    </section>
 
     {% include "root/_rv_all_reviews.html" %}
 </div>

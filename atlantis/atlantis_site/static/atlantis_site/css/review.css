@@ -2038,6 +2038,12 @@
     color: var(--oc-ink-3);
 }
 
+/* The shortcuts belong to the table above them, so they sit right under it
+   and take over the section's gap to whatever comes next. */
+.root-page .rq-section + .rq-hint {
+    margin: -18px 0 26px;
+}
+
 .root-page .rq-hint kbd {
     margin: 0 1px;
 }
@@ -2216,8 +2222,12 @@
     font-style: italic;
 }
 
+/* Above the queue, so it takes the section gap below rather than above. The
+   columns are wider than metrics' so the title and the period toggle share
+   one line instead of the toggle dropping under the title. */
 .root-page .rq-charts {
-    margin-top: 26px;
+    grid-template-columns: repeat(auto-fill, minmax(min(440px, 100%), 1fr));
+    margin: 0 0 26px;
 }
 
 /* One leaderboard per desk, switching between all time and this week. */
@@ -2225,13 +2235,19 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 6px 12px;
     flex-wrap: wrap;
     margin-bottom: 14px;
 }
 
 .root-page .rq-leaderboard-head h4 {
+    display: flex;
+    align-items: baseline;
     margin: 0;
+}
+
+.root-page .rq-leaderboard-head .rq-filter {
+    margin-left: 0;
 }
 
 /* .chart-bars is a flex column, which would otherwise beat [hidden]. */
