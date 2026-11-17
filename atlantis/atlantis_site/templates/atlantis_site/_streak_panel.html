@@ -115,6 +115,11 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
         <p class="streak-note">
             The eight weeks are over.{% if standing.printer_unlocked %} Your printer is waiting on the charts.{% endif %}
         </p>
+        {% if post_prep_ends %}
+            <p class="streak-note">
+                Prep weeks run until {{ post_prep_ends }} Eastern: hours you log until then earn pearls at the prep rate, and you can keep shipping.
+            </p>
+        {% endif %}
     {% endif %}
 
 </section>

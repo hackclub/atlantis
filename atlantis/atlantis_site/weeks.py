@@ -14,8 +14,9 @@ midnight and attaching the zone, never by adding a timedelta to an aware
 datetime — the latter would put weeks 7 and 8 an hour out.
 
 The program is `CHALLENGE_WEEKS` weeks long. Anything before week 1 opens is
-"prep", which pays the old flat rate; anything after the last week closes is
-past the end of the program, when shipping is off.
+"prep", which pays the old flat rate. After the last week closes come
+POST_PREP_WEEKS more prep weeks, paid at that same flat rate; once they end,
+shipping is off.
 """
 
 from datetime import date, datetime, time, timedelta
@@ -44,6 +45,13 @@ GRACE_PAIRS = ((1, 2), (7, 8))
 # extended — any other would run into the week after it — so an entry for an
 # earlier week is ignored.
 EXTENSION_DAYS = {8: 2}
+
+# Prep weeks after the program: once the last week closes, shipping stays open
+# at the flat prep rate until the end of this many more Sundays. They're counted
+# from the last week's own Sunday, so an extension eats into them rather than
+# pushing them back — week 8 ending on a Tuesday still leaves them ending on
+# the Sunday two weeks after its original one.
+POST_PREP_WEEKS = 2
 
 
 def zone():
@@ -115,6 +123,31 @@ def ends_at():
     including this, so a moment equal to it is already past the program.
     """
     return _local_midnight(_close_date(week_count()))
+
+
+def shipping_closes_at():
+    """The instant shipping closes — midnight after the last post-program prep
+    week's Sunday. Exclusive, and never before the program itself ends."""
+    closes = _local_midnight(start_date() + timedelta(weeks=week_count() + POST_PREP_WEEKS))
+    return max(closes, ends_at())
+
+
+def is_post_prep(moment):
+    """True between the program ending and shipping closing: the prep weeks
+    after the last week, which pay the flat rate like the ones before week 1.
+
+    Kept apart from is_prep, which means *before* week 1 — a deflation made
+    then is owed in week 1, and one made now is owed nowhere.
+    """
+    if moment is None:
+        return False
+    if timezone.is_naive(moment):
+        moment = timezone.make_aware(moment, timezone.get_default_timezone())
+    return ends_at() <= moment < shipping_closes_at()
+
+
+def shipping_has_closed(now=None):
+    return (now or timezone.now()) >= shipping_closes_at()
 
 
 def week_bounds(index):

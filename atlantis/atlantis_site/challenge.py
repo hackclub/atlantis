@@ -876,15 +876,15 @@ def elimination_reason(user, now=None):
 def shipping_blocked_reason(user, now=None):
 	"""Why shipping is closed to this user, or "".
 
-	Only the end of the program closes it. Being out doesn't: shipping is the
-	only way to earn pearls, and savers cost pearls, so blocking it would leave
-	someone with an empty wallet no way back in.
+	Only the end of the prep weeks after the program closes it
+	(weeks.shipping_closes_at). Being out doesn't: shipping is the only way to
+	earn pearls, and savers cost pearls, so blocking it would leave someone
+	with an empty wallet no way back in.
 	"""
-	state = standing(user, now)
-	if state.started and state.ended:
+	if weeks.has_started(now) and weeks.shipping_has_closed(now):
 		return (
-			"The eight weeks are over, so shipping is closed. Your printer claim "
-			"is on the printer charts."
+			"The eight weeks and the prep weeks after them are over, so shipping "
+			"is closed. Your printer claim is on the printer charts."
 		)
 	return ""
 

@@ -73,6 +73,14 @@ def after_week(index):
 	)
 
 
+def after_post_prep(index):
+	"""override_settings putting `now` past the prep weeks that follow a
+	program `index` weeks long, when shipping has closed."""
+	return override_settings(
+		**{**during_week(index + 1 + weeks.POST_PREP_WEEKS).options, "CHALLENGE_WEEKS": index}
+	)
+
+
 def in_week(index, minute=0):
 	"""A datetime inside challenge week `index`, for a recording's recorded_at."""
 	start, _end = weeks.week_bounds(index)

@@ -32,7 +32,7 @@ from ..models import (
 )
 from ..printers import item_key
 from .base import (
-    BaseTestCase, after_week, approve_timelapse, before_the_program, during_week,
+    BaseTestCase, after_post_prep, after_week, approve_timelapse, before_the_program, during_week,
     grant_perms, in_week, make_journal, make_project, make_ship, make_timelapse,
     make_user, message_texts, ship_checklist,
 )
@@ -110,6 +110,17 @@ class WeekMathTests(BaseTestCase):
         moment = et("2026-09-20 23:59")
         self.assertIsNone(weeks.week_for(moment))
         self.assertTrue(weeks.is_prep(moment))
+
+    def test_two_prep_weeks_follow_the_program_to_sunday_nov_29(self):
+        # Week 8 ends Tue Nov 17, but the prep weeks still end on the Sunday
+        # two weeks after its original one.
+        self.assertEqual(weeks.shipping_closes_at(), et("2026-11-30 00:00"))
+        self.assertFalse(weeks.is_post_prep(et("2026-11-17 23:59")))
+        self.assertTrue(weeks.is_post_prep(et("2026-11-18 00:00")))
+        self.assertTrue(weeks.is_post_prep(et("2026-11-29 23:59:59")))
+        self.assertFalse(weeks.is_post_prep(et("2026-11-30 00:00")))
+        self.assertFalse(weeks.shipping_has_closed(et("2026-11-29 23:59")))
+        self.assertTrue(weeks.shipping_has_closed(et("2026-11-30 00:00")))
 
     def test_after_the_end_is_neither_a_week_nor_prep(self):
         moment = et("2026-11-18 00:00")
@@ -596,6 +607,14 @@ class PayoutSplitTests(BaseTestCase):
             self.assertEqual(drawn, {})
             self.assertTrue(lines[0].is_prep)
 
+    def test_work_in_the_prep_weeks_after_the_program_pays_the_flat_rate(self):
+        with after_week(1):
+            journals = self._journals((120, weeks.ends_at() + timedelta(days=3)))
+            pearls, lines, drawn = challenge.payout_breakdown(journals, 120)
+            self.assertEqual(pearls, 16)  # two hours at 8
+            self.assertEqual(drawn, {})
+            self.assertTrue(lines[0].is_prep)
+
     def test_the_first_five_hours_of_a_week_pay_the_base_rate(self):
         with during_week(1):
             journals = self._journals((300, in_week(1)))
@@ -895,14 +914,20 @@ class EliminationGateTests(BaseTestCase):
             SaverCredit.objects.create(user=self.user, week_index=1)
             self.assertEqual(challenge.shipping_blocked_reason(self.user), "")
 
-    def test_shipping_closes_when_the_program_ends(self):
+    def test_shipping_stays_open_in_the_prep_weeks_after_the_program(self):
         with after_week(1):
+            self._log(300, in_week(1))
+            self.assertTrue(challenge.standing(self.user).ended)
+            self.assertEqual(challenge.shipping_blocked_reason(self.user), "")
+
+    def test_shipping_closes_when_the_prep_weeks_after_the_program_end(self):
+        with after_post_prep(1):
             self._log(300, in_week(1))
             reason = challenge.shipping_blocked_reason(self.user)
             self.assertIn("shipping is closed", reason)
 
     def test_shipping_closes_at_the_end_for_someone_out_too(self):
-        with after_week(2):
+        with after_post_prep(2):
             self._log(60, in_week(1))
             self.assertTrue(challenge.standing(self.user).eliminated)
             self.assertIn("shipping is closed", challenge.shipping_blocked_reason(self.user))

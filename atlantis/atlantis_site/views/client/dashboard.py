@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.contrib.auth.decorators import login_required
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from ... import challenge, weeks
@@ -21,6 +24,7 @@ def challenge_context(user):
     """
     state = challenge.standing(user)
     live = state.current
+    now = timezone.now()
 
     return {
         "standing": state,
@@ -29,6 +33,12 @@ def challenge_context(user):
         "weekly_hours": weeks.WEEKLY_HOURS,
         "program_starts": weeks.starts_at().isoformat(),
         "dropped_reason": challenge.elimination_reason(user),
+        # During the prep weeks after the program, when they end.
+        "post_prep_ends": (
+            (weeks.shipping_closes_at() - timedelta(seconds=1))
+            .astimezone(weeks.zone()).strftime("%a %b %-d, %-I:%M %p")
+            if weeks.is_post_prep(now) else ""
+        ),
     }
 
 
