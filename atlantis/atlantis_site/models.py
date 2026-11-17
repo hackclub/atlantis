@@ -51,6 +51,7 @@ ALLOWED_EDITORS = [
 	"Onshape",
 	"Solidworks",
 	"FreeCAD",
+	"Shapr3D",
 ]
 
 EDITOR_FILE_EXTENSIONS = {
@@ -60,6 +61,7 @@ EDITOR_FILE_EXTENSIONS = {
 	".sldasm": "Solidworks",
 	".slddrw": "Solidworks",
 	".fcstd": "FreeCAD",
+	".shapr": "Shapr3D",
 }
 
 # Every editor can also export a project as an archive, and some (Onshape,
@@ -75,7 +77,7 @@ EDITOR_ARCHIVE_EXTENSIONS = {
 # they only reach the file picker's accept list, which is what makes the file
 # selectable at all. Like an archive, they map to no editor name.
 UNLISTED_EDITOR_EXTENSIONS = {
-	".shapr",
+	
 }
 
 EDITOR_LINK_DOMAINS = {
