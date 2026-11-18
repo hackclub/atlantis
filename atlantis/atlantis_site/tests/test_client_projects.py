@@ -1630,18 +1630,16 @@ class UpdateEditorModelTests(BaseTestCase):
 		self.assertEqual(self.project.editor_model_url, VALID_EDITOR_LINK)
 
 	@override_settings(ALLOW_JOURNALING=True)
-	def test_unlisted_extension_uploads(self):
+	def test_a_shapr3d_file_uploads_and_names_its_editor(self):
 		from django.core.files.uploadedfile import SimpleUploadedFile
 		response = self._update(editor_model_file=SimpleUploadedFile("design.shapr", b"data"))
 		self.assertIn("Editor model updated successfully.", message_texts(response))
 		self.project.refresh_from_db()
 		self.assertTrue(self.project.editor_model_url.startswith("editor_models/"))
 		self.assertTrue(self.project.editor_model_url.endswith(".shapr"))
-		# No editor name, so the page reads it back as a plain "editor file".
-		self.assertIsNone(self.project.editor_name)
+		self.assertEqual(self.project.editor_name, "Shapr3D")
 
-	def test_unlisted_extension_is_only_ever_in_the_picker_accept_list(self):
-		"""Selectable in the file dialog, named by no copy on the page."""
+	def test_shapr3d_is_in_the_picker_and_named_on_the_page(self):
 		import re
 		self.project.editor_model_url = VALID_EDITOR_LINK
 		self.project.save()
@@ -1650,11 +1648,7 @@ class UpdateEditorModelTests(BaseTestCase):
 		).content.decode()
 		accept = re.search(r'name="editor_model_file"[^>]*accept="([^"]*)"', html).group(1)
 		self.assertIn(".shapr", accept)
-		self.assertEqual(len(re.findall("shapr", html, re.I)), 1)
-
-	def test_unlisted_extension_is_not_named_when_a_link_is_rejected(self):
-		response = self._update(editor_model_link="https://example.com/model")
-		self.assertFalse(any("shapr" in m.lower() for m in message_texts(response)))
+		self.assertIn("Shapr3D", html)
 
 	def test_clear_on_someone_elses_project_404s(self):
 		other = make_project(make_user("other"), editor_model_url=VALID_EDITOR_LINK)

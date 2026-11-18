@@ -75,10 +75,9 @@ EDITOR_ARCHIVE_EXTENSIONS = {
 # Taken on upload without being advertised. These stay out of ALLOWED_EDITORS
 # and out of every string built from it, so no copy on the page names them;
 # they only reach the file picker's accept list, which is what makes the file
-# selectable at all. Like an archive, they map to no editor name.
-UNLISTED_EDITOR_EXTENSIONS = {
-	
-}
+# selectable at all. Like an archive, they map to no editor name. Empty since
+# Shapr3D became a listed editor; a set, not {}, which would be a dict.
+UNLISTED_EDITOR_EXTENSIONS = set()
 
 EDITOR_LINK_DOMAINS = {
 	"onshape.com": "Onshape",

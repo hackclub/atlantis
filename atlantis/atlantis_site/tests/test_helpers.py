@@ -50,6 +50,7 @@ class EditorDetectionTests(TestCase):
 		self.assertEqual(detect_editor_from_filename("part.f3d"), "Fusion 360")
 		self.assertEqual(detect_editor_from_filename("assembly.sldasm"), "Solidworks")
 		self.assertEqual(detect_editor_from_filename("thing.FCStd"), "FreeCAD")
+		self.assertEqual(detect_editor_from_filename("design.shapr"), "Shapr3D")
 
 	def test_detect_editor_from_filename_is_case_insensitive(self):
 		self.assertEqual(detect_editor_from_filename("PART.F3D"), "Fusion 360")
@@ -64,16 +65,14 @@ class EditorDetectionTests(TestCase):
 		self.assertFalse(is_editor_model_file("notes.txt"))
 		self.assertFalse(is_editor_model_file(""))
 
-	def test_unlisted_extensions_upload_but_name_no_editor(self):
-		# Accepted without being advertised: it passes validation, stays out of
-		# the editor list the page reads from, and names no editor, so no copy
-		# anywhere ends up saying it.
+	def test_shapr3d_is_a_listed_editor(self):
+		# Once taken without being advertised; a listed editor since #26.
 		self.assertTrue(is_editor_model_file("design.shapr"))
 		self.assertTrue(is_editor_model_file("DESIGN.SHAPR"))
 		self.assertTrue(is_editor_model_file("editor_models/abc123.shapr"))
 		self.assertTrue(is_valid_editor_model_url("editor_models/abc123.shapr"))
-		self.assertIsNone(detect_editor("design.shapr"))
-		self.assertNotIn("Shapr3D", ALLOWED_EDITORS)
+		self.assertEqual(detect_editor("design.shapr"), "Shapr3D")
+		self.assertIn("Shapr3D", ALLOWED_EDITORS)
 
 	def test_detect_editor_from_filename_unknown(self):
 		self.assertIsNone(detect_editor_from_filename("model.stl"))
@@ -81,7 +80,6 @@ class EditorDetectionTests(TestCase):
 		self.assertIsNone(detect_editor_from_filename("box.scad"))
 		self.assertIsNone(detect_editor_from_filename("scene.blend"))
 		self.assertIsNone(detect_editor_from_filename("sketch.slvs"))
-		self.assertIsNone(detect_editor_from_filename("model.shapr"))
 
 	def test_detect_editor_from_link_known_domains(self):
 		self.assertEqual(detect_editor_from_link("https://onshape.com/doc/1"), "Onshape")
