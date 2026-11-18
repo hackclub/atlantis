@@ -70,6 +70,19 @@ class QueueOrderTests(BaseTestCase):
 		self.assertEqual([ship.id for ship in rows], [debt_older.id, debt_newer.id, oldest.id])
 		self.assertEqual([ship.in_debt for ship in rows], [True, True, False])
 
+	def test_a_long_wait_goes_ahead_of_fresh_debt(self):
+		long_wait = ages(make_ship(self.project), days=31)
+		in_debt = make_project(make_user("borrower", layers=-50), shippable=True)
+		debt_fresh = ages(make_ship(in_debt), days=19)
+		debt_stale = ages(make_ship(in_debt), days=21)
+		newest = make_ship(self.project)
+
+		rows = self.client.get(reverse("review_dash")).context["ships"]
+		# Debt that's waited 20d still leads; 30d without debt beats debt under 20d.
+		self.assertEqual(
+			[ship.id for ship in rows], [debt_stale.id, long_wait.id, debt_fresh.id, newest.id]
+		)
+
 	def test_a_zero_balance_is_not_debt(self):
 		oldest = ages(make_ship(self.project), days=9)
 		broke = make_project(make_user("broke", layers=0), shippable=True)
@@ -275,6 +288,15 @@ class LookoutQueueTests(BaseTestCase):
 		rows = self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["projects"]
 		self.assertEqual([p.id for p in rows], [in_debt.id, older.id])
 		self.assertTrue(rows[0].in_debt)
+
+	def test_a_project_waiting_30_days_goes_ahead_of_fresh_debt(self):
+		long_wait = make_project(make_user("patient"), shippable=True)
+		in_debt = make_project(make_user("borrower", layers=-25), shippable=True)
+		self._lapse(long_wait, 30)
+		self._lapse(in_debt, 5)
+
+		rows = self.client.get(reverse("timelapse_review_dash") + "?filter=all").context["projects"]
+		self.assertEqual([p.id for p in rows], [long_wait.id, in_debt.id])
 
 	def test_a_project_waits_from_its_oldest_lapse_not_its_creation(self):
 		self._lapse(self.project, 9)

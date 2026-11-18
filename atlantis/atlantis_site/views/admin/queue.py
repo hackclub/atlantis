@@ -27,7 +27,10 @@ from datetime import timedelta
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.paginator import Paginator
-from django.db.models import BooleanField, Count, Exists, ExpressionWrapper, Min, OuterRef, Prefetch, Q, Subquery, Sum
+from django.db.models import (
+    BooleanField, Case, Count, Exists, ExpressionWrapper, IntegerField, Min, OuterRef, Prefetch, Q, Subquery,
+    Sum, Value, When,
+)
 from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.shortcuts import redirect
@@ -107,6 +110,35 @@ def owner_in_debt(owner_path):
     )
 
 
+# Debt jumps the line, but not forever: a ship that's been waiting this long
+# with no debt goes ahead of a debt ship that's only waited DEBT_FRESH_DAYS.
+LONG_WAIT_DAYS = 30
+DEBT_FRESH_DAYS = 20
+
+
+def queue_priority(waiting_field):
+    """Which band of the queue an item sits in, lowest first.
+
+    0: in debt and waiting DEBT_FRESH_DAYS or more
+    1: not in debt and waiting LONG_WAIT_DAYS or more
+    2: in debt and waiting less than DEBT_FRESH_DAYS
+    3: everyone else
+
+    Expects `in_debt` already annotated. `waiting_field` is when the item
+    started waiting: "created_at" for a ship, "waiting_since" for a project.
+    """
+    now = timezone.now()
+    long_wait = {f"{waiting_field}__lte": now - timedelta(days=LONG_WAIT_DAYS)}
+    debt_fresh = {f"{waiting_field}__gt": now - timedelta(days=DEBT_FRESH_DAYS)}
+    return Case(
+        When(Q(in_debt=True) & ~Q(**debt_fresh), then=Value(0)),
+        When(Q(in_debt=False) & Q(**long_wait), then=Value(1)),
+        When(in_debt=True, then=Value(2)),
+        default=Value(3),
+        output_field=IntegerField(),
+    )
+
+
 @dataclass(frozen=True)
 class Queue:
     """One review desk: what's in it, and the URLs for moving through it."""
@@ -140,7 +172,9 @@ class Queue:
 
         Someone with a negative pearl balance only gets out of it through a
         payout, and a payout needs these reviews done, so theirs jump the
-        line (owner_in_debt). Within each group it's oldest first and not
+        line (owner_in_debt) — except that anyone not in debt who has waited
+        LONG_WAIT_DAYS goes ahead of debt that's younger than DEBT_FRESH_DAYS
+        (queue_priority). Within each band it's oldest first and not
         newest-first, unlike the tables this replaces. A queue worked
         newest-first starves its tail, and the tail is exactly the set of
         people who have been waiting longest.
@@ -165,9 +199,10 @@ class Queue:
                 ))
                 .filter(waiting_since__isnull=False)
                 .annotate(in_debt=owner_in_debt("owner"))
+                .annotate(priority=queue_priority("waiting_since"))
                 .select_related("owner", "owner__hackclub_profile")
                 .prefetch_related(project_lapse_prefetch())
-                .order_by("-in_debt", "waiting_since", "id")
+                .order_by("priority", "waiting_since", "id")
             )
         base = Ship.objects.filter(status=SHIP_STATUS_FOR[self.key], project__deleted=False)
         if self.key == "t1":
@@ -177,8 +212,9 @@ class Queue:
         return (
             base
             .annotate(in_debt=owner_in_debt("project__owner"))
+            .annotate(priority=queue_priority("created_at"))
             .select_related("project", "project__owner", "project__owner__hackclub_profile")
-            .order_by("-in_debt", "created_at", "id")
+            .order_by("priority", "created_at", "id")
         )
 
 
@@ -670,7 +706,7 @@ def _project_type_of(queue_key, row):
 DEFAULT_FILTERS = {"lookout": "shipped"}
 
 # The orders a desk's table can be put in, by `?sort=`. The queue's own order,
-# owners in debt and then oldest first, goes unsaid. Hours are the column the table already shows:
+# owners in debt and then oldest first (see queue_priority), goes unsaid. Hours are the column the table already shows:
 # approved project time on the ship desks, tracked footage on the timelapse
 # desk. Ties keep their queue order, so the longest-waiting of two equal rows
 # still comes first.
