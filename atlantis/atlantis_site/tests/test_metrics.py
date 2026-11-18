@@ -384,6 +384,16 @@ class MetricsHoursTests(BaseTestCase):
 			return make_project(make_user(f"builder{n}", slack_id=f"U{n}"))
 
 		make_ship(project(1), status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(60,))
+		# Not on the T1 desk until its lapses are signed off, and counted whole.
+		make_ship(
+			project(5), status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(45,),
+			timelapse_approved=False,
+		)
+		# A deleted project's ship isn't waiting on anyone.
+		gone = project(6)
+		make_ship(gone, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(600,))
+		gone.deleted = True
+		gone.save(update_fields=["deleted"])
 		# Only the latest T2 pass's deductions come off, as on the T3 form.
 		in_t3 = make_ship(project(2), status=Ship.ShipStatus.T3_QUEUE, journal_minutes=(120,))
 		for minutes in (60, 30):
@@ -404,8 +414,15 @@ class MetricsHoursTests(BaseTestCase):
 
 		ships = self.client.get(reverse("metrics")).context["ships"]
 
-		self.assertEqual(ships["queued_airtable_hours"], 4.0)
-		self.assertEqual(ships["airtable_backlog_hours"], 5.7)
+		self.assertEqual(ships["queued_airtable_hours"], 4.8)
+		self.assertEqual(ships["airtable_backlog_hours"], 6.5)
+		stages = {row["label"]: (row["value"], row["sub"]) for row in ships["queued_airtable_by_stage"]}
+		self.assertEqual(stages, {
+			"Held for timelapse review": (0.8, "1 ship"),
+			"T1 review": (1.0, "1 ship"),
+			"T2 review": (1.5, "1 ship"),
+			"Fraud (T3)": (1.5, "1 ship"),
+		})
 
 	def test_shipped_hours_by_status_add_up_to_the_shipped_total(self):
 		project = make_project(make_user("builder", slack_id="U1"))
