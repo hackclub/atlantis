@@ -377,6 +377,36 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(ships["queued_hours"], 3.5)
 		self.assertEqual(ships["queued_devlogs"], 4)
 
+	def test_queued_airtable_hours_are_what_the_queues_would_send(self):
+		reviewer = make_user("t2", slack_id="U-t2")
+
+		def project(n):
+			return make_project(make_user(f"builder{n}", slack_id=f"U{n}"))
+
+		make_ship(project(1), status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(60,))
+		# Only the latest T2 pass's deductions come off, as on the T3 form.
+		in_t3 = make_ship(project(2), status=Ship.ShipStatus.T3_QUEUE, journal_minutes=(120,))
+		for minutes in (60, 30):
+			T2.objects.create(
+				ship=in_t3, reviewer=reviewer, deductions=minutes,
+				feedback="ok", justification="ok",
+			)
+		# A rejected ship's hours ride along with the next one.
+		reshipped = project(3)
+		make_ship(reshipped, status=Ship.ShipStatus.REJECTED, journal_minutes=(60,))
+		make_ship(reshipped, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(30,))
+		# Finalized but never sent: not in the queues, only in the backlog.
+		finalized = make_ship(project(4), status=Ship.ShipStatus.FINALIZED, journal_minutes=(120,))
+		T3.objects.create(
+			ship=finalized, reviewer=reviewer, decision=T3.Decision.APPROVE,
+			payout_time=102, airtable_time=102,
+		)
+
+		ships = self.client.get(reverse("metrics")).context["ships"]
+
+		self.assertEqual(ships["queued_airtable_hours"], 4.0)
+		self.assertEqual(ships["airtable_backlog_hours"], 5.7)
+
 	def test_shipped_hours_by_status_add_up_to_the_shipped_total(self):
 		project = make_project(make_user("builder", slack_id="U1"))
 		make_ship(project, status=Ship.ShipStatus.T1_QUEUE, journal_minutes=(60,))

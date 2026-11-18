@@ -41,6 +41,7 @@ from ..helpers import (
     display_name,
     format_minutes,
     layers_for_minutes,
+    payable_minutes_by_ship,
     reviewer_leaderboard,
     tracked_minutes_for_journals,
     staff_member_required,
@@ -122,6 +123,23 @@ def _submitted_minutes_by_ship(ships):
         if approved or not picked.get(ship_id, (False,))[0]:
             picked[ship_id] = (approved, minutes or 0)
     return {ship_id: minutes for ship_id, (_approved, minutes) in picked.items()}
+
+
+def _projected_airtable_minutes(ships):
+    """What `ships` would send Airtable if every one of them passed review as
+    it stands: the minutes the T3 form prefills, the ship's approved payable
+    time less its latest T2 pass's deductions. A ship T2 hasn't seen yet has
+    nothing deducted, so it is counted at its approved time.
+    """
+    deductions = {}
+    for ship_id, minutes in (
+        T2.objects.filter(ship__in=ships).order_by("id").values_list("ship_id", "deductions")
+    ):
+        deductions[ship_id] = minutes or 0
+    return sum(
+        max(minutes - deductions.get(ship_id, 0), 0)
+        for ship_id, minutes in payable_minutes_by_ship(ships).items()
+    )
 
 
 def _daily_rows(counts, days, today, value=lambda n: n):
@@ -712,6 +730,13 @@ def build_metrics(now):
         Ship.ShipStatus.T1_QUEUE, Ship.ShipStatus.T2_QUEUE, Ship.ShipStatus.T3_QUEUE,
     ])
     queued_minutes = tracked_minutes_for_journals(queued_journals)
+    # The same queues read as what Airtable would be told rather than as
+    # footage: timelapse removals and T2 deductions come off, which is where
+    # the T3 form's prefill starts. Only an estimate until T3 signs off — the
+    # reviewer can still change it, or reject the ship outright.
+    queued_airtable_minutes = _projected_airtable_minutes(Ship.objects.filter(status__in=[
+        Ship.ShipStatus.T1_QUEUE, Ship.ShipStatus.T2_QUEUE, Ship.ShipStatus.T3_QUEUE,
+    ]))
 
     # The shipped hours split by where each ship stands now, so the cards
     # above can be read off it: every shipped lapse lands in exactly one row.
@@ -790,6 +815,12 @@ def build_metrics(now):
         "backlog_total": backlog_total,
         "queued_hours": _hours(queued_minutes),
         "queued_devlogs": queued_journals.count(),
+        "queued_airtable_hours": _hours(queued_airtable_minutes),
+        # Everything Airtable could still be sent: the queues as they'd pass,
+        # plus the finalized ships whose record hasn't gone out yet.
+        "airtable_backlog_hours": round(
+            _hours(queued_airtable_minutes) + finalized_hours - airtable_hours, 1
+        ),
         "pipeline": pipeline,
     }
 
