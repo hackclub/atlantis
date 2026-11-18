@@ -249,7 +249,9 @@ def projects(request):
         .annotate(total=Sum("tracked_seconds"))
     )
 
-    create_blocked_reason = ship_block_reason(request.user)
+    create_blocked_reason = (
+        challenge.project_creation_blocked_reason(request.user) or ship_block_reason(request.user)
+    )
 
     for project in projects:
         project.tracked_hours = f"{tracked_seconds.get(project.id, 0) / 3600:.1f}h"
@@ -259,7 +261,8 @@ def projects(request):
         "profile": profile,
         "create_blocked_reason": create_blocked_reason,
         "create_blocked_label": (
-            "add address" if create_blocked_reason in ADDRESS_BLOCK_MESSAGES
+            "closed" if create_blocked_reason == challenge.project_creation_blocked_reason(request.user)
+            else "add address" if create_blocked_reason in ADDRESS_BLOCK_MESSAGES
             else "verify to add"
         ),
     })
@@ -271,7 +274,8 @@ def projects(request):
 def create_project(request):
     # A YSWS project is a claim on YSWS prizes, so who may start one is HCA's
     # call, not ours — and so is where the prizes would go.
-    blocked = ship_block_reason(request.user)
+    # Closed with shipping: a project started now could never be shipped.
+    blocked = challenge.project_creation_blocked_reason(request.user) or ship_block_reason(request.user)
     if blocked:
         messages.error(request, blocked)
         return redirect("projects")
@@ -539,7 +543,7 @@ def project_detail(request, project_id):
         # the whole answer.
         halted = (
             ship_block_reason(user)
-            or challenge.shipping_blocked_reason(user)
+            or challenge.shipping_blocked_reason(user, resubmitting=resubmitting)
             or (project.locked and "This project is locked and cannot be shipped.")
             or (ship_pending and "Your most recent ship must be finalized or rejected before you can reship.")
         )
@@ -1132,10 +1136,15 @@ def ship_project(request, project_id):
     if blocked:
         messages.error(request, blocked)
         return redirect("projects")
-    # Closed once the eight weeks are over. Not while someone is out of the
-    # program: ships are where the pearls for their savers come from. Sits
-    # after the HCA check because eligibility is the more fundamental refusal.
-    dropped = challenge.shipping_blocked_reason(request.user)
+    # Closed once the prep weeks after the program are over, except to a ship
+    # sent back for changes. Not while someone is out of the program: ships
+    # are where the pearls for their savers come from. Sits after the HCA
+    # check because eligibility is the more fundamental refusal.
+    latest_ship = project.ships.order_by('-created_at').first()
+    resubmitting = (
+        latest_ship is not None and latest_ship.status == Ship.ShipStatus.CHANGES_REQUESTED
+    )
+    dropped = challenge.shipping_blocked_reason(request.user, resubmitting=resubmitting)
     if dropped:
         messages.error(request, dropped)
         return redirect("projects")
@@ -1158,14 +1167,10 @@ def ship_project(request, project_id):
     # rest of the pipeline can be exercised without hours of real recording.
     bypass_requirements = can_bypass_ship_requirements(request.user)
 
-    latest_ship = project.ships.order_by('-created_at').first()
-
-    # A T1 reviewer asked for changes rather than rejecting the ship. The
-    # same ship goes back into the T1 queue with its journals, plus anything
-    # logged since, so none of the new-ship gates below apply to it.
-    resubmitting = (
-        latest_ship is not None and latest_ship.status == Ship.ShipStatus.CHANGES_REQUESTED
-    )
+    # `resubmitting` (above): a T1 reviewer asked for changes rather than
+    # rejecting the ship. The same ship goes back into the T1 queue with its
+    # journals, plus anything logged since, so none of the new-ship gates
+    # below apply to it.
 
     unassigned_journals = project.journals.filter(ship__isnull=True)
     if not bypass_requirements and not resubmitting and not unassigned_journals.exists():

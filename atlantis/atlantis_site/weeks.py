@@ -134,11 +134,21 @@ def ends_at(extra=0):
     return _local_midnight(_close_date(week_count(), extra))
 
 
-def shipping_closes_at():
+def shipping_closes_at(extra=0):
     """The instant shipping closes — midnight after the last post-program prep
-    week's Sunday. Exclusive, and never before the program itself ends."""
+    week's Sunday. Exclusive, and never before the program itself ends.
+
+    For someone with `extra` days on the last week it's never before the end
+    of the day after their last week, either: an organizer can extend it as
+    far as they like, and the time recorded in it only counts once shipped,
+    so there has to be a day left to ship it in.
+    """
     closes = _local_midnight(start_date() + timedelta(weeks=week_count() + POST_PREP_WEEKS))
-    return max(closes, ends_at())
+    closes = max(closes, ends_at())
+    if extra:
+        after = _close_date(week_count(), extra) + timedelta(days=1)
+        closes = max(closes, _local_midnight(after))
+    return closes
 
 
 def is_post_prep(moment):
@@ -155,20 +165,8 @@ def is_post_prep(moment):
     return ends_at() <= moment < shipping_closes_at()
 
 
-def shipping_has_closed(now=None):
-    return (now or timezone.now()) >= shipping_closes_at()
-
-
-def max_extension_days():
-    """The most days an organizer can add to one person's last week.
-
-    Enough that it still ends a whole day before shipping closes: time
-    recorded in the extension only counts towards a printer once it's
-    shipped, so an extension running up to the close would leave nothing
-    to ship it in.
-    """
-    last_day = shipping_closes_at().astimezone(zone()).date() - timedelta(days=1)
-    return max((last_day - _close_date(week_count())).days, 0)
+def shipping_has_closed(now=None, extra=0):
+    return (now or timezone.now()) >= shipping_closes_at(extra)
 
 
 def week_bounds(index, extra=0):

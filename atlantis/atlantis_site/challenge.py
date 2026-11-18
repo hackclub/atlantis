@@ -1237,19 +1237,34 @@ def elimination_reason(user, now=None):
 	)
 
 
-def shipping_blocked_reason(user, now=None):
+def shipping_blocked_reason(user, now=None, resubmitting=False):
 	"""Why shipping is closed to this user, or "".
 
 	Only the end of the prep weeks after the program closes it
-	(weeks.shipping_closes_at). Being out doesn't: shipping is the only way to
+	(weeks.shipping_closes_at), later for someone whose last week an organizer
+	extended past it. Being out doesn't: shipping is the only way to
 	earn pearls, and savers cost pearls, so blocking it would leave someone
 	with an empty wallet no way back in.
+
+	Nor does it close for `resubmitting`, a ship a reviewer sent back for
+	changes: that's work shipped in time, waiting on a fix, and closing the
+	door on it would strand its hours short of finalized for good.
 	"""
-	if weeks.has_started(now) and weeks.shipping_has_closed(now):
+	if resubmitting:
+		return ""
+	if weeks.has_started(now) and weeks.shipping_has_closed(now, extension_days(user)):
 		return (
 			"The eight weeks and the prep weeks after them are over, so shipping "
-			"is closed. Your printer claim is on the printer charts."
+			"is closed. A ship sent back for changes can still be resubmitted."
 		)
+	return ""
+
+
+def project_creation_blocked_reason(user, now=None):
+	"""Why this user can't start a project now, or "": not once shipping has
+	closed for them, since a new one could never be shipped."""
+	if weeks.has_started(now) and weeks.shipping_has_closed(now, extension_days(user)):
+		return "Atlantis is over, so new projects can't be started."
 	return ""
 
 

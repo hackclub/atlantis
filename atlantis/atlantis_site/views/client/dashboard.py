@@ -28,7 +28,7 @@ def challenge_context(user):
     unshipped = challenge.unshipped_minutes(user) if state.started else 0
     # The last minute anything can be shipped, as the deck words a deadline.
     shipping_closes = (
-        (weeks.shipping_closes_at() - timedelta(seconds=1))
+        (weeks.shipping_closes_at(state.extension_days) - timedelta(seconds=1))
         .astimezone(weeks.zone()).strftime("%a %b %-d, %-I:%M %p")
     )
 
@@ -49,7 +49,7 @@ def challenge_context(user):
         "unshipped_minutes": unshipped,
         "unshipped_display": challenge.format_minutes(unshipped),
         "shipping_closes": shipping_closes,
-        "shipping_open": not weeks.shipping_has_closed(now),
+        "shipping_open": not weeks.shipping_has_closed(now, state.extension_days),
         "week_count": weeks.week_count(),
     }
 

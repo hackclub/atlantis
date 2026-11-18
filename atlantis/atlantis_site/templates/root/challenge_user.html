@@ -127,7 +127,8 @@
         those days counts towards it (pearls for it stay at the prep rate), it can't be
         missed until it ends, and printers wait for them until then. Giving it after the
         week has closed reopens it. Everyone else's ends {{ usual_final_deadline }}
-        Eastern; up to {{ max_extension_days }} more days. Set 0 to take it away.
+        Eastern. Any number of days; shipping and new projects stay open for them until the
+        end of the day after it, if that's later than everyone else's close. Set 0 to take it away.
     </p>
     {% if extension %}
         <p>
@@ -139,7 +140,7 @@
     <form method="post" action="{% url 'extend_final_week' target.id %}" class="inline-form">
         {% csrf_token %}
         <label>Days
-            <input type="number" name="days" min="0" max="{{ max_extension_days }}"
+            <input type="number" name="days" min="0"
                    value="{% if extension %}{{ extension.days }}{% else %}1{% endif %}" required>
         </label>
         <label>Why

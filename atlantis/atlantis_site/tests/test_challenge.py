@@ -2025,9 +2025,11 @@ class FinalWeekExtensionTests(BaseTestCase):
         self.assertIsNone(weeks.buffer_week(et("2026-11-18 01:00"), 3))
         self.assertEqual(weeks.settled_at(3), et("2026-11-21 02:00"))
         self.assertEqual(weeks.week_label(8, 3), "Week 8 · Nov 9–20")
-        # Ends a whole day before shipping closes at midnight going into Nov 30.
-        self.assertEqual(weeks.max_extension_days(), 11)
-        self.assertEqual(weeks.deadline(8, 11), et("2026-11-28 23:59:59"))
+        # A short extension leaves shipping closing with everyone's; a long one
+        # keeps it open to the end of the day after their week 8.
+        self.assertEqual(weeks.shipping_closes_at(3), et("2026-11-30 00:00"))
+        self.assertEqual(weeks.shipping_closes_at(20), et("2026-12-09 00:00"))
+        self.assertEqual(weeks.deadline(8, 20), et("2026-12-07 23:59:59"))
 
     @override_settings(CHALLENGE_WEEKS=9)
     def test_only_the_last_week_moves(self):
@@ -2176,11 +2178,36 @@ class FinalWeekExtensionTests(BaseTestCase):
             self.assertIn("removed", dm.call_args.args[0])
             self.assertIn("Tue Nov 17 at 11:59 PM", dm.call_args.args[0])
 
-    def test_an_extension_past_the_cap_is_refused(self):
+    def test_there_is_no_cap(self):
         from ..models import FinalWeekExtension
         self.client.force_login(self.organizer)
         with self._at("2026-11-17 12:00"):
-            for days in ("12", "-1", "two"):
+            self.client.post(reverse("extend_final_week", args=[self.user.id]), {"days": "60"})
+            self.assertEqual(FinalWeekExtension.objects.get(user=self.user).days, 60)
+
+    def test_a_long_extension_keeps_shipping_open_for_them_alone(self):
+        self._extend(20)  # week 8 ends Mon Dec 7 for them
+        other = make_user("other", slack_id="U0OTHER")
+        with self._at("2026-12-08 12:00"):
+            self.assertEqual(challenge.shipping_blocked_reason(self.user), "")
+            self.assertEqual(challenge.project_creation_blocked_reason(self.user), "")
+            self.assertIn("shipping is closed", challenge.shipping_blocked_reason(other))
+            self.assertNotEqual(challenge.project_creation_blocked_reason(other), "")
+        with self._at("2026-12-09 00:00"):
+            self.assertIn("shipping is closed", challenge.shipping_blocked_reason(self.user))
+
+    def test_the_dm_names_their_own_shipping_close(self):
+        self.client.force_login(self.organizer)
+        with self._at("2026-11-17 12:00"), \
+                patch("atlantis_site.views.admin.challenge.send_slack_dm") as dm:
+            self.client.post(reverse("extend_final_week", args=[self.user.id]), {"days": "20"})
+            self.assertIn("Shipping closes Tue Dec 8 at 11:59 PM", dm.call_args.args[0])
+
+    def test_a_nonsense_extension_is_refused(self):
+        from ..models import FinalWeekExtension
+        self.client.force_login(self.organizer)
+        with self._at("2026-11-17 12:00"):
+            for days in ("-1", "two", "40000"):
                 with self.subTest(days=days):
                     self.client.post(reverse("extend_final_week", args=[self.user.id]), {"days": days})
                     self.assertFalse(FinalWeekExtension.objects.exists())

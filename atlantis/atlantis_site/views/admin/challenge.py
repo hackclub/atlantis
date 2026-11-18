@@ -168,7 +168,6 @@ def challenge_user(request, user_id):
         "extension": (
             FinalWeekExtension.objects.filter(user=target).select_related("granted_by").first()
         ),
-        "max_extension_days": weeks.max_extension_days(),
         # Formatted here, in the program's zone: TIME_ZONE is UTC, so a
         # template's |date would put 11:59 PM Eastern on the next day.
         "usual_final_deadline": _eastern(weeks.deadline(weeks.week_count())),
@@ -352,8 +351,8 @@ def extend_final_week(request, user_id):
     towards it, it can't be missed until then, and printers wait for them
     until it has settled. It can be given after their week has closed, which
     reopens it — the way to rescue someone who had an emergency over the
-    deadline. Capped by weeks.max_extension_days so there's still a day left
-    to ship the time in.
+    deadline. No cap: shipping stays open for them until the end of the day
+    after their last week (weeks.shipping_closes_at), however far that is.
     """
     User = get_user_model()
     target = get_object_or_404(User, id=user_id)
@@ -365,9 +364,10 @@ def extend_final_week(request, user_id):
         messages.error(request, "Days must be a whole number.")
         return redirect("challenge_user", user_id=user_id)
 
-    most = weeks.max_extension_days()
-    if not 0 <= days <= most:
-        messages.error(request, f"Extend week {final} by 1 to {most} days, or 0 to take it away.")
+    # No cap as policy. This is only the PositiveSmallIntegerField's ceiling
+    # (about ninety years), so a typo is an error message, not a crash.
+    if not 0 <= days <= 32767:
+        messages.error(request, f"Extend week {final} by a positive number of days, or 0 to take it away.")
         return redirect("challenge_user", user_id=user_id)
 
     note = request.POST.get("note", "").strip()[:200]
@@ -415,7 +415,7 @@ def _extension_dm(final, days, ends):
             f"Your extension on week {final} of Atlantis has been removed, so week {final} "
             f"ended {_eastern(ends)} Eastern, the same as everyone else's."
         )
-    ship_by = _eastern(weeks.shipping_closes_at() - timedelta(seconds=1))
+    ship_by = _eastern(weeks.shipping_closes_at(days) - timedelta(seconds=1))
     return (
         f"An organizer gave you {days} extra day{'s' if days != 1 else ''} on week {final} "
         f"of Atlantis: it now ends {_eastern(ends)} Eastern for you. Time you record "

@@ -17,6 +17,7 @@ from .base import (
 	VALID_EDITOR_LINK,
 	VALID_PRINTABLES_URL,
 	BaseTestCase,
+	after_post_prep,
 	grant_perms,
 	image_upload,
 	make_journal,
@@ -1055,6 +1056,49 @@ class ShipProjectTests(BaseTestCase):
 		ship.refresh_from_db()
 		self.assertEqual(ship.status, Ship.ShipStatus.T1_QUEUE)
 		self.assertIn(f'Resubmitted "{self.project.title}" for T1 review!', message_texts(response))
+
+	def test_a_new_ship_is_refused_once_shipping_closes(self):
+		with after_post_prep(1):
+			make_journal(self.project, time_spent=200)
+			response = self._ship()
+			self.assertEqual(Ship.objects.count(), 0)
+			self.assertTrue(any("shipping is closed" in m for m in message_texts(response)))
+
+	def test_a_reship_after_rejection_is_refused_once_shipping_closes(self):
+		with after_post_prep(1):
+			make_ship(self.project, status=Ship.ShipStatus.REJECTED)
+			make_journal(self.project, time_spent=200)
+			self._ship()
+			self.assertEqual(Ship.objects.count(), 1)
+
+	def test_changes_requested_can_still_be_resubmitted_once_shipping_closes(self):
+		with after_post_prep(1):
+			ship = make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED)
+			response = self._ship()
+			ship.refresh_from_db()
+			self.assertEqual(ship.status, Ship.ShipStatus.T1_QUEUE)
+			self.assertIn(f'Resubmitted "{self.project.title}" for T1 review!', message_texts(response))
+
+	def test_the_project_page_offers_the_resubmit_once_shipping_closes(self):
+		with after_post_prep(1):
+			make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED)
+			response = self.client.get(reverse("project_detail", args=[self.project.id]))
+			self.assertNotContains(response, "shipping is closed")
+		with after_post_prep(1):
+			Ship.objects.update(status=Ship.ShipStatus.FINALIZED)
+			response = self.client.get(reverse("project_detail", args=[self.project.id]))
+			self.assertContains(response, "shipping is closed")
+
+	def test_no_new_projects_once_shipping_closes(self):
+		with after_post_prep(1):
+			before = Project.objects.count()
+			response = self.client.post(
+				reverse("create_project"), {"title": "Late", "description": "x"}, follow=True,
+			)
+			self.assertEqual(Project.objects.count(), before)
+			self.assertIn("Atlantis is over, so new projects can't be started.", message_texts(response))
+			page = self.client.get(reverse("projects"))
+			self.assertEqual(page.context["create_blocked_label"], "closed")
 
 	def test_resubmit_takes_lapses_logged_since(self):
 		ship = make_ship(self.project, status=Ship.ShipStatus.CHANGES_REQUESTED)
