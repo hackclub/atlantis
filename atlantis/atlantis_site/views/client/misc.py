@@ -205,8 +205,8 @@ def claim_printer(request, slug):
     if ineligible:
         messages.error(request, f"Buying a printer needs a YSWS-eligible Hack Club identity. {ineligible}")
         return redirect("printer_track", slug=slug)
-    # Only hours recorded inside the eight weeks count, five a week: prep
-    # time, before or after, doesn't, however much of it there is.
+    # Only hours recorded inside the eight weeks count, as one total however
+    # they're spread: prep time, before or after, doesn't, however much.
     total = weeks.printer_hours()
     if not state.all_shipped:
         messages.error(

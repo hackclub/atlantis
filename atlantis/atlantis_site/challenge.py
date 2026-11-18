@@ -25,8 +25,9 @@ Three numbers come out of here and they are deliberately different things:
                    Forty of them is exactly every week. That bar is on logged
                    time; what the end of the program judges is *shipped* and
                    *finalized* time recorded inside the weeks (see
-                   shipped_ledger): all forty shipped to pass, all forty
-                   finalized, with the streak kept, to claim a printer.
+                   shipped_ledger), as one total however it's spread across
+                   them: all forty shipped to pass, all forty finalized, with
+                   the streak kept, to claim a printer.
   pearls           paid at T3 finalization off *approved* time, split across
                    the weeks the work was done in. Nothing to do with either
                    bar; see payout_breakdown.
@@ -160,6 +161,12 @@ def shipped_ledger(user=None):
 		if status == Ship.ShipStatus.FINALIZED:
 			finalized[index] = finalized.get(index, 0) + approved
 	return out
+
+
+def unshipped_minutes(user):
+	"""Minutes from inside the weeks this user has logged and not shipped:
+	what shipping now would add to the forty, before the cap."""
+	return sum(unshipped_seconds_by_week(user).values()) // 60
 
 
 def unshipped_seconds_by_week(user):
@@ -663,43 +670,6 @@ class Week:
 
 
 @dataclass
-class ShippedUnit:
-	"""One row of the shipped printer hours: a week on its own, or a grace
-	pair judged as one (weeks.GRACE_PAIRS)."""
-	indexes: tuple
-	# Credited from shipped time, savers and passes, before any cap.
-	shipped_minutes: int
-	required_minutes: int
-	# Logged inside these weeks and on no ship yet: what shipping would add.
-	unshipped_minutes: int = 0
-	# Any of its weeks is running or over. One that hasn't begun is just empty.
-	started: bool = False
-
-	@property
-	def label(self):
-		if len(self.indexes) == 1:
-			return f"Week {self.indexes[0]}"
-		return f"Weeks {self.indexes[0]}–{self.indexes[-1]}"
-
-	@property
-	def met(self):
-		return self.shipped_minutes >= self.required_minutes
-
-	@property
-	def counted_display(self):
-		"""What this unit puts towards the forty: never more than it asks for."""
-		return format_minutes(min(self.shipped_minutes, self.required_minutes))
-
-	@property
-	def required_display(self):
-		return f"{self.required_minutes // 60}h"
-
-	@property
-	def unshipped_display(self):
-		return format_minutes(self.unshipped_minutes)
-
-
-@dataclass
 class Standing:
 	"""Everything about where one user is in the program."""
 	weeks: list = field(default_factory=list)
@@ -769,54 +739,25 @@ class Standing:
 	def printer_percent(self):
 		return min(round(self.printer_minutes / (weeks.printer_hours() * 60) * 100), 100)
 
-	def _unit_minutes(self, seconds):
-		"""[(unit, credited minutes, required minutes)] from {week: seconds} of
-		shipped or finalized time, a unit being a grace pair or a lone week, in
-		week order.
-
-		Judged like the streak: five a week, or the pair's ten across a grace
-		pair however it's split. Saver hours count, since a rescued week still
-		banks its five, and hours an organizer removed come off. A week an
-		organizer passed counts its full five, shipped or not, whatever else is
-		in it. Credited minutes aren't capped here; _counted_minutes caps them.
-		"""
-		by_index = {week.index: week for week in self.weeks}
-		out = []
-		for unit in sorted({weeks.grace_pair(index) or (index,) for index in by_index}):
-			minutes = 0
-			for i in unit:
-				week = by_index[i]
-				credited = _credited(seconds.get(i, 0) // 60, week.saver_hours, week.removed_hours)
-				if week.override == WeekOutcome.Override.PASS:
-					credited = max(credited, weeks.WEEKLY_MINUTES)
-				minutes += credited
-			out.append((unit, minutes, weeks.WEEKLY_MINUTES * len(unit)))
-		return out
-
 	def _counted_minutes(self, seconds):
-		"""Printer minutes from {week: seconds}: each unit's, up to what it
-		asks for and no more however much was shipped."""
-		total = sum(min(minutes, required) for _unit, minutes, required in self._unit_minutes(seconds))
-		return min(total, weeks.printer_hours() * 60)
+		"""Printer minutes from {week: seconds} of shipped or finalized time.
 
-	def shipped_units(self, unshipped=None):
-		"""The shipped printer hours, unit by unit, as ShippedUnit rows.
+		One total across the weeks, however it's spread: ten hours shipped from
+		week 3 and none from week 4 is ten hours, the same as five and five. The
+		streak is what asks for five a week, and it's judged on logged time
+		separately. Only the total is capped, at the forty.
 
-		`unshipped` is unshipped_seconds_by_week's map for this user, which
-		says where shipping now would help; without it every row has none.
+		Saver hours count, and hours an organizer removed come off, each on its
+		own week before anything is added up. A week an organizer passed counts
+		at least its five, shipped or not.
 		"""
-		unshipped = unshipped or {}
-		by_index = {week.index: week for week in self.weeks}
-		return [
-			ShippedUnit(
-				indexes=unit,
-				shipped_minutes=minutes,
-				required_minutes=required,
-				unshipped_minutes=sum(unshipped.get(i, 0) for i in unit) // 60,
-				started=any(by_index[i].closed or by_index[i].current for i in unit),
-			)
-			for unit, minutes, required in self._unit_minutes(self.shipped_seconds)
-		]
+		total = 0
+		for week in self.weeks:
+			credited = _credited(seconds.get(week.index, 0) // 60, week.saver_hours, week.removed_hours)
+			if week.override == WeekOutcome.Override.PASS:
+				credited = max(credited, weeks.WEEKLY_MINUTES)
+			total += credited
+		return min(total, weeks.printer_hours() * 60)
 
 	@property
 	def shipped_printer_minutes(self):

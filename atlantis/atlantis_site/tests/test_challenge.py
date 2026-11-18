@@ -1024,13 +1024,17 @@ class PrinterClaimTests(BaseTestCase):
             response = self._claim("A1 Mini")
             self.assertFalse(PrinterClaim.objects.exists())
 
-    def test_finalized_time_counts_five_a_week_and_no_more(self):
-        with after_week(2):
-            self._survive_the_program(minutes=500)
-            self._survive_the_program(when=in_week(2), minutes=60)
-            # Weeks 1 and 2 are a grace pair: 9h40m split 500/60 still banks
-            # its ten, less the 20 minutes short.
-            self.assertEqual(challenge.standing(self.user).finalized_printer_minutes, 560)
+    def test_finalized_time_is_one_total_across_the_weeks(self):
+        with after_week(3):
+            # Fifteen hours all from week 1 is all fifteen a 3-week program asks
+            # for, though weeks 2 and 3 have none.
+            self._survive_the_program(minutes=900)
+            self.assertEqual(challenge.standing(self.user).finalized_printer_minutes, 900)
+
+    def test_the_total_stops_at_the_printer_hours(self):
+        with after_week(1):
+            self._survive_the_program(minutes=1000)
+            self.assertEqual(challenge.standing(self.user).finalized_printer_minutes, 300)
 
     def test_a_week_rescued_with_savers_counts_its_saver_hours(self):
         with after_week(1):
@@ -1045,7 +1049,8 @@ class PrinterClaimTests(BaseTestCase):
             WeekOutcome.objects.create(
                 user=self.user, week_index=2, override=WeekOutcome.Override.PASS
             )
-            # Week 1's ten already fill the pair; the pass can't push it past.
+            # Ten from week 1 and five from the pass is fifteen, but a two-week
+            # program's printer only asks for ten.
             self.assertEqual(challenge.standing(self.user).finalized_printer_minutes, 600)
 
     def test_a_passed_week_with_nothing_shipped_still_unlocks(self):
@@ -1706,49 +1711,30 @@ class ShippedPanelTests(BaseTestCase):
         journal = make_journal(project, time_spent=0)
         make_timelapse(project, journal=journal, minutes=minutes, recorded_at=when)
 
-    def _units(self):
-        state = challenge.standing(self.user)
-        return {
-            unit.label: unit
-            for unit in state.shipped_units(challenge.unshipped_seconds_by_week(self.user))
-        }
+    def test_hours_count_across_the_weeks_however_they_are_spread(self):
+        """Forty across weeks 1–8, not five from each: a heavy week covers a
+        light one."""
+        with during_week(5):
+            self._ship(600, in_week(3))
+            self._ship(60, in_week(4))
+            self.assertEqual(challenge.standing(self.user).shipped_printer_minutes, 660)
 
     @override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
-    def test_grace_pairs_are_one_row(self):
+    def test_forty_from_a_few_weeks_is_all_forty(self):
         with patch("django.utils.timezone.now", return_value=et("2026-11-20 12:00")):
-            self.assertEqual(
-                list(self._units()),
-                ["Weeks 1–2", "Week 3", "Week 4", "Week 5", "Week 6", "Weeks 7–8"],
-            )
-
-    def test_a_week_counts_five_however_much_was_shipped(self):
-        with during_week(4):
-            self._ship(600, in_week(3))
-            unit = self._units()["Week 3"]
-            self.assertTrue(unit.met)
-            self.assertEqual(unit.counted_display, "5h 0m")
-            self.assertEqual(challenge.standing(self.user).shipped_printer_minutes, 300)
-
-    def test_the_rows_add_up_to_the_total(self):
-        with during_week(5):
-            self._ship(400, in_week(1))
-            self._ship(200, in_week(2))
-            self._ship(180, in_week(3))
-            self._ship(900, in_week(4))
+            self._ship(1500, in_week(2), status=Ship.ShipStatus.FINALIZED)
+            self._ship(1500, in_week(6), status=Ship.ShipStatus.FINALIZED)
             state = challenge.standing(self.user)
-            counted = sum(
-                min(unit.shipped_minutes, unit.required_minutes) for unit in state.shipped_units()
-            )
-            self.assertEqual(counted, state.shipped_printer_minutes)
-            self.assertEqual(counted, 600 + 180 + 300)
+            self.assertEqual(state.shipped_printer_minutes, 2400)  # capped at the forty
+            self.assertTrue(state.all_shipped)
+            self.assertTrue(state.all_finalized)
 
-    def test_logged_time_not_yet_shipped_is_shown_against_its_week(self):
+    def test_logged_time_not_yet_shipped_is_counted_up(self):
         with during_week(4):
             self._ship(180, in_week(3))
             self._log(150, in_week(3))
-            unit = self._units()["Week 3"]
-            self.assertFalse(unit.met)
-            self.assertEqual(unit.unshipped_minutes, 150)
+            self._log(30, in_week(1))
+            self.assertEqual(challenge.unshipped_minutes(self.user), 180)
 
     def test_time_that_can_never_be_shipped_is_not_waiting(self):
         """A rejected ship keeps its journals, a locked project can't ship,
@@ -1765,7 +1751,7 @@ class ShippedPanelTests(BaseTestCase):
             self._log(120, in_week(3))
             journal = self.project.journals.get()
             approve_timelapse(journal, removals=[(journal.timelapses.get(), 0, 1800)])
-            self.assertEqual(self._units()["Week 3"].unshipped_minutes, 90)
+            self.assertEqual(challenge.unshipped_minutes(self.user), 90)
 
     def test_the_deck_shows_the_panel(self):
         with during_week(4):
@@ -1776,19 +1762,14 @@ class ShippedPanelTests(BaseTestCase):
             self.assertContains(
                 response, f"of {weeks.printer_hours()} hours from weeks 1–{weeks.week_count()}"
             )
-            self.assertContains(response, "1h 0m logged, not shipped yet")
+            self.assertContains(response, "1h 0m logged during weeks 1–")
+            self.assertNotContains(response, "By week")
             left = challenge.format_minutes(weeks.printer_hours() * 60 - 300)
             self.assertContains(response, f"{left} to go")
             self.assertContains(response, "Shipping closes")
 
-    def test_weeks_that_have_not_begun_say_so(self):
-        with during_week(4):
-            response = self.client.get(reverse("dashboard"))
-            self.assertContains(response, "upcoming")
-
     def test_there_is_no_panel_before_the_program(self):
         response = self.client.get(reverse("dashboard"))
-        self.assertEqual(response.context["shipped_units"], [])
         self.assertNotContains(response, "Shipped for your printer")
 
     def test_all_shipped_points_at_finalizing(self):
