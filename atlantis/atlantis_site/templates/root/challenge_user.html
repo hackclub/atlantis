@@ -77,6 +77,49 @@
         </table>
     </div>
 
+    <h3>Shipped printer hours</h3>
+    <p class="muted">
+        Every recording on their ships and whether it counts towards the
+        {{ standing.weeks|length }}-week total. Only time recorded during the weeks counts,
+        less lapse review cuts (which they can't see). The panel then adds saver hours and
+        passed weeks, takes off removed hours, and stops at the total:
+        it says {{ standing.shipped_printer_display }} shipped,
+        {{ standing.finalized_printer_display }} finalized.
+    </p>
+    <table class="users-table">
+        <tbody>
+            {% for label, value in shipped_breakdown %}
+                <tr><td>{{ label }}</td><td>{{ value }}</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <details>
+        <summary>Each recording ({{ recordings|length }})</summary>
+        <div class="table-scroll">
+            <table class="users-table">
+                <thead>
+                    <tr><th>Recorded (Eastern)</th><th>Week</th><th>Project</th><th>Ship</th><th>Tracked</th><th>Cut</th><th>Counted</th><th></th></tr>
+                </thead>
+                <tbody>
+                    {% for row in recordings %}
+                        <tr>
+                            <td>{{ row.at_display }}{% if row.dated_by_journal %} <span class="muted">(journal date)</span>{% endif %}</td>
+                            <td>{{ row.week|default:"none" }}</td>
+                            <td>{{ row.project }}</td>
+                            <td>#{{ row.ship_id }} {{ row.ship_status }}</td>
+                            <td>{{ row.tracked_display }}</td>
+                            <td>{% if row.cut_seconds %}{{ row.cut_display }}{% else %}<span class="muted">none</span>{% endif %}</td>
+                            <td>{{ row.counted_display }}</td>
+                            <td>{% if row.excluded %}<span class="pill pill-bad">{{ row.excluded }}</span>{% endif %}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="8">Nothing shipped.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </details>
+
     <h3>Week {{ final_week }} extension</h3>
     <p class="muted">
         Extra days on week {{ final_week }} for this person only. Time they record in

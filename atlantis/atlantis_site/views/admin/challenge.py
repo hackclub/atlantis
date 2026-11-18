@@ -148,6 +148,7 @@ def challenge_user(request, user_id):
     target = get_object_or_404(User.objects.select_related("hackclub_profile"), id=user_id)
     outcomes = {row.week_index: row for row in WeekOutcome.objects.filter(user=target)}
     state = challenge.standing(target)
+    recordings, shipped_totals = challenge.shipped_recordings(target)
 
     return render(request, "root/challenge_user.html", {
         "target": target,
@@ -172,6 +173,17 @@ def challenge_user(request, user_id):
         # template's |date would put 11:59 PM Eastern on the next day.
         "usual_final_deadline": _eastern(weeks.deadline(weeks.week_count())),
         "final_deadline": _eastern(state.weeks[-1].deadline),
+        "recordings": recordings,
+        # The user's own sum first, then each thing between it and the panel.
+        "shipped_breakdown": [
+            (label, challenge.format_minutes(seconds // 60))
+            for label, seconds in (
+                [("Shipped, as they'd add it up", shipped_totals["tracked"])]
+                + [(k[0].upper() + k[1:], v) for k, v in shipped_totals.items() if k.startswith("not counted")]
+                + [("Cut in lapse review", shipped_totals["cut"])]
+                + [("Counted from shipped recordings", shipped_totals["counted"])]
+            )
+        ],
     })
 
 

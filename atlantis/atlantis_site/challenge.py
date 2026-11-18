@@ -163,6 +163,91 @@ def shipped_ledger(user=None):
 	return out
 
 
+@dataclass
+class ShippedRecording:
+	"""One recording on one of a user's ships, and whether it counts towards
+	the forty: what an organizer reads to square someone's own sum with the
+	shipped panel. Organizer-only, since it shows review cuts."""
+	timelapse_id: int
+	at: object
+	project: str
+	ship_id: int
+	ship_status: str
+	week: object  # index, or None
+	tracked_seconds: int
+	cut_seconds: int
+	# Empty when it counts, else why it doesn't.
+	excluded: str
+	dated_by_journal: bool
+
+	@property
+	def counted_seconds(self):
+		return 0 if self.excluded else self.tracked_seconds - self.cut_seconds
+
+	@property
+	def at_display(self):
+		return _local_display(self.at, "%a %b %-d, %-I:%M %p")
+
+	@property
+	def tracked_display(self):
+		return format_minutes(self.tracked_seconds // 60)
+
+	@property
+	def cut_display(self):
+		return format_minutes(self.cut_seconds // 60)
+
+	@property
+	def counted_display(self):
+		return format_minutes(self.counted_seconds // 60)
+
+
+def shipped_recordings(user):
+	"""(rows, totals) for every recording on this user's ships, oldest first.
+
+	Rows are ShippedRecording. Totals, in seconds: "tracked" (what adding up
+	their shipped journals gives them), "counted" (what shipped_ledger counts
+	before savers, removals and the cap), "cut", and one "not counted: ..."
+	entry per reason. Deleted projects are left out, as they are everywhere.
+	"""
+	extra = extension_days(user)
+	timelapses = (
+		_logged_timelapses(user)
+		.filter(journal__ship__isnull=False)
+		.select_related("journal__ship", "journal__project")
+		.order_by("at", "pk")
+	)
+	cuts = _removed_seconds(timelapses)
+	rows, totals = [], {"tracked": 0, "counted": 0, "cut": 0}
+	for t in timelapses:
+		ship, project = t.journal.ship, t.journal.project
+		seconds = t.tracked_seconds or 0
+		cut = min(cuts.get(t.pk, 0), seconds)
+		week = weeks.buffer_week(t.at, extra) or weeks.week_for(t.at, extra)
+		if ship.status == Ship.ShipStatus.REJECTED:
+			excluded = "rejected ship"
+		elif project.locked:
+			excluded = "locked project"
+		elif week is None:
+			excluded = "recorded before week 1" if weeks.is_prep(t.at) else f"recorded after week {weeks.week_count()}"
+		else:
+			excluded = ""
+		row = ShippedRecording(
+			timelapse_id=t.pk, at=t.at, project=project.title, ship_id=ship.id,
+			ship_status=ship.get_status_display(), week=week, tracked_seconds=seconds,
+			cut_seconds=0 if excluded else cut, excluded=excluded,
+			dated_by_journal=t.recorded_at is None,
+		)
+		rows.append(row)
+		totals["tracked"] += seconds
+		if excluded:
+			key = f"not counted: {excluded}"
+			totals[key] = totals.get(key, 0) + seconds
+		else:
+			totals["cut"] += row.cut_seconds
+			totals["counted"] += row.counted_seconds
+	return rows, totals
+
+
 def unshipped_minutes(user):
 	"""Minutes from inside the weeks this user has logged and not shipped:
 	what shipping now would add to the forty, before the cap."""

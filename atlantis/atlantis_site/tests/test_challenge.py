@@ -1502,6 +1502,35 @@ class ChallengeAdminTests(BaseTestCase):
                 ]
                 self.assertEqual(listed, ["U12345"], query)
 
+    def test_the_shipped_breakdown_squares_their_sum_with_the_panel(self):
+        def ship(minutes, when, status=Ship.ShipStatus.FINALIZED):
+            ship = Ship.objects.create(project=self.project, status=status)
+            journal = make_journal(self.project, ship=ship, time_spent=0)
+            make_timelapse(self.project, journal=journal, minutes=minutes, recorded_at=when)
+            return journal
+
+        with during_week(3):
+            week_1 = ship(300, in_week(1))
+            recording = week_1.timelapses.get()
+            approve_timelapse(week_1, removals=[(recording, 0, 600)])  # 10 minutes cut
+            ship(60, before_the_program())
+            ship(30, in_week(2), status=Ship.ShipStatus.REJECTED)
+
+            rows, totals = challenge.shipped_recordings(self.shipper)
+            self.assertEqual(len(rows), 3)
+            self.assertEqual(totals["tracked"], 390 * 60)
+            self.assertEqual(totals["not counted: recorded before week 1"], 60 * 60)
+            self.assertEqual(totals["not counted: rejected ship"], 30 * 60)
+            self.assertEqual(totals["cut"], 10 * 60)
+            self.assertEqual(totals["counted"], 290 * 60)
+            self.assertEqual(challenge.standing(self.shipper).shipped_printer_minutes, 290)
+
+            page = self.client.get(reverse("challenge_user", args=[self.shipper.id]))
+            self.assertContains(page, "Shipped, as they&#x27;d add it up")
+            self.assertContains(page, "6h 30m")
+            self.assertContains(page, "recorded before week 1")
+            self.assertContains(page, "Cut in lapse review")
+
     def test_granting_hours_revives_somebody(self):
         with during_week(2):
             self._log(240, in_week(1))
