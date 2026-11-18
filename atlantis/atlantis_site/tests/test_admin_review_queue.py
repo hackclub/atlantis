@@ -17,6 +17,7 @@ from ..views.admin.queue import (
 	REVIEW_STAT_KEYS, age_bucket, age_display, all_reviews_page, claim_holder,
 	claim_review, next_item_id, percentile, release_claim, review_stats,
 )
+from ..views.helpers import payable_minutes_by_ship, payable_minutes_for_ship
 from .base import (
 	BaseTestCase,
 	approve_timelapse,
@@ -935,6 +936,39 @@ class DeskStatsTests(BaseTestCase):
 	def test_hours_pending_is_what_the_queue_is_sitting_on(self):
 		make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(120, 60))
 		self.assertEqual(self._cards("t2")["hours_pending"]["value"], 3.0)
+
+	def test_hours_pending_counts_what_a_reship_would_pay(self):
+		"""A reship after a rejection pays for the rejected ship's hours too."""
+		make_ship(self.project, status=Ship.ShipStatus.REJECTED, journal_minutes=(120, 120))
+		make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(60,))
+		self.assertEqual(self._cards("t2")["hours_pending"]["value"], 5.0)
+
+	def test_bulk_payable_minutes_match_the_per_ship_ones(self):
+		"""payable_minutes_by_ship is payable_minutes_for_ship for many ships
+		at once, across every history that changes what a ship covers."""
+		# A reship after a rejection: covers the rejected ship's journals.
+		make_ship(self.project, status=Ship.ShipStatus.REJECTED, journal_minutes=(120, 120))
+		reship = make_ship(self.project, journal_minutes=(60,))
+		# An update after a finalized ship, with time cut in lapse review.
+		updated = make_project(make_user("updater"), shippable=True)
+		make_ship(updated, status=Ship.ShipStatus.FINALIZED, journal_minutes=(120,))
+		update = make_ship(updated, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=())
+		journal = make_journal(updated, ship=update, time_spent=90)
+		approve_timelapse(journal, removals=[(journal.timelapses.get(), 0, 1800)])
+		# Finalized, then rejected, then shipped again.
+		mixed = make_project(make_user("mixed"), shippable=True)
+		make_ship(mixed, status=Ship.ShipStatus.FINALIZED, journal_minutes=(60,))
+		make_ship(mixed, status=Ship.ShipStatus.REJECTED, journal_minutes=(60,))
+		third = make_ship(mixed, status=Ship.ShipStatus.T3_QUEUE, journal_minutes=(30,))
+
+		bulk = payable_minutes_by_ship(Ship.objects.all())
+		self.assertEqual(bulk, {ship.id: payable_minutes_for_ship(ship) for ship in Ship.objects.all()})
+		self.assertEqual(bulk[reship.id], 300)
+		self.assertEqual(bulk[update.id], 60)
+		self.assertEqual(bulk[third.id], 90)
+
+	def test_bulk_payable_minutes_of_nothing_is_empty(self):
+		self.assertEqual(payable_minutes_by_ship(Ship.objects.none()), {})
 
 	def test_a_snapshot_has_no_direction_to_move_in(self):
 		"""Hours pending is right now; there is no prior window to sit against."""

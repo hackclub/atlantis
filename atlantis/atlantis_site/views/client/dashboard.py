@@ -25,6 +25,11 @@ def challenge_context(user):
     state = challenge.standing(user)
     live = state.current
     now = timezone.now()
+    # The last minute anything can be shipped, as the deck words a deadline.
+    shipping_closes = (
+        (weeks.shipping_closes_at() - timedelta(seconds=1))
+        .astimezone(weeks.zone()).strftime("%a %b %-d, %-I:%M %p")
+    )
 
     return {
         "standing": state,
@@ -37,11 +42,16 @@ def challenge_context(user):
         "program_starts": weeks.starts_at().isoformat(),
         "dropped_reason": challenge.elimination_reason(user),
         # During the prep weeks after the program, when they end.
-        "post_prep_ends": (
-            (weeks.shipping_closes_at() - timedelta(seconds=1))
-            .astimezone(weeks.zone()).strftime("%a %b %-d, %-I:%M %p")
-            if weeks.is_post_prep(now) else ""
+        "post_prep_ends": shipping_closes if weeks.is_post_prep(now) else "",
+        # The shipped panel: the forty hours passing is judged on, by week,
+        # with what's logged but not shipped yet beside each short one.
+        "shipped_units": (
+            state.shipped_units(challenge.unshipped_seconds_by_week(user))
+            if state.started else []
         ),
+        "shipping_closes": shipping_closes,
+        "shipping_open": not weeks.shipping_has_closed(now),
+        "week_count": weeks.week_count(),
     }
 
 

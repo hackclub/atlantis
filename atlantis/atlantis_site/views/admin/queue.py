@@ -43,7 +43,7 @@ from ...models import (
 )
 from ..helpers import (
     staff_member_required, approved_minutes_by_project, approved_minutes_for_journals, display_name, format_minutes,
-    payable_minutes_for_ship, timelapse_cleared_ships, tracked_minutes_for_journals,
+    payable_minutes_by_ship, timelapse_cleared_ships, tracked_minutes_for_journals,
 )
 
 # How long a claim survives without a heartbeat. Long enough to read a project
@@ -222,14 +222,58 @@ def pending_count_cache_key(key):
     return f"nav-badge:{key}"
 
 
+def pending_hours_cache_key(key):
+    return f"queue-hours:{key}"
+
+
 def forget_pending_counts():
     """Drop the rail's cached counts so the next page load counts afresh.
 
     Called on the way out of every decision (see go_to_next), which is when a
     stale badge would be most confusing: the reviewer has just taken something
-    off a desk and the next page would still be wearing it.
+    off a desk and the next page would still be wearing it. The hours beside
+    each count go with them, so the two can't describe different queues.
     """
-    cache.delete_many([pending_count_cache_key(key) for key in PENDING_COUNT_KEYS])
+    cache.delete_many(
+        [pending_count_cache_key(key) for key in PENDING_COUNT_KEYS]
+        + [pending_hours_cache_key(key) for key in QUEUES]
+    )
+
+
+def pending_hours(queue_key):
+    """Hours of work sitting on one desk right now, to a tenth.
+
+    A ship desk counts what each ship's payout would cover
+    (payable_minutes_by_ship): a reship after a rejection carries only the
+    entries written since, and would otherwise hide every hour the rejected
+    ship held. The timelapse desk counts the time recorded on the lapses
+    waiting there — nothing has been cut from them yet, since cutting is
+    what that desk does.
+    """
+    if queue_key == "lookout":
+        seconds = (
+            Timelapse.objects
+            .filter(journal__project__deleted=False)
+            .exclude(Exists(TimelapseReview.objects.filter(journal=OuterRef("journal"))))
+            .aggregate(total=Sum("tracked_seconds"))["total"]
+        ) or 0
+        return round(seconds / 3600, 1)
+    minutes = sum(payable_minutes_by_ship(QUEUES[queue_key].pending()).values())
+    return round(minutes / 60, 1)
+
+
+def cached_pending_hours(queue_key):
+    """pending_hours, kept as long as the count beside it and cleared with it.
+
+    The admin home and the desk's own hours card both read this, so they
+    agree with each other and with the count of what's waiting.
+    """
+    key = pending_hours_cache_key(queue_key)
+    hours = cache.get(key)
+    if hours is None:
+        hours = pending_hours(queue_key)
+        cache.set(key, hours, PENDING_COUNT_TTL)
+    return hours
 
 
 # ---------------------------------------------------------------- claims
@@ -1229,17 +1273,6 @@ def _reships(window, as_of):
     return ships.filter(earlier_rejection).count(), total
 
 
-def _hours_pending(queue_key):
-    """Approved hours sitting in this queue right now.
-
-    Each ship counts what its payout would cover, not just the journals
-    attached to it: a reship after a rejection carries only the entries written
-    since, and would otherwise hide every hour the rejected ship held.
-    """
-    minutes = sum(payable_minutes_for_ship(ship) for ship in QUEUES[queue_key].pending())
-    return round(minutes / 60, 1)
-
-
 def _delta(current, prior):
     """The move against the prior window, or None when there's nothing to compare.
 
@@ -1265,7 +1298,7 @@ def _tone(delta, better):
 def _stat_value(queue_key, key, window, as_of):
     """One metric over one window. `None` where there is nothing to measure."""
     if key == "hours_pending":
-        return {"value": _hours_pending(queue_key), "count": None}
+        return {"value": cached_pending_hours(queue_key), "count": None}
     if key == "turnaround":
         waits = _waited_seconds(queue_key, window, as_of)
         days = percentile(waits, 0.9)
@@ -1293,7 +1326,14 @@ def review_stats(queue_key):
     keys = REVIEW_STAT_KEYS[queue_key]
     cached = cache.get(f"review-stats:{queue_key}")
     if cached is not None:
-        return cached
+        # Hours pending is a snapshot with no window, so it's read on the
+        # badges' clock rather than the cards': a decision clears it, and the
+        # desk can't show a different number from the admin home's.
+        return [
+            {**card, "value": cached_pending_hours(queue_key)}
+            if card["key"] == "hours_pending" else card
+            for card in cached
+        ]
 
     now = timezone.now()
     current = (now - STATS_WINDOW, now)

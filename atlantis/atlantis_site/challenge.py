@@ -146,13 +146,7 @@ def shipped_ledger(user=None):
 		timelapses = timelapses.filter(owner=user)
 		extensions = extensions.filter(user=user)
 	extra = dict(extensions.values_list("user", "days"))
-	removed = dict(
-		TimelapseRemoval.objects
-		.filter(session__in=timelapses.values("pk"))
-		.values_list("session")
-		.order_by()
-		.annotate(total=Sum(F("end_seconds") - F("start_seconds"), output_field=IntegerField()))
-	)
+	removed = _removed_seconds(timelapses)
 	out = {}
 	rows = timelapses.values_list("pk", "owner", "at", "tracked_seconds", "journal__ship__status")
 	for pk, owner, at, seconds, status in rows:
@@ -166,6 +160,43 @@ def shipped_ledger(user=None):
 		if status == Ship.ShipStatus.FINALIZED:
 			finalized[index] = finalized.get(index, 0) + approved
 	return out
+
+
+def unshipped_seconds_by_week(user):
+	"""{week: seconds} of this user's time from inside the weeks that no ship
+	has taken yet — what shipping now would add to shipped_ledger.
+
+	Counted the way shipped_ledger counts it: approved time, by the week it was
+	recorded in, buffer time to the week just closed, and the last week cut at
+	this person's own end. Only journals with no ship: one on a rejected ship
+	stays there and can't be shipped again, and a locked project can't be
+	shipped at all.
+	"""
+	timelapses = (
+		_logged_timelapses(user)
+		.filter(journal__ship__isnull=True)
+		.exclude(journal__project__locked=True)
+	)
+	extra = extension_days(user)
+	removed = _removed_seconds(timelapses)
+	out = {}
+	for pk, at, seconds in timelapses.values_list("pk", "at", "tracked_seconds"):
+		index = weeks.buffer_week(at, extra) or weeks.week_for(at, extra)
+		if index is None:
+			continue
+		out[index] = out.get(index, 0) + max((seconds or 0) - removed.get(pk, 0), 0)
+	return out
+
+
+def _removed_seconds(timelapses):
+	"""{timelapse id: seconds a timelapse reviewer cut from it}, over `timelapses`."""
+	return dict(
+		TimelapseRemoval.objects
+		.filter(session__in=timelapses.values("pk"))
+		.values_list("session")
+		.order_by()
+		.annotate(total=Sum(F("end_seconds") - F("start_seconds"), output_field=IntegerField()))
+	)
 
 
 def _bucket_by_week(rows, extra=0):
@@ -632,6 +663,43 @@ class Week:
 
 
 @dataclass
+class ShippedUnit:
+	"""One row of the shipped printer hours: a week on its own, or a grace
+	pair judged as one (weeks.GRACE_PAIRS)."""
+	indexes: tuple
+	# Credited from shipped time, savers and passes, before any cap.
+	shipped_minutes: int
+	required_minutes: int
+	# Logged inside these weeks and on no ship yet: what shipping would add.
+	unshipped_minutes: int = 0
+	# Any of its weeks is running or over. One that hasn't begun is just empty.
+	started: bool = False
+
+	@property
+	def label(self):
+		if len(self.indexes) == 1:
+			return f"Week {self.indexes[0]}"
+		return f"Weeks {self.indexes[0]}–{self.indexes[-1]}"
+
+	@property
+	def met(self):
+		return self.shipped_minutes >= self.required_minutes
+
+	@property
+	def counted_display(self):
+		"""What this unit puts towards the forty: never more than it asks for."""
+		return format_minutes(min(self.shipped_minutes, self.required_minutes))
+
+	@property
+	def required_display(self):
+		return f"{self.required_minutes // 60}h"
+
+	@property
+	def unshipped_display(self):
+		return format_minutes(self.unshipped_minutes)
+
+
+@dataclass
 class Standing:
 	"""Everything about where one user is in the program."""
 	weeks: list = field(default_factory=list)
@@ -701,19 +769,20 @@ class Standing:
 	def printer_percent(self):
 		return min(round(self.printer_minutes / (weeks.printer_hours() * 60) * 100), 100)
 
-	def _counted_minutes(self, seconds):
-		"""Printer minutes from {week: seconds} of shipped or finalized time.
+	def _unit_minutes(self, seconds):
+		"""[(unit, credited minutes, required minutes)] from {week: seconds} of
+		shipped or finalized time, a unit being a grace pair or a lone week, in
+		week order.
 
 		Judged like the streak: five a week, or the pair's ten across a grace
-		pair however it's split, and no more however much was shipped. Saver
-		hours count, since a rescued week still banks its five, and hours an
-		organizer removed come off. A week an organizer passed counts its full
-		five, shipped or not, whatever else is in it.
+		pair however it's split. Saver hours count, since a rescued week still
+		banks its five, and hours an organizer removed come off. A week an
+		organizer passed counts its full five, shipped or not, whatever else is
+		in it. Credited minutes aren't capped here; _counted_minutes caps them.
 		"""
 		by_index = {week.index: week for week in self.weeks}
-		units = {weeks.grace_pair(index) or (index,) for index in by_index}
-		total = 0
-		for unit in units:
+		out = []
+		for unit in sorted({weeks.grace_pair(index) or (index,) for index in by_index}):
 			minutes = 0
 			for i in unit:
 				week = by_index[i]
@@ -721,8 +790,33 @@ class Standing:
 				if week.override == WeekOutcome.Override.PASS:
 					credited = max(credited, weeks.WEEKLY_MINUTES)
 				minutes += credited
-			total += min(minutes, weeks.WEEKLY_MINUTES * len(unit))
+			out.append((unit, minutes, weeks.WEEKLY_MINUTES * len(unit)))
+		return out
+
+	def _counted_minutes(self, seconds):
+		"""Printer minutes from {week: seconds}: each unit's, up to what it
+		asks for and no more however much was shipped."""
+		total = sum(min(minutes, required) for _unit, minutes, required in self._unit_minutes(seconds))
 		return min(total, weeks.printer_hours() * 60)
+
+	def shipped_units(self, unshipped=None):
+		"""The shipped printer hours, unit by unit, as ShippedUnit rows.
+
+		`unshipped` is unshipped_seconds_by_week's map for this user, which
+		says where shipping now would help; without it every row has none.
+		"""
+		unshipped = unshipped or {}
+		by_index = {week.index: week for week in self.weeks}
+		return [
+			ShippedUnit(
+				indexes=unit,
+				shipped_minutes=minutes,
+				required_minutes=required,
+				unshipped_minutes=sum(unshipped.get(i, 0) for i in unit) // 60,
+				started=any(by_index[i].closed or by_index[i].current for i in unit),
+			)
+			for unit, minutes, required in self._unit_minutes(self.shipped_seconds)
+		]
 
 	@property
 	def shipped_printer_minutes(self):
@@ -739,6 +833,22 @@ class Standing:
 	@property
 	def finalized_printer_hours(self):
 		return self.finalized_printer_minutes // 60
+
+	@property
+	def shipped_printer_display(self):
+		return format_minutes(self.shipped_printer_minutes)
+
+	@property
+	def finalized_printer_display(self):
+		return format_minutes(self.finalized_printer_minutes)
+
+	@property
+	def shipped_left_display(self):
+		return format_minutes(weeks.printer_hours() * 60 - self.shipped_printer_minutes)
+
+	@property
+	def shipped_percent(self):
+		return min(round(self.shipped_printer_minutes / (weeks.printer_hours() * 60) * 100), 100)
 
 	@property
 	def all_shipped(self):

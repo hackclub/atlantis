@@ -1,0 +1,76 @@
+{% comment %}
+The shipped panel: the forty printer hours, counted from shipped time. Passing
+the program needs all of them (challenge.Standing.passed), five from each week
+or ten across a grace pair, and no more from any one week however much went
+out. The streak panel above is logged time, which keeps you in; this is the
+time that has gone out on a ship, by the week it was recorded in. Shipping
+later still counts for the week the work was done in, so a short week here is
+fixed by shipping, not by logging more.
+
+One line and a bar, with the week-by-week split folded away. It only matters
+once the total is short, and then it says which week is short and whether
+there is logged time waiting that shipping would count.
+
+Rendered on the deck under the streak panel. Takes the context
+dashboard.challenge_context builds.
+{% endcomment %}
+{% if shipped_units %}
+<section class="streak shipped" aria-label="Printer hours shipped">
+    <div class="streak-head">
+        <span class="streak-title">Shipped for your printer</span>
+        {% if standing.all_shipped %}<span class="streak-done">done</span>{% endif %}
+    </div>
+
+    <div class="streak-bar" role="progressbar"
+         aria-valuenow="{{ standing.shipped_percent }}" aria-valuemin="0" aria-valuemax="100"
+         aria-valuetext="{{ standing.shipped_printer_display }} of {{ printer_hours_total }} hours shipped"
+         aria-label="Printer hours shipped">
+        <span class="streak-fill" style="--fill: {{ standing.shipped_percent }}%"></span>
+    </div>
+
+    <p class="streak-legend">
+        <strong class="streak-count">{{ standing.shipped_printer_display }}</strong>
+        <span class="streak-of">of {{ printer_hours_total }} hours from weeks 1–{{ week_count }}</span>
+        {% if not standing.all_shipped %}
+            <span class="streak-left">{{ standing.shipped_left_display }} to go</span>
+        {% endif %}
+    </p>
+
+    {% if standing.all_shipped %}
+        {% if standing.all_finalized %}
+            <p class="streak-hint">All of them are finalized, too.</p>
+        {% else %}
+            <p class="streak-hint">
+                {{ standing.finalized_printer_display }} finalized so far. A printer needs all {{ printer_hours_total }} finalized.
+            </p>
+        {% endif %}
+    {% elif shipping_open %}
+        <p class="streak-hint">
+            Time counts for the week you recorded it, even if you ship it later. Shipping closes {{ shipping_closes }} Eastern.
+        </p>
+    {% else %}
+        <p class="streak-hint">Shipping has closed.</p>
+    {% endif %}
+
+    <details class="shipped-weeks">
+        <summary>By week</summary>
+        <ul>
+            {% for unit in shipped_units %}
+                <li class="shipped-week{% if unit.met %} is-met{% elif not unit.started %} is-upcoming{% endif %}">
+                    <span class="shipped-week-label">{{ unit.label }}</span>
+                    {% if unit.started or unit.met %}
+                        <span class="shipped-week-hours">
+                            {{ unit.counted_display }} / {{ unit.required_display }}{% if unit.met %} <span aria-hidden="true">✓</span>{% endif %}
+                        </span>
+                    {% else %}
+                        <span class="shipped-week-hours">upcoming</span>
+                    {% endif %}
+                    {% if not unit.met and unit.unshipped_minutes %}
+                        <span class="shipped-week-note">{{ unit.unshipped_display }} logged, not shipped yet</span>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    </details>
+</section>
+{% endif %}

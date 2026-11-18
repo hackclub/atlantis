@@ -1684,6 +1684,133 @@ class StreakPanelTests(BaseTestCase):
         self.assertEqual(response.context["week_deadline"], "")
 
 
+class ShippedPanelTests(BaseTestCase):
+    """The deck's readout of the forty hours passing is judged on: shipped
+    time from inside the weeks, by week, with what's waiting to be shipped."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = make_user("shipper")
+        self.project = make_project(self.user)
+        self.client.force_login(self.user)
+
+    def _ship(self, minutes, when, status=Ship.ShipStatus.T2_QUEUE, project=None):
+        project = project or self.project
+        ship = Ship.objects.create(project=project, status=status)
+        journal = make_journal(project, ship=ship, time_spent=0)
+        make_timelapse(project, journal=journal, minutes=minutes, recorded_at=when)
+        return ship
+
+    def _log(self, minutes, when, project=None):
+        project = project or self.project
+        journal = make_journal(project, time_spent=0)
+        make_timelapse(project, journal=journal, minutes=minutes, recorded_at=when)
+
+    def _units(self):
+        state = challenge.standing(self.user)
+        return {
+            unit.label: unit
+            for unit in state.shipped_units(challenge.unshipped_seconds_by_week(self.user))
+        }
+
+    @override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+    def test_grace_pairs_are_one_row(self):
+        with patch("django.utils.timezone.now", return_value=et("2026-11-20 12:00")):
+            self.assertEqual(
+                list(self._units()),
+                ["Weeks 1–2", "Week 3", "Week 4", "Week 5", "Week 6", "Weeks 7–8"],
+            )
+
+    def test_a_week_counts_five_however_much_was_shipped(self):
+        with during_week(4):
+            self._ship(600, in_week(3))
+            unit = self._units()["Week 3"]
+            self.assertTrue(unit.met)
+            self.assertEqual(unit.counted_display, "5h 0m")
+            self.assertEqual(challenge.standing(self.user).shipped_printer_minutes, 300)
+
+    def test_the_rows_add_up_to_the_total(self):
+        with during_week(5):
+            self._ship(400, in_week(1))
+            self._ship(200, in_week(2))
+            self._ship(180, in_week(3))
+            self._ship(900, in_week(4))
+            state = challenge.standing(self.user)
+            counted = sum(
+                min(unit.shipped_minutes, unit.required_minutes) for unit in state.shipped_units()
+            )
+            self.assertEqual(counted, state.shipped_printer_minutes)
+            self.assertEqual(counted, 600 + 180 + 300)
+
+    def test_logged_time_not_yet_shipped_is_shown_against_its_week(self):
+        with during_week(4):
+            self._ship(180, in_week(3))
+            self._log(150, in_week(3))
+            unit = self._units()["Week 3"]
+            self.assertFalse(unit.met)
+            self.assertEqual(unit.unshipped_minutes, 150)
+
+    def test_time_that_can_never_be_shipped_is_not_waiting(self):
+        """A rejected ship keeps its journals, a locked project can't ship,
+        and prep time is in no week."""
+        with during_week(4):
+            self._ship(120, in_week(3), status=Ship.ShipStatus.REJECTED)
+            locked = make_project(self.user, locked=True)
+            self._log(60, in_week(3), project=locked)
+            self._log(600, before_the_program())
+            self.assertEqual(challenge.unshipped_seconds_by_week(self.user), {})
+
+    def test_time_cut_in_lapse_review_does_not_wait_to_be_shipped(self):
+        with during_week(4):
+            self._log(120, in_week(3))
+            journal = self.project.journals.get()
+            approve_timelapse(journal, removals=[(journal.timelapses.get(), 0, 1800)])
+            self.assertEqual(self._units()["Week 3"].unshipped_minutes, 90)
+
+    def test_the_deck_shows_the_panel(self):
+        with during_week(4):
+            self._ship(300, in_week(3))
+            self._log(60, in_week(1))
+            response = self.client.get(reverse("dashboard"))
+            self.assertContains(response, "Shipped for your printer")
+            self.assertContains(
+                response, f"of {weeks.printer_hours()} hours from weeks 1–{weeks.week_count()}"
+            )
+            self.assertContains(response, "1h 0m logged, not shipped yet")
+            left = challenge.format_minutes(weeks.printer_hours() * 60 - 300)
+            self.assertContains(response, f"{left} to go")
+            self.assertContains(response, "Shipping closes")
+
+    def test_weeks_that_have_not_begun_say_so(self):
+        with during_week(4):
+            response = self.client.get(reverse("dashboard"))
+            self.assertContains(response, "upcoming")
+
+    def test_there_is_no_panel_before_the_program(self):
+        response = self.client.get(reverse("dashboard"))
+        self.assertEqual(response.context["shipped_units"], [])
+        self.assertNotContains(response, "Shipped for your printer")
+
+    def test_all_shipped_points_at_finalizing(self):
+        with after_week(1):
+            ship = self._ship(300, in_week(1))
+            response = self.client.get(reverse("dashboard"))
+            self.assertTrue(response.context["standing"].all_shipped)
+            self.assertNotContains(response, 'class="streak-left"')
+            self.assertContains(response, "0h 0m finalized so far")
+
+            Ship.objects.filter(pk=ship.pk).update(status=Ship.ShipStatus.FINALIZED)
+            response = self.client.get(reverse("dashboard"))
+            self.assertContains(response, "All of them are finalized, too.")
+
+    def test_short_after_shipping_closes_says_so(self):
+        with after_post_prep(1):
+            self._ship(120, in_week(1))
+            response = self.client.get(reverse("dashboard"))
+            self.assertContains(response, "Shipping has closed.")
+            self.assertNotContains(response, "Shipping closes")
+
+
 class PageRenderTests(BaseTestCase):
     """Every page the challenge touches, rendered.
 

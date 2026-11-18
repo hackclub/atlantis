@@ -1663,6 +1663,10 @@
     color: var(--oc-ink);
 }
 
+.root-page .home-desk-hours {
+    white-space: nowrap;
+}
+
 /* An empty desk is the state that needs nobody, so it steps back. */
 .root-page .home-desk.is-clear .home-desk-name,
 .root-page .home-desk.is-clear .home-desk-count {
@@ -1709,9 +1713,11 @@
         display: none;
     }
 
+    /* The count and its hours may take two lines here, but each half stays whole. */
     .root-page .home-desk-count {
         grid-column: 1;
         grid-row: 2;
+        white-space: normal;
     }
 
     .root-page .home-desk .rq-start,

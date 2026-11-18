@@ -159,6 +159,62 @@ button.streak-action {
 }
 
 /*
+ * The shipped panel (_shipped_panel.html): the same slab as the streak, with a
+ * sand fill so the season's forty never reads as this week's five.
+ */
+.shipped .streak-fill {
+    background: linear-gradient(90deg, #E0B25C, #F6DFA8);
+}
+
+.shipped-weeks {
+    margin-top: 0.35em;
+    font-size: 0.82em;
+}
+
+.shipped-weeks summary {
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.shipped-weeks summary:hover,
+.shipped-weeks[open] summary {
+    opacity: 1;
+}
+
+.shipped-weeks ul {
+    margin: 0.3em 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.shipped-week {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 0 0.5em;
+    padding: 0.12em 0;
+    border-top: 1px solid rgba(229, 242, 252, 0.12);
+}
+
+.shipped-week-hours {
+    font-variant-numeric: tabular-nums;
+}
+
+.shipped-week.is-met .shipped-week-hours {
+    color: #C5E8C7;
+}
+
+.shipped-week.is-upcoming {
+    opacity: 0.55;
+}
+
+/* What shipping would add to a short week: the line that says what to do. */
+.shipped-week-note {
+    flex-basis: 100%;
+    color: #F6DFA8;
+}
+
+/*
  * On a narrow screen the scene is already cropped hard and a 34vw column would
  * cover the chest. The panel drops its own line there instead.
  */

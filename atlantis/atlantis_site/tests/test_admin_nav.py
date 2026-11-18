@@ -7,14 +7,17 @@ those pages: same queue, same exclusions, and nothing shown for an empty desk.
 
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.urls import reverse
 
 from ..models import Item, Order, Ship
 from ..templatetags import nav_badges
 from ..templatetags.nav_badges import nav_badge, pending_count
-from ..views.admin.queue import forget_pending_counts
+from ..views.admin import queue
+from ..views.admin.queue import forget_pending_counts, review_stats
 from .base import (
 	BaseTestCase,
+	approve_timelapse,
 	grant_perms,
 	make_journal,
 	make_project,
@@ -138,3 +141,73 @@ class NavBadgeCacheTests(BaseTestCase):
 		self.assertIn('fulfillment<span class="nav-badge" title="1 pending">1</span>', self.rail())
 		self.client.post(reverse("update_order_status", args=[order.id]), {"action": "fulfilled"})
 		self.assertNotIn('fulfillment<span class="nav-badge"', self.rail())
+
+
+class HomeHoursTests(BaseTestCase):
+	"""The hours beside each desk's count on the admin home.
+
+	They're the desk's own "hours pending review" figure, so what's tested is
+	that the two can't disagree, and that the hours move with the count."""
+
+	def setUp(self):
+		super().setUp()
+		cache.clear()
+		self.organizer = grant_perms(make_user("boss"), "organizer")
+		self.client.force_login(self.organizer)
+		self.project = make_project(make_user("author"), shippable=True)
+
+	def home(self):
+		return self.client.get(reverse("admin_dash"))
+
+	def desk(self, response, short):
+		return next(desk for desk in response.context["desks"] if desk["short"] == short)
+
+	def test_a_ship_desk_shows_the_hours_its_ships_would_pay(self):
+		make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(120, 60))
+		response = self.home()
+		self.assertEqual(self.desk(response, "T2")["hours"], 3.0)
+		self.assertContains(response, "<strong>3.0h</strong> of work")
+
+	def test_the_timelapse_desk_shows_the_time_waiting_on_it(self):
+		make_journal(self.project, time_spent=90)
+		make_journal(make_project(make_user("other")), time_spent=30)
+		# Already reviewed, so not waiting on the desk.
+		approve_timelapse(make_journal(self.project, time_spent=600))
+		self.assertEqual(self.desk(self.home(), "Timelapse")["hours"], 2.0)
+
+	def test_an_empty_desk_has_no_hours(self):
+		response = self.home()
+		self.assertIsNone(self.desk(response, "T1")["hours"])
+		self.assertNotContains(response, "of work")
+
+	def test_fulfillment_has_no_hours(self):
+		item = Item.objects.create(name="Thing", description="x", cost=1)
+		Order.objects.create(owner=self.organizer, item=item)
+		self.assertIsNone(self.desk(self.home(), "Shop")["hours"])
+
+	def test_the_home_and_the_desk_agree(self):
+		make_ship(self.project, status=Ship.ShipStatus.T2_QUEUE, journal_minutes=(45,))
+		home_hours = self.desk(self.home(), "T2")["hours"]
+		cards = {card["key"]: card for card in review_stats("t2")}
+		self.assertEqual(cards["hours_pending"]["value"], home_hours)
+
+	def test_a_decision_moves_the_hours_with_the_count(self):
+		ship = make_ship(self.project, journal_minutes=(120,))
+		# Warm the desk's cards too, which are otherwise cached for minutes.
+		review_stats("t1")
+		self.assertEqual(self.desk(self.home(), "T1")["hours"], 2.0)
+		Ship.objects.filter(pk=ship.pk).update(status=Ship.ShipStatus.T2_QUEUE)
+		self.client.get(reverse("review_next"))
+
+		response = self.home()
+		self.assertIsNone(self.desk(response, "T1")["hours"])
+		self.assertEqual(self.desk(response, "T2")["hours"], 2.0)
+		cards = {card["key"]: card for card in review_stats("t1")}
+		self.assertEqual(cards["hours_pending"]["value"], 0.0)
+
+	def test_a_warm_home_counts_no_hours(self):
+		make_ship(self.project)
+		self.home()
+		with patch.object(queue, "pending_hours") as hours:
+			self.home()
+		hours.assert_not_called()

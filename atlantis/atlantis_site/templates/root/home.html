@@ -22,6 +22,10 @@
                     <span class="home-desk-count">
                         {% if desk.count %}
                             <strong>{{ desk.count }}</strong> {{ desk.noun }}{{ desk.count|pluralize }} waiting
+                            {% if desk.hours is not None %}
+                                {# Same figure, same rounding, as the desk's "Hours pending review" card. #}
+                                <span class="home-desk-hours" title="{{ desk.hours_title }}">&middot; <strong>{{ desk.hours|floatformat:1 }}h</strong> of work</span>
+                            {% endif %}
                         {% else %}
                             clear
                         {% endif %}

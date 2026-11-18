@@ -187,6 +187,57 @@ def payable_journals_for_ship(ship):
 def payable_minutes_for_ship(ship):
     return approved_minutes_for_journals(payable_journals_for_ship(ship))
 
+def payable_minutes_by_ship(ships):
+    """{ship id: payable_minutes_for_ship(ship)} for a whole queryset of ships.
+
+    Four queries however many ships there are, rather than three per ship, so
+    a desk's worth of hours can be counted as often as its badge is. The scope
+    is payable_journals_for_ship's — a ship's own journals plus those of every
+    ship on its project since the last finalized one — worked out from each
+    project's ship history here, over approved seconds summed per ship in SQL.
+    """
+    targets = list(ships.values_list("id", "project_id"))
+    if not targets:
+        return {}
+    project_ids = {project_id for _ship_id, project_id in targets}
+
+    history = {}
+    for ship_id, project_id, status in (
+        Ship.objects.filter(project_id__in=project_ids)
+        .order_by("id")
+        .values_list("id", "project_id", "status")
+    ):
+        history.setdefault(project_id, []).append((ship_id, status))
+    tracked = dict(
+        Timelapse.objects.filter(journal__ship__project_id__in=project_ids)
+        .values_list("journal__ship_id")
+        .order_by()
+        .annotate(total=Sum("tracked_seconds"))
+    )
+    removed = dict(
+        TimelapseRemoval.objects.filter(review__journal__ship__project_id__in=project_ids)
+        .values_list("review__journal__ship_id")
+        .order_by()
+        .annotate(total=Sum(F("end_seconds") - F("start_seconds"), output_field=IntegerField()))
+    )
+
+    out = {}
+    for ship_id, project_id in targets:
+        # Every ship up to and including this one, restarting after each
+        # finalized one: the last paid ship's journals were paid by it.
+        covered = []
+        for other_id, status in history[project_id]:
+            if other_id == ship_id:
+                covered.append(other_id)
+                break
+            covered = [] if status == Ship.ShipStatus.FINALIZED else covered + [other_id]
+        seconds = (
+            sum(tracked.get(i) or 0 for i in covered)
+            - sum(removed.get(i) or 0 for i in covered)
+        )
+        out[ship_id] = max(seconds, 0) // 60
+    return out
+
 
 def ship_payout(ship, minutes, multiplier=PAYOUT_MULTIPLIER_DEFAULT, brackets=None):
     """What paying `minutes` on this ship is worth, split across its weeks.

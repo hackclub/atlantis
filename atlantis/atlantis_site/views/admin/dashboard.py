@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.urls import reverse
 
 from ..helpers import check_perms, staff_member_required
-from .queue import QUEUE_PERMS, QUEUES, can_open_queue
+from .queue import QUEUE_PERMS, QUEUES, cached_pending_hours, can_open_queue
 
 # The desks in the order a ship passes through them, which is also the order
 # the public /queue/ page lists them in.
@@ -19,7 +19,9 @@ def desks_for(user):
     """What is waiting on each desk `user` can open, for the admin home.
 
     The counts are the rail's own cached ones, so the home page and the badges
-    beside it can't disagree and a warm page load counts nothing.
+    beside it can't disagree and a warm page load counts nothing. The hours
+    are the desk's own "hours pending" figure, cached and cleared alongside
+    them (queue.cached_pending_hours); an empty desk isn't asked for any.
     """
     # Imported here: nav_badges imports this package (for QUEUES), so a
     # module-level import is circular whenever nav_badges loads first.
@@ -37,6 +39,11 @@ def desks_for(user):
             "accent": queue.accent,
             "count": count,
             "noun": queue.noun,
+            "hours": cached_pending_hours(key) if count else None,
+            "hours_title": (
+                "Recorded hours waiting for timelapse review" if key == "lookout"
+                else "Approved hours these ships would pay out"
+            ),
             "url": queue.dash_url(),
             # Starting takes a claim, which is narrower than looking: a
             # reviewer lead can read the T1 desk but not work it.
@@ -52,6 +59,8 @@ def desks_for(user):
             "accent": "good",
             "count": cached_pending_count("fulfillment"),
             "noun": "order",
+            # Orders aren't hours of anybody's work.
+            "hours": None,
             "url": reverse("fulfillment_dash"),
             "start_url": None,
         })
