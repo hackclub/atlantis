@@ -81,7 +81,8 @@
     <p class="muted">
         Every recording on their ships and whether it counts towards the
         {{ standing.weeks|length }}-week total. Only time recorded during the weeks counts,
-        less lapse review cuts (which they can't see). The panel then adds saver hours and
+        less lapse review cuts (which they can't see) in any week where those come to more
+        than an hour; an hour or less is forgiven, as the streak forgives it. The panel then adds saver hours and
         passed weeks, takes off removed hours, and stops at the total:
         it says {{ standing.shipped_printer_display }} shipped,
         {{ standing.finalized_printer_display }} finalized.
@@ -108,7 +109,7 @@
                             <td>{{ row.project }}</td>
                             <td>#{{ row.ship_id }} {{ row.ship_status }}</td>
                             <td>{{ row.tracked_display }}</td>
-                            <td>{% if row.cut_seconds %}{{ row.cut_display }}{% else %}<span class="muted">none</span>{% endif %}</td>
+                            <td>{% if row.cut_seconds %}{{ row.cut_display }}{% if row.cut_forgiven %} <span class="muted">(forgiven)</span>{% endif %}{% else %}<span class="muted">none</span>{% endif %}</td>
                             <td>{{ row.counted_display }}</td>
                             <td>{% if row.excluded %}<span class="pill pill-bad">{{ row.excluded }}</span>{% endif %}</td>
                         </tr>

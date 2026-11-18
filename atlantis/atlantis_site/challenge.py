@@ -132,9 +132,10 @@ def _all_shipped_timelapses():
 def shipped_ledger(user=None):
 	"""{user id: ({week: shipped seconds}, {week: finalized seconds})}.
 
-	What the end of the program is judged on: *approved* time (tracked, less
-	what a timelapse reviewer cut) on shipped journals, by the challenge week
-	it was recorded in. Prep time, before week 1 or after the last week, is in
+	What the end of the program is judged on: time on shipped journals, by
+	the challenge week it was recorded in, less what a timelapse reviewer cut
+	from it — unless that week's cuts come to an hour or less, which are
+	forgiven, as the streak forgives them (_cut_forgiven). Prep time, before week 1 or after the last week, is in
 	no week and so counts for nothing here, however much of it there is. Time
 	in the buffer after a week goes to that week, since a session that ran
 	past midnight was that week's work. Nothing on a locked project counts
@@ -148,19 +149,39 @@ def shipped_ledger(user=None):
 		extensions = extensions.filter(user=user)
 	extra = dict(extensions.values_list("user", "days"))
 	removed = _removed_seconds(timelapses)
-	out = {}
+	# {owner: {week: [shipped tracked, shipped cut, finalized tracked, finalized cut]}}
+	sums = {}
 	rows = timelapses.values_list("pk", "owner", "at", "tracked_seconds", "journal__ship__status")
 	for pk, owner, at, seconds, status in rows:
 		days = extra.get(owner, 0)
 		index = weeks.buffer_week(at, days) or weeks.week_for(at, days)
 		if index is None:
 			continue
-		approved = max((seconds or 0) - removed.get(pk, 0), 0)
-		shipped, finalized = out.setdefault(owner, ({}, {}))
-		shipped[index] = shipped.get(index, 0) + approved
+		seconds = seconds or 0
+		cut = min(removed.get(pk, 0), seconds)
+		week = sums.setdefault(owner, {}).setdefault(index, [0, 0, 0, 0])
+		week[0] += seconds
+		week[1] += cut
 		if status == Ship.ShipStatus.FINALIZED:
-			finalized[index] = finalized.get(index, 0) + approved
+			week[2] += seconds
+			week[3] += cut
+	out = {}
+	for owner, by_week in sums.items():
+		shipped, finalized = out.setdefault(owner, ({}, {}))
+		for index, (tracked, cut, final_tracked, final_cut) in by_week.items():
+			# Judged on everything shipped from the week, so finalizing some of
+			# it can't change whether its cuts are forgiven.
+			forgiven = _cut_forgiven(cut)
+			shipped[index] = tracked - (0 if forgiven else cut)
+			finalized[index] = final_tracked - (0 if forgiven else final_cut)
 	return out
+
+
+def _cut_forgiven(cut_seconds):
+	"""Whether a week's lapse review cuts are let go: an hour or less of them,
+	the same grace the streak gives before any makeup is owed. Past that, all
+	of it counts, as all of it is owed there."""
+	return cut_seconds // 60 <= MAKEUP_THRESHOLD_MINUTES
 
 
 @dataclass
@@ -179,10 +200,14 @@ class ShippedRecording:
 	# Empty when it counts, else why it doesn't.
 	excluded: str
 	dated_by_journal: bool
+	# Its week's cuts came to an hour or less, so this one's is let go.
+	cut_forgiven: bool = False
 
 	@property
 	def counted_seconds(self):
-		return 0 if self.excluded else self.tracked_seconds - self.cut_seconds
+		if self.excluded:
+			return 0
+		return self.tracked_seconds - (0 if self.cut_forgiven else self.cut_seconds)
 
 	@property
 	def at_display(self):
@@ -206,8 +231,10 @@ def shipped_recordings(user):
 
 	Rows are ShippedRecording. Totals, in seconds: "tracked" (what adding up
 	their shipped journals gives them), "counted" (what shipped_ledger counts
-	before savers, removals and the cap), "cut", and one "not counted: ..."
-	entry per reason. Deleted projects are left out, as they are everywhere.
+	before savers, removals and the cap), "cut" (cuts that count against
+	them), "cut forgiven" (cuts let go under the hour-a-week grace), and one
+	"not counted: ..." entry per reason. Deleted projects are left out, as
+	they are everywhere.
 	"""
 	extra = extension_days(user)
 	timelapses = (
@@ -217,7 +244,7 @@ def shipped_recordings(user):
 		.order_by("at", "pk")
 	)
 	cuts = _removed_seconds(timelapses)
-	rows, totals = [], {"tracked": 0, "counted": 0, "cut": 0}
+	rows, totals = [], {"tracked": 0, "counted": 0, "cut": 0, "cut forgiven": 0}
 	for t in timelapses:
 		ship, project = t.journal.ship, t.journal.project
 		seconds = t.tracked_seconds or 0
@@ -238,12 +265,19 @@ def shipped_recordings(user):
 			dated_by_journal=t.recorded_at is None,
 		)
 		rows.append(row)
-		totals["tracked"] += seconds
-		if excluded:
-			key = f"not counted: {excluded}"
-			totals[key] = totals.get(key, 0) + seconds
+	# The grace is per week, so it can only be decided once every row is in.
+	week_cuts = {}
+	for row in rows:
+		if not row.excluded:
+			week_cuts[row.week] = week_cuts.get(row.week, 0) + row.cut_seconds
+	for row in rows:
+		row.cut_forgiven = not row.excluded and _cut_forgiven(week_cuts[row.week])
+		totals["tracked"] += row.tracked_seconds
+		if row.excluded:
+			key = f"not counted: {row.excluded}"
+			totals[key] = totals.get(key, 0) + row.tracked_seconds
 		else:
-			totals["cut"] += row.cut_seconds
+			totals["cut forgiven" if row.cut_forgiven else "cut"] += row.cut_seconds
 			totals["counted"] += row.counted_seconds
 	return rows, totals
 
@@ -836,13 +870,17 @@ class Standing:
 		own week before anything is added up. A week an organizer passed counts
 		at least its five, shipped or not.
 		"""
+		# In seconds until the end, so the total is rounded down to the minute
+		# once rather than once a week.
 		total = 0
 		for week in self.weeks:
-			credited = _credited(seconds.get(week.index, 0) // 60, week.saver_hours, week.removed_hours)
+			credited = max(
+				seconds.get(week.index, 0) + (week.saver_hours - week.removed_hours) * 3600, 0
+			)
 			if week.override == WeekOutcome.Override.PASS:
-				credited = max(credited, weeks.WEEKLY_MINUTES)
+				credited = max(credited, weeks.WEEKLY_MINUTES * 60)
 			total += credited
-		return min(total, weeks.printer_hours() * 60)
+		return min(total // 60, weeks.printer_hours() * 60)
 
 	@property
 	def shipped_printer_minutes(self):

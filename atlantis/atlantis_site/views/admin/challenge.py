@@ -180,7 +180,8 @@ def challenge_user(request, user_id):
             for label, seconds in (
                 [("Shipped, as they'd add it up", shipped_totals["tracked"])]
                 + [(k[0].upper() + k[1:], v) for k, v in shipped_totals.items() if k.startswith("not counted")]
-                + [("Cut in lapse review", shipped_totals["cut"])]
+                + [("Cut in lapse review, forgiven (an hour or less that week)", shipped_totals["cut forgiven"])]
+                + [("Cut in lapse review, counted against them", shipped_totals["cut"])]
                 + [("Counted from shipped recordings", shipped_totals["counted"])]
             )
         ],

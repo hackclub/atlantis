@@ -1063,14 +1063,47 @@ class PrinterClaimTests(BaseTestCase):
             self.assertTrue(state.passed)
             self.assertTrue(state.can_claim_printer)
 
-    def test_cut_time_does_not_count_as_finalized(self):
+    def test_an_hour_of_cuts_in_a_week_is_forgiven(self):
+        """As the streak forgives it: a few minutes trimmed in review don't
+        leave someone who did exactly five short forever."""
         with after_week(1):
             ship = self._survive_the_program()
             journal = ship.journals.get()
-            approve_timelapse(journal, removals=[(journal.timelapses.get(), 0, 600)])
+            approve_timelapse(journal, removals=[(journal.timelapses.get(), 0, 3600)])
             state = challenge.standing(self.user)
-            self.assertEqual(state.finalized_printer_minutes, 290)
-            self.assertFalse(state.can_claim_printer)
+            self.assertEqual(state.shipped_printer_minutes, 300)
+            self.assertEqual(state.finalized_printer_minutes, 300)
+            self.assertTrue(state.can_claim_printer)
+
+    def test_past_an_hour_every_minute_of_the_cut_counts(self):
+        with after_week(1):
+            ship = self._survive_the_program(minutes=400)
+            journal = ship.journals.get()
+            approve_timelapse(journal, removals=[(journal.timelapses.get(), 0, 3660)])  # 61 minutes
+            state = challenge.standing(self.user)
+            self.assertEqual(state.shipped_printer_minutes, 300)  # 400 - 61 = 339, capped at 5h
+            self.assertEqual(challenge.shipped_ledger(self.user)[self.user.id][0][1], (400 - 61) * 60)
+
+    def test_the_grace_is_per_week(self):
+        """Two weeks with 40 minutes cut each are both forgiven, though the
+        cuts come to more than an hour between them."""
+        with after_week(2):
+            for index in (1, 2):
+                ship = self._survive_the_program(when=in_week(index))
+                journal = ship.journals.get()
+                approve_timelapse(journal, removals=[(journal.timelapses.get(), 0, 2400)])
+            self.assertEqual(challenge.standing(self.user).finalized_printer_minutes, 600)
+
+    def test_the_total_is_rounded_once_not_every_week(self):
+        with after_week(2):
+            for index in (1, 2):
+                ship = Ship.objects.create(project=self.project, status=Ship.ShipStatus.FINALIZED)
+                journal = make_journal(self.project, ship=ship, time_spent=0)
+                recording = make_timelapse(self.project, journal=journal, minutes=1, recorded_at=in_week(index))
+                recording.tracked_seconds = 30
+                recording.save(update_fields=["tracked_seconds"])
+            # 30s + 30s is a minute; rounded each week first it would be none.
+            self.assertEqual(challenge.standing(self.user).shipped_printer_minutes, 1)
 
     def test_the_bulk_standings_agree_on_shipped_hours(self):
         with after_week(1):
@@ -1521,15 +1554,18 @@ class ChallengeAdminTests(BaseTestCase):
             self.assertEqual(totals["tracked"], 390 * 60)
             self.assertEqual(totals["not counted: recorded before week 1"], 60 * 60)
             self.assertEqual(totals["not counted: rejected ship"], 30 * 60)
-            self.assertEqual(totals["cut"], 10 * 60)
-            self.assertEqual(totals["counted"], 290 * 60)
-            self.assertEqual(challenge.standing(self.shipper).shipped_printer_minutes, 290)
+            # Ten minutes in a week is under the hour the streak forgives.
+            self.assertEqual(totals["cut"], 0)
+            self.assertEqual(totals["cut forgiven"], 10 * 60)
+            self.assertEqual(totals["counted"], 300 * 60)
+            self.assertEqual(challenge.standing(self.shipper).shipped_printer_minutes, 300)
 
             page = self.client.get(reverse("challenge_user", args=[self.shipper.id]))
             self.assertContains(page, "Shipped, as they&#x27;d add it up")
             self.assertContains(page, "6h 30m")
             self.assertContains(page, "recorded before week 1")
-            self.assertContains(page, "Cut in lapse review")
+            self.assertContains(page, "forgiven (an hour or less that week)")
+            self.assertContains(page, "(forgiven)")
 
     def test_granting_hours_revives_somebody(self):
         with during_week(2):
