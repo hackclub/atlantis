@@ -406,6 +406,7 @@
             {% include "root/_metric_chart.html" with title="Live pipeline (waiting now)" rows=ships.pipeline fill_class="lagoon" empty="Nothing in the pipeline" %}
             {% include "root/_metric_chart.html" with title="All ships by status" rows=ships.by_status %}
             {% include "root/_metric_chart.html" with title="Shipped hours by status" rows=ships.hours_by_status fill_class="warn" empty="Nothing shipped yet" %}
+            {% include "root/_metric_chart.html" with title="Airtable hours awaiting review, by stage" rows=ships.queued_airtable_by_stage fill_class="warn" empty="Nothing waiting on review" %}
         </div>
     </section>
 
