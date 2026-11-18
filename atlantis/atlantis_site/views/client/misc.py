@@ -11,7 +11,7 @@ from ... import challenge, weeks
 from ...hca import AddressUnavailable
 from ...models import Item, Journal, Order, PrinterClaim, Profile, Timelapse, Ship
 from ...printers import item_key, printer as find_printer, tracks, track as find_track
-from ..helpers import rate_limit, record_audit, too_long
+from ..helpers import rate_limit, record_audit, too_long, ysws_block_reason
 
 # The one list of guides: the scroll rail in _guides_base.html renders it, and
 # guide_detail() will only serve a slug that appears here. Adding a guide means
@@ -95,7 +95,9 @@ def _claim_context(user):
         "standing": state,
         "chosen_track": profile.printer_track,
         "claim": PrinterClaim.objects.filter(user=user).first(),
-        "claim_open": state.can_claim_printer,
+        # Eligibility last, so HCA is only re-asked about someone who could
+        # otherwise buy. claim_printer asks again; this only hides the buttons.
+        "claim_open": state.can_claim_printer and not ysws_block_reason(user),
         "printer_hours_total": weeks.printer_hours(),
     }
 
@@ -130,7 +132,6 @@ def printer_track(request, slug):
 
     return render(request, "atlantis_site/printer_track.html", {
         "track": {**chosen, "printers": printers},
-        "is_chosen_track": context["chosen_track"] == slug,
         **context,
     })
 
@@ -185,17 +186,41 @@ def claim_printer(request, slug):
         return redirect("printer_track", slug=slug)
 
     state = challenge.standing(request.user)
-    if not state.ended:
-        messages.error(request, "Printers are claimed once the eight weeks are over.")
+    if not state.settled:
+        # Not the end of the last week but the end of the buffer after it: until
+        # then someone short on it isn't out yet, and could buy on the way out.
+        opens = weeks.settled_at(state.extension_days).astimezone(weeks.zone())
+        messages.error(
+            request,
+            f"Printers go on sale {opens:%a %b} {opens.day} at {opens:%-I:%M %p} Eastern, "
+            "once the eight weeks are over.",
+        )
         return redirect("printer_track", slug=slug)
     if state.eliminated:
         messages.error(request, challenge.elimination_reason(request.user))
         return redirect("printer_track", slug=slug)
+    # A printer is a YSWS prize like any other: HCA has to say this person is
+    # eligible, now and not just when they shipped.
+    ineligible = ysws_block_reason(request.user)
+    if ineligible:
+        messages.error(request, f"Buying a printer needs a YSWS-eligible Hack Club identity. {ineligible}")
+        return redirect("printer_track", slug=slug)
+    # Only hours recorded inside the eight weeks count, five a week: prep
+    # time, before or after, doesn't, however much of it there is.
+    total = weeks.printer_hours()
+    if not state.all_shipped:
+        messages.error(
+            request,
+            f"You need all {total} hours from the eight weeks shipped to pass, "
+            f"and you've shipped {state.shipped_printer_hours}.",
+        )
+        return redirect("printer_track", slug=slug)
     if not state.printer_unlocked:
         messages.error(
             request,
-            f"You need all {weeks.printer_hours()} printer hours to claim, "
-            f"and you have {state.printer_hours}.",
+            f"All {total} of your hours from the eight weeks have to be finalized "
+            f"to claim, and {state.finalized_printer_hours} are so far. You can "
+            "claim once the rest of your ships finish review.",
         )
         return redirect("printer_track", slug=slug)
 
@@ -258,7 +283,7 @@ def claim_printer(request, slug):
         "pearls": cost,
         "order_id": order.id,
     })
-    messages.success(request, f"{entry['name']} claimed! It's with fulfillment now.")
+    messages.success(request, f"{entry['name']} bought! It's with fulfillment now.")
     return redirect("printer_track", slug=slug)
 
 @login_required

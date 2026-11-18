@@ -457,6 +457,41 @@ body {
     font-size: 0.78em;
 }
 
+/* The buy button, hung just under its star. Placed on the same --x/--y as
+   the star and pushed down by about the star's own height, so it follows the
+   star at every chart width. */
+.star-buy {
+    position: absolute;
+    z-index: 2;
+    left: var(--x);
+    top: var(--y);
+    translate: -50% calc(clamp(15px, 3.1cqw, 44px) * 0.6);
+    margin: 0;
+}
+
+.star-buy button {
+    padding: 0.1em 0.7em;
+    border: 0;
+    border-radius: 0.5em;
+    background-color: var(--gold);
+    color: #14252F;
+    font: inherit;
+    font-size: clamp(11px, 1.4cqw, 18px);
+    line-height: 1.4;
+    cursor: pointer;
+}
+
+.star-buy button:hover,
+.star-buy button:focus-visible {
+    filter: brightness(1.08);
+}
+
+.star-buy button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    filter: none;
+}
+
 /* Nothing to hover with, so the stars carry their labels all the time. Only
    from the width where the map is big enough for them not to collide. */
 @media (hover: none) and (min-width: 900px) {
@@ -479,102 +514,6 @@ body {
         flex: none;
         width: 680px;
     }
-}
-
-/* ---------- banking hours, and spending them ---------- */
-
-/*
- * Nothing wears these at the moment: the strip they dress is commented out of
- * printer_track.html for now, and they are kept so putting it back is a
- * template change and nothing more.
- *
- * The strip between the heading and the map. For eight weeks it is a progress
- * line and a "make this my chart" button; on the last day it grows the form
- * that actually buys a printer. Same slab either way, so the page doesn't
- * rearrange itself when the claim opens.
- */
-.chart-progress {
-    margin: 0 0 1.1em;
-    color: var(--ink-dim);
-}
-
-.chart-claim {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.6em 1.1em;
-    margin: 0 0 1.2em;
-    padding: 0.8em 1.1em;
-    border: 1px solid rgba(255, 217, 138, 0.25);
-    border-radius: 0.6em;
-    background-color: var(--deep-lift);
-    /* Lifted onto the same layer as the bar above it. The chart is a fixed
-       box later in the document, so anything left in the flow paints under
-       it: without this the slab is hidden wherever the map reaches, and the
-       button that picks the track can't be clicked. Unlike the bar it keeps
-       its pointer events, because it is an opaque slab with a button and a
-       select in it rather than writing over the stars. */
-    position: relative;
-    z-index: 1;
-}
-
-.chart-claim-done {
-    border-color: rgba(129, 199, 132, 0.4);
-}
-
-.chart-claim-line {
-    margin: 0;
-    flex: 1 1 18em;
-    color: var(--ink-dim);
-}
-
-.chart-claim-line strong {
-    color: var(--gold);
-}
-
-.chart-claim-mine {
-    margin: 0;
-    color: var(--gold);
-}
-
-.chart-claim-btn {
-    padding: 0.35em 1em;
-    border: 0;
-    border-radius: 0.5em;
-    background-color: var(--gold);
-    color: #14252F;
-    font: inherit;
-    cursor: pointer;
-}
-
-.chart-claim-btn:hover,
-.chart-claim-btn:focus-visible {
-    filter: brightness(1.08);
-}
-
-/* The claim takes the whole row: it is the one thing on the page that spends
-   anything, and it should not read as a sibling of the chart switcher. */
-.chart-claim-form {
-    flex: 1 1 100%;
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.5em 0.9em;
-    padding-top: 0.7em;
-    border-top: 1px solid rgba(255, 217, 138, 0.2);
-}
-
-.chart-claim-form select {
-    padding: 0.3em 0.5em;
-    border-radius: 0.4em;
-    font: inherit;
-}
-
-.chart-claim-warn {
-    flex: 1 1 100%;
-    margin: 0;
-    color: var(--ink-dim);
-    font-size: 0.9em;
 }
 
 /* The chart someone has settled on, marked on its card in the chart room. */

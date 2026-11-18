@@ -30,14 +30,6 @@
             <h1 class="chart-heading">{{ track.name }}</h1>
         </header>
 
-        {% comment %}
-        The claim strip — banked hours, "make this my chart" and the form that
-        buys a printer — is off the page for now. Nothing behind it moved:
-        choose_printer_track and claim_printer are still routed and still
-        enforce the hours, the pearls and the one-claim rule, and the styles it
-        used are still in printer.css. Putting it back is this block again.
-        {% endcomment %}
-
         <div class="chart-stage">
             <div id="chart">
                 <img id="chart-map"
@@ -62,9 +54,47 @@
                             <span class="star-pace">{{ printer.pace }}</span>
                         </span>
                     </div>
+                    {% if claim_open and not claim %}
+                        {% comment %}
+                        One debit for the whole path: this printer costs the
+                        track's entry pearls plus every upgrade between the
+                        opening printer and it, which is the figure on its star.
+                        A sibling of the star rather than inside it, which is
+                        an image to assistive tech and can't hold a button.
+                        {% endcomment %}
+                        <form method="post" action="{% url 'claim_printer' track.slug %}" class="star-buy"
+                              style="--x: {{ printer.x }}%; --y: {{ printer.y }}%"
+                              data-confirm-claim data-printer="{{ printer.name }}" data-pearls="{{ printer.pearls }}">
+                            {% csrf_token %}
+                            <input type="hidden" name="printer" value="{{ printer.name }}">
+                            <button type="submit"
+                                    {% if not printer.affordable %}disabled title="Costs {{ printer.pearls }} pearls; you have {{ profile.layers }}"{% endif %}
+                                    aria-label="Buy {{ printer.name }} for {{ printer.pearls }} pearls">Buy</button>
+                        </form>
+                    {% endif %}
                 {% endfor %}
             </div>
         </div>
     </div>
+
+    {% comment %}
+    A printer is one irreversible purchase, so each buy button asks once more
+    and names what it is about to spend. Progressive: with no JavaScript the form
+    still submits, and the server is the thing that actually enforces the
+    hours, the pearls and the one-claim rule.
+    {% endcomment %}
+    <script>
+        (function () {
+            document.querySelectorAll('[data-confirm-claim]').forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    const ok = window.confirm(
+                        'Buy the ' + form.dataset.printer + ' for ' + form.dataset.pearls + ' pearls?\n\n'
+                        + 'You get one printer and this cannot be undone.'
+                    );
+                    if (!ok) event.preventDefault();
+                });
+            });
+        })();
+    </script>
 </body>
 </html>

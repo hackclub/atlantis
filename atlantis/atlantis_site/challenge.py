@@ -22,7 +22,11 @@ Three numbers come out of here and they are deliberately different things:
                    pass an hour — or in the week after, if the owner chose
                    that (MakeupDeferral; see makeup_minutes_by_week).
   printer hours    five per week survived, and no more however long you worked.
-                   Forty of them buys a printer, which is exactly every week.
+                   Forty of them is exactly every week. That bar is on logged
+                   time; what the end of the program judges is *shipped* and
+                   *finalized* time recorded inside the weeks (see
+                   shipped_ledger): all forty shipped to pass, all forty
+                   finalized, with the streak kept, to claim a printer.
   pearls           paid at T3 finalization off *approved* time, split across
                    the weeks the work was done in. Nothing to do with either
                    bar; see payout_breakdown.
@@ -40,7 +44,7 @@ from . import weeks
 from .models import (
 	CHALLENGE_BASE_PEARLS_PER_HOUR, CHALLENGE_BONUS_PEARLS_PER_HOUR,
 	PAYOUT_MULTIPLIER_DEFAULT, PEARLS_PER_HOUR, HourRemoval, Item, MakeupDeferral, PearlBracket,
-	SaverCredit, Timelapse, TimelapseRemoval, WeekOutcome,
+	FinalWeekExtension, SaverCredit, Ship, Timelapse, TimelapseRemoval, WeekOutcome,
 )
 
 
@@ -81,20 +85,93 @@ def _all_logged_timelapses():
 	)
 
 
-def tracked_seconds_by_week(user):
+def extension_days(user):
+	"""Days an organizer added to this user's last week, or 0."""
+	return (
+		FinalWeekExtension.objects.filter(user=user).values_list("days", flat=True).first() or 0
+	)
+
+
+def extension_days_by_user():
+	"""{user id: days} for everyone with an extension on the last week."""
+	return dict(FinalWeekExtension.objects.values_list("user", "days"))
+
+
+def tracked_seconds_by_week(user, extra=None):
 	"""_bucket_by_week over everything this user logged.
 
 	Bucketed in Python rather than SQL so that weeks.week_for stays the single
 	answer to which week a moment is in — the boundaries are local midnights in
 	a zone the database isn't told about, and a second implementation of that
-	in SQL is a second thing to get wrong across the DST change.
+	in SQL is a second thing to get wrong across the DST change. `extra` is
+	their extension_days, looked up if not given.
 	"""
-	return _bucket_by_week(_logged_timelapses(user).values_list("at", "tracked_seconds"))
+	if extra is None:
+		extra = extension_days(user)
+	return _bucket_by_week(_logged_timelapses(user).values_list("at", "tracked_seconds"), extra)
 
 
-def _bucket_by_week(rows):
+def _all_shipped_timelapses():
+	"""Logged recordings on a ship that wasn't rejected, for everyone.
+
+	A rejected ship keeps its journals, so its time can never be shipped
+	again; everything else on a ship — in review, sent back for changes or
+	finalized — counts as shipped.
+	"""
+	return (
+		_all_logged_timelapses()
+		.filter(journal__ship__isnull=False)
+		.exclude(journal__ship__status=Ship.ShipStatus.REJECTED)
+		# A locked project is one a reviewer shut down; what's on it counts
+		# towards the streak like any logged time, but not towards a printer.
+		.exclude(journal__project__locked=True)
+	)
+
+
+def shipped_ledger(user=None):
+	"""{user id: ({week: shipped seconds}, {week: finalized seconds})}.
+
+	What the end of the program is judged on: *approved* time (tracked, less
+	what a timelapse reviewer cut) on shipped journals, by the challenge week
+	it was recorded in. Prep time, before week 1 or after the last week, is in
+	no week and so counts for nothing here, however much of it there is. Time
+	in the buffer after a week goes to that week, since a session that ran
+	past midnight was that week's work. Nothing on a locked project counts
+	(_all_shipped_timelapses). Someone with an extension has their last week
+	cut at their own end. `user` narrows it to one person.
+	"""
+	timelapses = _all_shipped_timelapses()
+	extensions = FinalWeekExtension.objects.all()
+	if user is not None:
+		timelapses = timelapses.filter(owner=user)
+		extensions = extensions.filter(user=user)
+	extra = dict(extensions.values_list("user", "days"))
+	removed = dict(
+		TimelapseRemoval.objects
+		.filter(session__in=timelapses.values("pk"))
+		.values_list("session")
+		.order_by()
+		.annotate(total=Sum(F("end_seconds") - F("start_seconds"), output_field=IntegerField()))
+	)
+	out = {}
+	rows = timelapses.values_list("pk", "owner", "at", "tracked_seconds", "journal__ship__status")
+	for pk, owner, at, seconds, status in rows:
+		days = extra.get(owner, 0)
+		index = weeks.buffer_week(at, days) or weeks.week_for(at, days)
+		if index is None:
+			continue
+		approved = max((seconds or 0) - removed.get(pk, 0), 0)
+		shipped, finalized = out.setdefault(owner, ({}, {}))
+		shipped[index] = shipped.get(index, 0) + approved
+		if status == Ship.ShipStatus.FINALIZED:
+			finalized[index] = finalized.get(index, 0) + approved
+	return out
+
+
+def _bucket_by_week(rows, extra=0):
 	"""({week index or PREP: seconds}, {week index: seconds in its buffer})
-	from (moment, seconds) pairs.
+	from (moment, seconds) pairs, for someone with `extra` days on the last
+	week.
 
 	Buffer time is kept apart because which week it belongs to depends on the
 	hours, not the clock; _settle_buffers hands it out. Seconds rather than
@@ -102,11 +179,11 @@ def _bucket_by_week(rows):
 	"""
 	totals, buffered = {}, {}
 	for at, seconds in rows:
-		index = weeks.buffer_week(at)
+		index = weeks.buffer_week(at, extra)
 		if index is not None:
 			buffered[index] = buffered.get(index, 0) + (seconds or 0)
 			continue
-		key = PREP if weeks.is_prep(at) else weeks.week_for(at)
+		key = PREP if weeks.is_prep(at) else weeks.week_for(at, extra)
 		totals[key] = totals.get(key, 0) + (seconds or 0)
 	return totals, buffered
 
@@ -117,7 +194,7 @@ def _credited(tracked_minutes, saver_hours, removed_hours):
 	return max(tracked_minutes + (saver_hours - removed_hours) * 60, 0)
 
 
-def _settle_buffers(tracked, savers, overrides, buffer=True, makeup=None, removed=None):
+def _settle_buffers(tracked, savers, overrides, buffer=True, makeup=None, removed=None, extra=0):
 	"""{week index or PREP: tracked minutes}, each week's buffer handed out.
 
 	`tracked` is _bucket_by_week's pair. A buffer goes to the week that just
@@ -154,7 +231,7 @@ def _settle_buffers(tracked, savers, overrides, buffer=True, makeup=None, remove
 		else:
 			# After the last week: wherever the calendar puts it, as it would
 			# have without a buffer.
-			target = weeks.week_for(weeks.buffer_bounds(index)[0])
+			target = weeks.week_for(weeks.buffer_bounds(index, extra)[0], extra)
 		seconds[target] = seconds.get(target, 0) + buffered[index]
 	return {key: total // 60 for key, total in seconds.items()}
 
@@ -329,6 +406,9 @@ class Week:
 	# Whether the owner chose next week for this week's makeup, which holds
 	# even once the week has made it all up and nothing is left to move.
 	makeup_deferred: bool = False
+	# Days an organizer added to this person's last week. Carried on every
+	# week, but weeks.py only ever moves the last one with it.
+	extension_days: int = 0
 
 	@property
 	def saver_minutes(self):
@@ -503,7 +583,7 @@ class Week:
 	@property
 	def grace_deadline(self):
 		"""When the pair's ten are actually due — the last grace week's end."""
-		return weeks.deadline(weeks.grace_pair(self.index)[-1])
+		return weeks.deadline(weeks.grace_pair(self.index)[-1], self.extension_days)
 
 	@property
 	def grace_deadline_display(self):
@@ -528,11 +608,16 @@ class Week:
 
 	@property
 	def label(self):
-		return weeks.week_label(self.index)
+		return weeks.week_label(self.index, self.extension_days)
 
 	@property
 	def deadline(self):
-		return weeks.deadline(self.index)
+		return weeks.deadline(self.index, self.extension_days)
+
+	@property
+	def extended(self):
+		"""This person's own deadline on it is later than everyone else's."""
+		return self.deadline != weeks.deadline(self.index)
 
 	@property
 	def deadline_display(self):
@@ -553,6 +638,14 @@ class Standing:
 	prep_minutes: int = 0
 	started: bool = False
 	ended: bool = False
+	# Ended, and the buffer after the last week has closed too, so no week
+	# can still be met or missed (weeks.settled_at).
+	settled: bool = False
+	# Days an organizer added to this person's last week (FinalWeekExtension).
+	extension_days: int = 0
+	# shipped_ledger's pair for this user, in seconds by week.
+	shipped_seconds: dict = field(default_factory=dict)
+	finalized_seconds: dict = field(default_factory=dict)
 
 	@property
 	def current(self):
@@ -608,15 +701,76 @@ class Standing:
 	def printer_percent(self):
 		return min(round(self.printer_minutes / (weeks.printer_hours() * 60) * 100), 100)
 
+	def _counted_minutes(self, seconds):
+		"""Printer minutes from {week: seconds} of shipped or finalized time.
+
+		Judged like the streak: five a week, or the pair's ten across a grace
+		pair however it's split, and no more however much was shipped. Saver
+		hours count, since a rescued week still banks its five, and hours an
+		organizer removed come off. A week an organizer passed counts its full
+		five, shipped or not, whatever else is in it.
+		"""
+		by_index = {week.index: week for week in self.weeks}
+		units = {weeks.grace_pair(index) or (index,) for index in by_index}
+		total = 0
+		for unit in units:
+			minutes = 0
+			for i in unit:
+				week = by_index[i]
+				credited = _credited(seconds.get(i, 0) // 60, week.saver_hours, week.removed_hours)
+				if week.override == WeekOutcome.Override.PASS:
+					credited = max(credited, weeks.WEEKLY_MINUTES)
+				minutes += credited
+			total += min(minutes, weeks.WEEKLY_MINUTES * len(unit))
+		return min(total, weeks.printer_hours() * 60)
+
+	@property
+	def shipped_printer_minutes(self):
+		return self._counted_minutes(self.shipped_seconds)
+
+	@property
+	def finalized_printer_minutes(self):
+		return self._counted_minutes(self.finalized_seconds)
+
+	@property
+	def shipped_printer_hours(self):
+		return self.shipped_printer_minutes // 60
+
+	@property
+	def finalized_printer_hours(self):
+		return self.finalized_printer_minutes // 60
+
+	@property
+	def all_shipped(self):
+		return self.shipped_printer_minutes >= weeks.printer_hours() * 60
+
+	@property
+	def all_finalized(self):
+		return self.finalized_printer_minutes >= weeks.printer_hours() * 60
+
+	@property
+	def passed(self):
+		"""Passed the program: every week is settled, the streak held, and all
+		forty hours from inside the weeks are shipped.
+
+		Settled rather than merely ended: in the two hours of buffer after the
+		last week, someone short on it isn't out *yet*, and would read as
+		passed until 2am.
+		"""
+		return self.settled and not self.eliminated and self.all_shipped
+
 	@property
 	def printer_unlocked(self):
-		"""Enough hours banked to claim a printer, and still in the program."""
-		return not self.eliminated and self.printer_minutes >= weeks.printer_hours() * 60
+		"""Still in the program with all forty hours from inside the weeks
+		finalized — what a printer needs, once the program is over."""
+		return not self.eliminated and self.all_finalized
 
 	@property
 	def can_claim_printer(self):
-		"""Claiming opens once the program is over and the bar is full."""
-		return self.ended and self.printer_unlocked
+		"""Buying opens once every week is settled (weeks.settled_at) and every
+		hour is finalized. Not at the end of the program itself: until the
+		last buffer closes, someone who is about to be out still isn't."""
+		return self.settled and self.printer_unlocked
 
 	@property
 	def saver_hours_needed(self):
@@ -647,9 +801,11 @@ def standing(user, now=None):
 	"""Where `user` stands right now — the one entry point everything reads."""
 	now = now or timezone.now()
 	overrides = {index: row.override for index, row in _overrides(user).items()}
+	extra = extension_days(user)
 	return _build_standing(
-		tracked_seconds_by_week(user), saver_hours_by_week(user), overrides, now,
+		tracked_seconds_by_week(user, extra), saver_hours_by_week(user), overrides, now,
 		makeup=_makeup(user), removed=removed_hours_by_week(user),
+		shipped=shipped_ledger(user).get(user.pk), extra=extra,
 	)
 
 
@@ -662,8 +818,10 @@ def standings(now=None):
 	account that ever signed in would have every week "missed" by people who
 	never started.
 	"""
-	tracked, savers, overrides, makeup, removed = _ledger()
-	return _standings_for(tracked.keys() | savers.keys(), tracked, savers, overrides, makeup, removed, now)
+	tracked, savers, overrides, makeup, removed, extensions = _ledger()
+	return _standings_for(
+		tracked.keys() | savers.keys(), tracked, savers, overrides, makeup, removed, extensions, now,
+	)
 
 
 def standings_for(user_ids, now=None):
@@ -672,8 +830,8 @@ def standings_for(user_ids, now=None):
 	Unlike standings(), someone who has logged nothing still gets a row — the
 	empty one standing() would have given them.
 	"""
-	tracked, savers, overrides, makeup, removed = _ledger()
-	return _standings_for(user_ids, tracked, savers, overrides, makeup, removed, now)
+	tracked, savers, overrides, makeup, removed, extensions = _ledger()
+	return _standings_for(user_ids, tracked, savers, overrides, makeup, removed, extensions, now)
 
 
 def rescued_by_buffer(now=None):
@@ -688,20 +846,21 @@ def rescued_by_buffer(now=None):
 	rather than missed, and so read as saved by a buffer with nothing in it.
 	"""
 	now = now or timezone.now()
-	tracked, savers, overrides, makeup, removed = _ledger()
-	calendar = {**_calendar(now), "buffering": None}
+	tracked, savers, overrides, makeup, removed, extensions = _ledger()
+	calendars = _Calendars(now)
 	rescued = {}
 	for owner in tracked.keys() | savers.keys():
+		extra = extensions.get(owner, 0)
 		args = (
 			tracked.get(owner, ({}, {})), savers.get(owner, {}), overrides.get(owner, {}),
-			now, calendar,
+			now, {**calendars[extra], "buffering": None},
 		)
 		owed = makeup.get(owner)
 		taken = removed.get(owner)
-		state = _build_standing(*args, makeup=owed, removed=taken)
+		state = _build_standing(*args, makeup=owed, removed=taken, extra=extra)
 		if state.eliminated:
 			continue
-		without = _build_standing(*args, buffer=False, makeup=owed, removed=taken)
+		without = _build_standing(*args, buffer=False, makeup=owed, removed=taken, extra=extra)
 		if without.eliminated:
 			rescued[owner] = (state, without)
 	return rescued
@@ -710,11 +869,14 @@ def rescued_by_buffer(now=None):
 def _ledger():
 	"""Everyone's (_bucket_by_week pair, {week: saver hours}, {week: override},
 	_makeup's (cut, deferred) pair, {week: removed hours}), each keyed by user
-	id."""
+	id, and {user id: extension days}."""
+	extensions = extension_days_by_user()
 	rows = {}
 	for owner, at, seconds in _all_logged_timelapses().values_list("owner", "at", "tracked_seconds"):
 		rows.setdefault(owner, []).append((at, seconds))
-	tracked = {owner: _bucket_by_week(pairs) for owner, pairs in rows.items()}
+	tracked = {
+		owner: _bucket_by_week(pairs, extensions.get(owner, 0)) for owner, pairs in rows.items()
+	}
 
 	savers = {}
 	for owner, index, hours in (
@@ -749,43 +911,66 @@ def _ledger():
 		for owner, rows in cuts.items()
 	}
 
-	return tracked, savers, overrides, makeup, taken
+	return tracked, savers, overrides, makeup, taken, extensions
 
 
-def _standings_for(user_ids, tracked, savers, overrides, makeup, removed, now):
+def _standings_for(user_ids, tracked, savers, overrides, makeup, removed, extensions, now):
 	now = now or timezone.now()
-	calendar = _calendar(now)
+	calendars = _Calendars(now)
+	shipped = shipped_ledger()
 	return {
 		owner: _build_standing(
 			tracked.get(owner, ({}, {})), savers.get(owner, {}), overrides.get(owner, {}), now,
-			calendar, makeup=makeup.get(owner), removed=removed.get(owner),
+			calendars[extensions.get(owner, 0)], makeup=makeup.get(owner),
+			removed=removed.get(owner), shipped=shipped.get(owner),
+			extra=extensions.get(owner, 0),
 		)
 		for owner in user_ids
 	}
 
 
-def _calendar(now):
-	"""The parts of a Standing that are the same for everyone at `now`.
+def _calendar(now, extra=0):
+	"""The parts of a Standing that are the same for everyone at `now` with
+	`extra` days on their last week.
 
 	Worked out once per page rather than once per user: on the pages that
 	build the whole field, recomputing the week boundaries for every row was
 	most of the time spent.
 	"""
 	return {
-		"closed": set(weeks.closed_weeks(now)),
-		"live": weeks.current_week(now),
-		"buffering": weeks.buffer_week(now),
+		"closed": set(weeks.closed_weeks(now, extra)),
+		"live": weeks.current_week(now, extra),
+		"buffering": weeks.buffer_week(now, extra),
 		"grace": weeks.grace_pairs(),
 		"started": weeks.has_started(now),
-		"ended": weeks.has_ended(now),
+		"ended": weeks.has_ended(now, extra),
+		"settled": weeks.has_settled(now, extra),
 	}
 
 
-def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True, makeup=None, removed=None):
+class _Calendars(dict):
+	"""_calendar at one `now`, by extension days, each worked out once: the
+	whole field shares a handful, almost everyone the one with no extension."""
+
+	def __init__(self, now):
+		super().__init__()
+		self.now = now
+
+	def __missing__(self, extra):
+		self[extra] = _calendar(self.now, extra)
+		return self[extra]
+
+
+def _build_standing(
+	tracked, savers, overrides, now, calendar=None, buffer=True, makeup=None, removed=None,
+	shipped=None, extra=0,
+):
 	"""A Standing from one user's _bucket_by_week pair, {week: saver hours},
-	{week: override}, _makeup's (cut, deferred) pair and {week: removed
-	hours}. buffer=False judges it as though there were no buffer after each
-	week."""
+	{week: override}, _makeup's (cut, deferred) pair, {week: removed hours},
+	shipped_ledger pair and extension days. buffer=False judges it as though
+	there were no buffer after each week. `calendar` has to be the one for
+	`extra`."""
+	shipped_seconds, finalized_seconds = shipped or ({}, {})
 	cut, deferred = makeup or ({}, set())
 	removed = removed or {}
 	# What each week has credited by the calendar, before any buffer is
@@ -796,11 +981,11 @@ def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True,
 		for index in cut
 	}
 	makeup, moved = _defer_makeup(cut, deferred, credited)
-	calendar = calendar or _calendar(now)
+	calendar = calendar or _calendar(now, extra)
 	closed = calendar["closed"]
 	live = calendar["live"]
 	buffering = calendar["buffering"] if buffer else None
-	tracked = _settle_buffers(tracked, savers, overrides, buffer, makeup, removed)
+	tracked = _settle_buffers(tracked, savers, overrides, buffer, makeup, removed, extra)
 	# Each grace pair's totals, keyed by every week in it, as Week fields.
 	# A week in no pair gets none of them and keeps the defaults.
 	grace = {}
@@ -831,12 +1016,17 @@ def _build_standing(tracked, savers, overrides, now, calendar=None, buffer=True,
 				deferred_makeup_minutes=moved.get(index, 0),
 				carried_makeup_minutes=moved.get(index - 1, 0),
 				makeup_deferred=index in deferred and index < weeks.week_count(),
+				extension_days=extra,
 			)
 			for index in range(1, weeks.week_count() + 1)
 		],
 		prep_minutes=tracked.get(PREP, 0),
 		started=calendar["started"],
 		ended=calendar["ended"],
+		settled=calendar["settled"],
+		extension_days=extra,
+		shipped_seconds=shipped_seconds,
+		finalized_seconds=finalized_seconds,
 	)
 
 

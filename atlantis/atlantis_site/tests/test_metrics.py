@@ -187,10 +187,15 @@ class MetricsActivityTests(BaseTestCase):
 		self.assertEqual(activity["avg_dau"], 1.0)
 
 	def test_signups_today_and_the_daily_average(self):
-		now = timezone.now()
+		# Noon on each local date, not `now` less a number of 24-hour days:
+		# across the November DST change that lands on the wrong date in the
+		# last hour before midnight Eastern, and the day counts are off by one.
+		today = timezone.localdate(timezone.now(), weeks.zone())
 		for offset in (0, 1, 5, 40):
 			user = make_user(f"joiner-{offset}", slack_id=f"US{offset}")
-			user.date_joined = now - timedelta(days=offset)
+			user.date_joined = datetime.combine(
+				today - timedelta(days=offset), time(12), tzinfo=weeks.zone()
+			)
 			user.save(update_fields=["date_joined"])
 
 		activity = self._page()["activity"]
@@ -514,7 +519,7 @@ class MetricsHoursTests(BaseTestCase):
 		self.assertEqual(hours["challenge_start"], weeks.start_date())
 		self.assertEqual(
 			hours["challenge_end"],
-			weeks.start_date() + timedelta(weeks=weeks.week_count(), days=-1),
+			weeks.ends_at().date() - timedelta(days=1),
 		)
 
 	def _ship_at(self, project, moment):

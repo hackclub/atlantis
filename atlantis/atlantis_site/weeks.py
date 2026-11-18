@@ -46,6 +46,11 @@ GRACE_PAIRS = ((1, 2), (7, 8))
 # earlier week is ignored.
 EXTENSION_DAYS = {8: 2}
 
+# On top of that, an organizer can give one person more days on the last week
+# (models.FinalWeekExtension). Everything below that can depend on it takes
+# `extra`, those days, and it only ever moves the last week's end: for any
+# other week, or extra=0, the answer is everyone's.
+
 # Prep weeks after the program: once the last week closes, shipping stays open
 # at the flat prep rate until the end of this many more Sundays. They're counted
 # from the last week's own Sunday, so an extension eats into them rather than
@@ -95,9 +100,13 @@ def extension_days(index):
     return EXTENSION_DAYS.get(index, 0) if index == week_count() else 0
 
 
-def _close_date(index):
+def _close_date(index, extra=0):
     """Local date of the midnight week `index` closes at (exclusive)."""
-    return start_date() + timedelta(weeks=index, days=extension_days(index))
+    if index == week_count():
+        extra += extension_days(index)
+    else:
+        extra = 0
+    return start_date() + timedelta(weeks=index, days=extra)
 
 
 def _local_midnight(on):
@@ -116,13 +125,13 @@ def starts_at():
     return _local_midnight(start_date())
 
 
-def ends_at():
+def ends_at(extra=0):
     """The instant the program closes — midnight after the last week's last day.
 
     Exclusive, like every other end in here: the last week runs up to but not
     including this, so a moment equal to it is already past the program.
     """
-    return _local_midnight(_close_date(week_count()))
+    return _local_midnight(_close_date(week_count(), extra))
 
 
 def shipping_closes_at():
@@ -150,21 +159,33 @@ def shipping_has_closed(now=None):
     return (now or timezone.now()) >= shipping_closes_at()
 
 
-def week_bounds(index):
+def max_extension_days():
+    """The most days an organizer can add to one person's last week.
+
+    Enough that it still ends a whole day before shipping closes: time
+    recorded in the extension only counts towards a printer once it's
+    shipped, so an extension running up to the close would leave nothing
+    to ship it in.
+    """
+    last_day = shipping_closes_at().astimezone(zone()).date() - timedelta(days=1)
+    return max((last_day - _close_date(week_count())).days, 0)
+
+
+def week_bounds(index, extra=0):
     """(start, end) for week `index`, 1-based. End is exclusive.
 
     The end is the *next* week's local midnight rather than 23:59:59, so no
     instant falls between two weeks. What a page shows as "Sunday 11:59pm" is
     this minus a second; what the arithmetic uses is this. An extended week
-    (EXTENSION_DAYS) ends that many days later.
+    (EXTENSION_DAYS, plus `extra` for one person) ends that many days later.
     """
     if not 1 <= index <= week_count():
         raise ValueError(f"week {index} is outside the {week_count()}-week program")
     opens = start_date() + timedelta(weeks=index - 1)
-    return _local_midnight(opens), _local_midnight(_close_date(index))
+    return _local_midnight(opens), _local_midnight(_close_date(index, extra))
 
 
-def week_for(moment):
+def week_for(moment, extra=0):
     """Which week `moment` falls in, or None for prep and for after the end.
 
     Compares local *dates*, since weeks are whole local days: that settles the
@@ -183,7 +204,7 @@ def week_for(moment):
     if index <= week_count():
         return index
     # The days an extended last week runs past its Sunday.
-    return week_count() if on < _close_date(week_count()) else None
+    return week_count() if on < _close_date(week_count(), extra) else None
 
 
 def is_prep(moment):
@@ -195,9 +216,9 @@ def is_prep(moment):
     return moment < starts_at()
 
 
-def current_week(now=None):
+def current_week(now=None, extra=0):
     """The week in progress, or None during prep and after the program ends."""
-    return week_for(now or timezone.now())
+    return week_for(now or timezone.now(), extra)
 
 
 def current_week_bounds(now=None):
@@ -220,23 +241,23 @@ def has_started(now=None):
     return (now or timezone.now()) >= starts_at()
 
 
-def has_ended(now=None):
-    return (now or timezone.now()) >= ends_at()
+def has_ended(now=None, extra=0):
+    return (now or timezone.now()) >= ends_at(extra)
 
 
-def closed_weeks(now=None):
+def closed_weeks(now=None, extra=0):
     """Every week index that has finished, oldest first.
 
     A week is closed once its end has passed; the week in progress is never in
     here, which is what stops a live week being judged before it is over.
     """
     now = now or timezone.now()
-    return [i for i in range(1, week_count() + 1) if week_bounds(i)[1] <= now]
+    return [i for i in range(1, week_count() + 1) if week_bounds(i, extra)[1] <= now]
 
 
-def deadline(index):
+def deadline(index, extra=0):
     """The last instant of week `index`, for display — its Sunday 11:59:59pm."""
-    return week_bounds(index)[1] - timedelta(seconds=1)
+    return week_bounds(index, extra)[1] - timedelta(seconds=1)
 
 
 # The two hours after a week closes, up to 2am local on the Monday. Work
@@ -247,19 +268,19 @@ def deadline(index):
 BUFFER_ENDS = time(2, 0)
 
 
-def buffer_bounds(index):
+def buffer_bounds(index, extra=0):
     """(start, end) of the buffer after week `index`. End is exclusive.
 
     Built from the local date like every other boundary here, not by adding
     two hours to midnight; neither DST change lands in a Monday's first hours,
     but that keeps it a non-question.
     """
-    start, end = week_bounds(index)
+    start, end = week_bounds(index, extra)
     monday = end.astimezone(zone()).date()
     return end, datetime.combine(monday, BUFFER_ENDS, tzinfo=zone()).replace(fold=0)
 
 
-def buffer_week(moment):
+def buffer_week(moment, extra=0):
     """The week whose buffer `moment` falls in, or None.
 
     Includes the buffer after the last week, when week_for already says None.
@@ -272,7 +293,22 @@ def buffer_week(moment):
     if local.time() >= BUFFER_ENDS:
         return None
     on = local.date()
-    return next((i for i in range(1, week_count() + 1) if _close_date(i) == on), None)
+    return next((i for i in range(1, week_count() + 1) if _close_date(i, extra) == on), None)
+
+
+def settled_at(extra=0):
+    """The instant every week is settled: the end of the buffer after the last
+    one, 2am local the day after it closes.
+
+    The program has *ended* two hours before this, but until the last buffer
+    closes the last week (and its grace pair) can't be missed yet, so who is
+    still in isn't final. Anything decided on who passed waits for this.
+    """
+    return buffer_bounds(week_count(), extra)[1]
+
+
+def has_settled(now=None, extra=0):
+    return (now or timezone.now()) >= settled_at(extra)
 
 
 # When the "hours left" DM goes out: the evening before the week's last day,
@@ -288,9 +324,9 @@ def reminder_at(index):
     return datetime.combine(on, REMINDER_TIME, tzinfo=zone()).replace(fold=0)
 
 
-def week_label(index):
+def week_label(index, extra=0):
     """"Week 3 · Oct 5–11", the way a heading names it."""
-    opens, closes = week_bounds(index)
+    opens, closes = week_bounds(index, extra)
     closes = (closes - timedelta(days=1)).astimezone(zone())
     opens = opens.astimezone(zone())
     if opens.month == closes.month:

@@ -3,14 +3,15 @@
 Two pages. The roster is every participant against every week, so "who is out
 and why" is one glance rather than a query; it also lists, and exports, who
 the two-hour buffer after each week put back in. The per-user page is where a wrong
-call gets fixed: grant saver hours, take hours off a week, or force a week to
-pass or fail outright.
+call gets fixed: grant saver hours, take hours off a week, force a week to
+pass or fail outright, or give someone extra days on the last week.
 
 Every one of those is a thumb on the scale, so all of them are audit-logged
 with the reason the organizer typed.
 """
 
 import csv
+from datetime import timedelta
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -20,9 +21,12 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from ... import challenge, weeks
-from ...models import HourRemoval, SaverCredit, WeekOutcome
+from ...models import FinalWeekExtension, HourRemoval, SaverCredit, WeekOutcome
 from ...models import Profile
-from ..helpers import check_perms, staff_member_required, display_name, record_audit
+from ..helpers import (
+    check_perms, display_name, record_audit, run_in_background, send_slack_dm,
+    staff_member_required,
+)
 
 CHALLENGE_PERMS = ["atlantis_site.organizer"]
 
@@ -143,11 +147,12 @@ def challenge_user(request, user_id):
     User = get_user_model()
     target = get_object_or_404(User.objects.select_related("hackclub_profile"), id=user_id)
     outcomes = {row.week_index: row for row in WeekOutcome.objects.filter(user=target)}
+    state = challenge.standing(target)
 
     return render(request, "root/challenge_user.html", {
         "target": target,
         "name": display_name(target),
-        "standing": challenge.standing(target),
+        "standing": state,
         "outcomes": outcomes,
         "credits": (
             SaverCredit.objects.filter(user=target)
@@ -158,7 +163,21 @@ def challenge_user(request, user_id):
             .select_related("removed_by")[:50]
         ),
         "overrides": WeekOutcome.Override.choices,
+        "final_week": weeks.week_count(),
+        "extension": (
+            FinalWeekExtension.objects.filter(user=target).select_related("granted_by").first()
+        ),
+        "max_extension_days": weeks.max_extension_days(),
+        # Formatted here, in the program's zone: TIME_ZONE is UTC, so a
+        # template's |date would put 11:59 PM Eastern on the next day.
+        "usual_final_deadline": _eastern(weeks.deadline(weeks.week_count())),
+        "final_deadline": _eastern(state.weeks[-1].deadline),
     })
+
+
+def _eastern(moment):
+    local = moment.astimezone(weeks.zone())
+    return f"{local:%a %b} {local.day} at {local:%-I:%M %p}"
 
 
 @staff_member_required
@@ -306,6 +325,91 @@ def override_week(request, user_id):
     })
     messages.success(request, f"Week {week_index} override set.")
     return redirect("challenge_user", user_id=user_id)
+
+
+@staff_member_required
+@require_POST
+@check_perms(CHALLENGE_PERMS)
+def extend_final_week(request, user_id):
+    """Give one person extra days on the last week, change how many, or take
+    them away with 0.
+
+    Their last week then ends that many days after everyone else's, with the
+    usual two-hour buffer after it: time they record in those days counts
+    towards it, it can't be missed until then, and printers wait for them
+    until it has settled. It can be given after their week has closed, which
+    reopens it — the way to rescue someone who had an emergency over the
+    deadline. Capped by weeks.max_extension_days so there's still a day left
+    to ship the time in.
+    """
+    User = get_user_model()
+    target = get_object_or_404(User, id=user_id)
+    final = weeks.week_count()
+
+    try:
+        days = int(request.POST.get("days", "").strip())
+    except ValueError:
+        messages.error(request, "Days must be a whole number.")
+        return redirect("challenge_user", user_id=user_id)
+
+    most = weeks.max_extension_days()
+    if not 0 <= days <= most:
+        messages.error(request, f"Extend week {final} by 1 to {most} days, or 0 to take it away.")
+        return redirect("challenge_user", user_id=user_id)
+
+    note = request.POST.get("note", "").strip()[:200]
+    before = challenge.extension_days(target)
+    was_out = challenge.standing(target).eliminated
+    if days:
+        FinalWeekExtension.objects.update_or_create(
+            user=target, defaults={"days": days, "granted_by": request.user, "note": note},
+        )
+    else:
+        FinalWeekExtension.objects.filter(user=target).delete()
+    now_out = challenge.standing(target).eliminated
+
+    ends = weeks.deadline(final, days).astimezone(weeks.zone())
+    record_audit(request, "extend_final_week", target=f"{display_name(target)} week {final}", metadata={
+        "user_id": target.id,
+        "week": final,
+        "days": days,
+        "previous_days": before,
+        "deadline": ends.isoformat(),
+        "note": note,
+        "revived": was_out and not now_out,
+    })
+    # Told only when the deadline actually moved: re-saving the same number
+    # with a better note is bookkeeping, not news. The note stays internal.
+    profile = getattr(target, "hackclub_profile", None)
+    if days != before and profile is not None and profile.slack_id:
+        run_in_background(send_slack_dm, _extension_dm(final, days, ends), profile.slack_id)
+
+    if days:
+        messages.success(
+            request,
+            f"Week {final} now ends {_eastern(ends)} Eastern "
+            f"for {display_name(target)} (+{days} day{'s' if days != 1 else ''}).",
+        )
+    else:
+        messages.success(request, f"Took away {display_name(target)}'s week {final} extension.")
+    return redirect("challenge_user", user_id=user_id)
+
+
+def _extension_dm(final, days, ends):
+    """What someone is told when their last week's deadline moves."""
+    if not days:
+        return (
+            f"Your extension on week {final} of Atlantis has been removed, so week {final} "
+            f"ended {_eastern(ends)} Eastern, the same as everyone else's."
+        )
+    ship_by = _eastern(weeks.shipping_closes_at() - timedelta(seconds=1))
+    return (
+        f"An organizer gave you {days} extra day{'s' if days != 1 else ''} on week {final} "
+        f"of Atlantis: it now ends {_eastern(ends)} Eastern for you. Time you record "
+        f"until then counts towards week {final}, and towards your 40 printer hours once "
+        f"it's shipped. Shipping closes {ship_by} Eastern, so ship it before then. "
+        "https://atlantis.hackclub.com/dashboard/"
+    )
 
 
 def _week_arg(request):

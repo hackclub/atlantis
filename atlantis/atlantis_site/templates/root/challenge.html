@@ -40,14 +40,14 @@
                             W{{ index }}
                         </th>
                     {% endfor %}
-                    <th>Printer</th>
+                    <th title="logged / shipped / finalized">Printer</th>
                     <th>Status</th>
                 </tr>
             </thead>
             <tbody>
                 {% for row in rows %}
                     <tr>
-                        <td><a href="{% url 'challenge_user' row.user.id %}">{{ row.name }}</a></td>
+                        <td><a href="{% url 'challenge_user' row.user.id %}">{{ row.name }}</a>{% if row.standing.extension_days %} <span class="pill pill-warn" title="Extra days on the last week">+{{ row.standing.extension_days }}d</span>{% endif %}</td>
 
                         {% for week in row.standing.weeks %}
                             {% comment %}
@@ -68,7 +68,7 @@
                             </td>
                         {% endfor %}
 
-                        <td>{{ row.standing.printer_hours }}h</td>
+                        <td title="logged / shipped / finalized">{{ row.standing.printer_hours }}h / {{ row.standing.shipped_printer_hours }}h / {{ row.standing.finalized_printer_hours }}h</td>
                         <td>
                             {% if row.standing.eliminated %}
                                 <span class="pill pill-bad">out, needs {{ row.standing.saver_hours_needed }}h</span>

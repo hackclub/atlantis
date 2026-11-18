@@ -29,8 +29,11 @@ def challenge_context(user):
     return {
         "standing": state,
         "week": live,
-        "week_deadline": weeks.deadline(live.index).isoformat() if live else "",
+        # The week's own deadline, which for someone with an extension on
+        # the last week is later than everyone else's.
+        "week_deadline": live.deadline.isoformat() if live else "",
         "weekly_hours": weeks.WEEKLY_HOURS,
+        "printer_hours_total": weeks.printer_hours(),
         "program_starts": weeks.starts_at().isoformat(),
         "dropped_reason": challenge.elimination_reason(user),
         # During the prep weeks after the program, when they end.

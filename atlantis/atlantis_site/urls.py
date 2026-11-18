@@ -109,5 +109,6 @@ urlpatterns = [
     path("root/challenge/<int:user_id>/remove/", remove_hours, name="remove_hours"),
     path("root/challenge/<int:user_id>/remove/<int:removal_id>/undo/", undo_hour_removal, name="undo_hour_removal"),
     path("root/challenge/<int:user_id>/override/", override_week, name="override_week"),
+    path("root/challenge/<int:user_id>/extend/", extend_final_week, name="extend_final_week"),
     path("users/<int:user_id>/", user_profile, name="user_profile")
 ]

@@ -77,6 +77,34 @@
         </table>
     </div>
 
+    <h3>Week {{ final_week }} extension</h3>
+    <p class="muted">
+        Extra days on week {{ final_week }} for this person only. Time they record in
+        those days counts towards it (pearls for it stay at the prep rate), it can't be
+        missed until it ends, and printers wait for them until then. Giving it after the
+        week has closed reopens it. Everyone else's ends {{ usual_final_deadline }}
+        Eastern; up to {{ max_extension_days }} more days. Set 0 to take it away.
+    </p>
+    {% if extension %}
+        <p>
+            <span class="pill pill-warn">+{{ extension.days }} day{{ extension.days|pluralize }}</span>
+            Ends {{ final_deadline }} Eastern.
+            Set by {{ extension.granted_by.username|default:"someone" }}{% if extension.note %}: {{ extension.note }}{% endif %}
+        </p>
+    {% endif %}
+    <form method="post" action="{% url 'extend_final_week' target.id %}" class="inline-form">
+        {% csrf_token %}
+        <label>Days
+            <input type="number" name="days" min="0" max="{{ max_extension_days }}"
+                   value="{% if extension %}{{ extension.days }}{% else %}1{% endif %}" required>
+        </label>
+        <label>Why
+            <input type="text" name="note" maxlength="200" placeholder="Illness, family emergency, etc."
+                   value="{{ extension.note|default:'' }}">
+        </label>
+        <button type="submit">Set</button>
+    </form>
+
     <h3>Grant saver hours</h3>
     <p class="muted">
         Free hours on a week. Enough on the earliest missed week puts them back in.

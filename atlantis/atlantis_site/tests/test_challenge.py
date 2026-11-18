@@ -580,7 +580,8 @@ class PrinterBarTests(BaseTestCase):
             state = challenge.standing(self.user)
             self.assertEqual(state.printer_hours, 40)
             self.assertEqual(state.printer_percent, 100)
-            self.assertTrue(state.printer_unlocked)
+            # The bar is logged time; a printer needs it shipped and finalized.
+            self.assertFalse(state.printer_unlocked)
 
 
 class PayoutSplitTests(BaseTestCase):
@@ -945,9 +946,13 @@ class PrinterClaimTests(BaseTestCase):
         self.project = make_project(self.user)
         self.client.force_login(self.user)
 
-    def _survive_the_program(self):
-        journal = make_journal(self.project, time_spent=0)
-        make_timelapse(self.project, journal=journal, minutes=300, recorded_at=in_week(1))
+    def _survive_the_program(self, status=Ship.ShipStatus.FINALIZED, when=None, minutes=300):
+        """Week 1's five, logged and shipped. A ship's status is all that
+        decides whether its hours are finalized."""
+        ship = Ship.objects.create(project=self.project, status=status)
+        journal = make_journal(self.project, ship=ship, time_spent=0)
+        make_timelapse(self.project, journal=journal, minutes=minutes, recorded_at=when or in_week(1))
+        return ship
 
     def _claim(self, printer, slug="bambu"):
         return self.client.post(
@@ -978,6 +983,171 @@ class PrinterClaimTests(BaseTestCase):
             response = self._claim("A1 Mini")
             self.assertFalse(PrinterClaim.objects.exists())
             self.assertTrue(any("out of the program" in m for m in message_texts(response)))
+
+    def test_logged_but_unshipped_hours_do_not_pass(self):
+        with after_week(1):
+            journal = make_journal(self.project, time_spent=0)
+            make_timelapse(self.project, journal=journal, minutes=300, recorded_at=in_week(1))
+            state = challenge.standing(self.user)
+            self.assertFalse(state.eliminated)
+            self.assertFalse(state.passed)
+            response = self._claim("A1 Mini")
+            self.assertFalse(PrinterClaim.objects.exists())
+            self.assertTrue(any("shipped to pass" in m for m in message_texts(response)))
+
+    def test_shipped_but_unfinalized_hours_pass_but_cannot_claim(self):
+        with after_week(1):
+            self._survive_the_program(status=Ship.ShipStatus.T2_QUEUE)
+            state = challenge.standing(self.user)
+            self.assertTrue(state.passed)
+            self.assertFalse(state.can_claim_printer)
+            response = self._claim("A1 Mini")
+            self.assertFalse(PrinterClaim.objects.exists())
+            self.assertTrue(any("have to be finalized" in m for m in message_texts(response)))
+
+    def test_a_rejected_ship_is_not_shipped(self):
+        with after_week(1):
+            self._survive_the_program(status=Ship.ShipStatus.REJECTED)
+            self.assertEqual(challenge.standing(self.user).shipped_printer_minutes, 0)
+
+    def test_finalized_prep_hours_do_not_count(self):
+        with after_week(1):
+            # Plenty finalized, but before week 1 and in the prep weeks after:
+            # week 1 itself is met by logged time that was never shipped.
+            self._survive_the_program(when=before_the_program(), minutes=600)
+            self._survive_the_program(when=weeks.ends_at() + timedelta(days=2), minutes=600)
+            journal = make_journal(self.project, time_spent=0)
+            make_timelapse(self.project, journal=journal, minutes=300, recorded_at=in_week(1))
+            state = challenge.standing(self.user)
+            self.assertFalse(state.eliminated)
+            self.assertEqual(state.finalized_printer_minutes, 0)
+            response = self._claim("A1 Mini")
+            self.assertFalse(PrinterClaim.objects.exists())
+
+    def test_finalized_time_counts_five_a_week_and_no_more(self):
+        with after_week(2):
+            self._survive_the_program(minutes=500)
+            self._survive_the_program(when=in_week(2), minutes=60)
+            # Weeks 1 and 2 are a grace pair: 9h40m split 500/60 still banks
+            # its ten, less the 20 minutes short.
+            self.assertEqual(challenge.standing(self.user).finalized_printer_minutes, 560)
+
+    def test_a_week_rescued_with_savers_counts_its_saver_hours(self):
+        with after_week(1):
+            self._survive_the_program(minutes=240)
+            SaverCredit.objects.create(user=self.user, week_index=1)
+            state = challenge.standing(self.user)
+            self.assertTrue(state.can_claim_printer)
+
+    def test_a_week_an_organizer_passed_counts_its_five(self):
+        with after_week(2):
+            self._survive_the_program(minutes=600)  # weeks 1 and 2's ten, all in week 1
+            WeekOutcome.objects.create(
+                user=self.user, week_index=2, override=WeekOutcome.Override.PASS
+            )
+            # Week 1's ten already fill the pair; the pass can't push it past.
+            self.assertEqual(challenge.standing(self.user).finalized_printer_minutes, 600)
+
+    def test_a_passed_week_with_nothing_shipped_still_unlocks(self):
+        with after_week(1):
+            WeekOutcome.objects.create(
+                user=self.user, week_index=1, override=WeekOutcome.Override.PASS
+            )
+            state = challenge.standing(self.user)
+            self.assertEqual(state.shipped_printer_minutes, 300)
+            self.assertTrue(state.passed)
+            self.assertTrue(state.can_claim_printer)
+
+    def test_cut_time_does_not_count_as_finalized(self):
+        with after_week(1):
+            ship = self._survive_the_program()
+            journal = ship.journals.get()
+            approve_timelapse(journal, removals=[(journal.timelapses.get(), 0, 600)])
+            state = challenge.standing(self.user)
+            self.assertEqual(state.finalized_printer_minutes, 290)
+            self.assertFalse(state.can_claim_printer)
+
+    def test_the_bulk_standings_agree_on_shipped_hours(self):
+        with after_week(1):
+            self._survive_the_program(status=Ship.ShipStatus.T3_QUEUE)
+            bulk = challenge.standings_for([self.user.id])[self.user.id]
+            self.assertEqual(bulk.shipped_printer_minutes, 300)
+            self.assertEqual(bulk.finalized_printer_minutes, 0)
+
+    def _every_week(self):
+        for index in range(1, 9):
+            self._survive_the_program(when=in_week(index))
+
+    @override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+    def test_buying_waits_for_the_buffer_after_the_last_week(self):
+        """Week 8 ends at midnight going into Wed Nov 18; its buffer runs to 2am."""
+        self._every_week()
+        with patch("django.utils.timezone.now", return_value=et("2026-11-18 00:30")):
+            state = challenge.standing(self.user)
+            self.assertTrue(state.ended)
+            self.assertFalse(state.settled)
+            self.assertFalse(state.passed)
+            self.assertFalse(state.can_claim_printer)
+            response = self._claim("A1")
+            self.assertFalse(PrinterClaim.objects.exists())
+            self.assertTrue(any("go on sale Wed Nov 18 at 2:00 AM" in m for m in message_texts(response)))
+        cache.clear()  # the view is rate limited; this is a second, deliberate claim
+        with patch("django.utils.timezone.now", return_value=et("2026-11-18 02:00")):
+            self.assertTrue(challenge.standing(self.user).can_claim_printer)
+            self._claim("A1")
+            self.assertTrue(PrinterClaim.objects.exists())
+
+    @override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+    def test_unpaid_week_8_makeup_cannot_buy_in_the_buffer(self):
+        """Short on weeks 7 and 8 only by makeup: not out until 2am, so the
+        buffer is the one window they could have bought in."""
+        from ..models import TimelapseRemoval
+        self._every_week()
+        ship = self._survive_the_program(when=in_week(1), minutes=120)
+        recording = ship.journals.get().timelapses.get()
+        review = approve_timelapse(recording.journal)
+        # 90 minutes cut during week 8 is owed as makeup in week 8.
+        TimelapseRemoval.objects.create(
+            review=review, session=recording, start_seconds=0, end_seconds=5400,
+            reason="afk", counts_toward_makeup=True, created_at=in_week(8),
+        )
+        with patch("django.utils.timezone.now", return_value=et("2026-11-18 00:30")):
+            state = challenge.standing(self.user)
+            self.assertFalse(state.eliminated)
+            self.assertTrue(state.all_finalized)
+            self.assertFalse(state.can_claim_printer)
+            self._claim("A1")
+            self.assertFalse(PrinterClaim.objects.exists())
+        with patch("django.utils.timezone.now", return_value=et("2026-11-18 02:00")):
+            state = challenge.standing(self.user)
+            self.assertTrue(state.eliminated)
+            self.assertFalse(state.can_claim_printer)
+
+    def test_an_identity_hca_says_is_ineligible_cannot_buy(self):
+        Profile.objects.filter(user=self.user).update(
+            verification_status="verified", ysws_eligible=False
+        )
+        with after_week(1):
+            self._survive_the_program()
+            self.assertTrue(challenge.standing(self.user).can_claim_printer)
+            chart = self.client.get(reverse("printer_track", args=["bambu"]))
+            self.assertNotContains(chart, 'class="star-buy"')
+            response = self._claim("A1")
+            self.assertFalse(PrinterClaim.objects.exists())
+            self.assertTrue(any("YSWS-eligible" in m for m in message_texts(response)))
+
+    def test_hours_on_a_locked_project_do_not_count(self):
+        with after_week(1):
+            self._survive_the_program()
+            self.project.locked = True
+            self.project.save()
+            state = challenge.standing(self.user)
+            self.assertFalse(state.eliminated)  # still logged, so still in
+            self.assertEqual(state.shipped_printer_minutes, 0)
+            self.assertEqual(state.finalized_printer_minutes, 0)
+            response = self._claim("A1")
+            self.assertFalse(PrinterClaim.objects.exists())
+            self.assertTrue(any("shipped to pass" in m for m in message_texts(response)))
 
     def test_claiming_spends_the_whole_path(self):
         with after_week(1):
@@ -1135,10 +1305,14 @@ class RemindWeekCommandTests(BaseTestCase):
         self._settle_weeks_1_to_6()
         self._log(120, et("2026-11-04 10:00"))
         self._log(60, et("2026-11-11 10:00"))
+        # Week 8 is extended to Tuesday, so its reminder is Monday evening.
         self._run("2026-11-14 18:05")
+        self.dm.assert_not_called()
+        self._run("2026-11-16 18:05")
         self.dm.assert_called_once()
         text = self.dm.call_args.args[0]
         self.assertIn("week 8", text)
+        self.assertIn("ends tomorrow (Tuesday)", text)
         self.assertIn("3h 0m of the 10 hours across weeks 7 and 8", text)
         self.assertIn("7h 0m", text)
 
@@ -1526,7 +1700,8 @@ class PageRenderTests(BaseTestCase):
         self.client.force_login(self.user)
 
     def _survive(self):
-        journal = make_journal(self.project, time_spent=0)
+        ship = Ship.objects.create(project=self.project, status=Ship.ShipStatus.FINALIZED)
+        journal = make_journal(self.project, ship=ship, time_spent=0)
         make_timelapse(self.project, journal=journal, minutes=300, recorded_at=in_week(1))
 
     def test_the_chart_room_renders_in_every_state(self):
@@ -1535,47 +1710,52 @@ class PageRenderTests(BaseTestCase):
                 self._survive()
                 self.assertEqual(self.client.get(reverse("printer_select")).status_code, 200)
 
-    # The claim strip is off the front end for now, so a chart is the same map
-    # in every state. These still render all of them: the view hands the
-    # template a standing, a claim and the affordability sums whatever the week
-    # is, and one of those going missing is a template error, not a wrong page.
-    # What the strip used to drive is covered against the views themselves, in
-    # PrinterClaimTests.
+    # The claim strip: what's shown is checked here, what's enforced against
+    # the views themselves in PrinterClaimTests.
 
-    def _chart_carries_no_claim_ui(self, response):
+    def _chart(self):
+        response = self.client.get(reverse("printer_track", args=["bambu"]))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Make this my chart")
-        self.assertNotContains(response, "Claim this printer")
-        self.assertNotContains(response, "printer hours banked")
+        return response
 
-    def test_a_chart_renders_while_the_program_runs(self):
+    def test_a_chart_has_no_claim_form_while_the_program_runs(self):
         with during_week(1):
-            self._chart_carries_no_claim_ui(
-                self.client.get(reverse("printer_track", args=["bambu"]))
-            )
+            response = self._chart()
+            self.assertNotContains(response, "Make this my chart")
+            self.assertNotContains(response, 'class="star-buy"')
 
-    def test_a_chart_renders_once_the_program_is_over(self):
+    def test_a_chart_has_the_claim_form_once_every_hour_is_finalized(self):
         with after_week(1):
             self._survive()
-            self._chart_carries_no_claim_ui(
-                self.client.get(reverse("printer_track", args=["bambu"]))
-            )
+            response = self._chart()
+            # One button under every star, priced and named for that printer.
+            from ..printers import track
+            printers = track("bambu")["printers"]
+            self.assertContains(response, 'class="star-buy"', count=len(printers))
+            self.assertContains(response, 'aria-label="Buy A1 for 230 pearls"')
+            self.assertNotContains(response, "Make this my chart")
+
+    def test_a_chart_holds_the_claim_while_ships_are_in_review(self):
+        with after_week(1):
+            self._survive()
+            Ship.objects.update(status=Ship.ShipStatus.T3_QUEUE)
+            response = self._chart()
+            self.assertNotContains(response, 'class="star-buy"')
 
     def test_a_chart_renders_after_claiming(self):
         with after_week(1):
             self._survive()
             self.client.post(reverse("claim_printer", args=["bambu"]), {"printer": "A1"})
             self.assertTrue(PrinterClaim.objects.exists())
-            self._chart_carries_no_claim_ui(
-                self.client.get(reverse("printer_track", args=["bambu"]))
-            )
+            response = self._chart()
+            self.assertNotContains(response, 'class="star-buy"')
 
     def test_a_chart_renders_for_someone_who_is_out(self):
         with after_week(2):
             self._survive()
             response = self.client.get(reverse("printer_track", args=["bambu"]))
             self.assertEqual(response.status_code, 200)
-            self.assertNotContains(response, "Claim this printer")
+            self.assertNotContains(response, 'class="star-buy"')
 
     def test_the_shop_and_an_item_page_render_with_savers_on_them(self):
         Item.objects.create(
@@ -1628,3 +1808,212 @@ class PageRenderTests(BaseTestCase):
             self.assertEqual(
                 [line.label for line in response.context["payout_lines"]], ["Week 1"]
             )
+
+
+@override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
+class FinalWeekExtensionTests(BaseTestCase):
+    """Extra days on the last week for one person, granted by an organizer.
+
+    Week 8 ends Tue Nov 17 11:59pm for everyone; three more days moves it to
+    Fri Nov 20 for whoever has them, with the buffer to 2am Sat Nov 21.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.organizer = grant_perms(make_user("organizer", slack_id="U0ORG"), "organizer")
+        self.user = make_user("shipper", slack_id="U0SHIP", layers=1000)
+        self.project = make_project(self.user)
+
+    def _extend(self, days):
+        from ..models import FinalWeekExtension
+        FinalWeekExtension.objects.update_or_create(
+            user=self.user, defaults={"days": days, "granted_by": self.organizer},
+        )
+
+    def _ship(self, minutes, when, status=Ship.ShipStatus.FINALIZED):
+        ship = Ship.objects.create(project=self.project, status=status)
+        journal = make_journal(self.project, ship=ship, time_spent=0)
+        make_timelapse(self.project, journal=journal, minutes=minutes, recorded_at=when)
+
+    def _weeks_1_to_7(self):
+        for index in range(1, 8):
+            self._ship(300, in_week(index))
+
+    def _at(self, text):
+        return patch("django.utils.timezone.now", return_value=et(text))
+
+    def test_the_week_math(self):
+        self.assertEqual(weeks.week_bounds(8, 3)[1], et("2026-11-21 00:00"))
+        self.assertEqual(weeks.deadline(8, 3), et("2026-11-20 23:59:59"))
+        self.assertEqual(weeks.week_for(et("2026-11-19 12:00"), 3), 8)
+        self.assertIsNone(weeks.week_for(et("2026-11-19 12:00")))
+        # Their buffer is after their own end; everyone else's is just week 8.
+        self.assertEqual(weeks.buffer_week(et("2026-11-21 01:00"), 3), 8)
+        self.assertIsNone(weeks.buffer_week(et("2026-11-18 01:00"), 3))
+        self.assertEqual(weeks.settled_at(3), et("2026-11-21 02:00"))
+        self.assertEqual(weeks.week_label(8, 3), "Week 8 · Nov 9–20")
+        # Ends a whole day before shipping closes at midnight going into Nov 30.
+        self.assertEqual(weeks.max_extension_days(), 11)
+        self.assertEqual(weeks.deadline(8, 11), et("2026-11-28 23:59:59"))
+
+    @override_settings(CHALLENGE_WEEKS=9)
+    def test_only_the_last_week_moves(self):
+        self.assertEqual(weeks.week_bounds(8, 3)[1], et("2026-11-16 00:00"))
+        self.assertEqual(weeks.week_bounds(9, 3)[1], et("2026-11-26 00:00"))
+
+    def test_time_in_the_extension_counts_and_they_are_not_out(self):
+        self._weeks_1_to_7()
+        self._ship(120, in_week(8))
+        self._ship(180, et("2026-11-19 15:00"))  # Thursday, inside their extension
+        self._extend(3)
+        with self._at("2026-11-19 16:00"):
+            state = challenge.standing(self.user)
+            self.assertEqual(state.current.index, 8)
+            self.assertTrue(state.current.extended)
+            self.assertFalse(state.eliminated)
+            self.assertEqual(state.current.grace_minutes, 600)
+            self.assertEqual(state.finalized_printer_minutes, 2400)
+
+    def test_without_it_the_same_person_is_out(self):
+        self._weeks_1_to_7()
+        self._ship(120, in_week(8))
+        self._ship(180, et("2026-11-19 15:00"))
+        with self._at("2026-11-19 16:00"):
+            state = challenge.standing(self.user)
+            self.assertTrue(state.eliminated)
+            self.assertEqual(state.finalized_printer_minutes, 2220)
+
+    def test_it_can_reopen_a_week_that_already_closed_short(self):
+        self._weeks_1_to_7()
+        self._ship(120, in_week(8))
+        with self._at("2026-11-18 12:00"):
+            self.assertTrue(challenge.standing(self.user).eliminated)
+            self._extend(3)
+            state = challenge.standing(self.user)
+            self.assertFalse(state.eliminated)
+            self.assertEqual(state.current.index, 8)
+
+    def test_printers_wait_for_their_own_settle(self):
+        self._weeks_1_to_7()
+        self._ship(300, in_week(8))
+        self._extend(3)
+        with self._at("2026-11-18 03:00"):
+            self.assertFalse(challenge.standing(self.user).can_claim_printer)
+        with self._at("2026-11-21 02:00"):
+            self.assertTrue(challenge.standing(self.user).can_claim_printer)
+
+    def test_the_whole_field_agrees_with_one_person(self):
+        self._weeks_1_to_7()
+        self._ship(120, in_week(8))
+        self._ship(180, et("2026-11-19 15:00"))
+        self._extend(3)
+        with self._at("2026-11-19 16:00"):
+            one = challenge.standing(self.user)
+            bulk = challenge.standings_for([self.user.id])[self.user.id]
+            self.assertEqual(bulk.eliminated, one.eliminated)
+            self.assertEqual(bulk.current.index, 8)
+            self.assertEqual(bulk.finalized_printer_minutes, one.finalized_printer_minutes)
+            self.assertNotIn(self.user.id, challenge.rescued_by_buffer())
+
+    def test_close_week_leaves_their_week_8_until_it_closes_for_them(self):
+        self._weeks_1_to_7()
+        self._ship(120, in_week(8))
+        self._extend(3)
+        def told(dm):
+            # The organizer's own empty account is DMed too; only the shipper matters.
+            return [c for c in dm.call_args_list if c.args[1] == "U0SHIP"]
+
+        with self._at("2026-11-18 03:00"), patch("atlantis_site.views.helpers.send_slack_dm") as dm:
+            call_command("close_week", stdout=StringIO())
+            self.assertFalse(WeekOutcome.objects.filter(user=self.user, week_index=8).exists())
+            self.assertEqual(told(dm), [])
+        with self._at("2026-11-21 03:00"), patch("atlantis_site.views.helpers.send_slack_dm") as dm:
+            call_command("close_week", stdout=StringIO())
+            row = WeekOutcome.objects.get(user=self.user, week_index=8)
+            self.assertFalse(row.passed)
+            self.assertEqual(len(told(dm)), 1)
+
+    def test_the_dashboard_counts_down_to_their_deadline(self):
+        self._extend(3)
+        self.client.force_login(self.user)
+        with self._at("2026-11-19 16:00"):
+            response = self.client.get(reverse("dashboard"))
+            self.assertEqual(response.context["week_deadline"], et("2026-11-20 23:59:59").isoformat())
+
+    def test_an_organizer_sets_changes_and_takes_it_away(self):
+        from ..models import FinalWeekExtension
+        self.client.force_login(self.organizer)
+        url = reverse("extend_final_week", args=[self.user.id])
+        with self._at("2026-11-17 12:00"):
+            response = self.client.post(url, {"days": "3", "note": "flu"}, follow=True)
+            extension = FinalWeekExtension.objects.get(user=self.user)
+            self.assertEqual((extension.days, extension.note, extension.granted_by), (3, "flu", self.organizer))
+            self.assertTrue(any("Fri Nov 20 at 11:59 PM" in m for m in message_texts(response)))
+            self.assertTrue(AuditLog.objects.filter(action="extend_final_week").exists())
+
+            page = self.client.get(reverse("challenge_user", args=[self.user.id]))
+            self.assertContains(page, "+3 days")
+            self.assertContains(page, "Fri Nov 20 at 11:59 PM")
+            self.assertContains(self.client.get(reverse("challenge_dash")), "+3d")
+
+            self.client.post(url, {"days": "5"})
+            self.assertEqual(FinalWeekExtension.objects.get(user=self.user).days, 5)
+
+            self.client.post(url, {"days": "0"})
+            self.assertFalse(FinalWeekExtension.objects.exists())
+
+    def test_shipping_in_the_extension_completes_the_program_then_the_printer(self):
+        """Ship the extension's hours, pass once their week settles, buy once
+        that ship is finalized."""
+        self._weeks_1_to_7()
+        self._ship(120, in_week(8))
+        self._extend(3)
+        with self._at("2026-11-19 15:00"):
+            self.assertEqual(challenge.shipping_blocked_reason(self.user), "")
+        self._ship(180, et("2026-11-19 15:00"), status=Ship.ShipStatus.T1_QUEUE)
+        with self._at("2026-11-21 03:00"):
+            state = challenge.standing(self.user)
+            self.assertEqual(state.shipped_printer_minutes, 2400)
+            self.assertTrue(state.passed)
+            self.assertFalse(state.can_claim_printer)
+        Ship.objects.filter(status=Ship.ShipStatus.T1_QUEUE).update(status=Ship.ShipStatus.FINALIZED)
+        with self._at("2026-11-21 03:00"):
+            self.assertTrue(challenge.standing(self.user).can_claim_printer)
+
+    def test_they_are_dmed_when_their_deadline_moves(self):
+        self.client.force_login(self.organizer)
+        url = reverse("extend_final_week", args=[self.user.id])
+        with self._at("2026-11-17 12:00"), \
+                patch("atlantis_site.views.admin.challenge.send_slack_dm") as dm:
+            self.client.post(url, {"days": "3", "note": "private reason"})
+            dm.assert_called_once()
+            text, slack_id = dm.call_args.args
+            self.assertEqual(slack_id, "U0SHIP")
+            self.assertIn("3 extra days on week 8", text)
+            self.assertIn("Fri Nov 20 at 11:59 PM", text)
+            self.assertIn("Shipping closes Sun Nov 29 at 11:59 PM", text)
+            self.assertNotIn("private reason", text)
+
+            # Same days, new note: nothing moved, so nothing to tell them.
+            self.client.post(url, {"days": "3", "note": "flu, confirmed"})
+            dm.assert_called_once()
+
+            self.client.post(url, {"days": "0"})
+            self.assertEqual(dm.call_count, 2)
+            self.assertIn("removed", dm.call_args.args[0])
+            self.assertIn("Tue Nov 17 at 11:59 PM", dm.call_args.args[0])
+
+    def test_an_extension_past_the_cap_is_refused(self):
+        from ..models import FinalWeekExtension
+        self.client.force_login(self.organizer)
+        with self._at("2026-11-17 12:00"):
+            for days in ("12", "-1", "two"):
+                with self.subTest(days=days):
+                    self.client.post(reverse("extend_final_week", args=[self.user.id]), {"days": days})
+                    self.assertFalse(FinalWeekExtension.objects.exists())
+
+    def test_only_organizers_can_extend(self):
+        from ..models import FinalWeekExtension
+        self.client.force_login(grant_perms(make_user("t1", slack_id="U0T1"), "t1_review"))
+        self.client.post(reverse("extend_final_week", args=[self.user.id]), {"days": "3"})
+        self.assertFalse(FinalWeekExtension.objects.exists())

@@ -113,7 +113,16 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
         <a class="streak-action" href="{% url 'shop' %}">Buy a missed-week saver</a>
     {% elif standing.started and not week %}
         <p class="streak-note">
-            The eight weeks are over.{% if standing.printer_unlocked %} Your printer is waiting on the charts.{% endif %}
+            The eight weeks are over.
+            {% if not standing.settled %}
+                Results are final at 2:00 AM Eastern, once the last week's buffer closes.
+            {% elif standing.can_claim_printer %}
+                You passed, and your printer is waiting on the charts.
+            {% elif standing.passed %}
+                You passed! {{ standing.finalized_printer_hours }} of your {{ printer_hours_total }} hours are finalized; you can buy a printer once the rest are.
+            {% else %}
+                To pass, all {{ printer_hours_total }} hours from the eight weeks have to be shipped. You've shipped {{ standing.shipped_printer_hours }}.
+            {% endif %}
         </p>
         {% if post_prep_ends %}
             <p class="streak-note">

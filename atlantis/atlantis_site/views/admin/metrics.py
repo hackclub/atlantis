@@ -267,6 +267,8 @@ def build_streak_stats(now):
         "live_label": weeks.week_label(live_index) if live_index else "",
         "weekly_hours": weeks.WEEKLY_HOURS,
         "printer_unlocked": sum(1 for s in still_in if s.printer_unlocked),
+        "passed": sum(1 for s in still_in if s.passed),
+        "printer_hours": weeks.printer_hours(),
         "still_in_projects": still_in_projects,
         "still_in_shipped": still_in_shipped,
         "avg_projects_still_in": _avg(still_in_projects, len(still_in)),
@@ -642,9 +644,12 @@ def build_metrics(now):
     # "this week" here. The month starts from the local date for the same DST
     # reason week_start does.
     month_start = datetime.combine(today.replace(day=1), time.min, tzinfo=timezone.get_current_timezone())
-    ships_today = Ship.objects.filter(created_at__gte=today_start)
-    ships_this_week = Ship.objects.filter(created_at__gte=week_start)
-    ships_this_month = Ship.objects.filter(created_at__gte=month_start)
+    # Each window runs up to `now`: build_metrics can be asked about a moment
+    # other than the present, and a ship made after it isn't in its "today".
+    so_far = Ship.objects.filter(created_at__lte=now)
+    ships_today = so_far.filter(created_at__gte=today_start)
+    ships_this_week = so_far.filter(created_at__gte=week_start)
+    ships_this_month = so_far.filter(created_at__gte=month_start)
     ships_challenge = Ship.objects.filter(
         created_at__gte=weeks.starts_at(), created_at__lt=weeks.ends_at()
     )

@@ -1678,6 +1678,37 @@ class HourRemoval(models.Model):
 		return f"{self.hours}h removed from {self.user_id}, week {self.week_index}"
 
 
+class FinalWeekExtension(models.Model):
+	"""Extra days an organizer gave one person on the program's last week.
+
+	One row per person, holding the total, not one per grant: changing it
+	overwrites `days`, and taking it away deletes the row. The audit log keeps
+	the history. Only the last week can be extended for one person, since any
+	other would run into the week after it. weeks.py takes these days as
+	`extra`; challenge.py looks them up (extension_days_by_user).
+	"""
+
+	user = models.OneToOneField(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="final_week_extension",
+	)
+	days = models.PositiveSmallIntegerField()
+	granted_by = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.SET_NULL,
+		related_name="final_week_extensions_granted",
+		null=True,
+		blank=True,
+	)
+	note = models.CharField(max_length=200, blank=True, default="")
+	created_at = models.DateTimeField(auto_now_add=True)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	def __str__(self):
+		return f"{self.user_id}: last week +{self.days}d"
+
+
 class ShopCategory(models.Model):
 	"""Where a category's shelf sits on the shop page.
 
