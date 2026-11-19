@@ -260,6 +260,19 @@
         }
 
         boxes.forEach(function (box) { box.addEventListener('change', render); });
+
+        // One press for the whole list. Each box gets its own change event so
+        // the draft saves it like a click would, and the gate re-renders.
+        var all = document.querySelector('[data-checklist-all]');
+        if (all) {
+            all.addEventListener('click', function () {
+                boxes.forEach(function (box) {
+                    if (box.checked) return;
+                    box.checked = true;
+                    box.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            });
+        }
         render();
     }
 
