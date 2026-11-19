@@ -48,6 +48,12 @@
             {% endfor %}
         </ol>
 
+        {% if total_wait %}
+            <p class="qs-total">
+                Shipping now? Expect <span class="qs-value">{{ total_wait }}</span> to get through all four.
+            </p>
+        {% endif %}
+
         <footer class="qs-footer">
             <p>
                 Updated <time datetime="{{ updated_at|date:'c' }}">{{ updated_at|timesince }} ago</time>

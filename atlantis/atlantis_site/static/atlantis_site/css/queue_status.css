@@ -201,6 +201,20 @@ body.qs {
 
 /* ------------------------------------------------------------- footer */
 
+.qs-total {
+    margin: 14px 0 0;
+    border: 1px solid var(--qs-border);
+    border-radius: 16px;
+    padding: 16px 22px;
+    color: var(--qs-muted);
+    font-size: 15px;
+}
+
+.qs-total .qs-value {
+    color: var(--qs-text);
+    font-variant-numeric: tabular-nums;
+}
+
 .qs-footer {
     margin-top: 32px;
     padding-top: 20px;
