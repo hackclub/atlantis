@@ -1,5 +1,7 @@
-"""A reviewer can't open or decide on their own project at T1, T2 or Lookout."""
+"""A reviewer can't open or decide on their own project at T1, T2 or Lookout,
+except under DEBUG."""
 
+from django.test import override_settings
 from django.urls import reverse
 
 from ..models import Ship, T1, T2, TimelapseReview
@@ -82,3 +84,46 @@ class OwnProjectReviewTests(BaseTestCase):
 			response, reverse("timelapse_review_project", args=[self.other.id]),
 			fetch_redirect_response=False,
 		)
+
+
+@override_settings(DEBUG=True)
+class OwnProjectReviewInDebugTests(BaseTestCase):
+	"""Locally the developer is usually the only user, so DEBUG lets them
+	review what they shipped themselves."""
+
+	def setUp(self):
+		super().setUp()
+		self.reviewer = grant_perms(
+			make_user("rev"), "t1_review", "t2_review", "timelapse_review",
+		)
+		self.client.force_login(self.reviewer)
+		self.own = make_project(self.reviewer, shippable=True)
+
+	def test_t1_page_and_decision_allowed(self):
+		ship = make_ship(self.own)
+		response = self.client.get(reverse("review_project", args=[ship.id]))
+		self.assertEqual(response.status_code, 200)
+
+		self.client.post(
+			reverse("t1_decision", args=[ship.id]),
+			{"approved": "approved", "feedback": "", **t1_checklist()},
+		)
+		ship.refresh_from_db()
+		self.assertEqual(ship.status, Ship.ShipStatus.T2_QUEUE)
+
+	def test_t1_next_offers_own_ship(self):
+		ship = make_ship(self.own)
+		response = self.client.get(reverse("review_next"))
+		self.assertRedirects(
+			response, reverse("review_project", args=[ship.id]), fetch_redirect_response=False,
+		)
+
+	def test_t2_decision_allowed(self):
+		ship = make_ship(self.own, status=Ship.ShipStatus.T2_QUEUE)
+		self.client.post(reverse("t2_decision", args=[ship.id]), {"decision": T2.Decision.APPROVE})
+		self.assertTrue(T2.objects.filter(ship=ship).exists())
+
+	def test_lookout_page_opens(self):
+		make_journal(self.own)
+		response = self.client.get(reverse("timelapse_review_project", args=[self.own.id]))
+		self.assertEqual(response.status_code, 200)

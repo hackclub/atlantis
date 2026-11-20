@@ -1,5 +1,5 @@
 {% extends 'root/_base_root.html' %}
-{% load static %}
+{% load static review_streak %}
 
 {% block body_class %} review-shell{% endblock %}
 {% block nav %}{% endblock %}
@@ -27,6 +27,7 @@
             {% else %}
                 <span class="rv-position rv-position-off">not in queue</span>
             {% endif %}
+            {% streak_badge %}
         </div>
 
         <div class="rv-topbar-right">

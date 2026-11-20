@@ -20,6 +20,7 @@ from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked
 from ...submissions import build_generated_justification, build_override_justification, submit_ship
 from ..helpers import check_perms, staff_member_required, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, is_valid_image_url, random_storage_key, sniff_image_extension, validate_file_size, INT_FIELD_MAX, INT_FIELD_MIN
 from ...challenge import brackets_for, draw_brackets
+from .streak import record_decision
 from .queue import (
     QUEUES, annotate_recordings, dash_context, decorate_rows, filter_rows,
     go_to_next, is_own_item, journal_stats, owner_snapshot, parse_skip,
@@ -430,6 +431,7 @@ def t1_decision(request, ship_id):
         "checklist": ticked(T1_CHECKLIST, request),
     })
 
+    record_decision(request, approved=approved)
     # Straight on to the next ship in the queue rather than back to the desk:
     # the desk is a place to start from, not somewhere to pass through between
     # every review.
@@ -683,6 +685,7 @@ def t2_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
+    record_decision(request, approved=decision == T2.Decision.APPROVE)
     return go_to_next(request, "t2", parse_skip(request) + [ship.id])
 
 @staff_member_required
@@ -921,6 +924,7 @@ def t3_decision(request, ship_id):
 
     if decision == T3.Decision.APPROVE:
         messages.info(request, AIRTABLE_QUEUED_MESSAGE)
+    record_decision(request, approved=decision == T3.Decision.APPROVE)
     return go_to_next(request, "t3", parse_skip(request) + [ship.id])
 
 @staff_member_required

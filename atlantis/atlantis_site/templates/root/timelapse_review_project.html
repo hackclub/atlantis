@@ -1,5 +1,5 @@
 {% extends 'root/_base_root.html' %}
-{% load static %}
+{% load static review_streak %}
 
 {% block body_class %} review-shell{% endblock %}
 {% block nav %}{% endblock %}
@@ -37,6 +37,7 @@
                     <strong>{{ queue_position }}</strong> / {{ queue_total }}
                 </span>
             {% endif %}
+            {% streak_badge %}
         </div>
 
         <div class="ta-topbar-right">

@@ -1,4 +1,4 @@
-{% load static %}
+{% load static review_streak %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,5 +14,8 @@
 
     {% block content %}
     {% endblock %}
+
+    {# The confetti and flames owed by the decision that led here, if any. #}
+    {% review_celebration %}
 </body>
 </html>

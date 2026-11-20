@@ -24,6 +24,7 @@ the thing that's authoritative.
 from dataclasses import dataclass
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.core.paginator import Paginator
@@ -382,6 +383,17 @@ def claims_for(queue_key, item_ids):
 # organizers, who are the last word on everything anyway.
 OWN_ITEM_BLOCKED = {"t1", "t2", "lookout"}
 
+
+def own_items_blocked(queue_key):
+    """Whether this desk turns reviewers away from their own items.
+
+    Never under DEBUG: a developer working locally is usually the only user
+    there is, and testing a desk means shipping a project and then reviewing
+    it themselves. Read on every call rather than at import, so it follows
+    override_settings.
+    """
+    return not settings.DEBUG and queue_key in OWN_ITEM_BLOCKED
+
 OWN_ITEM_MESSAGE = "You can't review your own project."
 
 
@@ -391,12 +403,12 @@ def owner_id_of(queue_key, item):
 
 
 def is_own_item(queue_key, item, user):
-    return queue_key in OWN_ITEM_BLOCKED and owner_id_of(queue_key, item) == user.id
+    return own_items_blocked(queue_key) and owner_id_of(queue_key, item) == user.id
 
 
 def exclude_own(queue_key, items, user):
     """`items` without the ones this reviewer may not review."""
-    if queue_key not in OWN_ITEM_BLOCKED or user is None:
+    if not own_items_blocked(queue_key) or user is None:
         return items
     if queue_key == "lookout":
         return items.exclude(owner_id=user.id)

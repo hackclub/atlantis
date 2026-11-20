@@ -43,6 +43,7 @@ from ..helpers import (
     staff_member_required, check_perms, display_name, format_minutes, record_audit, reviewer_leaderboards,
     run_in_background, send_slack_dm,
 )
+from .streak import record_decision
 from .queue import (
     QUEUES, dash_context, decorate_lapses, decorate_rows, filter_rows, go_to_next,
     is_own_item, next_item_id, owner_snapshot, parse_skip, refuse_own_item,
@@ -677,6 +678,9 @@ def timelapse_decision(request, project_id):
             f"{dropped} range{'' if dropped == 1 else 's'} were dropped: another reviewer "
             "signed off the lapse they were on while this pass was open.",
         )
+
+    # A sign-off is this desk's approval, cuts or no cuts.
+    record_decision(request, approved=True)
 
     # On to the next project rather than back to the desk. A session started
     # from a narrowed desk walks that table; otherwise one holding a ship out
