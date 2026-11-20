@@ -1550,3 +1550,37 @@ def draw_brackets(user, drawn):
 		)
 		row.minutes_paid = min(row.minutes_paid + minutes, weeks.WEEKLY_MINUTES)
 		row.save(update_fields=["minutes_paid"])
+
+
+def release_brackets(user, drawn):
+	"""Give back base-rate minutes a finalization drew (see draw_brackets),
+	for a finalization that has been undone.
+
+	Ships finalized since keep the rate they were paid at: they were priced
+	against the allowance as it stood, and repricing them would move pearls
+	nobody is undoing.
+	"""
+	for index, minutes in drawn.items():
+		row = PearlBracket.objects.select_for_update().filter(user=user, week_index=index).first()
+		if row is None:
+			continue
+		row.minutes_paid = max(row.minutes_paid - minutes, 0)
+		row.save(update_fields=["minutes_paid"])
+
+
+def drawn_from_breakdown(breakdown):
+	"""{week: base-rate minutes} a finalization drew, rebuilt from the payout
+	breakdown its audit entry recorded (PayoutLine as {"week": label,
+	"minutes", "rate"}).
+
+	The base-rate lines of a breakdown are exactly what payout_breakdown
+	returned as `drawn`; prep lines draw on no allowance.
+	"""
+	drawn = {}
+	for line in breakdown:
+		label = str(line.get("week", ""))
+		if not label.startswith("Week ") or Decimal(str(line.get("rate"))) != CHALLENGE_BASE_PEARLS_PER_HOUR:
+			continue
+		index = int(label.removeprefix("Week "))
+		drawn[index] = drawn.get(index, 0) + int(line.get("minutes", 0))
+	return drawn

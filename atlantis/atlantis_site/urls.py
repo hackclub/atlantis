@@ -86,6 +86,7 @@ urlpatterns = [
     path("root/fraud_review/next", fraud_review_next, name="fraud_review_next"),
     path("root/fraud_review/<int:ship_id>", fraud_review_project, name="fraud_review_project"),
     path("root/fraud_review/<int:ship_id>/decision", t3_decision, name="t3_decision"),
+    path("root/fraud_review/t3/<int:t3_id>/undo", t3_undo, name="t3_undo"),
     path("root/ships/<int:ship_id>/comment/", add_internal_comment, name="add_internal_comment"),
     path("root/review-claim/<slug:queue_key>/<int:item_id>/beat", review_heartbeat, name="review_heartbeat"),
     path("root/audit_log/", audit_log, name="audit_log"),

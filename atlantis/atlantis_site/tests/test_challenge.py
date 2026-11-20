@@ -645,6 +645,22 @@ class PayoutSplitTests(BaseTestCase):
             )
             self.assertEqual(pearls, 35)  # five hours at 7
 
+    def test_an_undone_finalization_gives_its_allowance_back(self):
+        """drawn_from_breakdown rebuilds `drawn` from the lines the T3 audit
+        entry stores, and release_brackets hands it back."""
+        with during_week(1):
+            journals = self._journals((120, before_the_program()), (480, in_week(1)))
+            _pearls, lines, drawn = challenge.payout_breakdown(journals, 600)
+            challenge.draw_brackets(self.user, drawn)
+            audited = [
+                {"week": line.label, "minutes": line.minutes, "rate": str(line.rate)}
+                for line in lines
+            ]
+            self.assertEqual(challenge.drawn_from_breakdown(audited), drawn)
+
+            challenge.release_brackets(self.user, challenge.drawn_from_breakdown(audited))
+            self.assertEqual(challenge.brackets_for(self.user), {1: 0})
+
     def test_work_spanning_prep_and_the_program_is_split(self):
         with during_week(1):
             journals = self._journals(

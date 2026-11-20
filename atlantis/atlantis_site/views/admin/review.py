@@ -12,17 +12,17 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 import json
 
 from ...models import (
-    AirtableSubmission, InternalComment, Profile, Project, Ship, T1, T2, T3,
+    AirtableSubmission, AuditLog, InternalComment, Profile, Project, Ship, T1, T2, T3,
     PAYOUT_MULTIPLIER_DEFAULT, PAYOUT_MULTIPLIER_MAX, PAYOUT_MULTIPLIER_MIN,
     PAYOUT_MULTIPLIER_STEP, PEARLS_PER_HOUR, media_url,
 )
 from ...checklists import T1_CHECKLIST, T3_CHECKLIST, ticked, unticked, unticked_message
 from ...submissions import build_generated_justification, build_override_justification, submit_ship
 from ..helpers import check_perms, staff_member_required, run_in_background, send_slack_dm, send_slack_message, slack_mention, record_audit, get_model_info, build_journal_timeline, reviewer_leaderboards, approved_minutes_for_journals, build_review_history, payable_minutes_for_ship, payout_buckets, ship_payout, rate_limit, safe_redirect_back, display_name, is_valid_image_url, random_storage_key, sniff_image_extension, validate_file_size, INT_FIELD_MAX, INT_FIELD_MIN
-from ...challenge import brackets_for, draw_brackets
+from ...challenge import brackets_for, draw_brackets, drawn_from_breakdown, release_brackets
 from .streak import record_decision
 from .queue import (
-    QUEUES, annotate_recordings, dash_context, decorate_rows, filter_rows,
+    QUEUES, annotate_recordings, dash_context, decorate_rows, filter_rows, forget_pending_counts,
     go_to_next, is_own_item, journal_stats, owner_snapshot, parse_skip,
     preflight_checks, refuse_own_item, review_context, ship_snapshot,
     sibling_reviews,
@@ -66,6 +66,9 @@ ROLLBACK_PERMS = ["atlantis_site.reviewer_lead", "atlantis_site.organizer"]
 # Leaves room in the InternalComment the rollback writes for the line that says
 # whose review it was.
 ROLLBACK_REASON_MAX_LENGTH = 800
+# Undoing a finalization is the same call as making one, so it belongs to the
+# same people.
+T3_UNDO_PERMS = ["atlantis_site.organizer", "atlantis_site.t3_review"]
 
 COMMENT_PERMS = [
     "atlantis_site.t1_review",
@@ -695,9 +698,39 @@ def fraud_review_dash(request):
     context = dash_context(request, "t3", ships)
     ships, filters = filter_rows(request, "t3", ships)
     context.update(filters, pending_count=len(ships))
+
+    # Only approvals can be undone, so only their rows get a button or a
+    # reason; returns to T1/T2 are left as they are.
+    can_undo = can_undo_t3(request.user)
+    if can_undo:
+        reviews = T3.objects.select_related("ship", "ship__project").in_bulk(
+            [row["id"] for row in context["all_reviews"]]
+        )
+        for row in context["all_reviews"]:
+            t3 = reviews.get(row["id"])
+            if t3 is None or t3.decision != T3.Decision.APPROVE:
+                continue
+            row["rollback_block"] = t3_undo_block(t3)
+            row["rollback_url"] = reverse("t3_undo", args=[t3.id])
+            row["rollback_label"] = (
+                f"the finalization of {row['project']} by {row['reviewer']} "
+                f"({t3.payout_layers} pearls)"
+            )
+
     return render(request, "root/fraud_review.html", {
         "ships": ships,
         "leaderboard": reviewer_leaderboards("t3_reviews"),
+        "can_roll_back": can_undo,
+        "rollback_reason_max": ROLLBACK_REASON_MAX_LENGTH,
+        "rollback_column": "Undo",
+        "rollback_title": "Undo a T3 approval",
+        "rollback_blurb": (
+            "Puts the ship back in the T3 queue, takes back the pearls it paid and frees the "
+            "week allowance it used. A record already sent to Airtable stays there, and "
+            "approving the ship again sends a new one. "
+            "Your reason is saved as an internal comment."
+        ),
+        "rollback_button": "Undo approval",
         **context,
     })
 
@@ -926,6 +959,161 @@ def t3_decision(request, ship_id):
         messages.info(request, AIRTABLE_QUEUED_MESSAGE)
     record_decision(request, approved=decision == T3.Decision.APPROVE)
     return go_to_next(request, "t3", parse_skip(request) + [ship.id])
+
+def can_undo_t3(user):
+    return any(user.has_perm(perm) for perm in T3_UNDO_PERMS)
+
+
+def t3_finalization_audit(t3):
+    """The audit entry the approval wrote, which is the only record of which
+    weeks' allowance its payout drew on."""
+    return (
+        AuditLog.objects
+        .filter(action="t3_decision", metadata__t3_id=t3.id)
+        .order_by("-created_at")
+        .first()
+    )
+
+
+def t3_undo_block(t3, audit=None):
+    """Why this T3 approval can't be undone, or None when it can.
+
+    Undoing puts the ship back in the T3 queue as though it had never been
+    approved, which is only honest while nothing has been built on the
+    approval and everything it paid can be worked out to be taken back.
+    """
+    if t3.decision != T3.Decision.APPROVE:
+        return "only an approval can be undone"
+    ship = t3.ship
+    if ship.status != Ship.ShipStatus.FINALIZED:
+        return f"the ship is now {ship.get_status_display().lower()}"
+    latest = ship.t3_reviews.order_by("-reviewed_at", "-id").first()
+    if latest.id != t3.id:
+        return "a later T3 review has replaced it"
+    if t3.payout_layers is None:
+        return "it was paid before payouts were recorded"
+    audit = audit or t3_finalization_audit(t3)
+    if audit is None or "payout_breakdown" not in audit.metadata:
+        return "its payout breakdown wasn't recorded"
+    return None
+
+
+@require_POST
+@staff_member_required
+@check_perms(T3_UNDO_PERMS)
+def t3_undo(request, t3_id):
+    """Undo a T3 approval: the ship goes back to the T3 queue, the pearls it
+    paid come back off the shipper, and the weeks' base-rate allowance it
+    drew is freed for the next finalization.
+
+    Airtable itself is left alone: a record already sent stays in HQ's table.
+    The ship's AirtableSubmission row goes, though, so approving it again sends
+    a fresh record for the new decision rather than submit_ship finding the old
+    record_id and treating the ship as done. The old row's record id is kept
+    in the audit entry, so the first copy can still be found.
+
+    The review row is deleted, as a T1 rollback's is, so the leaderboard and
+    the desk's stats stop counting it; the audit entry keeps all of it.
+    """
+    reason = request.POST.get("reason", "").strip()
+    if not reason:
+        messages.error(request, "Say why the approval is being undone.")
+        return safe_redirect_back(request)
+    if len(reason) > ROLLBACK_REASON_MAX_LENGTH:
+        messages.error(request, f"Reason too long (max {ROLLBACK_REASON_MAX_LENGTH} characters).")
+        return safe_redirect_back(request)
+
+    with transaction.atomic():
+        # Ship first, as t3_decision locks it, so an undo and a decision on the
+        # same ship queue up behind each other rather than interleaving.
+        ship = get_object_or_404(Ship.objects.select_for_update(), t3_reviews__id=t3_id)
+        t3 = get_object_or_404(
+            T3.objects.select_related("reviewer", "reviewer__hackclub_profile"), id=t3_id, ship=ship,
+        )
+        audit = t3_finalization_audit(t3)
+        block = t3_undo_block(t3, audit)
+        if block:
+            messages.error(request, f"That T3 approval can't be undone: {block}.")
+            return safe_redirect_back(request)
+
+        owner = ship.project.owner
+        owner_profile, _ = Profile.objects.get_or_create(user=owner)
+        profile = Profile.objects.select_for_update().get(pk=owner_profile.pk)
+        pearls = t3.payout_layers
+        # It can go below zero: they may have spent the pearls already. That
+        # is a debt like a loan's, and the next payout clears it.
+        if not INT_FIELD_MIN <= profile.layers - pearls <= INT_FIELD_MAX:
+            messages.error(request, "Taking that payout back would put the shipper's pearl balance out of range.")
+            return safe_redirect_back(request)
+        balance_before = profile.layers
+        profile.layers -= pearls
+        profile.save(update_fields=["layers"])
+
+        drawn = drawn_from_breakdown(audit.metadata["payout_breakdown"])
+        release_brackets(owner, drawn)
+
+        snapshot = {
+            "ship_id": ship.id,
+            "t3_id": t3.id,
+            "project": ship.project.title,
+            "reviewer": t3.reviewer.username,
+            "reviewed_at": t3.reviewed_at.isoformat(),
+            "payout_time": t3.payout_time,
+            "airtable_time": t3.airtable_time,
+            "payout_multiplier": str(t3.payout_multiplier),
+            "payout_layers": pearls,
+            "internal_notes": t3.internal_notes,
+            "justification": t3.justification,
+            "brackets_released": {str(week): minutes for week, minutes in drawn.items()},
+            "balance_before": balance_before,
+            "balance_after": profile.layers,
+            "reason": reason,
+            "previous_ship_status": ship.status,
+            "new_ship_status": Ship.ShipStatus.T3_QUEUE,
+        }
+
+        submission = AirtableSubmission.objects.filter(ship=ship).first()
+        if submission is not None:
+            snapshot["airtable_submission"] = {
+                "status": submission.status,
+                "record_id": submission.record_id,
+                "attempts": submission.attempts,
+                "submitted_at": submission.submitted_at.isoformat() if submission.submitted_at else None,
+            }
+            submission.delete()
+
+        reviewed_on = timezone.localtime(t3.reviewed_at)
+        InternalComment.objects.create(
+            ship=ship,
+            author=request.user,
+            text=(
+                f"Undid {display_name(t3.reviewer)}'s T3 approval from {reviewed_on:%b} "
+                f"{reviewed_on.day}, {reviewed_on.year} and took back its {pearls} pearls: {reason}"
+            )[:INTERNAL_COMMENT_MAX_LENGTH],
+        )
+        t3.delete()
+        ship.status = Ship.ShipStatus.T3_QUEUE
+        ship.save()
+
+    forget_pending_counts()
+    record_audit(request, "t3_undo", target=f"Ship #{ship.id} ({ship.project.title})", metadata=snapshot)
+
+    # They were DMed the payout, so they are DMed that it was taken back.
+    owner_profile = getattr(owner, "hackclub_profile", None)
+    run_in_background(
+        send_slack_dm,
+        f"The finalization of your project {project_link(ship.project)} has been undone, "
+        f"and the {pearls} pearls it paid have been taken back. It's back in final review "
+        f"and will be looked at again.",
+        owner_profile.slack_id if owner_profile else "",
+    )
+
+    messages.success(
+        request,
+        f"Undid the T3 approval of {ship.project.title}: {pearls} pearls taken back, and it's back in the T3 queue.",
+    )
+    return safe_redirect_back(request)
+
 
 @staff_member_required
 @require_POST

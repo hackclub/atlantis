@@ -34,7 +34,7 @@
                     <th>Verdict</th>
                     <th>Reviewed by</th>
                     <th>Reviewed</th>
-                    {% if can_roll_back %}<th>Rollback</th>{% endif %}
+                    {% if can_roll_back %}<th>{{ rollback_column|default:"Rollback" }}</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -56,10 +56,10 @@
                             <td>
                                 {% if review.rollback_block %}
                                     <span class="rq-quiet">Can't: {{ review.rollback_block }}</span>
-                                {% else %}
+                                {% elif review.rollback_url %}
                                     <button type="button" class="rv-btn rv-btn-sm rv-btn-danger"
                                             data-rollback-url="{{ review.rollback_url }}"
-                                            data-rollback-label="the T1 {% if review.status == 'approved' %}approval{% elif review.status == 'changes requested' %}request for changes{% else %}rejection{% endif %} of {{ review.project }} by {{ review.reviewer }}">Roll back</button>
+                                            data-rollback-label="{% if review.rollback_label %}{{ review.rollback_label }}{% else %}the T1 {% if review.status == 'approved' %}approval{% elif review.status == 'changes requested' %}request for changes{% else %}rejection{% endif %} of {{ review.project }} by {{ review.reviewer }}{% endif %}">{{ rollback_button|default:"Roll back" }}</button>
                                 {% endif %}
                             </td>
                         {% endif %}
@@ -108,13 +108,13 @@
     <dialog class="rv-shortcuts rq-rollback" id="rq-rollback">
         <form method="post" class="rv-form" id="rq-rollback-form">
             {% csrf_token %}
-            <h2>Roll back a T1 review</h2>
-            <p>Deletes <strong data-rollback-subject></strong> and returns the ship to T1. Your reason is saved as an internal comment.</p>
-            <label for="rq-rollback-reason">Why is it being rolled back?</label>
+            <h2>{{ rollback_title|default:"Roll back a T1 review" }}</h2>
+            <p>Undoes <strong data-rollback-subject></strong>. {% if rollback_blurb %}{{ rollback_blurb }}{% else %}Deletes the review and returns the ship to T1. Your reason is saved as an internal comment.{% endif %}</p>
+            <label for="rq-rollback-reason">Why is it being undone?</label>
             <textarea id="rq-rollback-reason" name="reason" rows="4" required maxlength="{{ rollback_reason_max }}"></textarea>
             <div class="rq-rollback-actions">
                 <button type="button" class="rv-btn rv-btn-ghost" data-rollback-cancel>Cancel</button>
-                <button type="submit" class="rv-btn rv-btn-danger">Roll back</button>
+                <button type="submit" class="rv-btn rv-btn-danger">{{ rollback_button|default:"Roll back" }}</button>
             </div>
         </form>
     </dialog>
