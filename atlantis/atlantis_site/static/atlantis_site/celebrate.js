@@ -6,10 +6,13 @@
  *   onFire     embers off the streak badge, for a run of FIRE_AT or more
  *   milestone  a callout naming the streak (5, 10, 25, ...)
  *
- * One canvas, laid over the page and removed once the last particle has
- * gone, so nothing here can get in the way of the review underneath. Anyone
- * who has asked for reduced motion gets the milestone callout and nothing
- * that moves.
+ * It plays over a review page, often over a playing timelapse, so it is kept
+ * cheap on purpose: a few dozen flat particles, no blur, shadows or blending
+ * (each of those makes the canvas redo every pixel it touches), a canvas at
+ * CSS resolution rather than the screen's, and a hard stop at MAX_MS. The
+ * canvas is removed when it's done, so nothing runs once the effect has
+ * finished. It makes no sound. Anyone who has asked for reduced motion gets
+ * the milestone callout and nothing that moves.
  */
 (function () {
     "use strict";
@@ -24,57 +27,40 @@
     }
 
     var still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Half as much on a machine with few cores, where a review page with a
+    // video playing is already most of what it can do.
+    var scale = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4 ? 0.5 : 1;
 
-    var CONFETTI = ["#5fd4c4", "#ffd166", "#ef476f", "#118ab2", "#06d6a0", "#f78c6b", "#c77dff"];
-    var EMBERS = ["#ffb703", "#fb8500", "#ff5400", "#ffd60a", "#e63946"];
+    var MAX_MS = 2000;
+    var CONFETTI = ["#5fd4c4", "#ffd166", "#ef476f", "#118ab2", "#06d6a0", "#f78c6b"];
+    var EMBERS = ["#ffb703", "#fb8500", "#ff5400", "#ffd60a"];
 
     var particles = [];
-    var canvas = null;
-    var ctx = null;
-    var last = 0;
+    var canvas, ctx, width, height, started, last;
 
     function rand(min, max) {
         return min + Math.random() * (max - min);
     }
 
-    function ensureCanvas() {
-        if (canvas) return;
-        canvas = document.createElement("canvas");
-        canvas.className = "celebrate-canvas";
-        canvas.setAttribute("aria-hidden", "true");
-        document.body.appendChild(canvas);
-        ctx = canvas.getContext("2d");
-        resize();
-        window.addEventListener("resize", resize);
-    }
-
-    function resize() {
-        var ratio = window.devicePixelRatio || 1;
-        canvas.width = window.innerWidth * ratio;
-        canvas.height = window.innerHeight * ratio;
-        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-    }
-
     function confetti() {
-        var w = window.innerWidth;
+        var count = Math.round(30 * scale);
         // Two cannons from the bottom corners, aimed up and in.
-        [[0, 1], [w, -1]].forEach(function (cannon) {
-            for (var i = 0; i < 90; i++) {
+        [[0, 1], [width, -1]].forEach(function (cannon) {
+            for (var i = 0; i < count; i++) {
                 var angle = rand(55, 80) * Math.PI / 180;
-                var speed = rand(11, 19);
+                var speed = rand(11, 18);
                 particles.push({
-                    kind: "confetti",
+                    confetti: true,
                     x: cannon[0],
-                    y: window.innerHeight,
+                    y: height,
                     vx: Math.cos(angle) * speed * cannon[1],
                     vy: -Math.sin(angle) * speed,
-                    w: rand(6, 11),
-                    h: rand(3, 6),
+                    size: rand(5, 9),
                     spin: rand(0, Math.PI * 2),
-                    vspin: rand(-0.25, 0.25),
+                    vspin: rand(-0.2, 0.2),
                     color: CONFETTI[i % CONFETTI.length],
                     life: 0,
-                    ttl: rand(150, 220),
+                    ttl: rand(80, 120),
                 });
             }
         });
@@ -82,86 +68,90 @@
 
     function embers(big) {
         var badge = document.querySelector("[data-review-streak]");
-        var x, y;
+        var x = width / 2;
+        var y = 40;
         if (badge) {
             var box = badge.getBoundingClientRect();
             x = box.left + box.width / 2;
             y = box.top + box.height / 2;
-        } else {
-            x = window.innerWidth / 2;
-            y = 40;
         }
-        var count = big ? 90 : 45;
+        var count = Math.round((big ? 30 : 18) * scale);
         for (var i = 0; i < count; i++) {
             var angle = rand(0, Math.PI * 2);
-            var speed = rand(1, big ? 7 : 5);
+            var speed = rand(1, big ? 5 : 4);
             particles.push({
-                kind: "ember",
+                confetti: false,
                 x: x,
                 y: y,
                 vx: Math.cos(angle) * speed,
                 vy: Math.sin(angle) * speed - rand(0.5, 2),
-                r: rand(1.5, big ? 4.5 : 3.5),
+                size: rand(2, big ? 5 : 4),
                 color: EMBERS[i % EMBERS.length],
                 life: 0,
-                ttl: rand(45, big ? 110 : 80),
+                ttl: rand(35, big ? 70 : 55),
             });
         }
     }
 
+    function finish() {
+        if (canvas) canvas.remove();
+        canvas = ctx = null;
+        particles = [];
+    }
+
     function step(now) {
-        // Frames are counted in 60ths of a second, so a 120Hz screen doesn't
+        if (!canvas) return;
+        if (!started) started = now;
+        if (now - started > MAX_MS) return finish();
+        // Frames counted in 60ths of a second, so a 120Hz screen doesn't
         // play everything at double speed.
         var dt = last ? Math.min((now - last) / (1000 / 60), 3) : 1;
         last = now;
-        ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 
-        particles = particles.filter(function (p) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.globalAlpha = 1;
+        ctx.clearRect(0, 0, width, height);
+
+        var alive = [];
+        for (var i = 0; i < particles.length; i++) {
+            var p = particles[i];
             p.life += dt;
-            if (p.life >= p.ttl) return false;
-            var fade = Math.min(1, (p.ttl - p.life) / 30);
-            if (p.kind === "confetti") {
-                p.vy += 0.32 * dt;
-                p.vx *= Math.pow(0.985, dt);
-                p.vy *= Math.pow(0.985, dt);
+            if (p.life >= p.ttl) continue;
+            if (p.confetti) {
+                p.vy += 0.35 * dt;
+                p.vx *= 0.985;
                 p.x += p.vx * dt;
                 p.y += p.vy * dt;
                 p.spin += p.vspin * dt;
-                ctx.save();
-                ctx.globalAlpha = fade;
-                ctx.translate(p.x, p.y);
-                ctx.rotate(p.spin);
-                // Flattened by its own spin, so each piece flutters.
-                ctx.scale(1, Math.cos(p.spin * 2));
-                ctx.fillStyle = p.color;
-                ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-                ctx.restore();
             } else {
                 // Embers rise: heat beats gravity.
-                p.vy -= 0.06 * dt;
-                p.vx *= Math.pow(0.96, dt);
+                p.vy -= 0.05 * dt;
+                p.vx *= 0.96;
                 p.x += p.vx * dt;
                 p.y += p.vy * dt;
-                ctx.save();
-                ctx.globalAlpha = fade;
-                ctx.globalCompositeOperation = "lighter";
-                ctx.shadowBlur = 12;
-                ctx.shadowColor = p.color;
-                ctx.fillStyle = p.color;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.r * (1 - p.life / p.ttl * 0.6), 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
             }
-            return p.y < window.innerHeight + 40;
-        });
+            if (p.y > height + 20 || p.y < -20) continue;
+            alive.push(p);
+
+            ctx.globalAlpha = Math.min(1, (p.ttl - p.life) / 20);
+            ctx.fillStyle = p.color;
+            if (p.confetti) {
+                // Squashed by its spin, so each piece flutters, without a
+                // save/restore per piece.
+                var c = Math.cos(p.spin), s = Math.sin(p.spin);
+                ctx.setTransform(c, s, -s * Math.cos(p.spin * 2), c * Math.cos(p.spin * 2), p.x, p.y);
+                ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+            } else {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.fillRect(p.x, p.y, p.size, p.size);
+            }
+        }
+        particles = alive;
 
         if (particles.length) {
             window.requestAnimationFrame(step);
         } else {
-            window.removeEventListener("resize", resize);
-            canvas.remove();
-            canvas = null;
+            finish();
         }
     }
 
@@ -183,11 +173,24 @@
         var badge = document.querySelector("[data-review-streak]");
         if (badge && data.onFire) badge.classList.add("rv-streak--flare");
 
-        if (still) return;
+        // A tab opened in the background has nobody to show it to.
+        if (still || document.hidden) return;
+
+        width = window.innerWidth;
+        height = window.innerHeight;
         if (data.approved) confetti();
         if (data.onFire) embers(data.milestone);
         if (!particles.length) return;
-        ensureCanvas();
+
+        // At CSS pixels, not the screen's: confetti doesn't need to be sharp,
+        // and a retina-sized canvas is four times the pixels to clear and fill.
+        canvas = document.createElement("canvas");
+        canvas.className = "celebrate-canvas";
+        canvas.setAttribute("aria-hidden", "true");
+        canvas.width = width;
+        canvas.height = height;
+        ctx = canvas.getContext("2d");
+        document.body.appendChild(canvas);
         window.requestAnimationFrame(step);
     }
 

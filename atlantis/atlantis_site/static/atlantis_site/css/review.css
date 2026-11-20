@@ -2569,7 +2569,13 @@
 
 /* --------------------------------------------------------- review streak */
 /* The topbar's run of decisions in a row (views/admin/streak.py), and the
-   effects celebrate.js plays after each one. */
+   effects celebrate.js plays after each one.
+
+   The badge stays up for as long as the streak does, over a review that may
+   be playing video, so the only thing on it that animates forever is the
+   flame's transform, which the compositor runs without repainting anything.
+   The fire gradient and glow are static: animating a background or a
+   box-shadow repaints the topbar on every frame. */
 
 .root-page .rv-streak {
     display: inline-flex;
@@ -2613,14 +2619,14 @@
     filter: none;
     opacity: 1;
     transform-origin: 50% 90%;
+    will-change: transform;
     animation: rv-flicker 0.9s ease-in-out infinite alternate;
 }
 
 .root-page .rv-streak--inferno {
     background: linear-gradient(90deg, #ffd166, #ff8c42, #ff5400);
-    background-size: 200% 100%;
     color: #3d1300;
-    animation: rv-inferno 2.4s linear infinite, rv-glow 1.2s ease-in-out infinite alternate;
+    box-shadow: 0 0 0 1px rgba(255, 84, 0, 0.6), 0 0 16px rgba(255, 110, 40, 0.6);
 }
 
 .root-page .rv-streak--inferno .rv-streak-flame {
@@ -2633,24 +2639,10 @@
     animation: rv-flare 0.7s ease-out;
 }
 
-.root-page .rv-streak--inferno.rv-streak--flare {
-    animation: rv-flare 0.7s ease-out, rv-inferno 2.4s linear infinite, rv-glow 1.2s ease-in-out infinite alternate;
-}
-
 @keyframes rv-flicker {
     0%   { transform: scale(1) rotate(-4deg); }
     50%  { transform: scale(1.12, 0.94) rotate(3deg); }
     100% { transform: scale(0.95, 1.1) rotate(-2deg); }
-}
-
-@keyframes rv-inferno {
-    from { background-position: 0% 0; }
-    to   { background-position: 200% 0; }
-}
-
-@keyframes rv-glow {
-    from { box-shadow: 0 0 0 1px rgba(255, 84, 0, 0.5), 0 0 10px rgba(255, 84, 0, 0.45); }
-    to   { box-shadow: 0 0 0 1px rgba(255, 84, 0, 0.7), 0 0 22px rgba(255, 140, 66, 0.75); }
 }
 
 @keyframes rv-flare {
