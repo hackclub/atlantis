@@ -131,6 +131,15 @@ Rendered on the deck. Takes the context dashboard.challenge_context builds.
         {% endif %}
     {% endif %}
 
+    {% comment %}
+    Prep time, before week 1 and after the last week, is one bucket
+    (challenge.PREP) paid at the flat rate. It counts towards no week, so it's
+    only worth showing when there's no week on screen to count towards.
+    {% endcomment %}
+    {% if standing.prep_minutes and not week %}
+        <p class="streak-hint streak-prep">{{ standing.prep_display }} logged in the prep weeks.</p>
+    {% endif %}
+
 </section>
 
 {% if week_deadline %}

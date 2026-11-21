@@ -899,6 +899,12 @@ class Standing:
 		return self.finalized_printer_minutes // 60
 
 	@property
+	def prep_display(self):
+		"""Time logged in the prep weeks, before week 1 and after the last
+		week alike — the same bucket the flat rate pays on."""
+		return format_minutes(self.prep_minutes)
+
+	@property
 	def shipped_printer_display(self):
 		return format_minutes(self.shipped_printer_minutes)
 

@@ -1769,6 +1769,39 @@ class StreakPanelTests(BaseTestCase):
         self.assertEqual(response.context["week"], None)
         self.assertEqual(response.context["week_deadline"], "")
 
+    def test_before_the_start_it_shows_the_prep_hours_so_far(self):
+        self._log(150, before_the_program())
+        response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, "2h 30m logged in the prep weeks.")
+
+    def test_after_the_end_it_shows_prep_hours_from_both_sides(self):
+        with after_week(1):
+            self._log(60, before_the_program())
+            self._log(90, weeks.ends_at() + timedelta(days=3))
+            response = self.client.get(reverse("dashboard"))
+            self.assertEqual(response.context["standing"].prep_minutes, 150)
+            self.assertContains(response, "2h 30m logged in the prep weeks.")
+
+    def test_the_prep_hours_show_once_out_of_the_program_too(self):
+        with after_week(1):
+            self._log(60, in_week(1))
+            self._log(90, weeks.ends_at() + timedelta(days=3))
+            response = self.client.get(reverse("dashboard"))
+            self.assertContains(response, "out of the program")
+            self.assertContains(response, "1h 30m logged in the prep weeks.")
+
+    def test_no_prep_line_during_a_week(self):
+        with during_week(1):
+            self._log(60, before_the_program())
+            response = self.client.get(reverse("dashboard"))
+            self.assertNotContains(response, "streak-prep")
+
+    def test_no_prep_line_without_prep_hours(self):
+        with after_week(1):
+            self._log(60, in_week(1))
+            response = self.client.get(reverse("dashboard"))
+            self.assertNotContains(response, "streak-prep")
+
 
 class ShippedPanelTests(BaseTestCase):
     """The deck's readout of the forty hours passing is judged on: shipped
