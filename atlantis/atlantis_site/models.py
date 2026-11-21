@@ -236,6 +236,13 @@ class Profile(models.Model):
 	# request with the "you have been banned" screen instead of the view.
 	banned = models.BooleanField(default=False)
 
+	# The IANA zone Slack has for this user ("America/Los_Angeles"), or "" when
+	# we haven't been told. Read by the daily review streak (daily_streak.py),
+	# whose days run midnight to midnight where the reviewer is, not on the
+	# program's Eastern clock. Written at login and backfilled from Slack by
+	# remind_review_streak for anyone who reviewed before this existed.
+	timezone = models.CharField(max_length=64, blank=True, default="")
+
 	def __str__(self):
 		return self.user.username
 
@@ -1550,6 +1557,36 @@ class WeekReminder(models.Model):
 
 	def __str__(self):
 		return f"{self.user_id} week {self.week_index} reminded"
+
+
+class ReviewStreakReminder(models.Model):
+	"""That the 11pm "your review streak is about to end" DM went to one
+	reviewer on one of their days.
+
+	`day` is the reviewer's own local date (daily_streak.py), not a UTC one, so
+	the row means "reminded on the day that ends at their midnight". Like
+	WeekReminder, it exists so remind_review_streak can run every few minutes
+	through the 11pm hour and DM each person once.
+	"""
+
+	user = models.ForeignKey(
+		settings.AUTH_USER_MODEL,
+		on_delete=models.CASCADE,
+		related_name="review_streak_reminders",
+	)
+	day = models.DateField()
+	sent_at = models.DateTimeField(auto_now_add=True)
+
+	class Meta:
+		ordering = ["-day"]
+		constraints = [
+			models.UniqueConstraint(
+				fields=["user", "day"], name="one_streak_reminder_per_user_day"
+			),
+		]
+
+	def __str__(self):
+		return f"{self.user_id} streak reminded on {self.day}"
 
 
 class PearlBracket(models.Model):

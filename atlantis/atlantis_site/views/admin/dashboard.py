@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from django.urls import reverse
 
+from ...daily_streak import can_keep_streak, daily_streak
 from ..helpers import check_perms, staff_member_required
 from .queue import QUEUE_PERMS, QUEUES, cached_pending_hours, can_open_queue
 
@@ -70,4 +71,9 @@ def desks_for(user):
 @staff_member_required
 @check_perms(["atlantis_site.organizer", "atlantis_site.fulfillment", "atlantis_site.t1_review", "atlantis_site.t2_review", "atlantis_site.baller", "atlantis_site.t3_review", "atlantis_site.timelapse_review", "atlantis_site.reviewer_lead", "atlantis_site.metrics"])
 def admin_dash(request):
-    return render(request, "root/home.html", {"desks": desks_for(request.user)})
+    user = request.user
+    return render(request, "root/home.html", {
+        "desks": desks_for(user),
+        # Only for whoever can make the reviews it counts.
+        "daily": daily_streak(user) if can_keep_streak(user) else None,
+    })

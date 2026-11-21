@@ -1,11 +1,31 @@
 {% extends "root/_base_root.html" %}
-{% load static %}
+{% load static review_streak %}
 
 {% block page_id %}admin-dashboard{% endblock %}
 
 {% block content %}
 <div class="content rq home">
     <h1>What needs you</h1>
+
+    {% if daily %}
+        {% comment %}
+        The daily review streak (daily_streak.py): DAILY_GOAL reviews at any
+        of T1, T2 and T3, before midnight in the reviewer's own zone.
+        {% endcomment %}
+        <p class="home-daily home-daily--{% if daily.done_today %}done{% elif daily.days %}risk{% else %}idle{% endif %}">
+            {% daily_streak_badge daily %}
+            <span class="home-daily-text">
+                {% if daily.done_today %}
+                    Today's {{ daily.goal }} reviews are done. <strong>{{ daily.days }}-day</strong> review streak!
+                {% elif daily.days %}
+                    <strong>{{ daily.days }}-day</strong> review streak: {{ daily.left }} more review{{ daily.left|pluralize }} today keep{{ daily.left|pluralize:"s," }} it going.
+                {% else %}
+                    Do {{ daily.goal }} reviews today to start a daily review streak.
+                {% endif %}
+                <span class="home-daily-zone">Your day ends at midnight {{ daily.zone_name }} time.</span>
+            </span>
+        </p>
+    {% endif %}
 
     {% if desks %}
         {% comment %}

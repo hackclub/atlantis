@@ -3,7 +3,7 @@ from django.contrib import admin
 from .models import (
     AirtableSubmission, AuditLog, LapseAccount, PearlBracket, PrinterClaim,
     HourRemoval, SaverCredit, Timelapse, TimelapseRemoval, TimelapseReview, WeekOutcome,
-    WeekReminder,
+    ReviewStreakReminder, WeekReminder,
 )
 
 
@@ -159,6 +159,13 @@ class WeekOutcomeAdmin(ReadOnlyAdmin):
 class WeekReminderAdmin(ReadOnlyAdmin):
     list_display = ("user", "week_index", "sent_at")
     list_filter = ("week_index",)
+    search_fields = ("user__username",)
+
+
+@admin.register(ReviewStreakReminder)
+class ReviewStreakReminderAdmin(ReadOnlyAdmin):
+    list_display = ("user", "day", "sent_at")
+    list_filter = ("day",)
     search_fields = ("user__username",)
 
 

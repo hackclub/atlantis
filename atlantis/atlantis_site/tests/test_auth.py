@@ -162,6 +162,22 @@ class AuthCallbackTests(TestCase):
 		self.assertEqual(profile.slack_username, "Test Person")
 		self.assertEqual(profile.slack_pfp_url, "https://example.com/default.png")
 
+	def test_stores_the_slack_timezone(self, mock_token, mock_slack):
+		"""The daily review streak's days run in it (daily_streak.py)."""
+		mock_slack.return_value = {**SLACK_USER_RESPONSE, "user": {
+			**SLACK_USER_RESPONSE["user"], "tz": "Europe/London",
+		}}
+		self._callback(mock_token)
+		profile = User.objects.get(username="user_abc123").hackclub_profile
+		self.assertEqual(profile.timezone, "Europe/London")
+
+	def test_slack_failure_keeps_the_stored_timezone(self, mock_token, mock_slack):
+		mock_slack.side_effect = Exception("slack down")
+		user = User.objects.create_user(username="user_abc123")
+		Profile.objects.create(user=user, timezone="Asia/Tokyo")
+		self._callback(mock_token)
+		self.assertEqual(Profile.objects.get(user=user).timezone, "Asia/Tokyo")
+
 	def test_slack_display_name_falls_back_to_real_name(self, mock_token, mock_slack):
 		mock_slack.return_value = {
 			"user": {"profile": {"display_name": "", "real_name": "Real Name", "image_512": "https://x/pfp.png"}}

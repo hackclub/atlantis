@@ -434,7 +434,7 @@ def t1_decision(request, ship_id):
         "checklist": ticked(T1_CHECKLIST, request),
     })
 
-    record_decision(request, approved=approved)
+    record_decision(request, approved=approved, daily=True)
     # Straight on to the next ship in the queue rather than back to the desk:
     # the desk is a place to start from, not somewhere to pass through between
     # every review.
@@ -688,7 +688,7 @@ def t2_decision(request, ship_id):
         "new_ship_status": ship.status,
     })
 
-    record_decision(request, approved=decision == T2.Decision.APPROVE)
+    record_decision(request, approved=decision == T2.Decision.APPROVE, daily=True)
     return go_to_next(request, "t2", parse_skip(request) + [ship.id])
 
 @staff_member_required
@@ -957,7 +957,7 @@ def t3_decision(request, ship_id):
 
     if decision == T3.Decision.APPROVE:
         messages.info(request, AIRTABLE_QUEUED_MESSAGE)
-    record_decision(request, approved=decision == T3.Decision.APPROVE)
+    record_decision(request, approved=decision == T3.Decision.APPROVE, daily=True)
     return go_to_next(request, "t3", parse_skip(request) + [ship.id])
 
 def can_undo_t3(user):

@@ -62,6 +62,7 @@ def auth_callback(request):
     # never assigned — a NameError, which is a 500 on somebody's login.
     display_name = name
     avatar_url = os.environ.get("DEFAULT_PFP", "")
+    slack_tz = ""
 
     if slack_id:
         try:
@@ -74,6 +75,10 @@ def auth_callback(request):
                 or name
             )
             avatar_url = slack_profile.get("image_512") or avatar_url
+            # Where the daily review streak's midnight falls for them
+            # (daily_streak.py). Refreshed every login, so it follows
+            # somebody who moves.
+            slack_tz = slack_user.get("tz") or ""
 
         except Exception as e:
             print("Slack profile fetch failed", e)
@@ -88,6 +93,10 @@ def auth_callback(request):
         "slack_username": fit(display_name, Profile, "slack_username"),
         "slack_pfp_url": fit(avatar_url, Profile, "slack_pfp_url"),
     }
+
+    # Only when Slack said: a failed lookup leaves the zone we already had.
+    if slack_tz:
+        defaults["timezone"] = fit(slack_tz, Profile, "timezone")
 
     stored_token = storable_token(token)
     if stored_token:

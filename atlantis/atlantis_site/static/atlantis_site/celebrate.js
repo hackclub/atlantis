@@ -5,6 +5,9 @@
  *   approved   confetti, for approvals only
  *   onFire     embers off the streak badge, for a run of FIRE_AT or more
  *   milestone  a callout naming the streak (5, 10, 25, ...)
+ *   dailyStreak  present only on the decision that met the day's goal
+ *              (daily_streak.py): a callout with the days kept, and confetti
+ *              whatever the decision was
  *
  * It plays over a review page, often over a playing timelapse, so it is kept
  * cheap on purpose: a few dozen flat particles, no blur, shadows or blending
@@ -155,11 +158,14 @@
         }
     }
 
-    function callout(streak) {
+    // `slot` stacks a second callout under the first, for the decision that
+    // both meets the day's goal and hits a milestone.
+    function callout(text, slot) {
         var note = document.createElement("div");
         note.className = "celebrate-callout";
         note.setAttribute("role", "status");
-        note.textContent = "🔥 " + streak + " in a row!";
+        note.textContent = text;
+        if (slot) note.style.top = (64 + slot * 54) + "px";
         document.body.appendChild(note);
         window.setTimeout(function () {
             note.classList.add("celebrate-callout--out");
@@ -168,7 +174,12 @@
     }
 
     function play() {
-        if (data.milestone) callout(data.streak);
+        var notes = [];
+        if (data.dailyStreak) {
+            notes.push("✅ Today's reviews done! " + data.dailyStreak + "-day streak");
+        }
+        if (data.milestone) notes.push("🔥 " + data.streak + " in a row!");
+        notes.forEach(callout);
 
         var badge = document.querySelector("[data-review-streak]");
         if (badge && data.onFire) badge.classList.add("rv-streak--flare");
@@ -178,7 +189,7 @@
 
         width = window.innerWidth;
         height = window.innerHeight;
-        if (data.approved) confetti();
+        if (data.approved || data.dailyStreak) confetti();
         if (data.onFire) embers(data.milestone);
         if (!particles.length) return;
 

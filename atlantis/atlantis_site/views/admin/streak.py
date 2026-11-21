@@ -15,6 +15,8 @@ from datetime import datetime, timedelta
 
 from django.utils import timezone
 
+from ...daily_streak import DAILY_GOAL, daily_streak
+
 # Long enough for a careful T3 review between two decisions, short enough that
 # a coffee break ends the run.
 STREAK_GAP = timedelta(minutes=20)
@@ -47,16 +49,26 @@ def current_streak(request, now=None):
     return state.get("count", 0)
 
 
-def record_decision(request, approved):
+def record_decision(request, approved, daily=False):
     """Count one decision toward the streak and queue its celebration.
 
     Called by each desk once its decision has committed, just before moving
     on to the next item. Returns the streak including this decision.
+
+    `daily` is for the T1, T2 and T3 desks, whose decisions also count toward
+    the daily streak (daily_streak.py). The one that meets the day's goal gets
+    a celebration of its own. The decision's row is already written, so
+    today's count includes it.
     """
     now = timezone.now()
     count = current_streak(request, now) + 1
     request.session[SESSION_KEY] = {"count": count, "last": now.isoformat()}
-    request.session[CELEBRATE_KEY] = {"approved": bool(approved), "streak": count}
+    celebration = {"approved": bool(approved), "streak": count}
+    if daily:
+        today = daily_streak(request.user, now)
+        if today.today == DAILY_GOAL:
+            celebration["daily"] = today.days
+    request.session[CELEBRATE_KEY] = celebration
     return count
 
 

@@ -4,7 +4,8 @@
 #
 # Three things have to happen on a schedule and none of them had anywhere to
 # run: close_week settles finished challenge weeks and DMs whoever got dropped
-# (with remind_week nudging whoever is still short on Saturday evening),
+# (with remind_week nudging whoever is still short on Saturday evening, and
+# remind_review_streak nudging reviewers whose daily streak ends at midnight),
 # submit_airtable retries submissions that failed at finalization, and
 # check_timelapse_activity looks for dead air in compiled footage. (A fourth,
 # snapshot_metrics, runs once a day at a set time; see snapshot_loop.) Every
@@ -29,6 +30,11 @@ CLOSE_WEEK_EVERY="${CLOSE_WEEK_EVERY:-3600}"
 # Does nothing until Saturday 6pm Eastern, then DMs each person short on the
 # week once; running it often just means the DMs go out close to six.
 REMIND_WEEK_EVERY="${REMIND_WEEK_EVERY:-600}"
+# Does nothing for a reviewer outside 11pm in their own zone, then DMs each
+# one whose daily review streak is about to end, once. Every zone's 11pm comes
+# round at some point, so this runs all day; a ten-minute tick means the DM
+# lands by 11:10 wherever they are.
+REMIND_REVIEW_STREAK_EVERY="${REMIND_REVIEW_STREAK_EVERY:-600}"
 SUBMIT_AIRTABLE_EVERY="${SUBMIT_AIRTABLE_EVERY:-600}"
 CHECK_ACTIVITY_EVERY="${CHECK_ACTIVITY_EVERY:-900}"
 # Each pass runs ffmpeg over whole videos, so it is bounded rather than left to
@@ -120,6 +126,7 @@ snapshot_loop &
 while true; do
 	run_due close_week "$CLOSE_WEEK_EVERY" close_week
 	run_due remind_week "$REMIND_WEEK_EVERY" remind_week
+	run_due remind_review_streak "$REMIND_REVIEW_STREAK_EVERY" remind_review_streak
 	run_due submit_airtable "$SUBMIT_AIRTABLE_EVERY" submit_airtable
 	run_due check_activity "$CHECK_ACTIVITY_EVERY" \
 		check_timelapse_activity --limit "$CHECK_ACTIVITY_LIMIT"

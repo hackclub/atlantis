@@ -11,7 +11,8 @@ services:
         condition: service_healthy
 
   # The timer for the management commands: close_week, remind_week,
-  # submit_airtable, check_timelapse_activity and the nightly snapshot_metrics.
+  # remind_review_streak, submit_airtable, check_timelapse_activity and the
+  # nightly snapshot_metrics.
   # Same image as web, so it is always running the
   # code that was deployed, but it never serves traffic and never migrates —
   # web owns that, and scheduler.sh waits for it. See that file for why this
