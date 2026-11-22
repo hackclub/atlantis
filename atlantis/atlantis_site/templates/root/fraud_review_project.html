@@ -25,7 +25,8 @@
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>T</kbd></dt><dd>Return to T2</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>&crarr;</kbd></dt><dd>Submit the current draft</dd>
     <dt><kbd>&#8984;</kbd>&thinsp;<kbd>J</kbd></dt><dd>Focus Internal notes</dd>
-    <dt><kbd>A</kbd></dt><dd>Tick the whole checklist</dd>
+    <dt><kbd>Alt/&#8997;</kbd>&thinsp;<kbd>M</kbd></dt><dd>Focus the pearl multiplier; then &larr;&thinsp;&rarr; adjust it</dd>
+    <dt><kbd>Alt/&#8997;</kbd>&thinsp;<kbd>A</kbd></dt><dd>Tick the whole checklist</dd>
     <dt><kbd>U</kbd></dt><dd>Open the owner's profile</dd>
     <dt><kbd>P</kbd></dt><dd>Open the Printables listing</dd>
     <dt><kbd>M</kbd></dt><dd>Open the editor model</dd>
@@ -143,8 +144,9 @@
         <span class="rv-field-label">
             Pearl multiplier
             <output id="multiplier_value" for="payout_multiplier" class="rv-multiplier-value">{{ multiplier_default }}&times;</output>
+            <kbd>Alt&thinsp;M</kbd>
         </span>
-        <input type="range" name="payout_multiplier" id="payout_multiplier" class="rv-range"
+        <input type="range" name="payout_multiplier" id="payout_multiplier" class="rv-range" data-alt-focus="m"
                min="{{ multiplier_min }}" max="{{ multiplier_max }}"
                step="{{ multiplier_step }}" value="{{ multiplier_default }}">
     </div>
@@ -181,15 +183,16 @@
     HQ's YSWS submission guidelines, as they apply to the record this approval
     sends. Approve stays disabled until all of them are ticked and t3_decision
     refuses an approval without them; returning to T1 or T2 is never gated.
-    Tick all (A) is for the reviewer who has already been through the files
-    and doesn't want eight clicks to say so; Approve still asks before it posts.
+    Tick all (Alt+A, Option+A on a Mac, so it works from a text box) is for the
+    reviewer who has already been through the files and doesn't want eight
+    clicks to say so; Approve still asks before it posts.
     The list itself is T3_CHECKLIST in checklists.py.
     {% endcomment %}
     <fieldset class="rv-checklist" data-checklist>
         <legend>
             Before you approve<span class="rv-checklist-left" data-checklist-count></span>
-            <button type="button" class="rv-btn rv-btn-sm rv-btn-ghost" data-key="a" data-checklist-all
-                    {% if ship.project.locked %}disabled{% endif %}>Tick all<kbd>A</kbd></button>
+            <button type="button" class="rv-btn rv-btn-sm rv-btn-ghost" data-alt-key="a" data-checklist-all
+                    {% if ship.project.locked %}disabled{% endif %}>Tick all<kbd>Alt&thinsp;A</kbd></button>
         </legend>
         <ul>
             {% for item in t3_checklist %}

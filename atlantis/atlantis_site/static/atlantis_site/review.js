@@ -10,6 +10,8 @@
  *   - anything with `data-focus="x"` is focusable by pressing x,
  *   - anything with `data-mod-key="x"` is clickable by pressing Cmd/Ctrl+x,
  *   - anything with `data-mod-focus="x"` is focusable by pressing Cmd/Ctrl+x,
+ *   - `data-alt-key="x"` and `data-alt-focus="x"` do the same with Alt/Option+x,
+ *     for page tools whose Cmd/Ctrl letter the browser already owns,
  *   - the primary decision is one Cmd/Ctrl+Enter away from inside any text box,
  *   - and `?` shows the reviewer what all of that is.
  *
@@ -197,6 +199,14 @@
         return document.querySelector('[data-mod-focus="' + key.replace(/"/g, '') + '"]');
     }
 
+    function altTarget(key) {
+        return document.querySelector('[data-alt-key="' + key + '"]:not([disabled])');
+    }
+
+    function altFocusTarget(key) {
+        return document.querySelector('[data-alt-focus="' + key + '"]');
+    }
+
     /*
      * A decision button may name a field it can't be pressed without —
      * "Reject" without feedback is not a decision, it's a shrug. When that
@@ -327,6 +337,24 @@
         // taking from the browser, and the only one that works mid-sentence.
         if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
             if (submitPrimary()) event.preventDefault();
+            return;
+        }
+
+        // Alt/Option+letter: page tools that also fire from inside a text box.
+        // Matched on the physical key, because Option on a Mac types µ or å
+        // instead of the letter; preventDefault keeps that character out of
+        // the field. Ctrl+Alt is left alone: it's AltGr on Windows layouts.
+        if (event.altKey && !event.metaKey && !event.ctrlKey && /^Key[A-Z]$/.test(event.code)) {
+            var altKey = event.code.charAt(3).toLowerCase();
+            var altFocusable = altFocusTarget(altKey);
+            var altButton = altFocusable ? null : altTarget(altKey);
+            if (altFocusable) {
+                event.preventDefault();
+                altFocusable.focus();
+            } else if (altButton) {
+                event.preventDefault();
+                altButton.click();
+            }
             return;
         }
 
