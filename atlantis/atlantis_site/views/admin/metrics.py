@@ -885,14 +885,19 @@ def build_metrics(now):
     # still exactly what they paid.
     total_payout_minutes = 0
     total_layers_paid = 0
+    # The multiplier averaged over approvals only: a return pays nothing, so
+    # whatever its slider was left on never scaled a pearl.
+    multipliers = []
     for payout_time, multiplier, paid in T3.objects.filter(
         decision=T3.Decision.APPROVE
     ).values_list("payout_time", "payout_multiplier", "payout_layers"):
         minutes = payout_time or 0
+        multiplier = multiplier or PAYOUT_MULTIPLIER_DEFAULT
+        multipliers.append(multiplier)
         total_payout_minutes += minutes
         total_layers_paid += (
             paid if paid is not None
-            else layers_for_minutes(minutes, multiplier or PAYOUT_MULTIPLIER_DEFAULT)
+            else layers_for_minutes(minutes, multiplier)
         )
 
     # Average number of reviews a project goes through before passing T3.
@@ -937,6 +942,12 @@ def build_metrics(now):
         "t3_payout_display": format_minutes(total_payout_minutes),
         "t3_airtable_display": format_minutes(t3_total_airtable_minutes),
         "total_layers_paid": total_layers_paid,
+        # Formatted here: a snapshot stores the context as JSON, which would
+        # turn a Decimal into a string anyway.
+        "avg_payout_multiplier_display": (
+            f"{sum(multipliers) / len(multipliers):.2f}x" if multipliers else None
+        ),
+        "t3_approved": len(multipliers),
         "top_t1": reviewer_leaderboard("t1_reviews"),
         "top_t2": reviewer_leaderboard("t2_reviews"),
         "top_t3": reviewer_leaderboard("t3_reviews"),

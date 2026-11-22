@@ -434,6 +434,11 @@
                 <div class="stat-sub">for {{ reviews.t3_payout_display }} approved</div>
             </div>
             <div class="stat-card">
+                <div class="stat-value">{{ reviews.avg_payout_multiplier_display|default:"—" }}</div>
+                <div class="stat-label">Avg T3 pearl multiplier</div>
+                <div class="stat-sub">across {{ reviews.t3_approved }} approval{{ reviews.t3_approved|pluralize }}</div>
+            </div>
+            <div class="stat-card">
                 {% if reviews.avg_reviews_to_pass_t3 is not None %}
                 <div class="stat-value">{{ reviews.avg_reviews_to_pass_t3 }}</div>
                 {% else %}
