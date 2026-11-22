@@ -1,5 +1,5 @@
 asgiref==3.11.1
-Authlib==1.7.2
+Authlib==1.9.1
 boto3==1.43.34
 botocore==1.43.34
 certifi==2026.5.20
