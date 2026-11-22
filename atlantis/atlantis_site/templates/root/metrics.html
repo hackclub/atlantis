@@ -433,6 +433,15 @@
                 <div class="stat-label">Pearls paid out</div>
                 <div class="stat-sub">for {{ reviews.t3_payout_display }} approved</div>
             </div>
+            <div class="stat-card">
+                {% if reviews.avg_reviews_to_pass_t3 is not None %}
+                <div class="stat-value">{{ reviews.avg_reviews_to_pass_t3 }}</div>
+                {% else %}
+                <div class="stat-value">—</div>
+                {% endif %}
+                <div class="stat-label">Avg reviews to pass T3</div>
+                <div class="stat-sub">across {{ reviews.avg_reviews_to_pass_t3_projects }} finalized project{{ reviews.avg_reviews_to_pass_t3_projects|pluralize }}</div>
+            </div>
         </div>
 
         <div class="chart-grid">

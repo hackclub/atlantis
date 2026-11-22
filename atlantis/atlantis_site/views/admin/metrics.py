@@ -895,6 +895,32 @@ def build_metrics(now):
             else layers_for_minutes(minutes, multiplier or PAYOUT_MULTIPLIER_DEFAULT)
         )
 
+    # Average number of reviews a project goes through before passing T3.
+    # We count every T1, T2, and T3 review across all of a project's ships,
+    # then average that total across all projects that have at least one
+    # finalized ship (i.e. passed T3 approval).
+    finalized_project_ids = (
+        Ship.objects.filter(status=Ship.ShipStatus.FINALIZED)
+        .values_list("project_id", flat=True)
+        .distinct()
+    )
+    reviews_per_finalized_project = (
+        Project.objects.filter(id__in=finalized_project_ids)
+        .annotate(
+            t1_count=Count("ships__t1_reviews", distinct=True),
+            t2_count=Count("ships__t2_reviews", distinct=True),
+            t3_count=Count("ships__t3_reviews", distinct=True),
+        )
+        .values_list("t1_count", "t2_count", "t3_count")
+    )
+    if reviews_per_finalized_project:
+        total_review_counts = [t1 + t2 + t3 for t1, t2, t3 in reviews_per_finalized_project]
+        avg_reviews_to_pass_t3 = round(sum(total_review_counts) / len(total_review_counts), 1)
+        avg_reviews_to_pass_t3_projects = len(total_review_counts)
+    else:
+        avg_reviews_to_pass_t3 = None
+        avg_reviews_to_pass_t3_projects = 0
+
     reviews_stats = {
         "t1_total": t1_total,
         "t1_approved": t1_approved,
@@ -915,6 +941,8 @@ def build_metrics(now):
         "top_t2": reviewer_leaderboard("t2_reviews"),
         "top_t3": reviewer_leaderboard("t3_reviews"),
         "behind_on_quota": _behind_on_quota(now),
+        "avg_reviews_to_pass_t3": avg_reviews_to_pass_t3,
+        "avg_reviews_to_pass_t3_projects": avg_reviews_to_pass_t3_projects,
     }
 
     total_items = Item.objects.count()
