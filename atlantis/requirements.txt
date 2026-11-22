@@ -14,7 +14,7 @@ idna==3.17
 jmespath==1.1.0
 joserfc==1.6.8
 packaging==26.2
-Pillow==12.3.0
+Pillow==13.0.0
 psycopg==3.3.4
 psycopg-binary==3.3.4
 pycparser==3.0
