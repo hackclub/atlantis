@@ -12,7 +12,7 @@ django-storages==1.14.6
 gunicorn==26.0.0
 idna==3.17
 jmespath==1.1.0
-joserfc==1.6.8
+joserfc==1.7.6
 packaging==26.2
 Pillow==12.3.0
 psycopg==3.3.4
