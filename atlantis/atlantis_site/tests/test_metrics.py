@@ -2,6 +2,7 @@
 
 import os
 from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from io import StringIO
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -515,6 +516,28 @@ class MetricsHoursTests(BaseTestCase):
 		reviews = self.client.get(reverse("metrics")).context["reviews"]
 
 		self.assertEqual(reviews["t3_airtable_display"], "1h 30m")
+
+	def test_average_pearl_multiplier_counts_approvals_only(self):
+		project = make_project(make_user("builder", slack_id="U1"))
+		reviewer = make_user("t3", slack_id="U-t3")
+		ship = make_ship(project, status=Ship.ShipStatus.FINALIZED, journal_minutes=(60,))
+		# A return's slider never paid anything, so it stays out of the average.
+		T3.objects.create(
+			ship=ship, reviewer=reviewer, decision=T3.Decision.RETURN_T1,
+			payout_time=60, airtable_time=60, payout_multiplier=Decimal("3.0"),
+		)
+		for multiplier in ("1.5", "1.0"):
+			T3.objects.create(
+				ship=ship, reviewer=reviewer, decision=T3.Decision.APPROVE,
+				payout_time=60, airtable_time=60, payout_multiplier=Decimal(multiplier),
+			)
+
+		response = self.client.get(reverse("metrics"))
+		reviews = response.context["reviews"]
+
+		self.assertEqual(reviews["avg_payout_multiplier_display"], "1.25x")
+		self.assertEqual(reviews["t3_approved"], 2)
+		self.assertContains(response, "Avg T3 pearl multiplier")
 
 	def test_funnel_counts_each_step_out_of_the_one_before(self):
 		make_user("signed-up-only", slack_id="U1")
