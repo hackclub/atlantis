@@ -45,6 +45,17 @@ def et(text):
     return datetime.fromisoformat(text).replace(tzinfo=ET)
 
 
+def assert_buy_buttons_disabled(test, response, reason):
+    """Every star on the Bambu chart has a Buy button, all of them disabled
+    with `reason` as the tooltip: the buttons show to everyone, and only the
+    claim being open turns them on."""
+    from ..printers import track
+    count = len(track("bambu")["printers"])
+    test.assertContains(response, 'class="star-buy"', count=count)
+    test.assertContains(response, "disabled title=", count=count)
+    test.assertContains(response, reason, count=count)
+
+
 @override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8)
 class WeekMathTests(BaseTestCase):
     """Where the week boundaries actually fall."""
@@ -1185,7 +1196,7 @@ class PrinterClaimTests(BaseTestCase):
             self._survive_the_program()
             self.assertTrue(challenge.standing(self.user).can_claim_printer)
             chart = self.client.get(reverse("printer_track", args=["bambu"]))
-            self.assertNotContains(chart, 'class="star-buy"')
+            assert_buy_buttons_disabled(self, chart, "YSWS-eligible")
             response = self._claim("A1")
             self.assertFalse(PrinterClaim.objects.exists())
             self.assertTrue(any("YSWS-eligible" in m for m in message_texts(response)))
@@ -1944,7 +1955,7 @@ class PageRenderTests(BaseTestCase):
         with during_week(1):
             response = self._chart()
             self.assertNotContains(response, "Make this my chart")
-            self.assertNotContains(response, 'class="star-buy"')
+            assert_buy_buttons_disabled(self, response, "Printers go on sale")
 
     def test_a_chart_has_the_claim_form_once_every_hour_is_finalized(self):
         with after_week(1):
@@ -1956,13 +1967,16 @@ class PageRenderTests(BaseTestCase):
             self.assertContains(response, 'class="star-buy"', count=len(printers))
             self.assertContains(response, 'aria-label="Buy A1 for 230 pearls"')
             self.assertNotContains(response, "Make this my chart")
+            # Open, so only a printer they can't afford is greyed out.
+            self.assertNotContains(response, "go on sale")
+            self.assertNotContains(response, "finalized")
 
     def test_a_chart_holds_the_claim_while_ships_are_in_review(self):
         with after_week(1):
             self._survive()
             Ship.objects.update(status=Ship.ShipStatus.T3_QUEUE)
             response = self._chart()
-            self.assertNotContains(response, 'class="star-buy"')
+            assert_buy_buttons_disabled(self, response, "have to be finalized")
 
     def test_a_chart_renders_after_claiming(self):
         with after_week(1):
@@ -1970,14 +1984,14 @@ class PageRenderTests(BaseTestCase):
             self.client.post(reverse("claim_printer", args=["bambu"]), {"printer": "A1"})
             self.assertTrue(PrinterClaim.objects.exists())
             response = self._chart()
-            self.assertNotContains(response, 'class="star-buy"')
+            assert_buy_buttons_disabled(self, response, "already claimed your printer")
 
     def test_a_chart_renders_for_someone_who_is_out(self):
         with after_week(2):
             self._survive()
             response = self.client.get(reverse("printer_track", args=["bambu"]))
             self.assertEqual(response.status_code, 200)
-            self.assertNotContains(response, 'class="star-buy"')
+            assert_buy_buttons_disabled(self, response, "out of the program")
 
     def test_the_shop_and_an_item_page_render_with_savers_on_them(self):
         Item.objects.create(

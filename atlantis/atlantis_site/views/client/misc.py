@@ -90,16 +90,63 @@ def _claim_context(user):
     """
     state = challenge.standing(user)
     profile = user.hackclub_profile
+    claim = PrinterClaim.objects.filter(user=user).first()
+    # The buy buttons show to everyone; this is why they're greyed out, as the
+    # button's tooltip. claim_printer asks again; this only disables them.
+    if claim:
+        block_reason = "You've already claimed your printer."
+    else:
+        block_reason = _claim_block_reason(user, state)
     return {
         "profile": profile,
         "standing": state,
         "chosen_track": profile.printer_track,
-        "claim": PrinterClaim.objects.filter(user=user).first(),
-        # Eligibility last, so HCA is only re-asked about someone who could
-        # otherwise buy. claim_printer asks again; this only hides the buttons.
-        "claim_open": state.can_claim_printer and not ysws_block_reason(user),
+        "claim": claim,
+        "claim_open": not block_reason,
+        "claim_block_reason": block_reason,
         "printer_hours_total": weeks.printer_hours(),
     }
+
+
+def _claim_block_reason(user, state):
+    """Why this user can't buy a printer yet, or "" if they can.
+
+    Shared by the chart, which shows it on a disabled buy button, and
+    claim_printer, which refuses with it, so the two never disagree. Pearls
+    are left out: they depend on which printer, and the chart checks those
+    per star. Eligibility is asked last, so HCA is only re-asked about someone
+    who could otherwise buy.
+    """
+    if not state.settled:
+        # Not the end of the last week but the end of the buffer after it: until
+        # then someone short on it isn't out yet, and could buy on the way out.
+        opens = weeks.settled_at(state.extension_days).astimezone(weeks.zone())
+        return (
+            f"Printers go on sale {opens:%a %b} {opens.day} at {opens:%-I:%M %p} Eastern, "
+            "once the eight weeks are over."
+        )
+    if state.eliminated:
+        return challenge.elimination_reason(user)
+    # Only hours recorded inside the eight weeks count, as one total however
+    # they're spread: prep time, before or after, doesn't, however much.
+    total = weeks.printer_hours()
+    if not state.all_shipped:
+        return (
+            f"You need all {total} hours from the eight weeks shipped to pass, "
+            f"and you've shipped {state.shipped_printer_hours}."
+        )
+    if not state.printer_unlocked:
+        return (
+            f"All {total} of your hours from the eight weeks have to be finalized "
+            f"to claim, and {state.finalized_printer_hours} are so far. You can "
+            "claim once the rest of your ships finish review."
+        )
+    # A printer is a YSWS prize like any other: HCA has to say this person is
+    # eligible, now and not just when they shipped.
+    ineligible = ysws_block_reason(user)
+    if ineligible:
+        return f"Buying a printer needs a YSWS-eligible Hack Club identity. {ineligible}"
+    return ""
 
 
 @login_required
@@ -186,42 +233,9 @@ def claim_printer(request, slug):
         return redirect("printer_track", slug=slug)
 
     state = challenge.standing(request.user)
-    if not state.settled:
-        # Not the end of the last week but the end of the buffer after it: until
-        # then someone short on it isn't out yet, and could buy on the way out.
-        opens = weeks.settled_at(state.extension_days).astimezone(weeks.zone())
-        messages.error(
-            request,
-            f"Printers go on sale {opens:%a %b} {opens.day} at {opens:%-I:%M %p} Eastern, "
-            "once the eight weeks are over.",
-        )
-        return redirect("printer_track", slug=slug)
-    if state.eliminated:
-        messages.error(request, challenge.elimination_reason(request.user))
-        return redirect("printer_track", slug=slug)
-    # A printer is a YSWS prize like any other: HCA has to say this person is
-    # eligible, now and not just when they shipped.
-    ineligible = ysws_block_reason(request.user)
-    if ineligible:
-        messages.error(request, f"Buying a printer needs a YSWS-eligible Hack Club identity. {ineligible}")
-        return redirect("printer_track", slug=slug)
-    # Only hours recorded inside the eight weeks count, as one total however
-    # they're spread: prep time, before or after, doesn't, however much.
-    total = weeks.printer_hours()
-    if not state.all_shipped:
-        messages.error(
-            request,
-            f"You need all {total} hours from the eight weeks shipped to pass, "
-            f"and you've shipped {state.shipped_printer_hours}.",
-        )
-        return redirect("printer_track", slug=slug)
-    if not state.printer_unlocked:
-        messages.error(
-            request,
-            f"All {total} of your hours from the eight weeks have to be finalized "
-            f"to claim, and {state.finalized_printer_hours} are so far. You can "
-            "claim once the rest of your ships finish review.",
-        )
+    blocked = _claim_block_reason(request.user, state)
+    if blocked:
+        messages.error(request, blocked)
         return redirect("printer_track", slug=slug)
 
     # Resolved before the transaction: this calls out to HCA, which has no
