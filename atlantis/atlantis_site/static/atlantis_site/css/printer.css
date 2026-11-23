@@ -394,14 +394,14 @@ body {
 }
 
 .star:hover,
-.star:focus {
+.star:focus-within {
     /* Over its neighbours, so the label is never cut in half by the next
        star along. */
     z-index: 3;
 }
 
 .star:hover img,
-.star:focus img {
+.star:focus-within img {
     filter: brightness(1.15) drop-shadow(0 0 1.4cqw rgba(255, 217, 138, 0.95));
     scale: 1.22;
 }
@@ -427,6 +427,23 @@ body {
     transition: opacity 0.15s ease-out;
 }
 
+/* Fills the gap between the star and its label, so the pointer can travel
+   from one to the other (and on to the buy button) without the label
+   closing under it. */
+.star-tip::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: 0.6em;
+}
+
+.star[data-tip="below"] .star-tip::after {
+    top: auto;
+    bottom: 100%;
+}
+
 /* Stars in the band the heading is laid over hang their label below them
    instead: the bar paints over the chart, so a label opening upward there
    would be half hidden behind a long track name. */
@@ -437,9 +454,11 @@ body {
     margin-bottom: 0;
 }
 
+/* Kept open while focus is on the buy button too, not just the star. */
 .star:hover .star-tip,
-.star:focus .star-tip {
+.star:focus-within .star-tip {
     opacity: 1;
+    pointer-events: auto;
 }
 
 .star-cost {
@@ -457,16 +476,9 @@ body {
     font-size: 0.78em;
 }
 
-/* The buy button, hung just under its star. Placed on the same --x/--y as
-   the star and pushed down by about the star's own height, so it follows the
-   star at every chart width. */
+/* The buy button, under the pace in the star's label. */
 .star-buy {
-    position: absolute;
-    z-index: 2;
-    left: var(--x);
-    top: var(--y);
-    translate: -50% calc(clamp(15px, 3.1cqw, 44px) * 0.6);
-    margin: 0;
+    margin: 0.3em 0 0;
 }
 
 .star-buy button {
@@ -476,7 +488,7 @@ body {
     background-color: var(--gold);
     color: #14252F;
     font: inherit;
-    font-size: clamp(11px, 1.4cqw, 18px);
+    font-size: 0.75em;
     line-height: 1.4;
     cursor: pointer;
 }
@@ -497,6 +509,7 @@ body {
 @media (hover: none) and (min-width: 900px) {
     .star-tip {
         opacity: 1;
+        pointer-events: auto;
     }
 }
 
