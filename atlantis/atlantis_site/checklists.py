@@ -59,7 +59,7 @@ T1_CHECKLIST = [
     },
     {
         "key": "volume",
-        "label": "Under 256cm³ in the slicer",
+        "label": "Under 256mm³ in the slicer",
         "detail": "The sliced model's volume is below the limit.",
     },
     {
