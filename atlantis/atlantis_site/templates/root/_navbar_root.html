@@ -1,15 +1,23 @@
 {% load nav_badges %}
 {% comment %}
-The rail, in the order the work flows: the review desks, then the shop, then
-the organizer's tables. A group a reviewer holds no permission in renders no
+The rail, in the order the work flows: home, the review desks, then the shop,
+then the organizer's tables. A group a reviewer holds no permission in renders no
 links, and admin.css hides a group with no links, so nobody sees a heading
 over nothing.
 {% endcomment %}
 <nav class="sidebar" aria-label="Admin">
-    <a class="sidebar-brand" href="{% url 'admin_dash' %}"{% nav_current 'admin_dash' %}>
+    <a class="sidebar-brand" href="{% url 'admin_dash' %}">
         <span class="sidebar-brand-name">Atlantis</span>
         <span class="sidebar-brand-sub">admin</span>
     </a>
+
+    {% comment %}
+    The wordmark already links home, but nothing about it says so. Everyone who
+    can see the rail can open the home, so this one isn't gated.
+    {% endcomment %}
+    <div class="nav-group">
+        <a href="{% url 'admin_dash' %}"{% nav_current 'admin_dash' %}>home</a>
+    </div>
 
     <div class="nav-group">
         <p class="nav-group-label">Review</p>

@@ -211,3 +211,18 @@ class HomeHoursTests(BaseTestCase):
 		with patch.object(queue, "pending_hours") as hours:
 			self.home()
 		hours.assert_not_called()
+
+
+class NavHomeTests(BaseTestCase):
+	"""The admin home has its own link at the top of the rail."""
+
+	def test_every_reviewer_gets_the_home_link(self):
+		self.client.force_login(grant_perms(make_user("t1rev"), "t1_review"))
+		rail = self.client.get(reverse("review_dash")).content.decode()
+		self.assertIn(f'<a href="{reverse("admin_dash")}">home</a>', rail)
+
+	def test_the_home_link_marks_the_home(self):
+		self.client.force_login(grant_perms(make_user("boss"), "organizer"))
+		rail = self.client.get(reverse("admin_dash")).content.decode()
+		self.assertIn(f'<a href="{reverse("admin_dash")}" aria-current="page">home</a>', rail)
+		self.assertEqual(rail.count('aria-current="page"'), 1)
