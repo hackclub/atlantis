@@ -30,6 +30,7 @@ class AtlantisTestRunner(DiscoverRunner):
 			AIRTABLE_EMAILS_TABLE_ID="",
 			SLACK_AUTOJOIN_CHANNEL_IDS=[],
 			RUN_BACKGROUND_INLINE=True,
+			LDDB_API_KEY="",
 		)
 		self._airtable_guard.enable()
 

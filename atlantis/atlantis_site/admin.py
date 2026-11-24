@@ -13,7 +13,7 @@ class TimelapseAdmin(admin.ModelAdmin):
         "external_id", "source", "name", "project", "owner", "status",
         "tracked_seconds", "created_at",
     )
-    list_filter = ("source", "status", "created_at")
+    list_filter = ("source", "status", "lddb_pending", "created_at")
     search_fields = ("lapse_id", "session_id", "name", "owner__username", "project__title")
     # None of this is ours to rewrite: it came from Lapse or from Lookout, and
     # tracked_seconds is what somebody gets paid on. `token` is a live Lookout
@@ -26,6 +26,7 @@ class TimelapseAdmin(admin.ModelAdmin):
         # it. Moving it here would hand footage nobody watched to a lapse that
         # was already signed off, and through it into T1.
         "journal",
+        "lddb_version", "lddb_marks", "lddb_pending", "lddb_synced_at", "lddb_error",
     )
     exclude = ("token",)
     date_hierarchy = "created_at"
@@ -80,7 +81,8 @@ class AuditLogAdmin(admin.ModelAdmin):
 class TimelapseRemovalInline(admin.TabularInline):
     model = TimelapseRemoval
     extra = 0
-    readonly_fields = ("session", "start_seconds", "end_seconds", "reason")
+    readonly_fields = ("session", "start_seconds", "end_seconds", "reason", "lddb_mark_id")
+    exclude = ("lddb_mark",)
 
     def has_add_permission(self, request, obj=None):
         return False

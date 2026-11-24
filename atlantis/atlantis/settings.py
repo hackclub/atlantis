@@ -95,6 +95,9 @@ LAPSE_REDIRECT_URI = os.environ.get(
     "LAPSE_REDIRECT_URI", "https://atlantis.hackclub.com/lapse/callback"
 )
 
+LDDB_API_BASE_URL = os.environ.get("LDDB_API_BASE_URL", "https://assay.lapse.hackclub.com/api")
+LDDB_API_KEY = os.environ.get("LDDB_API_KEY", "")
+
 # Lookout (lookout.hackclub.com) — legacy. Superseded by Lapse and kept working
 # for recordings already in flight and the hours already logged from them; see
 # the legacy drawer on the project page. The token is optional now, because a
