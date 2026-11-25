@@ -69,7 +69,7 @@ def _request(method, path, *, json=None, params=None):
 	except requests.RequestException as exc:
 		raise LddbError(f"LDDB {method} {path} failed: {exc}") from exc
 
-	if response.status_code == 404:
+	if response.status_code == 404 and method == "GET":
 		return None
 	try:
 		body = response.json()
@@ -79,7 +79,7 @@ def _request(method, path, *, json=None, params=None):
 		raise LddbStale(body.get("current"))
 	if not response.ok:
 		message = (body or {}).get("error", {}).get("message") if isinstance(body, dict) else None
-		error = LddbRejected if response.status_code in (400, 422) else LddbError
+		error = LddbRejected if response.status_code in (400, 404, 422) else LddbError
 		raise error(
 			f"LDDB {method} {path} returned {response.status_code}: "
 			f"{message or response.text[:300]}"
