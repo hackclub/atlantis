@@ -37,6 +37,7 @@ REMIND_WEEK_EVERY="${REMIND_WEEK_EVERY:-600}"
 REMIND_REVIEW_STREAK_EVERY="${REMIND_REVIEW_STREAK_EVERY:-600}"
 SUBMIT_AIRTABLE_EVERY="${SUBMIT_AIRTABLE_EVERY:-600}"
 CHECK_ACTIVITY_EVERY="${CHECK_ACTIVITY_EVERY:-900}"
+SYNC_LDDB_EVERY="${SYNC_LDDB_EVERY:-120}"
 # Each pass runs ffmpeg over whole videos, so it is bounded rather than left to
 # work through a backlog in one go and hold the container for an hour.
 CHECK_ACTIVITY_LIMIT="${CHECK_ACTIVITY_LIMIT:-20}"
@@ -128,6 +129,7 @@ while true; do
 	run_due remind_week "$REMIND_WEEK_EVERY" remind_week
 	run_due remind_review_streak "$REMIND_REVIEW_STREAK_EVERY" remind_review_streak
 	run_due submit_airtable "$SUBMIT_AIRTABLE_EVERY" submit_airtable
+	run_due sync_lddb "$SYNC_LDDB_EVERY" sync_lddb
 	run_due check_activity "$CHECK_ACTIVITY_EVERY" \
 		check_timelapse_activity --limit "$CHECK_ACTIVITY_LIMIT"
 	sleep "$TICK"

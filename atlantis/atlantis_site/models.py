@@ -890,6 +890,12 @@ class Timelapse(models.Model):
 	# length is estimated per source (see video_seconds).
 	measured_video_seconds = models.IntegerField(null=True, blank=True)
 
+	lddb_version = models.IntegerField(null=True, blank=True)
+	lddb_marks = models.JSONField(default=list, blank=True)
+	lddb_pending = models.BooleanField(default=False, db_index=True)
+	lddb_synced_at = models.DateTimeField(null=True, blank=True)
+	lddb_error = models.CharField(max_length=500, blank=True, default="")
+
 	created_at = models.DateTimeField(auto_now_add=True)
 	updated_at = models.DateTimeField(auto_now=True)
 
@@ -1353,6 +1359,8 @@ class TimelapseRemoval(models.Model):
 	# review's reviewed_at: a range added by a later correction is owed in the
 	# week it was added, not the week the review was first written.
 	created_at = models.DateTimeField(default=timezone.now)
+	lddb_mark_id = models.UUIDField(null=True, blank=True)
+	lddb_mark = models.JSONField(null=True, blank=True)
 
 	class Meta:
 		ordering = ["session_id", "start_seconds"]
@@ -1428,6 +1436,14 @@ class TimelapseReviewEdit(models.Model):
 
 	def __str__(self):
 		return f"Edit to timelapse review {self.review_id} by {self.editor_id}"
+
+
+class LddbCursor(models.Model):
+	position = models.BigIntegerField(default=0)
+	updated_at = models.DateTimeField(auto_now=True)
+
+	def __str__(self):
+		return f"LDDB change feed read up to {self.position}"
 
 
 # shop models

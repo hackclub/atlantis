@@ -33,7 +33,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import Exists, OuterRef
 
-from ... import challenge, weeks
+from ... import challenge, lddb, weeks
 from ...models import (
     Journal, Project, Ship, TimelapseAnnotation, TimelapseRemoval, TimelapseReview,
     TimelapseReviewEdit, first_overlap, format_timecode, parse_timecode,
@@ -628,6 +628,12 @@ def timelapse_decision(request, project_id):
         ]
         TimelapseAnnotation.objects.bulk_create(annotations)
 
+        signed_off = [
+            session for session in sessions.values() if session.journal_id in reviews
+        ]
+        lddb.mark_pending(signed_off)
+
+    lddb.push_soon([session.id for session in signed_off])
     removed_seconds = sum(removal.duration_seconds for removal in kept)
     dropped = len(removals) - len(kept)
 
@@ -939,6 +945,9 @@ def lapse_review_save(request, review_id):
         edit = TimelapseReviewEdit.objects.create(
             review=review, editor=request.user, note=note, changes=changes,
         )
+        lddb.mark_pending(sessions.values())
+
+    lddb.push_soon(list(sessions))
 
     record_audit(
         request,
