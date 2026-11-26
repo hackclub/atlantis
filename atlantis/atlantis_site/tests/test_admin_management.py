@@ -333,6 +333,35 @@ class ManageProjectsTests(BaseTestCase):
 		response = self.client.get(reverse("manage_projects"))
 		self.assertEqual(response.context["projects"][0].status_display, "No ships yet")
 
+	@override_settings(CHALLENGE_START_DATE="2026-09-21", CHALLENGE_WEEKS=8, CHALLENGE_TIMEZONE="America/New_York")
+	def test_filter_by_week_first_shipped(self):
+		eastern = ZoneInfo("America/New_York")
+
+		def ship_at(project, *local):
+			ship = make_ship(project, journal_minutes=())
+			Ship.objects.filter(pk=ship.pk).update(created_at=datetime(*local, tzinfo=eastern))
+
+		# Late on week 2's Sunday locally, already Monday in UTC; shipped again
+		# in week 3, which mustn't make it a week-3 project.
+		early = make_project(self.owner, title="Early")
+		ship_at(early, 2026, 10, 4, 23, 30)
+		ship_at(early, 2026, 10, 7, 12, 0)
+		later = make_project(self.owner, title="Later")
+		ship_at(later, 2026, 10, 6, 12, 0)
+		prep = make_project(self.owner, title="Prep")
+		ship_at(prep, 2026, 9, 1, 12, 0)
+		make_project(self.owner, title="Unshipped")
+
+		def titles(week):
+			response = self.client.get(reverse("manage_projects"), {"week": week})
+			return sorted(p.title for p in response.context["projects"])
+
+		self.assertEqual(titles("2"), ["Early"])
+		self.assertEqual(titles("3"), ["Later"])
+		self.assertEqual(titles("prep"), ["Prep"])
+		self.assertEqual(titles("post"), [])
+		self.assertEqual(titles("nonsense"), ["Early", "Later", "Prep", "Unshipped"])
+
 	@patch.object(management_views, "ADMIN_PAGE_SIZE", 2)
 	def test_paginates_and_annotates_only_the_page(self):
 		projects = [make_project(self.owner, title=f"Owned {n}") for n in range(3)]

@@ -3,7 +3,7 @@ from django.contrib.auth.models import Group
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_POST
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Min, Q, Sum
 from django.db import transaction
 from django.contrib import messages
 from django.conf import settings
@@ -338,6 +338,25 @@ def manage_projects(request):
             | Q(owner__hackclub_profile__slack_username__icontains=search_query)
         )
 
+    # The week a project was first shipped in: when its earliest ship was
+    # made, cut into weeks the same way the challenge cuts them. "prep" is
+    # before week 1 opens; "post" is anything after the last week closes.
+    week_options = [("prep", "Prep (before week 1)")]
+    week_options += [(str(index), weeks.week_label(index)) for index in range(1, weeks.week_count() + 1)]
+    week_options.append(("post", "After the program"))
+    shipped_week = request.GET.get("week", "")
+    if shipped_week not in dict(week_options):
+        shipped_week = ""
+    if shipped_week:
+        projects = projects.annotate(first_shipped_at=Min("ships__created_at"))
+        if shipped_week == "prep":
+            projects = projects.filter(first_shipped_at__lt=weeks.starts_at())
+        elif shipped_week == "post":
+            projects = projects.filter(first_shipped_at__gte=weeks.ends_at())
+        else:
+            opens, closes = weeks.week_bounds(int(shipped_week))
+            projects = projects.filter(first_shipped_at__gte=opens, first_shipped_at__lt=closes)
+
     # Per-project figures as three grouped queries for the page rather than
     # three per row — and for this page only, not every project there is.
     page = Paginator(projects, ADMIN_PAGE_SIZE).get_page(request.GET.get("page"))
@@ -378,6 +397,8 @@ def manage_projects(request):
         "page": page,
         "default_pfp_url": default_pfp_url,
         "search_query": search_query,
+        "week_options": week_options,
+        "shipped_week": shipped_week,
     })
 
 @staff_member_required
