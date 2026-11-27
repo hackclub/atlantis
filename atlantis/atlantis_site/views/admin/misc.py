@@ -14,6 +14,7 @@ REVIEW_AUDIT_ACTIONS = [
     "t1_decision",
     "t1_rollback",
     "t2_decision",
+    "t2_rollback",
     "t3_decision",
     "internal_comment",
     "lock_project",

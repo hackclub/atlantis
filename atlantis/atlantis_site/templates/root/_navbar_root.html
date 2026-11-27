@@ -27,7 +27,7 @@ over nothing.
         {% if perms.atlantis_site.t1_review or perms.atlantis_site.organizer or perms.atlantis_site.t2_review or perms.atlantis_site.baller or perms.atlantis_site.t3_review or perms.atlantis_site.reviewer_lead %}
             <a href="{% url 'review_dash' %}" class="nav-counted"{% nav_current 'review_dash' %}>T1 review{% nav_badge 't1' %}</a>
         {% endif %}
-        {% if perms.atlantis_site.t2_review or perms.atlantis_site.baller or perms.atlantis_site.organizer or perms.atlantis_site.t3_review %}
+        {% if perms.atlantis_site.t2_review or perms.atlantis_site.baller or perms.atlantis_site.organizer or perms.atlantis_site.t3_review or perms.atlantis_site.reviewer_lead %}
             <a href="{% url 'ysws_review_dash' %}" class="nav-counted"{% nav_current 'ysws_review_dash' %}>T2 review{% nav_badge 't2' %}</a>
         {% endif %}
         {% if perms.atlantis_site.t3_review or perms.atlantis_site.organizer %}
