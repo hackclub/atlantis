@@ -2098,9 +2098,9 @@ class Permissions(models.Model):
 			# people who do it are not the people who talk to the shipper.
 			("timelapse_review", "Timelapse Review (internal)"),
 			# Oversight of the reviewers rather than a tier of review: undoing a
-			# T1 decision that shouldn't have been made, and reading the audit
-			# trail of review decisions. Makes no decisions of its own.
-			("reviewer_lead", "Reviewer Lead: roll back T1 reviews, audit reviews"),
+			# T1 or T2 decision that shouldn't have been made, and reading the
+			# audit trail of review decisions. Makes no decisions of its own.
+			("reviewer_lead", "Reviewer Lead: roll back T1/T2 reviews, audit reviews"),
 			# T1, T2 and timelapse review, and nothing else that comes with being a
 			# reviewer: no T3 and no reviewer shop.
 			("baller", "Baller: T1, T2 and timelapse review only"),

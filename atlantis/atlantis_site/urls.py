@@ -78,6 +78,7 @@ urlpatterns = [
     path("root/ysws_review/next", ysws_review_next, name="ysws_review_next"),
     path("root/ysws_review/<int:ship_id>", ysws_review_project, name="ysws_review_project"),
     path("root/ysws_review/<int:ship_id>/decision", t2_decision, name="t2_decision"),
+    path("root/ysws_review/t2/<int:t2_id>/rollback", t2_rollback, name="t2_rollback"),
     path("root/timelapse_review/", timelapse_review_dash, name="timelapse_review_dash"),
     path("root/timelapse_review/next", timelapse_review_next, name="timelapse_review_next"),
     path("root/timelapse_review/<int:project_id>", timelapse_review_project, name="timelapse_review_project"),

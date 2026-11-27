@@ -167,6 +167,126 @@ class T1RollbackTests(BaseTestCase):
 		self.assertEqual(self.ship.status, Ship.ShipStatus.REJECTED)
 
 
+def t2_decided(ship, reviewer, decision=T2.Decision.APPROVE, **kwargs):
+	"""A ship as a T2 decision leaves it."""
+	ship.status = {
+		T2.Decision.APPROVE: Ship.ShipStatus.T3_QUEUE,
+		T2.Decision.RETURN_T1: Ship.ShipStatus.T1_QUEUE,
+		T2.Decision.CHANGES: Ship.ShipStatus.CHANGES_REQUESTED,
+	}[decision]
+	ship.save()
+	return T2.objects.create(
+		ship=ship, reviewer=reviewer, decision=decision, deductions=kwargs.get("deductions", 0),
+		feedback=kwargs.get("feedback", "nice hours"),
+		justification=kwargs.get("justification", "journals line up"),
+	)
+
+
+class T2RollbackTests(BaseTestCase):
+	def setUp(self):
+		super().setUp()
+		self.lead = grant_perms(make_user("lead", slack_id="U0LEAD"), "reviewer_lead")
+		self.reviewer = grant_perms(make_user("t2rev", slack_id="U0REV"), "t2_review")
+		self.project = make_project(make_user("author", slack_id="U0AUTHOR"), shippable=True)
+		self.ship = make_ship(self.project)
+		decided(self.ship, grant_perms(make_user("t1rev"), "t1_review"))
+		self.t2 = t2_decided(self.ship, self.reviewer)
+		self.client.force_login(self.lead)
+
+	def _roll_back(self, t2=None, reason="deducted nothing for a padded journal"):
+		t2 = t2 or self.t2
+		return self.client.post(reverse("t2_rollback", args=[t2.id]), {"reason": reason})
+
+	def test_each_decision_rolled_back_to_t2_queue(self):
+		for decision in T2.Decision:
+			with self.subTest(decision=decision):
+				T2.objects.all().delete()
+				t2 = t2_decided(self.ship, self.reviewer, decision)
+				self._roll_back(t2)
+				self.ship.refresh_from_db()
+				self.assertEqual(self.ship.status, Ship.ShipStatus.T2_QUEUE)
+				self.assertFalse(T2.objects.exists())
+
+	def test_leaves_an_internal_comment_with_the_reason(self):
+		self._roll_back(reason="missed the stolen model")
+		comment = InternalComment.objects.get(ship=self.ship)
+		self.assertEqual(comment.author, self.lead)
+		self.assertIn("T2 approval", comment.text)
+		self.assertIn("missed the stolen model", comment.text)
+
+	def test_audit_keeps_what_the_review_said(self):
+		self._roll_back()
+		log = AuditLog.objects.get(action="t2_rollback")
+		self.assertEqual(log.actor, self.lead)
+		self.assertEqual(log.metadata["t2_id"], self.t2.id)
+		self.assertEqual(log.metadata["reviewer"], "t2rev")
+		self.assertEqual(log.metadata["justification"], "journals line up")
+		self.assertEqual(log.metadata["previous_ship_status"], Ship.ShipStatus.T3_QUEUE)
+
+	@override_settings(REVIEW_CHECKPOINT_ID="C0CHECK")
+	def test_shipper_told_in_checkpoint_channel(self):
+		self._roll_back()
+		content, channel = self.slack_message_mocks["review"].call_args.args
+		self.assertEqual(channel, "C0CHECK")
+		self.assertIn("<@U0AUTHOR>", content)
+		self.assertIn("T2 queue", content)
+
+	def test_reason_required(self):
+		self._roll_back(reason="   ")
+		self.assertTrue(T2.objects.exists())
+
+	def test_reviewers_cannot_roll_back(self):
+		for perm in ("t1_review", "t2_review", "baller", "t3_review"):
+			with self.subTest(perm=perm):
+				self.client.force_login(grant_perms(make_user(f"only_{perm}"), perm))
+				self._roll_back()
+				self.assertTrue(T2.objects.filter(id=self.t2.id).exists())
+
+	def test_organizer_can_roll_back(self):
+		self.client.force_login(grant_perms(make_user("org"), "organizer"))
+		self._roll_back()
+		self.assertFalse(T2.objects.exists())
+
+	def test_refused_once_t3_has_reviewed(self):
+		T3.objects.create(
+			ship=self.ship, reviewer=self.reviewer, decision=T3.Decision.RETURN_T2,
+			payout_time=0, airtable_time=0,
+		)
+		self.ship.status = Ship.ShipStatus.T3_QUEUE
+		self.ship.save()
+		response = self._roll_back()
+		self.assertTrue(T2.objects.exists())
+		self.assertTrue(any("can't be rolled back" in m for m in message_texts(response)))
+
+	def test_refused_once_t1_has_reviewed_a_return(self):
+		T2.objects.all().delete()
+		t2 = t2_decided(self.ship, self.reviewer, T2.Decision.RETURN_T1)
+		decided(self.ship, self.reviewer, approved=False)
+		self._roll_back(t2)
+		self.assertTrue(T2.objects.exists())
+		self.ship.refresh_from_db()
+		self.assertEqual(self.ship.status, Ship.ShipStatus.REJECTED)
+
+	def test_refused_when_a_newer_t2_replaced_it(self):
+		newer = t2_decided(self.ship, self.reviewer)
+		self._roll_back()
+		self.assertTrue(T2.objects.filter(id=self.t2.id).exists())
+		self._roll_back(newer)
+		self.assertFalse(T2.objects.filter(id=newer.id).exists())
+
+	def test_lead_reads_the_t2_desk_with_rollback_offered(self):
+		response = self.client.get(reverse("ysws_review_dash"))
+		self.assertEqual(response.status_code, 200)
+		self.assertContains(response, reverse("t2_rollback", args=[self.t2.id]))
+		self.assertContains(response, "Roll back a T2 review")
+		self.assertEqual(self.client.get(reverse("ysws_review_project", args=[self.ship.id])).status_code, 200)
+
+	def test_desk_hides_rollback_from_reviewers(self):
+		self.client.force_login(self.reviewer)
+		response = self.client.get(reverse("ysws_review_dash"))
+		self.assertNotContains(response, "data-rollback-url")
+
+
 class ReviewerLeadDeskTests(BaseTestCase):
 	def setUp(self):
 		super().setUp()
@@ -188,7 +308,12 @@ class ReviewerLeadDeskTests(BaseTestCase):
 		self.client.post(reverse("t1_decision", args=[pending.id]), {"approved": "denied"})
 		pending.refresh_from_db()
 		self.assertEqual(pending.status, Ship.ShipStatus.T1_QUEUE)
-		self.assertEqual(self.client.get(reverse("ysws_review_dash")).status_code, 302)
+		in_t2 = make_ship(make_project(make_user("third"), shippable=True))
+		in_t2.status = Ship.ShipStatus.T2_QUEUE
+		in_t2.save()
+		self.client.post(reverse("t2_decision", args=[in_t2.id]), {"decision": T2.Decision.APPROVE})
+		in_t2.refresh_from_db()
+		self.assertEqual(in_t2.status, Ship.ShipStatus.T2_QUEUE)
 		self.assertEqual(self.client.get(reverse("fraud_review_dash")).status_code, 302)
 		self.assertEqual(self.client.get(reverse("audit_log")).status_code, 302)
 

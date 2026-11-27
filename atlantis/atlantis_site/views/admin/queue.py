@@ -1584,10 +1584,11 @@ QUEUE_PERMS = {
 }
 
 # Who can open an item's review page, which is a little wider than who can hold
-# a claim on it: a reviewer lead reads T1 pages to roll decisions back.
+# a claim on it: a reviewer lead reads T1 and T2 pages to roll decisions back.
 QUEUE_VIEW_PERMS = {
     **QUEUE_PERMS,
     "t1": QUEUE_PERMS["t1"] + ["atlantis_site.reviewer_lead"],
+    "t2": QUEUE_PERMS["t2"] + ["atlantis_site.reviewer_lead"],
 }
 
 
